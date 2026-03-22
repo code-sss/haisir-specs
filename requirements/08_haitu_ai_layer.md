@@ -45,9 +45,16 @@ Each interaction type has a fixed system prompt and a defined input/output contr
 
 **Context assembled server-side:**
 - Topic title, level, subject, board
-- Topic's content items (PDF text extracts, text notes bodies)
+- Topic's content items — see content extraction rules below
 - Student's mastery score for this topic
 - Last 5 messages from this topic's hAITU session (rolling window)
+
+**Content extraction rules for `{content_summary}`:**
+- Include only `text` type `topic_contents` items (plain text notes) in full.
+- For `pdf` type items: extract text using a server-side PDF text extractor (e.g., `pdfplumber` or `PyMuPDF`). Truncate extracted text to **2000 characters** per PDF. If the PDF has no extractable text (scanned image), include only the content item title.
+- For `video` type items: include only the content item title (no transcript extraction in this phase).
+- Total `{content_summary}` must not exceed **4000 characters**. If the combined content exceeds this, truncate the longest items proportionally, preserving at least the title of each item.
+- Content extraction results should be cached per topic (invalidate on `topic_contents` change) to avoid repeated PDF parsing on every doubt message.
 
 **System prompt template:**
 ```

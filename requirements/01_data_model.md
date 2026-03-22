@@ -218,6 +218,8 @@ ALTER TABLE exam_templates
   ADD COLUMN organization_id UUID NULL;  -- FK → organizations (new table)
 ```
 
+> **Why `instructor` instead of `platform`:** Unlike `course_path_nodes` and `topics`, exam templates are always authored by a specific person — there is no concept of "platform-owned" exam content that the SuperAdmin publishes. The `instructor` value means an individual teacher within an institution created the template. `institution` means it was created at the org level by an institution admin. `tutor` means an independent tutor created it. This is intentionally different from the `('platform', 'institution', 'tutor')` set used on `course_path_nodes` and `topics`.
+
 ---
 
 ## 4. New Tables

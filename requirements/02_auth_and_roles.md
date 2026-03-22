@@ -202,9 +202,11 @@ iframe.onload = () => {
   await refreshUser(); // re-fetch /api/users/me
 };
 
-// Option 2: Full-page redirect (fallback if iframe blocked)
+// Option 2: Full-page redirect (fallback if iframe blocked by third-party cookie policies)
 window.location.href = '/auth/login?prompt=none&redirect_uri=' + encodeURIComponent(window.location.href);
 ```
+
+> **Browser compatibility note:** Safari (ITP) and Firefox (ETP in strict mode) block third-party cookies, which causes the hidden iframe silent refresh to fail silently — the Keycloak session cookie is treated as third-party in the iframe context. The frontend must detect iframe refresh failure (e.g., iframe `onerror` or timeout after 3 seconds) and fall back to Option 2 (full-page redirect with `prompt=none`). This is transparent to the user — Keycloak re-authenticates using the existing session and redirects back immediately.
 
 **BR-AUTH-001:** The frontend must trigger a token refresh after every successful `POST /api/users/me/assign-role` during onboarding before proceeding to the next screen. This ensures `realm_access.roles` in the JWT reflects the newly assigned role before `X-Current-Role` is set for that role.
 

@@ -38,6 +38,7 @@
 | ADD `owner_type`, `owner_id` to `course_path_nodes` | ALTER TABLE | **Medium** | Existing rows need backfill (`owner_type = 'platform'`, `owner_id = NULL`). All queries touching this table need updating. |
 | ADD `status`, `owner_type`, `owner_id` to `topics` | ALTER TABLE | **Medium** | Existing topics get `status = 'live'`, `owner_type = 'platform'`. Topic service must enforce state transitions. |
 | ADD `owner_type`, `organization_id` to `exam_templates` | ALTER TABLE | **Low** | Backfill `owner_type = 'platform'`. |
+| ADD `paragraph_question_id` to `exam_template_questions` | ALTER TABLE | **Low** | Nullable FK → `paragraph_questions`. Required for paragraph question support in exams (see BR-EXAM-001 in `01_data_model.md`). Plan backfill: existing rows get `paragraph_question_id = NULL`. |
 | 24 new tables | CREATE TABLE | **None** | Additive, no existing data affected. |
 
 ### Backend Code Changes
@@ -79,35 +80,37 @@
 
 ### Phase 0 — Foundation (unblocks everything)
 1. Role migration (Keycloak + backend + frontend) per `11_role_migration.md`
-2. Schema extensions (ALTER 3 tables + backfill)
+2. Schema extensions (ALTER 4 tables + backfill) — `course_path_nodes`, `topics`, `exam_templates`, and `exam_template_questions` (paragraph question support, see BR-EXAM-001)
 3. User metadata + onboarding endpoints
 4. Onboarding frontend (8 screens)
 
 ### Phase 1 — Core Personas
-5. Student dashboard + enrollment system
-6. Organizations + classes + class enrollments
-7. Teacher/tutor home + class dashboard
-8. Doubt system (doubts + messages + escalation)
+5. Organizations + classes + class enrollments — **must be first**; unblocks structured enrollments and teacher class management
+6. Student dashboard + enrollment system — requires classes from item 5 for `POST /api/enrollments` with `type: "structured"` (parallel with 7)
+7. Teacher/tutor home + class dashboard — requires classes from item 5 (parallel with 6)
+8. Curriculum builder (instructor supplements + tutor full) — requires teacher/tutor home from item 7; makes the system end-to-end usable (teachers need content to put in classes)
+9. Doubt system (doubts + messages + escalation) — requires enrollments from item 6 (doubts are scoped to `enrollment_id` + `topic_id`)
 
-### Phase 2 — AI & Notifications
-9. hAITU AI layer (Claude integration, 8 interaction types)
-10. Notification system (22 types, polling, cron jobs)
-11. Curriculum builder (instructor supplements + tutor full)
+> **Dependency graph:** 5 → {6, 7} (parallel) → 8 → 9
+
+### Phase 2 — AI, Notifications & Parent
+10. hAITU AI layer (Claude integration, 8 interaction types)
+11. Notification system (22 types, polling, cron jobs)
+12. Parent portal (5 screens + child linking) — depends on doubt system (Phase 1 item 9) and notification types (`child_doubt_replied`, `child_doubt_auto_closed`, `child_weekly_digest`)
 
 ### Phase 3 — Extended Personas
-12. Parent portal (5 screens + child linking)
-13. Institution admin (6 screens + analytics)
+13. Institution admin (6 screens + analytics) — requires doubt stats (Phase 1) and hAITU resolution rates (Phase 2)
 14. Platform admin (6 screens + feature flags)
-15. Tutor marketplace (discovery, profiles, reviews)
+15. Tutor marketplace (discovery, profiles, reviews) — most optional, nothing blocks on it
 
 ---
 
 ## Decisions Needed Before Implementation
 
-1. **Tutor marketplace gate**: Immediate visibility or admin approval required?
+1. ~~**Tutor marketplace gate**: Immediate visibility or admin approval required?~~ **Resolved:** Immediate on toggle, admin can suspend post-hoc. See `02_auth_and_roles.md` section 2.3.
 2. **Pagination strategy**: Cursor-based or offset-based? Max page size?
 3. **File storage**: S3/cloud or local disk for PDFs/images?
 4. **Search backend**: PostgreSQL full-text or dedicated search service?
 5. **Dynamic exam algorithm**: Random, weighted, or coverage-based question selection?
 6. **Topic archived correction**: Can tutors clone an archived topic to create a corrected version?
-7. **Mastery initial value**: First attempt — is previous_mastery = 0 or = latest_score?
+7. ~~**Mastery initial value**: First attempt — is previous_mastery = 0 or = latest_score?~~ **Resolved:** First attempt sets `mastery_score = latest_score` directly. See `01_data_model.md` BR-PROGRESS-003.

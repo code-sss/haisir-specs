@@ -72,7 +72,8 @@ All subsequent onboarding calls require `X-CSRF-Token` and the session cookie se
 
 **Business rules:**
 - **BR-ON-005:** At least one role must be selected to proceed.
-- **BR-ON-006:** Selecting multiple roles queues them. Setup runs sequentially for each selected role (ON03 → ON04 → ON06 → ON05 in that order, skipping unselected ones). Teacher (ON04) and Tutor (ON06) run back-to-back so ON06 can pre-fill from ON04 data (see BR-ON-020).
+- **BR-ON-006:** Selecting multiple roles queues them. Setup runs sequentially for each selected role (ON03 → ON04 → ON06 → ON05 in that order, skipping unselected ones). Teacher (ON04) and Tutor (ON06) run back-to-back so ON06 can pre-fill from ON04 data (see BR-ON-020). See `11_role_migration.md` section 8 for the full list of valid multi-role combinations and role switcher behaviour.
+- **BR-ON-006a:** All role combinations selectable on this screen are valid. Since `institution_admin` and `admin` are not shown (BR-ON-004), the possible self-selected combinations are: Student only, Teacher only, Tutor only, Parent only, Student+Teacher, Student+Tutor, Student+Parent, Teacher+Tutor, Teacher+Parent, Tutor+Parent, Student+Teacher+Tutor, Student+Teacher+Parent, Student+Tutor+Parent, Teacher+Tutor+Parent, and all four. No combination is forbidden — each role operates in an independent workspace.
 - **BR-ON-007:** A user who selects both "Teacher" and "Tutor" completes both setup screens — they get both `instructor` and `tutor` roles assigned.
 
 ---

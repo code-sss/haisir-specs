@@ -67,7 +67,7 @@
   - Verify: 60s polling is sufficient (vs WebSocket for real-time needs)
   - Verify: Each of 22 notification types — is the trigger correct? Any missing?
   - Verify: Cron schedules (hourly due_soon, weekly digest) — timezone handling?
-  - **Missing:** Notification for doubt auto-close (7 days)
+  - ~~**Missing:** Notification for doubt auto-close (7 days)~~ **Present:** `doubt_auto_closed` (student) and `child_doubt_auto_closed` (parent) are defined in `10_notifications.md` sections 3.1 and 3.4, with generation rules in BR-NOTIF-011.
 
 ### Phase 4 — Visual & UX validation
 
