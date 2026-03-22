@@ -175,28 +175,15 @@ The backend needs Keycloak Admin credentials (client_id + client_secret with rol
 
 ## 5. Frontend Changes
 
-### 5.1 `useAuth` hook — extend valid roles
+### 5.1 `useAuth` hook — no hardcoded role list to update
 
-Find where `useAuth` validates the stored role from `localStorage` against a known set. Extend it:
+The existing `useAuth` hook at `/src/hooks/use-auth.ts` does NOT have a hardcoded `VALID_ROLES` list. Roles are dynamically loaded from the backend via `GET /api/users/me` and filtered server-side by the `UserRole` enum.
 
-```typescript
-// Before:
-const VALID_ROLES = ['student', 'instructor', 'admin'];
-
-// After:
-const VALID_ROLES = [
-  'student',
-  'instructor',
-  'admin',
-  'institution_admin',  // new
-  'tutor',              // new
-  'parent',             // new
-];
-```
+**No frontend change needed for role validation.** Once the backend `UserRole` enum is updated (section 4.1), new roles will flow through automatically. The `useAuth` hook stores the active role in `localStorage` under the key `currentRole` and includes it in all API calls via `buildApiHeaders()` in `/src/lib/utils.ts`.
 
 ### 5.2 `useAuth` hook — role display metadata
 
-The role switcher UI needs display metadata per role. Add entries for new roles wherever existing roles are mapped to labels and colours:
+The role switcher UI currently has no role metadata mapping — roles are displayed via `capitalizeFirst(role)` in `/src/components/layout/header/user-menu-dropdown.tsx`. **Create** the following metadata map (this is new code, not an extension of existing code):
 
 ```typescript
 // Extend existing role metadata map:
@@ -215,7 +202,7 @@ Note: `tutor` and `instructor` share the `/teacher` route — the teacher dashbo
 
 ### 5.3 Role switcher component
 
-The role switcher renders one pill per role in `realm_access.roles`. Since the switcher is already generic (renders based on the roles list), no structural change is needed — only the metadata map (5.2) needs updating so the new roles have correct labels, colours, and destination routes.
+The role switcher renders one pill per role in `realm_access.roles`. The existing role switcher in `/src/components/layout/header/user-menu-dropdown.tsx` renders role options from `userData.roles` with basic capitalized labels. It will need to be updated to use the `ROLE_META` map (5.2) for colour-coded pills, correct display labels, and destination routes per role.
 
 ### 5.4 `X-Current-Role` header — no changes needed
 
@@ -223,19 +210,7 @@ The header is already set generically from the stored active role string. No cod
 
 ### 5.5 Route guards
 
-Any existing route guards that check the active role must be extended. Find all places where role checks are hardcoded:
-
-```typescript
-// Pattern to find and fix:
-if (activeRole === 'student' || activeRole === 'instructor' || activeRole === 'admin') {
-  // allow
-}
-
-// Replace with:
-if (VALID_ROLES.includes(activeRole)) {
-  // allow
-}
-```
+The existing frontend does not have explicit role-based route guards. Route protection is currently handled at the API level (backend returns 403). **New route guards must be created** for the new persona routes:
 
 New role-specific route guards for new pages:
 
@@ -250,7 +225,7 @@ New role-specific route guards for new pages:
 
 ## 6. Onboarding Role Assignment Flow
 
-During onboarding, when a user completes a role setup screen, the frontend calls `POST /api/users/me/assign-role` to assign the role in Keycloak. The JWT is then refreshed so the new role appears in `realm_access.roles`.
+During onboarding, when a user completes a role setup screen, the frontend calls `POST /api/users/me/assign-role` to assign the role in Keycloak. The JWT must then be refreshed so the new role appears in `realm_access.roles` before the next screen sets `X-Current-Role` for that role.
 
 **Sequence:**
 
@@ -258,27 +233,31 @@ During onboarding, when a user completes a role setup screen, the frontend calls
 1. User selects "Student" on role selection screen (ON02)
 2. User completes student setup (ON03)
 3. Frontend calls POST /api/users/me/assign-role {role: "student"}
-4. Backend assigns role in Keycloak
-5. Frontend calls Keycloak token refresh endpoint to get updated JWT
-6. Updated JWT now contains "student" in realm_access.roles
-7. useAuth hook picks up new role, adds to switcher
+4. Backend assigns role in Keycloak via Admin API
+5. Frontend triggers token refresh via silent re-authentication (hidden iframe with prompt=none to /auth/login)
+6. APISIX OIDC plugin re-authenticates → new JWT containing "student" in realm_access.roles
+7. Session cookie updated in-place; useAuth picks up new role, adds to switcher
 8. Repeat for each selected role
 ```
 
 **JWT refresh after role assignment:**
 
 ```typescript
-// After each role assignment, refresh the token:
-// APISIX handles the OIDC token exchange — call the refresh endpoint
-await fetch('/api/auth/refresh', {
-  method: 'POST',
-  credentials: 'include',
-  headers: { 'X-CSRF-Token': csrfToken }
-});
-// New JWT with updated roles is now in the session cookie
+// After each role assignment, force token refresh via silent re-auth:
+const iframe = document.createElement('iframe');
+iframe.style.display = 'none';
+iframe.src = '/auth/login?prompt=none';
+document.body.appendChild(iframe);
+iframe.onload = () => {
+  document.body.removeChild(iframe);
+  // Session cookie now contains a new JWT with the updated realm_access.roles
+  await refreshUser(); // re-fetch /api/users/me to pick up new role
+};
 ```
 
-If APISIX does not expose a refresh endpoint, use the Keycloak token endpoint directly (check existing `useAuth` implementation for how token refresh is currently handled).
+**Token refresh uses silent re-authentication — there is no explicit refresh endpoint.** See `02_auth_and_roles.md` section 4.4 for the full mechanism.
+
+**Fallback — if APISIX refresh endpoint is unavailable:** Use Keycloak silent re-authentication (`prompt=none`) via a hidden iframe. Check the existing `useAuth` implementation for any existing token refresh mechanism before implementing from scratch.
 
 ---
 

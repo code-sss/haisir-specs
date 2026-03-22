@@ -163,7 +163,7 @@ GET /api/parents/me/children/{child_sub}/assessments
 **Tutor card:**
 - Name, role, next session, rate, subjects covering.
 - Live message thread: shows last 3 messages (parent ↔ tutor). "Message {tutor}" input + send button.
-- "Book a session" button (navigates to tutor profile — booking out of scope).
+- "View profile" button (navigates to tutor profile on the student marketplace).
 - "View profile" button.
 
 **Browse tutors card (purple):** "Need extra support? Browse tutors who specialise in {child name}'s weak topics." → links to tutor marketplace.
@@ -347,9 +347,9 @@ POST /api/topics/{topic_id}/content
 
 **Business rules:**
 - **BR-INST-007:** Institution admin cannot view or modify individual student assessment content or doubt message bodies.
-- **BR-INST-008:** Teacher invite sends a Keycloak-managed email with a registration link. On registration, the user automatically receives the `instructor` role and is linked to this organization.
+- **BR-INST-008:** Adding a teacher by email works in two paths depending on whether the email exists in Keycloak: (a) **New account** — backend calls Keycloak Admin API to create the account, assigns the `instructor` role, and adds the user to `organization_members` with `status = 'active'`; a Keycloak-managed welcome email is sent so the teacher can set their password. (b) **Existing account** — skip account creation, assign `instructor` role if not already held, and add to `organization_members` with `status = 'active'`. In both paths: no acceptance step is required — the institution admin is the authority for their organization. A `teacher_added_to_org` in-app notification is sent to the teacher. **Note:** No `teacher_profiles` row is created at invite time. The teacher completes their profile via the onboarding flow (ON04) on first login. API endpoints that display teacher data (e.g. class roster, people manager) must handle a missing `teacher_profiles` row gracefully — show the teacher's name from Keycloak claims and "Profile not completed" status until ON04 is done.
 - **BR-INST-009:** CSV enroll columns: `first_name, last_name, email, grade, section`. Email used to match or create Keycloak accounts.
-- **BR-INST-016:** When inviting a teacher whose email already exists in Keycloak, skip account creation and directly add them to `organization_members` with `status = 'active'`. Send an in-app `teacher_added_to_org` notification: "{org_name} has added you as a teacher." No acceptance required — the institution admin is the authority for their organization.
+- **BR-INST-016:** Removed — merged into BR-INST-008.
 - **BR-INST-017:** CSV upload validates row-by-row. Per-row outcomes: duplicate row within CSV — skip silently (process first occurrence only); student already enrolled in class — skip with warning "Already enrolled"; email exists in Keycloak — enroll directly; email not in Keycloak — skip with error "Account not found." Response returns `{created: int, skipped: int, errors: [{row, email, reason}]}`. Valid rows succeed even if others fail.
 
 **API calls:**
@@ -462,10 +462,14 @@ GET /api/organizations/{org_id}/analytics
 
 **Stat row:** Students, Avg progress, At-risk, Assignments.
 
-**Student roster table:** Name, Progress bar, Weak topics count, Status badge, "View" button. Clicking "View" navigates to instructor view of student detail (T03, scoped to this class) — institution admin sees same layout as teacher, because they are reviewing for management purposes.
+**Student roster table:** Name, Progress bar, Weak topics count, Status badge, "View" button. Clicking "View" navigates to the instructor view of student detail (T03, scoped to this class).
+
+**Topic heatmap:** Same as T02 — per-topic class average bars. Read-only for institution admin (no "Add content" button).
+
+**Note:** Institution admin sees the full T02 layout (roster, heatmap, assignments) in read-only mode. They cannot take actions (assign assessments, add content, message students). This is consistent with "NO individual answers/doubts" — they see mastery scores and progress but cannot access T03's doubt history or individual assessment answers.
 
 **Business rules:**
-- **BR-INST-015:** Institution admin accessing T03 from I06 sees the teacher's student detail view. They cannot see `teacher_notes` — those are private to the teacher.
+- **BR-INST-015:** Institution admin accessing T03 from I06 sees the teacher's student detail view **without** `teacher_notes` (private to the teacher) and **without** doubt message bodies (aggregate doubt status only — count and status, not content). They can see topic performance scores and overall progress.
 
 **API calls:**
 ```
@@ -680,7 +684,7 @@ PATCH /api/admin/users/{keycloak_sub}/restore
 
 **AI Configuration card:** Model selector (claude-sonnet / claude-opus / claude-haiku), hAITU toggle per role (student / teacher / parent), max tokens per student query.
 
-**Platform Features card:** Toggle — tutor marketplace, open learning track, parent portal, tutor session booking, public tutor profiles.
+**Platform Features card:** Toggle — tutor marketplace, open learning track, parent portal, public tutor profiles.
 
 **Announcements card:** Banner text, severity selector (info/warning/critical), "Update banner" button.
 
@@ -697,7 +701,7 @@ PATCH /api/admin/users/{keycloak_sub}/restore
 ```
 GET /api/admin/settings
 → Auth: admin
-→ Returns: {model: str, haitu_enabled: {student, teacher, parent}, max_tokens: int, features: {marketplace, open_learning, parent_portal...}, banner: {text, severity} | null, maintenance_mode: bool}
+→ Returns: {model: str, haitu_enabled: {student, teacher, parent}, max_tokens: {topic_doubt, exam_review_chat, escalation_attempt, teacher_tools_plan, teacher_tools_questions, teacher_tools_report, parent_topic_description, parent_report, parent_topic_explain, exam_analysis}, features: {marketplace, open_learning, parent_portal...}, banner: {text, severity} | null, maintenance_mode: bool}
 
 PATCH /api/admin/settings
 → Auth: admin

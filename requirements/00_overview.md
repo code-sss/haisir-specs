@@ -130,9 +130,10 @@ ProxyHeaders → SecurityHeaders → SecurityValidation
 
 | Prefix | Purpose |
 |---|---|
-| `/api/auth` | CSRF token issuance |
-| `/api/users` | Current user identity (`/me`) |
+| `/api/auth` | CSRF token issuance (`GET /api/auth/csrf`); token refresh (`POST /api/auth/refresh` — **APISIX-handled**, not a FastAPI route) |
+| `/api/users` | Current user identity (`/me`) — returns `sub`, `email`, `roles`, `onboarding_completed` |
 | `/api/categories` | Category CRUD |
+| `/api/courses` | Course management |
 | `/api/course-path-nodes` | Course hierarchy tree |
 | `/api/topics` | Topics within a course path node |
 | `/api/topics-contents` | Content items (PDF, video, text) per topic |
@@ -158,6 +159,7 @@ ProxyHeaders → SecurityHeaders → SecurityValidation
 | `/api/haitu` | AI layer — all hAITU interactions |
 | `/api/notifications` | Notification feed |
 | `/api/admin` | SuperAdmin — boards, institutions, users, settings |
+| `/api/parent-link-codes` | Parent link code validation (onboarding) |
 
 ---
 
@@ -233,7 +235,7 @@ Key rule: hAITU must attempt before escalation is possible (`doubt.haitu_attempt
 | No Redux/Zustand — custom hooks + useState only | Existing |
 | SQLAlchemy imperative mapping — domain models are plain dataclasses | Existing |
 | `question_ids` as PostgreSQL ARRAY columns — not join tables | Existing |
-| Exam sessions snapshot questions at creation time | Existing |
+| Exam session questions reference live question rows via FK (no JSONB snapshot) | Existing |
 | Images stored on disk at `data_dir/images/questions/`, base64 at API layer | Existing |
 | `is_active` soft delete on `exam_templates` | Existing |
 | No local users table | Existing |

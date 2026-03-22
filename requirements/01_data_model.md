@@ -27,13 +27,54 @@ categories
               └── topic_contents   (PDF, video, text)
 ```
 
-**`categories`** — top-level groupings (e.g. "NCERT", "JNV").
+> **Terminology:** The UI and persona specs use the word "board" (e.g. "board content", "board adoption", "board management"). A "board" maps directly to a `categories` row — there is no separate `boards` table. `categories` is the canonical table name in the database.
 
-**`course_path_nodes`** — self-referential tree representing the full curriculum hierarchy from grade down to course level. This is the existing content tree. Fields include `parent_id` (self-referential), `name`, `node_type`, `order_index`.
+> **Note on existing tables:** The backend implementation is the authority on exact column names if any discrepancy arises. Schemas below are inferred from existing spec references and API contracts.
 
-> Extension required: add `owner_type` and `owner_id` columns to `course_path_nodes` to support multi-persona content ownership. See section 3.3.
+**`categories`** — top-level board groupings (e.g. "NCERT", "CBSE", "JNV"). Referenced as FK in `organizations.primary_board_category_id` and `board_adoptions.category_id`.
+
+```python
+class Category(BaseModel):
+    id: UUID
+    name: str           # e.g. "NCERT", "CBSE", "JNV"
+    path_type: str      # 'structured' | 'flexible' (Enum: PathType)
+    description: str | None
+```
+
+**`course_path_nodes`** — self-referential tree representing the full curriculum hierarchy from grade down to course level.
+
+```python
+class CoursePathNode(BaseModel):
+    id: UUID
+    parent_id: UUID | None      # self-referential; null = root node under a category
+    category_id: UUID           # FK → categories (the board this node belongs to)
+    name: str
+    node_type: str              # e.g. 'grade', 'subject', 'course' (Enum: NodeType)
+    order: int | None           # nullable in existing schema
+    # Extended columns (section 3.1 — added via ALTER TABLE):
+    owner_type: str             # 'platform' | 'institution' | 'tutor'
+    owner_id: UUID | None       # org_id or keycloak_sub; null for platform-owned
+```
+
+> Extension required: see section 3.1 for the `owner_type` / `owner_id` ALTER TABLE migration.
 
 **`topics`** — leaf nodes within a `course_path_node`. Each topic is a specific study unit (e.g. "Fractions").
+
+```python
+class Topic(BaseModel):
+    id: UUID
+    course_path_node_id: UUID   # FK → course_path_nodes
+    title: str                  # NOTE: column is 'title', not 'name'
+    order: int | None           # nullable in existing schema; NOTE: column is 'order', not 'order_index'
+    # Extended columns (section 3.2 — added via ALTER TABLE):
+    status: str                 # 'draft' | 'live' | 'archived'
+    owner_type: str             # 'platform' | 'institution' | 'tutor'
+    owner_id: UUID | None       # org_id or keycloak_sub; null for platform-owned
+```
+
+> Extension required: see section 3.2 for the `status` / `owner_type` / `owner_id` ALTER TABLE migration.
+
+> **`locked` is not a column on `topics`.** It is a derived field computed at the API layer when building topic list responses for students. A topic is `locked = true` when its nearest `course_path_node` ancestor with `node_type = 'grade'` represents a grade higher than the requesting student's `student_profiles.grade`. No migration or stored column is needed.
 
 **`topic_contents`** — content items attached to a topic. Types: PDF (file stored on disk), video (URL), text notes.
 
@@ -41,7 +82,7 @@ categories
 
 ### 2.2 Question Bank
 
-**`questions`** — shared question bank. Fields include body, image reference, answer options (MCQ), correct answer, explanation.
+**`questions`** — shared question bank. Fields include `question_text` (NOTE: not `body`), `question_type` (`single_choice` | `multiple_choice` | `true_false` | `fill_in_the_blank` | `essay`), `options` (JSONB), `correct_answers` (JSONB), `explanation`, `difficulty` (`easy` | `medium` | `hard`), `tags` (JSONB, nullable), `image_url`.
 
 **`paragraph_questions`** — reading passages with embedded question IDs. A `paragraph_question` contains a passage body and an array of `question_id` references from the `questions` table. Used in exams where students read a passage and answer several questions about it.
 
@@ -49,21 +90,75 @@ categories
 
 ### 2.3 Assessments (topic-based quizzes)
 
-**`assessments`** — topic-based quizzes authored by instructors. Fields include `topic_id`, `question_ids` (ARRAY), `time_limit_minutes`.
+**`assessments`** — topic-based quizzes authored by instructors. Fields include `topic_id`, `question_ids` (ARRAY), `paragraph_question_ids` (ARRAY, nullable), `title`.
 
-**`assessment_attempts`** — one record per student per attempt. Fields include `assessment_id`, `student_id` (Keycloak sub), `status`, `score`, `started_at`, `submitted_at`.
+**`assessment_attempts`** — one record per student per attempt. Fields include `assessment_id`, `user_id` (Keycloak sub — NOTE: column is `user_id`, not `student_id`), `status` (`pending` | `ongoing` | `completed` | `failed`), `score`, `started_at`, `finished_at` (NOTE: column is `finished_at`, not `submitted_at`).
 
 **`assessment_answers`** — individual answer records per question per attempt.
 
 ### 2.4 Exams (formal timed exams)
 
-**`exam_templates`** — instructor-authored exam blueprints. Fields include `title`, `instructor_id`, `is_active` (soft delete flag). Contains mixed question types including `paragraph_questions`.
+> **Note:** These are existing tables. The backend implementation is the authority on exact column names if any discrepancy arises. The schemas below are inferred from the existing spec references, design decisions, and API contracts.
 
-**`exam_template_questions`** — ordered list of questions (regular + paragraph) within a template.
+**`exam_templates`** — instructor-authored exam blueprints.
 
-**`exam_sessions`** — per-student exam instances. **Key design decision: questions are copied from the template at session creation time.** Template edits after session creation do not affect in-progress sessions.
+```python
+class ExamTemplate(BaseModel):
+    id: UUID
+    course_path_node_id: UUID   # FK → course_path_nodes
+    title: str
+    description: str | None
+    mode: str                   # 'static' | 'dynamic' | 'custom' (Enum: ExamMode)
+    ruleset: dict | None        # JSON — dynamic exam generation rules
+    duration_minutes: int | None  # NOTE: column is 'duration_minutes', not 'time_limit_minutes'
+    passing_score: float | None # 0.0–1.0
+    created_by: UUID            # Keycloak sub of creating instructor; NOTE: column is 'created_by', not 'instructor_id'
+    is_active: bool             # soft delete — False means archived
+```
 
-**`exam_session_questions`** — the snapshot copy of questions for a specific session.
+**`exam_template_questions`** — ordered list of questions within a template.
+
+```python
+class ExamTemplateQuestion(BaseModel):
+    id: UUID
+    exam_template_id: UUID      # FK → exam_templates
+    question_id: UUID           # FK → questions
+    order: int                  # NOTE: column is 'order', not 'order_index'
+    points: int                 # points awarded for this question
+```
+
+**BR-EXAM-001:** Paragraph questions in exam templates are not yet supported in the existing schema. The `exam_template_questions` table currently references only `questions` via `question_id`. Paragraph question support in exams will require an ALTER TABLE migration to add `paragraph_question_id` — plan this as part of the new work.
+
+**`exam_sessions`** — per-student exam instances. **Key design decision: exam session questions reference live question rows via FK — no JSONB snapshot.** Template edits after session creation may affect question content — the current design does not snapshot. **Accepted risk:** If a teacher edits a question after a student has completed an exam, the student's review screen will show the edited question text, not the original. This is a known trade-off for simplicity — teachers should be aware that question edits are retroactive across all past sessions.
+
+```python
+class ExamSession(BaseModel):
+    id: UUID
+    user_id: UUID               # Keycloak sub; NOTE: column is 'user_id', not 'student_id'
+    exam_template_id: UUID | None  # FK → exam_templates; nullable
+    course_path_node_id: UUID   # FK → course_path_nodes
+    mode: str                   # 'static' | 'dynamic' | 'custom' (Enum: ExamMode)
+    ruleset: dict | None        # JSON — snapshotted from template or custom
+    created_at: datetime | None
+    started_at: datetime | None
+    finished_at: datetime | None  # NOTE: column is 'finished_at', not 'submitted_at'
+    score: float | None         # computed and stored on completion
+    status: str                 # 'pending' | 'ongoing' | 'completed' | 'failed' (Enum: ExamStatus)
+```
+
+**`exam_session_questions`** — per-question records for a specific session. **Key design decision: exam session questions reference live question rows via FK, not JSONB snapshots.** Answers (`user_answer`, `is_correct`, `earned_points`) are stored directly on the session question row. Template edits after session creation may affect question content — the current design does not snapshot.
+
+```python
+class ExamSessionQuestion(BaseModel):
+    id: UUID
+    exam_session_id: UUID       # FK → exam_sessions
+    question_id: UUID           # FK → questions (references live question row, not a snapshot)
+    order: int                  # NOTE: column is 'order', not 'order_index'
+    points: int                 # points available for this question
+    user_answer: str | None     # student's submitted answer
+    is_correct: bool | None     # grading result
+    earned_points: float | None # points earned
+```
 
 ---
 
@@ -101,10 +196,18 @@ ALTER TABLE topics
 
 **Status lifecycle:**
 - `draft` → topic created but not visible to students. Only the creator can view and edit.
-- `live` → visible to students within their enrollment scope.
+- `live` → visible to students within their enrollment scope. **Content (title, topic_contents) remains editable in-place** — the creator can fix errors, add content, or update materials without changing the topic's status. Status transitions remain one-way.
 - `archived` → hidden from students and read-only. Cannot be reverted to `live` (create a new topic instead).
 
-**Transitions:** `draft → live` (creator publishes), `live → archived` (creator or admin archives). No other transitions are valid.
+**Transitions:** `draft → live` (creator publishes), `live → archived` (creator or admin archives). No other transitions are valid. Note: while status transitions are one-way, topic content (title, attached content items) can be edited at any status except `archived`.
+
+**BR-CONTENT-003:** A topic's `owner_type` and `owner_id` are set at creation based on the creator's role context — not inherited from the parent `course_path_node`:
+- Creator is `admin` → `owner_type = 'platform'`, `owner_id = NULL`
+- Creator is `institution_admin` → `owner_type = 'institution'`, `owner_id = org_id`
+- Creator is `instructor` (adding supplemental content) → `owner_type = 'institution'`, `owner_id = org_id` of their organization
+- Creator is `tutor` → `owner_type = 'tutor'`, `owner_id = tutor_keycloak_sub`
+
+**BR-CONTENT-004:** `topic_contents` items do not carry their own `owner_type`. They inherit access rules from their parent `topic`. No ownership columns are needed on `topic_contents`.
 
 ### 3.3 `exam_templates` — add owner columns
 
@@ -120,6 +223,27 @@ ALTER TABLE exam_templates
 ## 4. New Tables
 
 All tables below are new additions. They must not conflict with the existing schema.
+
+### 4.0 User Metadata
+
+**`user_metadata`** ❌ NEW — cross-role user state, keyed on Keycloak `sub`. Applies to all personas including admin and institution_admin who skip the onboarding flow.
+
+```python
+class UserMetadata(BaseModel):
+    keycloak_sub: str                      # PK — no FK constraint
+    onboarding_completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+```
+
+**Row lifecycle:**
+- Created (upsert) on the user's first authenticated request to `GET /api/users/me`.
+- `onboarding_completed_at` is set by `PATCH /api/users/me/onboarding-complete` (called at ON08).
+- For `admin` and `institution_admin` users who are Keycloak-invited and skip onboarding, the row is created with `onboarding_completed_at = now()` at the time the backend processes their first login — they never see the onboarding flow.
+
+**BR-META-001:** `GET /api/users/me` returns `onboarding_completed: bool` derived from `onboarding_completed_at IS NOT NULL`. The frontend uses this on every page load to decide whether to redirect to `/onboarding`.
+
+**BR-META-002:** `PATCH /api/users/me/onboarding-complete` does not require `X-Current-Role` — users may not have an active role yet at ON08. This is an explicit exception to BR-SEC-006.
 
 ### 4.1 Profile Tables
 
@@ -208,7 +332,9 @@ class Class(BaseModel):
     academic_year: str          # e.g. "2025-2026"
     instructor_keycloak_sub: str | None
     invite_code: str            # e.g. "STMARY-2026-G6" — unique platform-wide
+    board_adoption_id: UUID | None  # FK → board_adoptions; null = no board curriculum assigned yet
     created_at: datetime
+    updated_at: datetime
 ```
 
 **`class_enrollments`** ❌ NEW
@@ -251,12 +377,13 @@ class EnrollmentTopic(BaseModel):
     status: Literal['not_started', 'in_progress', 'completed', 'weak']
     mastery_score: float | None # 0.0–100.0
     last_studied_at: datetime | None
+    created_at: datetime
     updated_at: datetime
 ```
 
 **BR-PROGRESS-001:** A topic is `weak` if `mastery_score < 60.0` after at least one assessment attempt.
 **BR-PROGRESS-002:** A topic is `completed` if `mastery_score >= 75.0` and at least one attempt submitted.
-**BR-PROGRESS-003:** `mastery_score` recalculation: `(latest_score * 0.6) + (previous_mastery * 0.4)`.
+**BR-PROGRESS-003:** `mastery_score` recalculation: On the **first attempt**, `mastery_score = latest_score` (raw score directly). From the **second attempt onward**, `mastery_score = (latest_score * 0.6) + (previous_mastery * 0.4)`. This prevents false weak-topic flags from a single attempt (e.g., scoring 80% would give mastery 48% if previous_mastery defaulted to 0).
 
 **Enrollment deactivation rules:**
 
@@ -274,6 +401,12 @@ class EnrollmentTopic(BaseModel):
 - Pending `class_assignments` for that student are excluded from due items.
 
 **BR-ENROLL-006:** Removal is not reversible. To re-enroll, create a new enrollment. Previous `enrollment_topics` data is not carried over — student starts fresh.
+
+**BR-ENROLL-007 (structured enrollment invariant):** For every structured enrollment, a `class_enrollments` row and an `enrollments` row with `type = 'structured'` must always exist as a pair. The backend service layer is responsible for creating and removing both atomically within a single database transaction.
+
+- **Creation:** When a student joins a class (via invite code, CSV upload, or admin manual), the service creates both rows in one transaction. If either insert fails, both are rolled back.
+- **Source of truth for class membership:** `class_enrollments` is authoritative for "is this student on the class roster". `enrollments` is authoritative for learning progress, doubts, topics, and reviews.
+- **Access check:** A student's access to class content requires `class_enrollments.status = 'active'` AND `enrollments.status = 'active'`. If the two ever diverge (data integrity failure), the more restrictive state governs — treat the student as unenrolled and alert via application logs.
 
 ### 4.4 Tutor–Student Relationships
 
@@ -340,7 +473,9 @@ class DoubtMessage(BaseModel):
 **BR-DOUBT-002:** Messages are append-only — no editing or deletion.
 **BR-DOUBT-003:** Auto-close at 7 days if not manually resolved.
 **BR-DOUBT-004:** When teacher sends a message, `doubt.status` → `answered`. When marked resolved, `status` → `resolved` and `resolved_at` is set.
-**BR-DOUBT-005:** Escalation target is determined automatically: for structured enrollments, `escalated_to` = the `instructor_keycloak_sub` of the class linked to the enrollment. For open enrollments, `escalated_to` = the `tutor_keycloak_sub` on the enrollment. If no instructor is assigned to the class, the doubt is created with `escalated_to = NULL` and surfaces in the institution admin's unassigned doubts list.
+**BR-DOUBT-005:** `escalated_to` is resolved by `domain/services/doubts_service.py` at `POST /api/doubts` creation time — not at hAITU interaction time, and not in the route handler. Resolution chain:
+- **Structured enrollment:** `enrollment.class_id` → `classes.instructor_keycloak_sub`. If `instructor_keycloak_sub` is NULL (class has no teacher), set `escalated_to = NULL` — the doubt surfaces in the institution admin's unassigned doubts list and triggers a `class_no_teacher` notification if one has not already fired for this class within 48 hours.
+- **Open enrollment:** `enrollment.tutor_keycloak_sub`. If NULL (self-directed with no tutor), set `escalated_to = NULL` — the doubt is visible only to the student and platform admin.
 
 ### 4.7 Class Assignments
 
@@ -360,8 +495,9 @@ class ClassAssignment(BaseModel):
     exam_template_id: UUID | None  # FK → exam_templates (summative) — mutually exclusive with assessment_id
     assigned_by: str            # instructor keycloak_sub
     due_at: datetime
-    note: str | None
+    note: str | None            # max 500 chars
     created_at: datetime
+    updated_at: datetime
 ```
 
 **BR-ASSESS-001:** A `class_assignment` must have exactly one of `assessment_id` or `exam_template_id` set — never both, never neither. Enforce with a database CHECK constraint: `CHECK (num_nonnulls(assessment_id, exam_template_id) = 1)`.
@@ -400,7 +536,16 @@ INSERT INTO platform_settings VALUES
   ('haitu_enabled_student', 'true', NOW()),
   ('haitu_enabled_teacher', 'true', NOW()),
   ('haitu_enabled_parent', 'true', NOW()),
-  ('haitu_max_tokens_student', '400', NOW()),
+  ('haitu_max_tokens_topic_doubt',              '400',  NOW()),
+  ('haitu_max_tokens_exam_review_chat',         '500',  NOW()),
+  ('haitu_max_tokens_escalation_attempt',       '400',  NOW()),
+  ('haitu_max_tokens_teacher_tools_plan',       '600',  NOW()),
+  ('haitu_max_tokens_teacher_tools_questions',  '800',  NOW()),
+  ('haitu_max_tokens_teacher_tools_report',     '300',  NOW()),
+  ('haitu_max_tokens_parent_topic_description', '200',  NOW()),
+  ('haitu_max_tokens_parent_report',            '350',  NOW()),
+  ('haitu_max_tokens_parent_topic_explain',     '200',  NOW()),
+  ('haitu_max_tokens_exam_analysis',            '600',  NOW()),
   ('marketplace_enabled', 'true', NOW()),
   ('open_learning_enabled', 'true', NOW()),
   ('parent_portal_enabled', 'true', NOW()),
@@ -437,6 +582,7 @@ class BoardAdoption(BaseModel):
     adopted_by: str              # keycloak_sub of institution_admin
     status: Literal['active', 'inactive']
     adopted_at: datetime
+    updated_at: datetime
 ```
 
 **BR-ADOPT-001:** On board import, topics are created with `owner_type = 'institution'` and `owner_id = org_id` (see BR-INST-006).
@@ -453,7 +599,7 @@ class PlatformEvent(BaseModel):
     actor_keycloak_sub: str      # who performed the action
     actor_role: str              # role at time of action
     entity_type: str | None      # e.g. 'organization', 'tutor', 'board'
-    entity_id: str | None        # ID of affected entity
+    entity_id: str | None        # ID of affected entity — intentionally str, not UUID, to support heterogeneous entity types (org IDs, keycloak subs, board names)
     description: str             # human-readable summary
     created_at: datetime
 ```
@@ -461,11 +607,44 @@ class PlatformEvent(BaseModel):
 **BR-EVENT-001:** Platform events are append-only — no editing or deletion.
 **BR-EVENT-002:** The SuperAdmin dashboard shows the most recent 20 events (see BR-SA-002).
 
+### 4.12 Topic Reviews
+
+**`topic_reviews`** ❌ NEW — student ratings of topics after studying them. Aggregate scores feed the tutor marketplace content rating.
+
+```python
+class TopicReview(BaseModel):
+    id: UUID
+    topic_id: UUID               # FK → topics
+    reviewer_keycloak_sub: str   # student — no FK constraint
+    enrollment_id: UUID          # FK → enrollments (ensures student studied via this context)
+    rating: int                  # 1–5 stars
+    comment: str | None          # optional short text
+    created_at: datetime
+```
+
+**BR-REVIEW-001:** One review per student per topic — enforced by unique index on `(topic_id, reviewer_keycloak_sub)`.
+
+**BR-REVIEW-002:** A student can only submit a review for a topic where their `enrollment_topics.status` is `completed` or `weak` (i.e. they have genuinely attempted the topic at least once).
+
+**BR-REVIEW-003:** Reviews are immutable once submitted — no editing or deletion by the student.
+
+**BR-REVIEW-004:** `teacher_profiles.content_rating` and `teacher_profiles.review_count` are cached aggregates recomputed when a new review is submitted for any topic owned by that tutor (`topics.owner_type = 'tutor'` and `topics.owner_id = tutor_keycloak_sub`). Platform and institution-owned topics do not feed tutor ratings.
+
+**`teacher_profiles` extension** — add two cached aggregate columns:
+```sql
+ALTER TABLE teacher_profiles
+  ADD COLUMN content_rating NUMERIC(3,2) NULL,   -- avg of topic_reviews.rating across tutor's topics
+  ADD COLUMN review_count   INT NOT NULL DEFAULT 0;
+```
+
 ---
 
 ## 5. Key Indexes
 
 ```sql
+-- User metadata
+-- keycloak_sub is the PK — no additional index needed
+
 -- Profiles
 CREATE UNIQUE INDEX idx_student_profiles_sub ON student_profiles(keycloak_sub);
 CREATE UNIQUE INDEX idx_teacher_profiles_sub ON teacher_profiles(keycloak_sub);
@@ -473,6 +652,9 @@ CREATE UNIQUE INDEX idx_parent_profiles_sub  ON parent_profiles(keycloak_sub);
 
 -- Classes
 CREATE UNIQUE INDEX idx_classes_invite_code ON classes(invite_code);
+CREATE INDEX idx_classes_board_adoption
+  ON classes(board_adoption_id)
+  WHERE board_adoption_id IS NOT NULL;
 
 -- Class enrollments
 CREATE UNIQUE INDEX idx_class_enrollment_active
@@ -514,8 +696,18 @@ CREATE UNIQUE INDEX idx_board_adoption_active
   ON board_adoptions(organization_id, category_id)
   WHERE status = 'active';
 
+-- Doubts auto-close
+CREATE INDEX idx_doubts_auto_close
+  ON doubts(auto_close_at)
+  WHERE status != 'resolved';
+
 -- Platform events
 CREATE INDEX idx_platform_events_recent ON platform_events(created_at DESC);
+
+-- Topic reviews
+CREATE UNIQUE INDEX idx_topic_review_once
+  ON topic_reviews(topic_id, reviewer_keycloak_sub);
+CREATE INDEX idx_topic_reviews_topic ON topic_reviews(topic_id, rating);
 ```
 
 ---

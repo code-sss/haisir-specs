@@ -50,7 +50,7 @@ Institution admins and platform admins (`admin`) are never onboarded through thi
 
 **API calls:**
 ```
-POST /api/auth/csrf
+GET /api/auth/csrf
 → Returns: {csrf_token}
 → No auth required (bootstraps CSRF for onboarding)
 ```
@@ -72,7 +72,7 @@ All subsequent onboarding calls require `X-CSRF-Token` and the session cookie se
 
 **Business rules:**
 - **BR-ON-005:** At least one role must be selected to proceed.
-- **BR-ON-006:** Selecting multiple roles queues them. Setup runs sequentially for each selected role (ON03 → ON04 → ON05 → ON06 in that order, skipping unselected ones).
+- **BR-ON-006:** Selecting multiple roles queues them. Setup runs sequentially for each selected role (ON03 → ON04 → ON06 → ON05 in that order, skipping unselected ones). Teacher (ON04) and Tutor (ON06) run back-to-back so ON06 can pre-fill from ON04 data (see BR-ON-020).
 - **BR-ON-007:** A user who selects both "Teacher" and "Tutor" completes both setup screens — they get both `instructor` and `tutor` roles assigned.
 
 ---
@@ -217,13 +217,14 @@ POST /api/teachers/me/profile
 
 **Business rules:**
 - **BR-ON-025:** Destination per role: student → `/home/dashboard`, instructor → `/teacher`, tutor → `/teacher`, parent → `/parent`, admin → `/admin`.
-- **BR-ON-026:** Onboarding completion is recorded. Users who revisit `/onboarding` are redirected to their dashboard immediately.
+- **BR-ON-026:** Onboarding completion is recorded in `user_metadata.onboarding_completed_at`. The frontend checks `onboarding_completed` from `GET /api/users/me` and caches the result in `localStorage` for the session. The cache is invalidated and re-fetched only on hard reload or immediately after `PATCH /api/users/me/onboarding-complete` succeeds. If `false`, redirect to `/onboarding`. If `true`, redirect to the role dashboard. Admin and institution_admin users always have `onboarding_completed = true` (set at first login).
 
 **API calls:**
 ```
 PATCH /api/users/me/onboarding-complete
-→ Auth: any role
-→ Returns: {completed_at}
+→ Auth: any authenticated session (no X-Current-Role required — explicit exception to BR-SEC-006)
+→ Action: sets user_metadata.onboarding_completed_at = now()
+→ Returns: {completed_at: datetime}
 ```
 
 ---

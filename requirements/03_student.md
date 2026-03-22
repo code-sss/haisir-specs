@@ -40,7 +40,6 @@
 | S08 | `doubt-inbox` | `/doubts` | My doubts | Topbar → "Doubts" |
 | S09 | `doubt-thread` | `/doubts/:doubt_id` | Doubt thread | Doubt inbox → row |
 | S10 | `profile` | `/profile` | Student profile | Topbar → "Profile" |
-| S11 | `booking` | `/tutors/:keycloak_sub/book` | Book session (UI only) | Tutor profile → "Book" |
 
 ---
 
@@ -188,7 +187,18 @@ POST /api/enrollments/open/bulk
 - Source tag (institution name or tutor name).
 - Status badge (Needs attention / In progress / Completed / Not started) with mastery score.
 - "Ask hAITU" button.
-- "Ask teacher" button — shown only for weak topics (`status = 'weak'`).
+
+**hAITU chat panel (slide-in, scoped to topic):**
+- Opens from the right when "Ask hAITU" is clicked on any topic row.
+- Header shows topic title and "Scoped to this topic" subtitle.
+- Student types a question → hAITU responds.
+- After hAITU has sent at least one response, a "Still need help? Request teacher help →" button appears at the bottom of the panel.
+- Clicking "Request teacher help →" creates a doubt record and navigates to S09 thread.
+- The panel can be dismissed with a close button (×) without creating a doubt.
+
+**Content rating prompt:**
+- When a topic's `enrollment_topics.status` transitions to `completed` or `weak`, a rating prompt appears inline in the topic row (below the status badge): "Rate this topic's content: ★ ★ ★ ★ ★". Selecting a star immediately submits the rating (no confirm step). An optional comment field appears after submission.
+- Once rated, the prompt is replaced with the student's submitted rating (read-only).
 
 **Actions:**
 - Click enrollment tab → switches active enrollment, re-renders topics list.
@@ -196,14 +206,14 @@ POST /api/enrollments/open/bulk
 - Click × on pill → removes filter.
 - Type in search → filters topics live.
 - ☰ toggle → collapses/expands sidebar.
-- "Ask hAITU" → opens hAITU chat panel (in-page, scoped to topic).
-- "Ask teacher" on weak topic → creates a doubt and navigates to S09 thread.
+- "Ask hAITU" on a topic row → opens hAITU chat panel scoped to that topic.
+- "Request teacher help →" inside the hAITU panel (shown after first hAITU response) → creates a doubt and navigates to S09 thread.
 - Click topic row → opens topic study view (out of scope for this version — stub with toast).
 
 **Business rules:**
-- **BR-STU-012:** Locked topics (`locked = true`) are shown but not clickable. They show a lock icon and "Locked — next grade" label.
+- **BR-STU-012:** Locked topics (`locked = true`) are shown but not clickable. They show a lock icon and "Locked — next grade" label. `locked` is a derived field in the API response — not a stored column. The backend computes it by traversing the topic's `course_path_node` ancestry to find the nearest ancestor with `node_type = 'grade'`, then comparing that grade to the student's `student_profiles.grade`. If the topic's grade is higher than the student's grade, `locked = true`.
 - **BR-STU-013:** Switching enrollment tabs resets filters and search.
-- **BR-STU-014:** "Ask teacher" only appears on topics with `enrollment_topics.status = 'weak'`. On click, creates a `doubt` record with `haitu_attempted = false` (teacher request is direct — hAITU attempt is simulated as already done in this flow).
+- **BR-STU-014:** There is no "Ask teacher" button on topic rows. Teacher escalation is only available from within the hAITU chat panel, after hAITU has sent at least one response. The "Request teacher help →" button appears at the bottom of the panel once `escalation_suggested = true` is returned by `POST /api/haitu/topic-doubt`, or after the student has received at least one hAITU response (the button is always shown after the first exchange, regardless of escalation signal). Clicking it creates a `doubt` record with `haitu_attempted = true` and navigates to S09.
 
 **API calls:**
 ```
@@ -214,6 +224,27 @@ GET /api/enrollments/{enrollment_id}/topics?status={}&subject={}&q={}
 GET /api/students/me/enrollments
 → Auth: student
 → Returns: [{id, type, label, sublabel, icon, board, grade, tutor_name}]
+
+POST /api/haitu/topic-doubt
+→ Auth: student
+→ Body: {topic_id, enrollment_id, message, history: [{role, content}]}
+→ Returns: {response: str, escalation_suggested: bool}
+→ See: `08_haitu_ai_layer.md #topic-doubt`
+→ Note: used by the hAITU chat panel in the topic navigator. After the first response,
+  the frontend always shows "Request teacher help →" regardless of escalation_suggested.
+
+POST /api/doubts
+→ Auth: student
+→ Body: {topic_id, enrollment_id, initial_message}
+→ Returns: {doubt_id}
+→ Note: called when student clicks "Request teacher help →" inside the hAITU panel.
+  Server sets haitu_attempted = true automatically on this path.
+
+POST /api/topics/{topic_id}/reviews
+→ Auth: student
+→ Body: {enrollment_id, rating: int (1–5), comment?: str}
+→ Returns: {review_id, created_at}
+→ Errors: 409 already reviewed, 403 topic not completed or weak for this student
 ```
 
 ---
@@ -276,7 +307,7 @@ GET /api/exam-sessions/{session_id}/review
     ]
   }
 
-POST /api/haitu/exam-chat
+POST /api/haitu/exam-review-chat
 → Auth: student
 → Body: {session_id: uuid, message: str, history: [{role, content}]}
 → Returns: {response: str}
@@ -309,8 +340,8 @@ GET /api/tutors/marketplace?subject={}&grade={}&q={}
 → Auth: student
 → Returns: [{
     keycloak_sub, name, initials, color, subjects, grades,
-    topics: [str], rating, review_count, student_count,
-    rate_per_session, availability
+    topics: [str], content_rating: float | null, review_count: int,
+    student_count, rate_per_session, availability
   }]
 ```
 
@@ -318,21 +349,23 @@ GET /api/tutors/marketplace?subject={}&grade={}&q={}
 
 ### S07 — Tutor Profile
 
-**Purpose:** Full tutor profile with bio, topics, slots, and reviews.
+**Purpose:** Full tutor profile with bio, topics, and content reviews. Informational only — no session booking in this phase.
 
 **Layout:**
-- Hero: avatar, name, subjects, grade range, bio, rating, student count, rate, "Book a session" button.
-- Left main: About section, Topics covered, Student reviews.
-- Right sidebar: Available slots grid, booking CTA, "Why hAIsir" trust card.
+- Hero: avatar, name, subjects, grade range, bio, content rating (aggregate stars + count), student count, rate and availability (shown as info text — no booking button).
+- Left main: About section, Topics covered (with per-topic avg rating shown as small stars next to each topic pill), Content reviews.
+- Right sidebar: "Enroll with this tutor" CTA (starts open enrollment — same flow as S03), "Why hAIsir" trust card.
+
+**Content reviews section:**
+- Each review row: student avatar initials, topic name pill, star rating, optional comment, date.
+- Label: "Content reviews" (not "Student reviews").
 
 **Actions:**
-- Click time slot → selects it (highlights purple, updates booking button label).
-- "Book a session" → navigates to S11. If no slot selected, shows toast "Please select a time slot first."
-- "View profile" on reviews (future).
+- "Enroll with this tutor" → creates an open enrollment for this tutor → navigates to S04 scoped to that enrollment.
 
 **Business rules:**
-- **BR-STU-021:** Slots marked `full` are not selectable.
-- **BR-STU-022:** Slot selection is client-side state only — not persisted to backend until booking confirmed.
+- **BR-STU-021:** Rate and availability are displayed as informational text only. There is no slot picker or booking flow.
+- **BR-STU-022:** Content rating shown is `teacher_profiles.content_rating` — the aggregate across all of the tutor's topics. Tutors with no reviews yet show "No reviews yet" instead of a star rating.
 
 **API calls:**
 ```
@@ -340,10 +373,18 @@ GET /api/tutors/{keycloak_sub}/profile
 → Auth: student
 → Returns: {
     keycloak_sub, name, bio, subjects, grades, topics,
-    rating, review_count, student_count, rate_per_session,
-    availability, slots: [{label, available}],
-    reviews: [{reviewer_name, stars, text}]
+    content_rating: float | null, review_count: int, student_count,
+    rate_per_session, availability,
+    reviews: [{
+      reviewer_initials, reviewer_color, topic_title,
+      rating: int, comment: str | null, created_at
+    }]
   }
+
+POST /api/enrollments/open/bulk
+→ Auth: student
+→ Body: {items: [{tutor_keycloak_sub}]}
+→ Returns: {enrollment_ids: [uuid]}
 ```
 
 ---
@@ -473,32 +514,6 @@ POST /api/students/me/parent-link-code
 GET /api/students/me/parent-link-code
 → Auth: student
 → Returns: {code: str, expires_at: datetime, linked_parents: int} | null
-```
-
----
-
-### S11 — Book Session (UI stub)
-
-**Purpose:** UI for confirming a tutor session booking. No payment processing in current scope.
-
-**Layout:**
-- Booking summary card: tutor name, subject, selected slot, duration (60 min), rate, total.
-- Payment method selector: UPI / Credit-Debit / Net banking (visual only — no actual payment).
-- Refund policy note.
-- "Pay & confirm session" button → shows success state.
-- Success state: green confirmation card with session details. Adds tutor to enrollments.
-
-**Business rules:**
-- **BR-STU-027:** On booking confirmation, create a new open enrollment for this tutor if one doesn't already exist.
-- **BR-STU-028:** No actual payment processing. The payment UI is a placeholder for future integration. Log a `booking_intent` record only.
-
-**API calls:**
-```
-POST /api/bookings/intent
-→ Auth: student
-→ Body: {tutor_keycloak_sub: str, slot_label: str, subject: str}
-→ Returns: {booking_intent_id, enrollment_id}
-→ Side effect: creates open enrollment if not exists
 ```
 
 ---

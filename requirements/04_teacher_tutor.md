@@ -45,7 +45,7 @@ A single user can hold both `instructor` and `tutor` roles. The workspace adapts
 - Topbar colour: `#3C1F6E` (deep purple, shown as teal in combined view)
 - Operates independently — owns their curriculum fully
 - Manages individual student relationships asynchronously
-- Marketplace listing requires SuperAdmin approval
+- Marketplace listing is immediate (no approval gate) — admin can suspend post-hoc
 - Answers doubts from their own students
 
 When both roles are active, the home screen shows both contexts. The teacher home topbar uses `#0A3D2B`. Role context within the home is visual (section labels and card borders distinguish institutional from open).
@@ -199,11 +199,12 @@ POST /api/classes/{class_id}/assignments
 - **BR-TCH-008:** Topic performance table shows all topics the student has started or been assigned in this context, with their individual mastery scores.
 - **BR-TCH-009:** Teacher notes are private — only the teacher/tutor who wrote them can read them. Not visible to student, parent, or institution admin.
 - **BR-TCH-010:** The hAITU analysis is generated fresh on each page load. It analyses: weak topics, recent attempt trends, doubt frequency.
+- **BR-TCH-011:** The tutor student detail view (T03) is always opened with an enrollment context. When a student appears on the tutor's roster, each enrollment is shown as a separate row. The `enrollment_id` from that row is passed to T03 and used to scope all API calls, including `teacher_notes` lookup. A student with two active enrollments with the same tutor appears as two separate rows in the roster.
 
 **API calls:**
 ```
 GET /api/classes/{class_id}/students/{student_keycloak_sub}
-→ Auth: instructor (own class only)
+→ Auth: instructor (own class only) OR institution_admin (own org only; teacher_notes excluded per BR-INST-015)
 → Returns: {
     student: {keycloak_sub, name, initials, grade},
     overall_progress: float,
@@ -212,14 +213,16 @@ GET /api/classes/{class_id}/students/{student_keycloak_sub}
     doubt_history: [{doubt_id, topic_title, status, created_at, message_count}]
   }
 
-GET /api/tutors/me/students/{student_keycloak_sub}
+GET /api/tutors/me/students/{student_keycloak_sub}?enrollment_id={id}
 → Auth: tutor
 → Returns: same shape + teacher_notes field
+→ Errors: 404 if enrollment_id does not belong to this tutor–student pair
 
-PATCH /api/tutors/me/students/{student_keycloak_sub}/notes
+PATCH /api/tutors/me/students/{student_keycloak_sub}/notes?enrollment_id={id}
 → Auth: tutor
 → Body: {notes: str}
 → Returns: {updated_at}
+→ Errors: 404 if enrollment_id does not belong to this tutor–student pair
 
 POST /api/haitu/teacher-tools
 → Auth: instructor OR tutor
@@ -259,7 +262,7 @@ POST /api/haitu/teacher-tools
 - "Publish" button (tutor only) → sets topic status to `live`.
 
 **Business rules:**
-- **BR-TCH-011:** Instructors can only add content items to topics they are assigned to via their class. They cannot add content to topics outside their class curriculum.
+- **BR-TCH-025:** Instructors can only add content items to topics they are assigned to via their class. They cannot add content to topics outside their class curriculum.
 - **BR-TCH-012:** Tutors can only modify topics where `owner_type = 'tutor'` and `owner_id = self`.
 - **BR-TCH-013:** A topic with `status = 'draft'` is not visible to students.
 - **BR-TCH-014:** Uploaded PDFs are stored server-side. File size limit: 20MB. Accepted types: PDF only.
@@ -297,10 +300,10 @@ DELETE /api/content/{content_item_id}
 - Availability: free text field (e.g. "Mon–Fri 4–8pm").
 - Session rate: INR amount input.
 - Marketplace toggle: "List me in tutor marketplace" checkbox. If off, profile is not discoverable by students.
-- Stats (read-only): active students, topics built, average student progress, rating (placeholder).
+- Stats (read-only): active students, topics built, average student progress, content rating (aggregate of `topic_reviews` across all owned topics — shows "No reviews yet" if `review_count = 0`).
 
 **Business rules:**
-- **BR-TCH-016:** Toggling marketplace listing to `on` immediately makes the profile public (`marketplace_listed = true`). No admin approval required — the marketplace is federated. If the tutor has been suspended by admin (`marketplace_suspended = true`), show: "Your marketplace listing has been suspended by the platform admin. Contact support for details."
+- **BR-TCH-016:** Toggling marketplace listing to `on` immediately makes the profile public (`marketplace_listed = true`). No admin approval gate — the marketplace uses a federated model with post-hoc moderation. Platform Admin can suspend a tutor at any time by setting `marketplace_suspended = true`, which immediately hides them from student discovery regardless of `marketplace_listed`. If suspended, show: "Your marketplace listing has been suspended by the platform admin. Contact support for details."
 - **BR-TCH-017:** Toggling listing off immediately hides the profile from the marketplace (`marketplace_listed = false`).
 
 **API calls:**

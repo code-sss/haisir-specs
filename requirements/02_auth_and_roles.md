@@ -45,11 +45,11 @@ FastAPI validates the JWT that APISIX injects — not anything from the browser.
 
 | Setting | Value |
 |---|---|
-| Realm | `haisir` |
+| Realm | `haisir-realm-{{APP_ENV}}` (e.g. `haisir-realm-staging`, `haisir-realm-prod`) |
 | Auth flow | OIDC / OAuth 2.0 Authorization Code Flow |
 | Token type | JWT (RS256) |
 | SSO providers | Google (configured as identity provider) |
-| User self-registration | Enabled (email verification required) |
+| User self-registration | Disabled in Keycloak realm config (`registrationAllowed: false`). New accounts are created via Google SSO, Keycloak Admin API (for institution admins and invited teachers), or the onboarding flow's role assignment endpoint. |
 | JWT validation | FastAPI validates RS256 against Keycloak JWKS endpoint |
 
 ### 2.1 Realm Roles — Existing vs New
@@ -99,7 +99,7 @@ The active role context is NOT in the JWT — it comes from the `X-Current-Role`
 | `instructor` | Auto-assigned on self-registration; OR invited by `institution_admin` |
 | `admin` | Assigned manually in Keycloak console — never through the application |
 | `institution_admin` | New — assigned by `admin` only, never self-registered |
-| `tutor` | New — auto-assigned on self-registration; marketplace listing is immediate (federated model), admin can suspend |
+| `tutor` | New — auto-assigned on self-registration; marketplace listing is immediate on toggle (federated model, no approval gate), admin can suspend post-hoc |
 | `parent` | New — auto-assigned on self-registration |
 
 ---
@@ -169,11 +169,44 @@ def require_role(required_role: str):
     return dependency
 ```
 
-**BR-SEC-006:** `X-Current-Role` must be sent with every request. Requests missing this header return 400 Bad Request.
+**BR-SEC-006:** `X-Current-Role` should be sent with every request. If missing, the backend defaults to the user's first available role — but the frontend must always send it explicitly to avoid ambiguity. See section 7 for the small set of explicit exceptions.
 
 ### 4.3 `institution_admin` + `instructor` dual role
 
 An institution admin who also teaches holds both roles. When they switch to `X-Current-Role: instructor`, the teacher workspace is scoped to their own organization — they see only their own classes.
+
+---
+
+## 4.4 Token Refresh After Role Assignment
+
+During onboarding, the backend assigns new Keycloak roles via `POST /api/users/me/assign-role`. Because the user's existing JWT was issued before the role existed, the JWT must be refreshed before the new role appears in `realm_access.roles`.
+
+**Token refresh is automatic — there is no explicit `/api/auth/refresh` route.**
+
+APISIX's OIDC plugin is configured with `renew_access_token_on_expiry: true` and the `offline_access` scope, which means:
+- When the access token expires (300s lifespan), APISIX automatically uses the stored refresh token to obtain a new access token from Keycloak
+- The session cookie is updated transparently — no client action required for normal token expiry
+
+**After role assignment during onboarding**, the new role won't appear in the current JWT until it expires and APISIX auto-refreshes. To force an immediate refresh, use Keycloak's silent re-authentication:
+
+```typescript
+// After POST /api/users/me/assign-role, force token refresh:
+// Option 1: Hidden iframe with prompt=none (preferred)
+const iframe = document.createElement('iframe');
+iframe.style.display = 'none';
+iframe.src = '/auth/login?prompt=none';
+document.body.appendChild(iframe);
+iframe.onload = () => {
+  document.body.removeChild(iframe);
+  // Session cookie now contains JWT with updated realm_access.roles
+  await refreshUser(); // re-fetch /api/users/me
+};
+
+// Option 2: Full-page redirect (fallback if iframe blocked)
+window.location.href = '/auth/login?prompt=none&redirect_uri=' + encodeURIComponent(window.location.href);
+```
+
+**BR-AUTH-001:** The frontend must trigger a token refresh after every successful `POST /api/users/me/assign-role` during onboarding before proceeding to the next screen. This ensures `realm_access.roles` in the JWT reflects the newly assigned role before `X-Current-Role` is set for that role.
 
 ---
 
@@ -218,9 +251,11 @@ ProxyHeaders → SecurityHeaders → SecurityValidation (content-type, 10MB limi
 @dataclass
 class CurrentUser:
     sub: str                    # Keycloak sub claim
-    email: str
-    roles: list[str]            # all roles this user holds
-    current_role: str           # from X-Current-Role header
+    email: str | None
+    name: str | None            # from Keycloak 'name' claim
+    email_verified: bool
+    roles: list[str]            # all roles this user holds (filtered to valid UserRole values)
+    current_role: UserRole | None  # from X-Current-Role header; defaults to first role if not provided
 ```
 
 ---
@@ -286,7 +321,7 @@ Full read/write on all existing resources. New capabilities added:
 | Doubt escalation metrics (aggregate only) | ✓ | ✗ |
 | Own notifications | ✓ | ✓ (mark read) |
 
-**BR-ADMIN-001:** Institution admins see only aggregate metrics — never individual student assessment answers or doubt message content.
+**BR-ADMIN-001:** Institution admins can see individual student names, mastery scores, and progress (via I06/T02 read-only view), but never individual student assessment answers or doubt message content. They see doubt counts and status per student, not the actual messages.
 
 ### 6.5 Tutor (`tutor` — new role)
 
@@ -300,7 +335,7 @@ Full read/write on all existing resources. New capabilities added:
 | Own students' progress | ✓ | ✗ |
 | Doubts escalated to them | ✓ | ✓ (respond, resolve) |
 | Tutor-student relationships | ✓ | ✓ (manage own) |
-| Marketplace profile | ✓ | ✓ (edit; visibility requires `admin` approval) |
+| Marketplace profile | ✓ | ✓ (edit; immediately visible on toggle — admin can suspend post-hoc) |
 | Own notifications | ✓ | ✓ (mark read) |
 
 ### 6.6 Parent (`parent` — new role)
@@ -334,9 +369,9 @@ Full read/write on all existing resources. New capabilities added:
 
 **BR-SEC-005:** Institution admins can only manage data within their own organization. Cross-org access returns 403.
 
-**BR-SEC-006:** `X-Current-Role` must be present on every request. Missing header returns 400.
+**BR-SEC-006:** `X-Current-Role` should be sent with every request. If missing, the backend defaults to the user's first available role — but the frontend must always send it explicitly to avoid ambiguity. **Exceptions** (endpoints that accept requests without this header): `GET /api/users/me`, `PATCH /api/users/me/onboarding-complete`, `POST /api/users/me/assign-role` — these are called during or immediately after onboarding before the user has an active role.
 
-**BR-SEC-007:** JWT public key caching is acceptable with a max TTL of 5 minutes for the JWKS response.
+**BR-SEC-007:** JWT public key caching — APISIX caches JWKS for 24 hours (`jwk_expires_in: 86400`). The backend PyJWKClient uses library-default caching. Rotate Keycloak signing keys with at least 24 hours overlap to avoid validation failures.
 
 **BR-SEC-008:** Never log JWT contents, CSRF tokens, or session cookies. Use `structlog` with sensitive field redaction as established in the existing middleware stack.
 
@@ -349,8 +384,10 @@ Full read/write on all existing resources. New capabilities added:
 | `doubt_teacher_replied` | `student` |
 | `assessment_due_soon` | `student` |
 | `assessment_results_ready` | `student` |
+| `exam_results_ready` | `student` |
 | `topic_marked_weak` | `student` |
 | `new_content_uploaded` | `student` |
+| `doubt_auto_closed` | `student` |
 | `new_doubt_escalated` | `instructor` or `tutor` |
 | `class_exam_submitted` | `instructor` |
 | `student_at_risk` | `instructor` |
@@ -359,9 +396,10 @@ Full read/write on all existing resources. New capabilities added:
 | `child_assessment_due` | `parent` |
 | `child_weekly_digest` | `parent` |
 | `child_streak_milestone` | `parent` |
+| `child_doubt_auto_closed` | `parent` |
+| `teacher_added_to_org` | `instructor` |
 | `class_no_teacher` | `institution_admin` |
 | `student_at_risk_admin` | `institution_admin` |
-| `teacher_invite_accepted` | `institution_admin` |
 | `board_content_updated` | `institution_admin` |
 | `institution_registration` | `admin` |
 | `tutor_published` | `admin` |

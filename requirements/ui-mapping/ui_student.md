@@ -20,7 +20,6 @@
 | S08 | `s-doubts` | `/doubts` | `renderDoubtInbox()` |
 | S09 | `s-doubt-thread` | `/doubts/:doubt_id` | `renderDoubtThread()` |
 | S10 | `s-profile` | `/profile` | `renderProfile()` |
-| S11 | `s-booking` | `/tutors/:keycloak_sub/book` | `renderBooking()` |
 
 ---
 
@@ -129,7 +128,17 @@ Shows: St. Mary's School · NCERT · Grade 6
 - Left: icon (28px, coloured by status), title, breadcrumb (source tag + board·grade·subject·course)
 - Source tag: blue pill for structured, purple for open
 - Status badges: `tbw` (red) weak, `tbp` (amber) in-progress, `tbd` (green) done, `tbn` (grey) new
-- Right: status badge, "Ask hAITU" button (purple pill), "Ask teacher" button (red pill — weak topics only)
+- Right: status badge, "Ask hAITU" button (purple pill)
+- No "Ask teacher" button on topic rows — escalation is only via the hAITU chat panel
+
+### hAITU chat panel (slide-in overlay)
+- Triggered by "Ask hAITU" click on any topic row
+- Slides in from the right: fixed position, 300px wide, full viewport height, `z-index: 200`
+- Semi-transparent dark overlay (`rgba(0,0,0,0.3)`) behind panel; clicking overlay closes panel
+- Panel header: dark navy bg (`#0A1F5C`), topic title in white, "Scoped to this topic" subtitle in `rgba(255,255,255,.5)`, × close button (top-right)
+- Chat area: scrollable, AI bubbles blue (`#E6F1FB`), student bubbles right-aligned grey (`#f5f4f0`)
+- Input row: text input + send button (`#534AB7` purple — matches open/hAITU colour)
+- "Request teacher help →" button: shown below the input row after the first hAITU response is received. Style: amber bg (`#FAEEDA`), amber border (`#FAC775`), dark amber text (`#7A4E00`). Full-width. Clicking creates a doubt and navigates to S09.
 
 ### Status grouping order
 1. Needs attention (weak)
@@ -181,7 +190,7 @@ Shows: St. Mary's School · NCERT · Grade 6
 - Tutor cards (stacked, full-width):
   - Avatar (44px circle, coloured), name (bold), subjects · grade meta
   - Topic tags (small purple pills)
-  - Rating stars + review count + student count
+  - Content rating stars + review count + student count (label: "Content rating")
   - Right: rate + availability (stacked), "View profile" button (`#534AB7`)
 
 ### Filter state
@@ -193,21 +202,27 @@ Shows: St. Mary's School · NCERT · Grade 6
 ## S07 — Tutor Profile (`s-tutor-profile`)
 
 ### Layout
-- Hero card: avatar (64px), name (18px bold), subjects · grade · availability, rating + student count, rate ("₹X/hr"), "Book a session" button (`#534AB7`)
+- Hero card: avatar (64px), name (18px bold), subjects · grade · availability, content rating (stars + count) + student count, rate ("₹X/hr" — informational only, no booking button)
 - Two-column body (1fr + 280px sidebar):
   - Left: About card, Topics covered (purple pills), Student reviews
-  - Right: Available slots grid (3 columns), booking CTA, "Why hAIsir" trust card
+  - Right: "Enroll with this tutor" CTA card (`#534AB7` button), "Why hAIsir" trust card
 
-### Slot grid
-- Each slot: 36×36px rounded tile
-- Default: `#d3d1c7` border
-- Selected: `#534AB7` bg, white text
-- Full: `#f5f4f0` bg, grey text, pointer-events: none
-- "Select a slot above" → "Book {slot}" button label updates on selection
+### Enroll CTA
+- Button label: "Enroll with this tutor" (`#534AB7` bg, white text, full-width)
+- On click: creates open enrollment and navigates to S04 topic navigator scoped to that enrollment
+- No slot grid, no payment UI
 
-### Student reviews
-- Each review: avatar (28px), name + stars (`#EF9F27`), review text
+### Content reviews
+- Section label: "Content reviews"
+- Each review row: avatar initials (28px), topic name (small purple pill), star rating in amber (`#EF9F27`), comment text (if present), date in grey
 - Stars: ★★★★★ / ★★★★☆ etc.
+- No reviews state: "No content reviews yet"
+
+### Content rating prompt (S04 topic rows)
+- Shown inline below status badge when `enrollment_topics.status = 'completed'` or `'weak'` and no review yet submitted
+- Label: "Rate this content:" + 5 star icons (grey default, amber on hover/select)
+- Clicking a star immediately submits; an optional comment input appears below (with "Skip" and "Submit" buttons)
+- After submission: stars replaced with submitted rating (read-only amber stars)
 
 ---
 
@@ -265,15 +280,3 @@ Shows: St. Mary's School · NCERT · Grade 6
 
 ---
 
-## S11 — Booking (`s-booking`)
-
-### Layout
-- Centred booking card (max 480px)
-- Booking summary: grey bg tile with rows (label | value), total row in green bold (`#0F6E56`)
-- Payment methods: three option tiles (UPI / Card / Net banking), selected tile: blue border (`#185FA5`) + blue bg
-- Security note: 🔒 grey info box
-- "Pay & confirm session" primary button (`#185FA5`)
-
-### Confirmed state
-- Green card (`#E1F5EE`): ✅ icon, "Session booked!" title, session details
-- "Back to home" button

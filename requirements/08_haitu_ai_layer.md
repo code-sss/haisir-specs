@@ -67,7 +67,7 @@ Rules:
 - Respond in the same language the student uses (English or Hindi or mixed).
 ```
 
-**Output:** Plain text response, max 300 tokens.
+**Output:** Plain text response, max 400 tokens (configurable via `haitu_max_tokens_topic_doubt` in `platform_settings`).
 
 **Escalation trigger:** If hAITU response contains the phrase "ask your teacher" OR if the student explicitly clicks "Request teacher help", set `doubt.haitu_attempted = true` and allow escalation.
 

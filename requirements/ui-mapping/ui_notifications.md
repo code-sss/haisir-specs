@@ -114,6 +114,7 @@ The notifications centre is a single screen with a persona switcher at the top.
 | `doubt_teacher_replied` | 💬 | `#E6F1FB` (blue) |
 | `assessment_due_soon` | 📅 | `#FAEEDA` (amber) |
 | `assessment_results_ready` | 📊 | `#E1F5EE` (green) |
+| `exam_results_ready` | 📊 | `#E1F5EE` (green) |
 | `topic_marked_weak` | ⚠️ | `#FAECE7` (red) |
 | `new_content_uploaded` | 📚 | `#E6F1FB` (blue) |
 | `new_doubt_escalated` | 📬 | `#FAEEDA` (amber) |
@@ -123,9 +124,9 @@ The notifications centre is a single screen with a persona switcher at the top.
 | `child_assessment_due` | 📅 | `#FAEEDA` (amber) |
 | `child_weekly_digest` | 📈 | `#FDF4E3` (amber-warm) |
 | `child_streak_milestone` | 🎉 | `#E1F5EE` (green) |
+| `teacher_added_to_org` | ✅ | `#E1F5EE` (green) |
 | `class_no_teacher` | ⚠️ | `#FAEEDA` (amber) |
 | `student_at_risk_admin` | 📉 | `#FAECE7` (red) |
-| `teacher_invite_accepted` | ✅ | `#E1F5EE` (green) |
 | `board_content_updated` | 📚 | `#E6F1FB` (blue) |
 | `institution_registration` | 🏫 | `#FAEEDA` (amber) |
 | `tutor_published` | 👤 | `#E6F1FB` (blue) |

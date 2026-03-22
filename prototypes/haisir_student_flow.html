@@ -293,9 +293,36 @@ input{font-family:inherit;}
 .tbl{background:#F1EFE8;color:#888780;}
 .ask-btn{font-size:10px;padding:3px 7px;border-radius:5px;background:#EEEDFE;color:#3C3489;border:0.5px solid #CECBF6;font-weight:500;}
 .ask-btn:hover{background:#534AB7;color:#fff;}
+/* hAITU slide-in panel */
+.haitu-overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:199;display:none;}
+.haitu-overlay.open{display:block;}
+.haitu-panel{position:fixed;top:0;right:-320px;width:300px;height:100vh;background:#fff;border-left:0.5px solid #e5e3dc;z-index:200;display:flex;flex-direction:column;transition:right .22s ease;box-shadow:-4px 0 18px rgba(0,0,0,.12);}
+.haitu-panel.open{right:0;}
+.hp-header{background:#0A1F5C;padding:12px 14px;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;}
+.hp-header-text{}
+.hp-title{font-size:12px;font-weight:600;color:#fff;margin-bottom:2px;}
+.hp-sub{font-size:10px;color:rgba(255,255,255,.5);}
+.hp-close{background:none;border:none;color:rgba(255,255,255,.7);font-size:16px;line-height:1;cursor:pointer;padding:0 2px;}
+.hp-close:hover{color:#fff;}
+.hp-chat{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px;}
+.hp-bubble-ai{background:#E6F1FB;border-radius:8px 8px 8px 2px;padding:9px 11px;font-size:12px;color:#0C447C;line-height:1.6;align-self:flex-start;max-width:95%;}
+.hp-bubble-q{background:#f5f4f0;border-radius:8px 8px 2px 8px;padding:9px 11px;font-size:12px;color:#3d3d3a;line-height:1.6;align-self:flex-end;max-width:95%;}
+.hp-input-area{padding:10px 14px;border-top:0.5px solid #e5e3dc;flex-shrink:0;}
+.hp-input-row{display:flex;gap:7px;margin-bottom:8px;}
+.hp-input{flex:1;font-size:12px;border:0.5px solid #d3d1c7;border-radius:6px;padding:7px 10px;background:#fafaf8;color:#1a1a18;outline:none;}
+.hp-input:focus{border-color:#534AB7;}
+.hp-send{background:#534AB7;border:none;border-radius:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;flex-shrink:0;cursor:pointer;}
+.hp-send:hover{background:#3C1F6E;}
+.hp-escalate{display:none;width:100%;padding:9px 12px;background:#FAEEDA;border:0.5px solid #FAC775;border-radius:7px;color:#7A4E00;font-size:11px;font-weight:500;cursor:pointer;text-align:center;}
+.hp-escalate:hover{background:#f5e0c0;}
 .locked-row{opacity:.4;pointer-events:none;}
 .nempty{padding:36px 0;text-align:center;color:#888780;font-size:12px;line-height:1.8;}
 .nempty-link{color:#185FA5;background:none;border:none;text-decoration:underline;font-size:12px;}
+.rating-prompt{font-size:11px;color:#888780;margin-top:5px;display:flex;align-items:center;gap:5px;}
+.rating-prompt span{font-size:10px;}
+.rating-star{font-size:14px;color:#d3d1c7;cursor:pointer;transition:color .1s;line-height:1;}
+.rating-star:hover,.rating-star.rated{color:#EF9F27;}
+.rating-submitted{font-size:11px;color:#EF9F27;margin-top:5px;}
 
 /* ─── TOASTS ────────────────────────────────────────────── */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a18;color:#fff;font-size:12px;padding:10px 18px;border-radius:8px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;white-space:nowrap;}
@@ -392,8 +419,8 @@ input{font-family:inherit;}
 .ph-right{margin-left:auto;display:flex;flex-direction:column;gap:8px;align-items:flex-end;}
 .ph-rate{font-size:16px;font-weight:700;color:#0F6E56;}
 .ph-rate-lbl{font-size:11px;color:#888780;}
-.book-btn{font-size:13px;padding:10px 22px;border-radius:8px;background:#534AB7;color:#fff;border:none;font-weight:600;}
-.book-btn:hover{background:#3C3489;}
+.enroll-tutor-btn{font-size:13px;padding:10px 22px;border-radius:8px;background:#534AB7;color:#fff;border:none;font-weight:600;width:100%;cursor:pointer;}
+.enroll-tutor-btn:hover{background:#3C3489;}
 
 .profile-body-layout{display:grid;grid-template-columns:1fr 280px;gap:14px;}
 .prof-main{display:flex;flex-direction:column;gap:12px;}
@@ -402,11 +429,6 @@ input{font-family:inherit;}
 .info-card{background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;padding:14px;}
 .ic-title{font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:10px;}
 .ic-body{font-size:12px;color:#5f5e5a;line-height:1.7;}
-.slot-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px;}
-.time-slot{font-size:11px;padding:7px;border-radius:6px;border:0.5px solid #d3d1c7;text-align:center;cursor:pointer;transition:all .12s;color:#5f5e5a;}
-.time-slot:hover{border-color:#534AB7;color:#534AB7;}
-.time-slot.selected{background:#534AB7;color:#fff;border-color:#534AB7;}
-.time-slot.full{background:#f5f4f0;color:#b4b2a9;pointer-events:none;}
 
 .review-card{display:flex;gap:10px;padding:10px 0;border-bottom:0.5px solid #f0efe9;}
 .review-card:last-child{border-bottom:none;}
@@ -415,30 +437,6 @@ input{font-family:inherit;}
 .rev-text{font-size:11px;color:#5f5e5a;line-height:1.5;}
 .rev-stars{color:#EF9F27;font-size:11px;}
 
-/* ── SCREEN 8: BOOKING CONFIRM + PAYMENT ─────────────────── */
-.booking-card{background:#fff;border:0.5px solid #e5e3dc;border-radius:14px;padding:24px;max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:16px;width:100%;}
-.bk-title{font-size:16px;font-weight:700;color:#1a1a18;}
-.bk-sub{font-size:12px;color:#888780;margin-top:2px;}
-.bk-summary{background:#f5f4f0;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px;}
-.bk-row{display:flex;justify-content:space-between;font-size:12px;}
-.bk-label{color:#888780;}
-.bk-val{color:#1a1a18;font-weight:500;}
-.bk-total{border-top:0.5px solid #e5e3dc;padding-top:8px;margin-top:2px;font-size:13px;font-weight:600;}
-.bk-total .bk-val{color:#0F6E56;font-size:15px;}
-.payment-methods{display:flex;flex-direction:column;gap:7px;}
-.pm-option{display:flex;align-items:center;gap:10px;padding:11px 14px;border:0.5px solid #d3d1c7;border-radius:8px;cursor:pointer;transition:border-color .12s;}
-.pm-option.selected{border-color:#185FA5;background:#f4f8fd;}
-.pm-icon{font-size:20px;flex-shrink:0;}
-.pm-label{font-size:12px;font-weight:500;color:#1a1a18;}
-.pm-sub{font-size:11px;color:#888780;}
-.pm-check{width:16px;height:16px;border-radius:50%;border:1.5px solid #d3d1c7;margin-left:auto;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;}
-.pm-check.on{background:#185FA5;border-color:#185FA5;color:#fff;}
-.bk-btn{font-size:13px;padding:12px;border-radius:8px;background:#185FA5;color:#fff;border:none;font-weight:700;width:100%;}
-.bk-btn:hover{background:#0C447C;}
-.bk-confirm{background:#E1F5EE;border-radius:10px;padding:16px;text-align:center;}
-.bk-confirm-icon{font-size:36px;margin-bottom:8px;}
-.bk-confirm-title{font-size:15px;font-weight:600;color:#0F6E56;margin-bottom:4px;}
-.bk-confirm-sub{font-size:12px;color:#5f5e5a;line-height:1.6;}
 
 /* ── SCREEN 9: STUDENT PROFILE ───────────────────────────── */
 .profile-page{padding:20px;display:flex;flex-direction:column;gap:16px;flex:1;}
@@ -637,28 +635,6 @@ input{font-family:inherit;}
 </div>
 
 <!-- ══ SCREEN 8: BOOKING + PAYMENT ═════════════════════════ -->
-<div class="screen" id="s-booking">
-  <div class="shell">
-    <div class="topbar">
-      <button class="tb-back" onclick="showScreen('s-tutor-profile')">← Profile</button>
-      <span class="tb-brand">hAIsir</span>
-      <div class="tb-right"><div class="tb-avatar">AR</div></div>
-    </div>
-    <div class="bc">
-      <span class="bc-link" onclick="goHome()">Home</span>
-      <span class="bc-sep">›</span>
-      <span class="bc-link" onclick="showScreen('s-tutors')">Find a tutor</span>
-      <span class="bc-sep">›</span>
-      <span class="bc-link" onclick="showScreen('s-tutor-profile')">Profile</span>
-      <span class="bc-sep">›</span>
-      <span class="bc-cur">Book session</span>
-    </div>
-    <div style="padding:20px;flex:1;display:flex;flex-direction:column;gap:0;align-items:center;">
-      <div class="booking-card" id="booking-card"></div>
-    </div>
-  </div>
-</div>
-
 <!-- ══ SCREEN 9: STUDENT PROFILE ════════════════════════════ -->
 <div class="screen" id="s-profile">
   <div class="shell">
@@ -788,6 +764,25 @@ input{font-family:inherit;}
       </div>
     </div>
   </div>
+  <!-- hAITU slide-in panel -->
+  <div class="haitu-overlay" id="haitu-overlay" onclick="closeHaituPanel()"></div>
+  <div class="haitu-panel" id="haitu-panel">
+    <div class="hp-header">
+      <div class="hp-header-text">
+        <div class="hp-title" id="hp-topic-title">Ask hAITU</div>
+        <div class="hp-sub">Scoped to this topic</div>
+      </div>
+      <button class="hp-close" onclick="closeHaituPanel()">×</button>
+    </div>
+    <div class="hp-chat" id="hp-chat"></div>
+    <div class="hp-input-area">
+      <div class="hp-input-row">
+        <input class="hp-input" id="hp-input" type="text" placeholder="Ask a question about this topic…" onkeydown="if(event.key==='Enter')sendHaituNavMsg()" />
+        <button class="hp-send" onclick="sendHaituNavMsg()">›</button>
+      </div>
+      <button class="hp-escalate" id="hp-escalate" onclick="escalateToTeacher()">Still need help? Request teacher help →</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -892,7 +887,6 @@ function goNav(eid)  { navActiveId = eid; navFilters = {}; renderNav(); showScre
 function goReview(examId) { renderReview(examId); showScreen('s-review'); }
 function goTutors(prefSubject) { activeTutorSubject=prefSubject||null; renderTutorSidebar(); renderTutors(); showScreen('s-tutors'); }
 function goTutorProfile(tid) { renderTutorProfile(tid); showScreen('s-tutor-profile'); }
-function goBooking(tid,slot)  { renderBooking(tid,slot); showScreen('s-booking'); }
 function goProfile() { renderProfile(); showScreen('s-profile'); }
 function goDoubts()  { renderDoubtInbox(); showScreen('s-doubts'); }
 function goDoubtThread(did) { renderDoubtThread(did); showScreen('s-doubt-thread'); }
@@ -912,6 +906,72 @@ function requestTeacherHelp(topic, enrollment, questionText) {
   updateDoubtsBadge();
   showToast('Doubt sent to your teacher — they\'ll respond shortly');
   goDoubtThread(newDoubt.id);
+}
+
+/* ── Topic content ratings ── */
+const topicRatings = {}; // key: enrollmentId_topicTitle → star rating (1–5)
+
+function submitRating(key, stars) {
+  topicRatings[key] = stars;
+  showToast('Thanks for rating this content!');
+  navRender();
+}
+
+/* ── hAITU slide-in panel (topic navigator) ── */
+let haituPanelTopic = '';
+let haituPanelEnrollment = '';
+let haituPanelHistory = [];
+
+const haituNavReplies = [
+  "Great question! Let me break this down step by step. The key concept here is understanding the underlying principle — think of it as building blocks. First, make sure you're comfortable with the basics before moving to more complex problems. Does that help clarify things?",
+  "I see where the confusion might be. This topic often trips students up because it looks simple on the surface but has a few tricky parts. Let me explain using a concrete example from everyday life — does that approach work for you?",
+  "Let's try a different angle. Sometimes it helps to think about why this rule exists rather than just memorising it. Once you understand the 'why', the 'how' becomes much clearer. Would you like me to walk through a worked example?"
+];
+let haituNavReplyIdx = 0;
+
+function openHaituPanel(topicTitle, enrollmentId) {
+  haituPanelTopic = topicTitle;
+  haituPanelEnrollment = enrollmentId;
+  haituPanelHistory = [];
+  haituNavReplyIdx = 0;
+  document.getElementById('hp-topic-title').textContent = topicTitle;
+  document.getElementById('hp-chat').innerHTML = '';
+  document.getElementById('hp-input').value = '';
+  document.getElementById('hp-escalate').style.display = 'none';
+  document.getElementById('haitu-overlay').classList.add('open');
+  document.getElementById('haitu-panel').classList.add('open');
+  setTimeout(() => document.getElementById('hp-input').focus(), 250);
+}
+
+function closeHaituPanel() {
+  document.getElementById('haitu-overlay').classList.remove('open');
+  document.getElementById('haitu-panel').classList.remove('open');
+}
+
+function sendHaituNavMsg() {
+  const input = document.getElementById('hp-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  const chat = document.getElementById('hp-chat');
+  chat.innerHTML += `<div class="hp-bubble-q">${msg}</div>`;
+  chat.scrollTop = chat.scrollHeight;
+  haituPanelHistory.push({role:'user', content: msg});
+  setTimeout(() => {
+    const reply = haituNavReplies[haituNavReplyIdx % haituNavReplies.length];
+    haituNavReplyIdx++;
+    chat.innerHTML += `<div class="hp-bubble-ai">${reply}</div>`;
+    chat.scrollTop = chat.scrollHeight;
+    haituPanelHistory.push({role:'assistant', content: reply});
+    document.getElementById('hp-escalate').style.display = 'block';
+  }, 600);
+}
+
+function escalateToTeacher() {
+  const lastStudentMsg = haituPanelHistory.filter(m => m.role === 'user').pop();
+  const question = lastStudentMsg ? lastStudentMsg.content : 'I need help with ' + haituPanelTopic;
+  closeHaituPanel();
+  requestTeacherHelp(haituPanelTopic, haituPanelEnrollment, question);
 }
 
 /* ════════════════════════════════════════════════════════
@@ -1421,6 +1481,14 @@ function navRender() {
       const bc = is
         ? `${e.board} · Grade ${e.grade} · ${t.subject} · ${t.course}`
         : `${t.subject} · ${t.course}`;
+      const ratingKey = e.id+'_'+t.title;
+      const submittedRating = topicRatings[ratingKey];
+      const showRatingPrompt = (status === 'done' || status === 'weak') && !submittedRating;
+      const ratingHtml = submittedRating
+        ? `<div class="rating-submitted">${'★'.repeat(submittedRating)}${'☆'.repeat(5-submittedRating)} Your rating</div>`
+        : showRatingPrompt
+          ? `<div class="rating-prompt"><span>Rate this content:</span>${[1,2,3,4,5].map(n=>`<span class="rating-star" onclick="event.stopPropagation();submitRating('${ratingKey}',${n})">★</span>`).join('')}</div>`
+          : '';
       html += `
         <div class="topic-row ${status==='weak'?'tweak':''}">
           <div class="tr-icon" style="background:${iconBg[status]}">${subjIcon[t.subject]||'📄'}</div>
@@ -1430,11 +1498,11 @@ function navRender() {
               <span class="src-tag ${srcCls}">${srcLbl}</span>
               <span>${bc}</span>
             </div>
+            ${ratingHtml}
           </div>
           <div class="tr-right">
             <span class="tbadge ${badgeCls[status]}">${score}</span>
-            <button class="ask-btn" onclick="event.stopPropagation();">Ask hAITU</button>
-            ${status==='weak'?`<button class="ask-btn" style="background:#FAECE7;color:#712B13;border-color:#F5C4B3;" onclick="event.stopPropagation();requestTeacherHelp('${t.title}','${e.id}','I need help with ${t.title}')">Ask teacher</button>`:''}
+            <button class="ask-btn" onclick="event.stopPropagation();openHaituPanel('${t.title}','${e.id}')">Ask hAITU</button>
           </div>
         </div>`;
     });
@@ -1587,17 +1655,15 @@ function sendReviewMsg() {
    SCREEN 6 — TUTOR DISCOVERY
 ════════════════════════════════════════════════════════ */
 const tutorCatalog = [
-  {id:'t1', name:'Ravi Kumar',   initials:'RK', color:'#534AB7', subjects:['Maths','Algebra','Geometry'],   grade:'6-10', rating:4.8, reviews:34, rate:'₹300/hr', avail:'Mon–Fri 4–8pm', students:12, bio:'8 years experience in NCERT Maths. Specialised in making Algebra approachable for Grade 6–10 students.',  topics:['Fractions','Algebra','Geometry','Word Problems','Trigonometry']},
-  {id:'t2', name:"Priya Ma'am",  initials:'PM', color:'#1D9E75', subjects:['Science','Biology','Chemistry'],grade:'6-12', rating:4.9, reviews:51, rate:'₹350/hr', avail:'Tue/Thu/Sat',    students:18, bio:'Former CBSE examiner. Expert in conceptual Science for competitive exams and board prep.',              topics:['Cell Biology','Photosynthesis','Atomic Structure','Chemical Reactions','Genetics']},
-  {id:'t3', name:'Anand Sir',    initials:'AS', color:'#D85A30', subjects:['Maths','Physics'],             grade:'8-12', rating:4.6, reviews:22, rate:'₹400/hr', avail:'Weekends only',  students:8,  bio:'IIT graduate with 5 years tutoring JEE aspirants. Strong in Physics and advanced Maths.',               topics:['Mechanics','Electromagnetism','Calculus','Vectors','Quadratic Equations']},
-  {id:'t4', name:'Kavitha Devi', initials:'KD', color:'#BA7517', subjects:['English','Hindi'],             grade:'5-10', rating:4.7, reviews:29, rate:'₹250/hr', avail:'Mon–Sat 5–7pm',  students:15, bio:'English literature graduate. Helps students with comprehension, essay writing and grammar.',          topics:['Reading Comprehension','Essay Writing','Grammar','Creative Writing','Poetry']},
-  {id:'t5', name:'Deepa Lal',    initials:'DL', color:'#185FA5', subjects:['Maths','Statistics'],         grade:'9-12', rating:4.5, reviews:17, rate:'₹300/hr', avail:'Flexible',        students:6,  bio:'Post-graduate in Statistics. Helps students understand data handling, probability and higher Maths.',   topics:['Statistics','Probability','Data Handling','Permutations','Matrices']},
+  {id:'t1', name:'Ravi Kumar',   initials:'RK', color:'#534AB7', subjects:['Maths','Algebra','Geometry'],   grade:'6-10', content_rating:4.8, review_count:34, rate:'₹300/hr', avail:'Mon–Fri 4–8pm', students:12, bio:'8 years experience in NCERT Maths. Specialised in making Algebra approachable for Grade 6–10 students.',  topics:['Fractions','Algebra','Geometry','Word Problems','Trigonometry']},
+  {id:'t2', name:"Priya Ma'am",  initials:'PM', color:'#1D9E75', subjects:['Science','Biology','Chemistry'],grade:'6-12', content_rating:4.9, review_count:51, rate:'₹350/hr', avail:'Tue/Thu/Sat',    students:18, bio:'Former CBSE examiner. Expert in conceptual Science for competitive exams and board prep.',              topics:['Cell Biology','Photosynthesis','Atomic Structure','Chemical Reactions','Genetics']},
+  {id:'t3', name:'Anand Sir',    initials:'AS', color:'#D85A30', subjects:['Maths','Physics'],             grade:'8-12', content_rating:4.6, review_count:22, rate:'₹400/hr', avail:'Weekends only',  students:8,  bio:'IIT graduate with 5 years tutoring JEE aspirants. Strong in Physics and advanced Maths.',               topics:['Mechanics','Electromagnetism','Calculus','Vectors','Quadratic Equations']},
+  {id:'t4', name:'Kavitha Devi', initials:'KD', color:'#BA7517', subjects:['English','Hindi'],             grade:'5-10', content_rating:4.7, review_count:29, rate:'₹250/hr', avail:'Mon–Sat 5–7pm',  students:15, bio:'English literature graduate. Helps students with comprehension, essay writing and grammar.',          topics:['Reading Comprehension','Essay Writing','Grammar','Creative Writing','Poetry']},
+  {id:'t5', name:'Deepa Lal',    initials:'DL', color:'#185FA5', subjects:['Maths','Statistics'],         grade:'9-12', content_rating:4.5, review_count:17, rate:'₹300/hr', avail:'Flexible',        students:6,  bio:'Post-graduate in Statistics. Helps students understand data handling, probability and higher Maths.',   topics:['Statistics','Probability','Data Handling','Permutations','Matrices']},
 ];
 
 let activeTutorId      = null;
 let activeTutorSubject = null;
-let selectedSlot       = null;
-let selectedPayment    = 'upi';
 
 function renderTutorSidebar() {
   const subjects = [...new Set(tutorCatalog.flatMap(t=>t.subjects))];
@@ -1638,7 +1704,7 @@ function renderTutors() {
         <div class="tutor-name">${t.name}</div>
         <div class="tutor-subjects">${t.subjects.join(' · ')} · Grade ${t.grade}</div>
         <div class="tutor-tags">${t.topics.slice(0,3).map(tp=>`<span class="tutor-tag">${tp}</span>`).join('')}</div>
-        <div class="tutor-rating">★ ${t.rating} <span style="color:#888780;">(${t.reviews} reviews) · ${t.students} students</span></div>
+        <div class="tutor-rating">★ ${t.content_rating} <span style="color:#888780;">(${t.review_count} content reviews) · ${t.students} students</span></div>
       </div>
       <div class="tutor-right">
         <div><div class="tutor-rate">${t.rate}</div><div class="tutor-avail">${t.avail}</div></div>
@@ -1654,15 +1720,12 @@ function renderTutorProfile(tid) {
   activeTutorId = tid;
   const t = tutorCatalog.find(x=>x.id===tid);
   document.getElementById('profile-bc-name').textContent = t.name;
-  const stars = '★'.repeat(Math.floor(t.rating)) + (t.rating%1?'½':'');
-  const slots = ['Mon 5pm','Mon 6pm','Tue 5pm','Tue 7pm','Wed 4pm','Wed 6pm','Thu 5pm','Thu 7pm','Fri 4pm','Sat 10am','Sat 2pm','Sun 11am'];
-  const fullSlots = new Set(['Mon 6pm','Wed 4pm','Thu 7pm']);
-
-  const reviews = [
-    {initials:'AK',color:'#378ADD',name:'Arjun K.',  text:'Ravi Sir explained Algebra so clearly. My grades went from 52% to 88% in 2 months!',    stars:'★★★★★'},
-    {initials:'ST',color:'#7F77DD',name:'Sneha T.',  text:'Very patient and methodical. Breaks down every concept step by step.',                   stars:'★★★★★'},
-    {initials:'RV',color:'#D85A30',name:'Rahul V.',  text:'Good tutor, very knowledgeable. Sometimes sessions run over time though.',               stars:'★★★★☆'},
-    {initials:'PR',color:'#1D9E75',name:'Priya R.',  text:'Highly recommend for anyone struggling with fractions or algebra. Very approachable.',   stars:'★★★★★'},
+  const stars = '★'.repeat(Math.floor(t.content_rating)) + (t.content_rating%1?'½':'');
+  const contentReviews = [
+    {initials:'AK', color:'#378ADD', topic:'Fractions',   rating:'★★★★★', comment:'Finally understood this after trying 3 other resources. Clear worked examples.'},
+    {initials:'ST', color:'#7F77DD', topic:'Algebra',     rating:'★★★★★', comment:'Step-by-step breakdown made it click. Went from 48% to 82% on my next test.'},
+    {initials:'RV', color:'#D85A30', topic:'Geometry',    rating:'★★★★☆', comment:'Good content but could use more practice problems.'},
+    {initials:'PR', color:'#1D9E75', topic:'Word Problems',rating:'★★★★★', comment:''},
   ];
 
   document.getElementById('tutor-profile-body').innerHTML = `
@@ -1673,13 +1736,12 @@ function renderTutorProfile(tid) {
         <div class="ph-sub">${t.subjects.join(' · ')} · Grade ${t.grade} · ${t.avail}</div>
         <div class="ph-tags">${t.subjects.map(s=>`<span class="ph-tag">${s}</span>`).join('')}</div>
         <div class="ph-stats">
-          <div class="ph-stat"><div class="ph-stat-val">${stars} ${t.rating}</div><div class="ph-stat-lbl">${t.reviews} reviews</div></div>
+          <div class="ph-stat"><div class="ph-stat-val">${stars} ${t.content_rating}</div><div class="ph-stat-lbl">${t.review_count} content reviews</div></div>
           <div class="ph-stat"><div class="ph-stat-val">${t.students}</div><div class="ph-stat-lbl">Students</div></div>
         </div>
       </div>
       <div class="ph-right">
-        <div><div class="ph-rate">${t.rate}</div><div class="ph-rate-lbl">per session</div></div>
-        <button class="book-btn" onclick="showBookingModal()">Book a session</button>
+        <div><div class="ph-rate">${t.rate}</div><div class="ph-rate-lbl">per session · ${t.avail}</div></div>
       </div>
     </div>
 
@@ -1696,121 +1758,45 @@ function renderTutorProfile(tid) {
           </div>
         </div>
         <div class="info-card">
-          <div class="ic-title" style="margin-bottom:8px;">Student reviews</div>
-          ${reviews.map(r=>`
+          <div class="ic-title" style="margin-bottom:8px;">Content reviews</div>
+          ${contentReviews.map(r=>`
             <div class="review-card">
               <div class="rev-av" style="background:${r.color}">${r.initials}</div>
-              <div>
+              <div style="flex:1;">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
-                  <span class="rev-name">${r.name}</span>
-                  <span class="rev-stars">${r.stars}</span>
+                  <span class="tutor-tag" style="font-size:10px;padding:2px 7px;">${r.topic}</span>
+                  <span class="rev-stars">${r.rating}</span>
                 </div>
-                <div class="rev-text">${r.text}</div>
+                ${r.comment ? `<div class="rev-text">${r.comment}</div>` : ''}
               </div>
             </div>`).join('')}
         </div>
       </div>
       <div class="prof-side">
-        <div class="info-card">
-          <div class="ic-title">Available slots</div>
-          <div class="slot-grid">
-            ${slots.map(s=>`
-              <div class="time-slot ${fullSlots.has(s)?'full':selectedSlot===s?'selected':''}"
-                   onclick="${fullSlots.has(s)?'':'selectSlot(\''+s+'\')'}">${fullSlots.has(s)?s+' (full)':s}</div>
-            `).join('')}
-          </div>
-          <button class="book-btn" style="width:100%;margin-top:10px;font-size:12px;" onclick="showBookingModal()">
-            ${selectedSlot?'Book '+selectedSlot:'Select a slot above'}
-          </button>
-        </div>
         <div class="info-card" style="background:#EEEDFE;border-color:#CECBF6;">
-          <div class="ic-title" style="color:#3C3489;">Why book through hAIsir?</div>
-          <div class="ic-body" style="color:#534AB7;font-size:11px;">✓ Secure payment &amp; receipts<br>✓ Session notes saved to your profile<br>✓ Progress tracked after each session<br>✓ Easy rescheduling</div>
+          <div class="ic-title" style="color:#3C3489;margin-bottom:8px;">Start learning with ${t.name}</div>
+          <div class="ic-body" style="color:#534AB7;font-size:11px;margin-bottom:12px;">Enroll to access ${t.name}'s topics, ask doubts, and track your progress — all in one place.</div>
+          <button class="enroll-tutor-btn" onclick="enrollWithTutor('${t.id}')">Enroll with this tutor</button>
+        </div>
+        <div class="info-card">
+          <div class="ic-title" style="color:#3C3489;">Why hAIsir?</div>
+          <div class="ic-body" style="font-size:11px;">✓ Track progress per topic<br>✓ Ask doubts anytime via hAITU<br>✓ Teacher responds async in your doubt thread<br>✓ Parents can monitor your progress</div>
         </div>
       </div>
     </div>`;
 }
 
-function selectSlot(s) {
-  selectedSlot = s;
-  renderTutorProfile(activeTutorId);
-}
-
-function showBookingModal() {
-  if (!selectedSlot) { showToast('Please select a time slot first'); return; }
-  goBooking(activeTutorId, selectedSlot);
-}
-
-/* ════════════════════════════════════════════════════════
-   SCREEN 8 — BOOKING + PAYMENT
-════════════════════════════════════════════════════════ */
-let bookingConfirmed = false;
-
-function renderBooking(tid, slot) {
-  bookingConfirmed = false;
+function enrollWithTutor(tid) {
   const t = tutorCatalog.find(x=>x.id===tid);
-  renderBookingCard(t, slot);
-}
-
-function renderBookingCard(t, slot) {
-  document.getElementById('booking-card').innerHTML = bookingConfirmed ? `
-    <div class="bk-confirm">
-      <div class="bk-confirm-icon">✅</div>
-      <div class="bk-confirm-title">Session booked!</div>
-      <div class="bk-confirm-sub">
-        Your session with <strong>${t.name}</strong> is confirmed for <strong>${slot}</strong>.<br><br>
-        A calendar invite and reminder will be sent to you. Session notes will appear in your profile after the session.
-      </div>
-    </div>
-    <button class="bk-btn" style="margin-top:4px;" onclick="goHome()">Back to home</button>` : `
-    <div><div class="bk-title">Confirm your booking</div><div class="bk-sub">Review the details before payment</div></div>
-    <div class="bk-summary">
-      <div class="bk-row"><span class="bk-label">Tutor</span><span class="bk-val">${t.name}</span></div>
-      <div class="bk-row"><span class="bk-label">Subject</span><span class="bk-val">${t.subjects[0]}</span></div>
-      <div class="bk-row"><span class="bk-label">Session slot</span><span class="bk-val">${slot}</span></div>
-      <div class="bk-row"><span class="bk-label">Duration</span><span class="bk-val">60 minutes</span></div>
-      <div class="bk-row"><span class="bk-label">Rate</span><span class="bk-val">${t.rate}</span></div>
-      <div class="bk-row bk-total"><span class="bk-label">Total</span><span class="bk-val">${t.rate}</span></div>
-    </div>
-    <div>
-      <div style="font-size:11px;font-weight:600;color:#5f5e5a;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;">Payment method</div>
-      <div class="payment-methods">
-        ${[
-          {id:'upi',  icon:'📱', label:'UPI',          sub:'Google Pay, PhonePe, Paytm'},
-          {id:'card', icon:'💳', label:'Credit / Debit card', sub:'Visa, Mastercard, RuPay'},
-          {id:'nb',   icon:'🏦', label:'Net banking',  sub:'All major banks supported'},
-        ].map(p=>`
-          <div class="pm-option ${selectedPayment===p.id?'selected':''}" onclick="setPayment('${p.id}')">
-            <span class="pm-icon">${p.icon}</span>
-            <div><div class="pm-label">${p.label}</div><div class="pm-sub">${p.sub}</div></div>
-            <div class="pm-check ${selectedPayment===p.id?'on':''}">${selectedPayment===p.id?'✓':''}</div>
-          </div>`).join('')}
-      </div>
-    </div>
-    <div style="font-size:11px;color:#888780;background:#f5f4f0;border-radius:7px;padding:9px 12px;">
-      🔒 Payment is processed securely. You can cancel up to 24 hours before the session for a full refund.
-    </div>
-    <button class="bk-btn" onclick="confirmBooking('${t.id}','${slot}')">Pay &amp; confirm session</button>`;
-}
-
-function setPayment(p) {
-  selectedPayment = p;
-  const t = tutorCatalog.find(x=>x.id===activeTutorId);
-  renderBookingCard(t, selectedSlot);
-}
-
-function confirmBooking(tid, slot) {
-  bookingConfirmed = true;
-  const t = tutorCatalog.find(x=>x.id===tid);
-  renderBookingCard(t, slot);
   enrollments.push({
     id:'e_'+Date.now(), type:'open',
     label:t.name, sublabel:`${t.subjects[0]} tutor · 0 topics`, icon:'👤',
     tutor:t.name, progress:0, weakCount:0,
-    lastTopic:{title:'First session upcoming', sub:t.subjects[0]},
+    lastTopic:{title:'Start exploring topics', sub:t.subjects[0]},
     topics:[]
   });
-  selectedSlot = null;
+  showToast('Enrolled with '+t.name+' — opening your topics');
+  setTimeout(() => goNav('e_'+Date.now()), 600);
 }
 
 /* ════════════════════════════════════════════════════════
