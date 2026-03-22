@@ -96,7 +96,7 @@ The active role context is NOT in the JWT — it comes from the `X-Current-Role`
 | Role | How assigned |
 |---|---|
 | `student` | Auto-assigned on self-registration via onboarding flow (new) |
-| `instructor` | Auto-assigned on self-registration; OR invited by `institution_admin` |
+| `instructor` | Invited by `institution_admin` via email/userid — never self-assigned |
 | `admin` | Assigned manually in Keycloak console — never through the application |
 | `institution_admin` | New — assigned by `admin` only, never self-registered |
 | `tutor` | New — auto-assigned on self-registration; marketplace listing is immediate on toggle (federated model, no approval gate), admin can suspend post-hoc |
@@ -272,7 +272,6 @@ class CurrentUser:
 | `course_path_nodes` (within enrollment) | ✓ | ✗ |
 | `topic_contents` (within enrollment) | ✓ | ✗ |
 | Own `exam_sessions` (quiz + exam) | ✓ | ✓ (submit only) |
-| Own `exam_sessions` | ✓ | ✓ (submit only) |
 | Other students' attempts/sessions | ✗ | ✗ |
 | Own doubts (new) | ✓ | ✓ (create, message, resolve) |
 | Own notifications (new) | ✓ | ✓ (mark read) |
@@ -284,8 +283,7 @@ class CurrentUser:
 | Resource | Read | Write |
 |---|---|---|
 | Own teacher profile | ✓ | ✓ |
-| `exam_templates` (own + class-scoped, quiz + exam) | ✓ | ✓ (create, assign) |
-| `exam_templates` (own) | ✓ | ✓ (create, edit) |
+| `exam_templates` (own + class-scoped, quiz + exam) | ✓ | ✓ (create, edit, assign) |
 | `questions` + `paragraph_questions` | ✓ | ✓ (create, edit own) |
 | `exam_sessions` (class only) | ✓ | ✗ |
 | Students in assigned classes | ✓ | ✗ |
@@ -387,6 +385,8 @@ See `11_role_migration.md` §3.2 and §4.5 for full assignment flows.
 ---
 
 ## 8. Notification Type — Role Routing
+
+> **Canonical definition:** `10_notifications.md` is the authoritative source for notification types, generation triggers, and cron schedules. The table below is a quick-reference routing summary only. If the two files conflict, `10_notifications.md` takes precedence.
 
 | NotificationType | Delivered to role |
 |---|---|

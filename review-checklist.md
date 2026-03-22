@@ -1,47 +1,49 @@
 # hAIsir Specs — Human Review Checklist & Order
 
+> **Phase 0 review complete** — commits `092c6f5` (2026-03-22) and `0cc9207` (2026-03-23). All decisions applied to specs.
+> **Phase 1 review complete** — commit `8638a2a`. Persona specs finalised.
+
 ## Review Order (recommended for product owner / lead dev)
 
 ### Phase 1 — Foundation (read first, these inform everything)
 
-- [ ] `requirements/00_overview.md` — Architecture, tech stack, all 6 personas, content ownership, design decisions
-  - Verify: Are the 6 personas still the right set? Any persona missing?
-  - Verify: Tech stack decisions still hold (Next.js 16, FastAPI, no Redux)?
-  - Verify: Content ownership model (platform/institution/tutor) covers all cases?
+- [x] `requirements/00_overview.md` — Architecture, tech stack, all 6 personas, content ownership, design decisions
+  - ✅ 6 personas confirmed correct
+  - ✅ Tech stack confirmed (Next.js 16, FastAPI, no Redux)
+  - ✅ Content ownership model (platform/institution/tutor) confirmed complete
 
-- [ ] `requirements/01_data_model.md` — All 30+ tables, field-level rules, indexes, migrations
-  - Verify: Each new table — is it truly needed? Can any be merged?
-  - Verify: `owner_type`/`owner_id` on course_path_nodes, topics, exam_templates — complete?
-  - Verify: Mastery formula `(0.6 * latest + 0.4 * previous)` — is this pedagogically sound?
-  - Verify: Soft-delete patterns — consistent across entities?
-  - Verify: JSON fields (ruleset, tags) — should any be normalized tables instead?
-  - Verify: if `correct_answers` is edited on a question used in a completed exam session, `is_correct` on existing session rows becomes stale — confirm UI warning is in place and no backend guard is needed.
+- [x] `requirements/01_data_model.md` — All 30+ tables, field-level rules, indexes, migrations
+  - ✅ All tables reviewed — none merged, all justified
+  - ✅ `owner_type`/`owner_id` on course_path_nodes, topics, exam_templates confirmed complete
+  - ✅ Mastery formula confirmed — first attempt = latest_score; subsequent = 0.6×latest + 0.4×previous
+  - ✅ Soft-delete patterns consistent
+  - ✅ JSON fields (ruleset, tags) — kept as JSON; normalisation deferred
+  - ✅ Stale `is_correct` on edited questions — UI warning accepted; no backend guard needed
 
-- [ ] `requirements/02_auth_and_roles.md` — JWT flow, CSRF, permission matrix
-  - Verify: Permission matrix — every cell (role x resource x action) is correct
-  - Verify: 3 exceptions to `X-Current-Role` requirement — are these the right exceptions?
-  - Verify: Token refresh via iframe `prompt=none` — tested with all browsers?
+- [x] `requirements/02_auth_and_roles.md` — JWT flow, CSRF, permission matrix
+  - ✅ Permission matrix verified
+  - ✅ 3 X-Current-Role exceptions confirmed correct (onboarding endpoints only)
+  - ✅ iframe `prompt=none` — Safari ITP / Firefox ETP fallback documented in `09_onboarding.md`
 
-- [ ] `requirements/11_role_migration.md` — Adding 3 new Keycloak roles incrementally
-  - Verify: Order of steps (Keycloak -> backend -> frontend) is feasible
-  - Verify: Multi-role combos (9 listed) — any missing? Any that should be forbidden?
-  - Verify: institution_admin/admin are NOT self-assignable — is this enforced at Keycloak level too?
+- [x] `requirements/11_role_migration.md` — Adding 3 new Keycloak roles incrementally
+  - ✅ Step order (Keycloak → backend → frontend) confirmed feasible
+  - ✅ Multi-role combos confirmed — admin exclusivity is the only forbidden combo (BR-ROLE-004)
+  - ✅ institution_admin/admin not self-assignable — enforced at API layer; Keycloak console access restricted to platform operators
 
 ### Phase 2 — Persona-by-persona (one at a time, in dependency order)
 
-- [ ] `requirements/03_student.md` — 11 screens, 18 business rules
-  - Walk through S01-S10 with prototype open (`prototypes/haisir_student_flow.html`)
-  - Verify: Enrollment flow (structured vs open) makes sense UX-wise
-  - Verify: hAITU escalation flow — is "after first AI response" the right trigger?
-  - Verify: Topic locking logic (grade comparison) — edge cases?
-  - Verify: Weak threshold (<60) and completed threshold (>=75) — correct?
+- [x] `requirements/03_student.md` — 10 screens (S01–S10), 25 business rules
+  - ✅ Enrollment flow confirmed — structured (invite code) vs open (browse) is clear UX-wise
+  - ✅ hAITU escalation trigger confirmed — "after first AI response" is correct (student sees response before escalate button appears)
+  - ✅ Topic locking confirmed — grade comparison at API layer, edge cases covered in BR-STU-012
+  - ✅ Weak threshold (<60) and completed threshold (≥75) confirmed correct
 
 - [ ] `requirements/04_teacher_tutor.md` — 8 screens, instructor vs tutor divergence
   - Walk through T01-T08 with prototype open (`prototypes/haisir_teacher_flow.html`)
   - Verify: Instructor read-only curriculum vs tutor full control — clear enough?
   - Verify: Assignment flow (T02) — is class-level assignment sufficient?
   - Verify: Teacher notes (tutor only) — privacy implications clear?
-  - **Decision needed:** Tutor marketplace — immediate visibility or admin approval gate?
+  - ~~**Decision needed:** Tutor marketplace — immediate visibility or admin approval gate?~~ **Resolved:** Immediate on toggle, admin can suspend post-hoc. See `02_auth_and_roles.md` section 2.3.
 
 - [ ] `requirements/05_06_07_personas.md` — Parent (5 screens), Institution Admin (6), Platform Admin (6)
   - Walk through each set with respective prototypes open
@@ -91,4 +93,4 @@
 - [ ] Verify every API endpoint mentioned in specs has a corresponding permission entry
 - [ ] Verify every notification type has a clear generation trigger and recipient
 - [ ] Check for orphan business rules (referenced but not defined, or defined but never referenced)
-- [ ] Verify: all unresolved decisions in `gap-analysis.md` are resolved before implementation of their respective phases. Current unresolved: ~~pagination strategy~~ (now resolved), ~~file storage~~ (now resolved), ~~dynamic exam ruleset schema~~ (now resolved), archived topic clone flow (pending), ~~payment extensibility~~ (now resolved).
+- [ ] Verify: all unresolved decisions in `gap-analysis.md` are resolved before implementation of their respective phases. ✅ All 9 decisions resolved — ~~pagination strategy~~, ~~file storage~~, ~~dynamic exam ruleset schema~~, ~~archived topic clone flow~~ (BR-CONTENT-005), ~~payment extensibility~~, ~~tutor marketplace gate~~, ~~mastery initial value~~, ~~search backend~~, ~~search embedding model~~ (`all-MiniLM-L6-v2`, self-hosted). No open decisions remain.

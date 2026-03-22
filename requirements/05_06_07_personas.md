@@ -3,7 +3,7 @@
 > Parent and Institution Admin are entirely new personas and roles.
 > Platform Admin (SuperAdmin in the UI) maps to the existing `admin` role in Keycloak — no new role required.
 > → Depends on: `00_overview.md`, `01_data_model.md`, `02_auth_and_roles.md`
-> → Prototypes: `haisir_parent_flow.html`, `haisir_institution_flow.html`, `haisir_admin_flow.html`
+> → Prototypes: `haisir_parent_flow.html`, `haisir_institution_flow.html`, `haisir_superadmin_flow.html`
 
 ---
 

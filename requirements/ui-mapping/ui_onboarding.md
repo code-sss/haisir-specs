@@ -9,13 +9,13 @@
 
 | Spec ID | Prototype screen ID | Render / navigation |
 |---|---|---|
-| ON01 | `s-signup` / `s-login` | Static HTML + `checkSignup()` |
-| ON02 | `s-roles` | `buildGrid()` |
+| ON01 | `s-welcome` | Static HTML |
+| ON02 | `s-roles` | `buildGrid()` + `pickRole()` (single-select) |
 | ON03 | `s-setup-student` | Role queue `advance()` |
-| ON04 | `s-setup-teacher` | Role queue `advance()` |
+| ON04 | ~~`s-setup-teacher`~~ | **Removed from onboarding** — instructors are invited by institution_admin |
 | ON05 | `s-setup-parent` | Role queue `advance()` |
-| ON06 | `s-setup-tutor` | Role queue `advance()` |
-| ON07 | `s-switcher` | `renderSwitcher()` |
+| ON06 | ~~`s-setup-tutor`~~ | **Removed from onboarding** — separate "Become a tutor" flow |
+| ON07 | `s-switcher` | `buildReady()` (single-role users go straight to ready) |
 | ON08 | `s-ready` | Static success screen |
 
 ---
@@ -27,7 +27,7 @@
 - Left: "hAIsir" brand, "Think and try, learn with hAI" tagline (40% opacity, left border divider)
 - Right: "Already have an account? Log in →" link (login screen: "New here? Create account →")
 
-### Progress dots (ON02–ON06)
+### Progress dots (ON02–ON05)
 - 8px circles, gap 8px
 - Done steps: `#1D9E75` (green)
 - Active step: `#0A1F5C` (navy), 24px width (pill shape), 4px border-radius
@@ -70,13 +70,16 @@
 
 ## ON02 — Role Selection (`s-roles`)
 
-### Role grid (2×2)
-- Four role cards: Student / Teacher+Tutor / Parent / Multi-role
-- Card: 1.5px `#e5e3dc` border, 12px border-radius, 20px 18px padding, flex-column
-- Selected: `#0A1F5C` border, `#f4f7fd` bg, `rgba(10,31,92,.07)` box-shadow
-- Check circle (top-right): empty when unselected, `#0A1F5C` fill + ✓ when selected
-- Role icons: 28px emoji
-- Continue button disabled until at least one role selected
+**Single-select only (BR-ON-005).** Shows exactly two role cards: Student and Parent/Guardian. Instructor and Tutor are not shown here.
+
+### Role grid (1×2)
+- Two role cards: Student / Parent/Guardian
+- Card: 1.5px `#e5e3dc` border, 12px border-radius, 18px 16px padding, flex-column
+- Selected: role-colour border + tinted background (student: `#185FA5` / `#f4f8fd`; parent: `#BA7517` / `#fdf8f2`)
+- Check circle (top-right): empty when unselected, role-colour fill + ✓ when selected
+- Role icons: 26px emoji
+- Continue button disabled until one card is selected
+- Info note below grid: "Teacher or tutor? Instructors are invited by their institution admin. Independent tutors register via 'Become a tutor' after signing up."
 
 ---
 
@@ -101,15 +104,9 @@
 
 ---
 
-## ON04 — Teacher Setup (`s-setup-teacher`)
+## ON04 — Teacher Setup — **REMOVED FROM ONBOARDING**
 
-### Teaching type selection (3 options, stacked)
-- Row-direction role cards: icon + title + desc + check circle (right)
-- Selected: `#0A1F5C` border + bg
-- Options: Institutional teacher / Independent tutor / Both
-
-### Continue button
-- Enabled only when teaching type selected
+> Instructors are invited by institution_admin. Profile setup happens inline on first login to the teacher dashboard. No prototype screen.
 
 ---
 

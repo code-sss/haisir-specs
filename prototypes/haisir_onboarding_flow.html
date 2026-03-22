@@ -20,7 +20,7 @@ input,select,textarea{font-family:inherit;}
 .card{background:#fff;border:0.5px solid #e5e3dc;border-radius:16px;padding:32px;width:100%;display:flex;flex-direction:column;gap:20px;}
 .card-sm{max-width:460px;}
 .card-md{max-width:580px;}
-.card-lg{max-width:760px;}
+.card-lg{max-width:640px;}
 .h1{font-size:22px;font-weight:700;color:#0A1F5C;margin-bottom:4px;}
 .h2{font-size:18px;font-weight:700;color:#1a1a18;margin-bottom:4px;}
 .subtitle{font-size:13px;color:#888780;line-height:1.6;}
@@ -29,6 +29,7 @@ input,select,textarea{font-family:inherit;}
 .form-input:focus{border-color:#0A1F5C;}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .form-hint{font-size:11px;color:#b4b2a9;margin-top:4px;}
+/* 2-column role grid */
 .role-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
 .role-card{border:1.5px solid #e5e3dc;border-radius:12px;padding:18px 16px;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:7px;position:relative;}
 .role-card:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(0,0,0,.07);}
@@ -39,7 +40,6 @@ input,select,textarea{font-family:inherit;}
 .rc-title{font-size:14px;font-weight:600;color:#1a1a18;}
 .rc-desc{font-size:11px;color:#888780;line-height:1.5;}
 .rc-tag{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;align-self:flex-start;}
-.multi-note{background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:8px;padding:11px 14px;font-size:12px;color:#0C447C;display:flex;gap:8px;}
 .btn-primary{font-size:13px;padding:12px 24px;border-radius:8px;background:#0A1F5C;color:#fff;border:none;font-weight:600;width:100%;}
 .btn-primary:hover{background:#0d2568;}
 .btn-primary:disabled{background:#b4b2a9;cursor:not-allowed;}
@@ -54,11 +54,9 @@ input,select,textarea{font-family:inherit;}
 .code-box{border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px;}
 .cbb{background:#E6F1FB;border:0.5px solid #B5D4F4;}
 .cba{background:#FAEEDA;border:0.5px solid #FAC775;}
-.cbn{background:#e8ebf0;border:0.5px solid #c5cad4;}
 .code-lbl{font-size:11px;font-weight:600;}
 .cll-b{color:#185FA5;}
 .cll-a{color:#854F0B;}
-.cll-n{color:#0D1B2A;}
 .code-input{font-size:15px;font-weight:700;border:1.5px solid #d3d1c7;border-radius:7px;padding:10px 14px;background:#fff;color:#0A1F5C;outline:none;letter-spacing:.08em;text-align:center;width:100%;}
 .code-input:focus{border-color:#0A1F5C;}
 .code-msg{font-size:12px;padding:6px 10px;border-radius:6px;}
@@ -68,13 +66,6 @@ input,select,textarea{font-family:inherit;}
 .step-row:last-child{border-bottom:none;}
 .step-num{width:22px;height:22px;border-radius:50%;background:#0A1F5C;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
 .step-text{font-size:12px;color:#5f5e5a;line-height:1.5;}
-.type-opt{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:0.5px solid #d3d1c7;border-radius:8px;cursor:pointer;margin-bottom:7px;}
-.type-opt:last-child{margin-bottom:0;}
-.type-opt.sel{border-color:#0F6E56;background:#f2fbf7;}
-.type-radio{width:16px;height:16px;border-radius:50%;border:1.5px solid #d3d1c7;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:9px;}
-.type-opt.sel .type-radio{background:#0F6E56;border-color:#0F6E56;color:#fff;}
-.type-title{font-size:12px;font-weight:500;color:#1a1a18;margin-bottom:2px;}
-.type-sub{font-size:11px;color:#888780;}
 .sw-demo{background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;margin:0;}
 .sw-topbar{height:44px;display:flex;align-items:center;padding:0 16px;gap:10px;transition:background .3s;}
 .sw-brand{font-size:14px;font-weight:700;color:#fff;}
@@ -99,7 +90,7 @@ input,select,textarea{font-family:inherit;}
 </head>
 <body>
 
-<!-- S1: WELCOME -->
+<!-- S1: WELCOME (ON01) -->
 <div class="screen active" id="s-welcome">
   <div class="topbar"><span class="tb-brand">hAIsir</span></div>
   <div class="progress-bar"><div class="progress-fill" style="width:8%"></div></div>
@@ -124,17 +115,17 @@ input,select,textarea{font-family:inherit;}
   </div>
 </div>
 
-<!-- S2: ROLE SELECTION -->
+<!-- S2: ROLE SELECTION (ON02) — single-select: Student or Parent only -->
 <div class="screen" id="s-roles">
   <div class="topbar"><span class="tb-brand">hAIsir</span><span class="tb-step">Step 1 of 3</span></div>
   <div class="progress-bar"><div class="progress-fill" style="width:30%"></div></div>
   <div class="center-body">
     <div class="card card-lg">
       <div><div class="h2">What best describes you?</div>
-        <div class="subtitle">Select all that apply — you can hold multiple roles on hAIsir.</div></div>
+        <div class="subtitle">Choose your role to get started. You can add more roles later from your profile.</div></div>
       <div class="role-grid" id="role-grid"></div>
-      <div class="multi-note" id="multi-note" style="display:none;">
-        <span>i</span><span>You have multiple roles. You will set each one up, then switch between them via the topbar role switcher at any time.</span>
+      <div style="background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:8px;padding:11px 14px;font-size:12px;color:#0C447C;">
+        <strong>Teacher or tutor?</strong> Instructors are invited by their institution admin. Independent tutors register via the "Become a tutor" flow after signing up.
       </div>
       <div class="btn-row">
         <button class="btn-secondary" onclick="goScreen('s-welcome')">&larr; Back</button>
@@ -144,7 +135,7 @@ input,select,textarea{font-family:inherit;}
   </div>
 </div>
 
-<!-- S3: STUDENT SETUP -->
+<!-- S3: STUDENT SETUP (ON03) -->
 <div class="screen" id="s-setup-student">
   <div class="topbar"><span class="tb-brand">hAIsir</span><span class="tb-step" id="lbl-student">Step 2 of 3</span></div>
   <div class="progress-bar"><div class="progress-fill" id="p-student" style="width:60%"></div></div>
@@ -155,18 +146,18 @@ input,select,textarea{font-family:inherit;}
         <div><div class="h2" style="margin:0;">Student profile</div><div class="form-hint" style="margin:0;">Takes about 1 minute</div></div>
       </div>
       <div class="form-row">
-        <div><label class="form-label">Grade</label>
-          <select class="form-input" id="s-grade">
-            <option value="">Select grade</option>
-            <option>Grade 5</option><option>Grade 6</option><option>Grade 7</option>
-            <option>Grade 8</option><option>Grade 9</option><option>Grade 10</option>
-          </select></div>
-        <div><label class="form-label">Board / curriculum</label>
-          <select class="form-input">
-            <option value="">Select board</option>
-            <option>NCERT</option><option>JNV</option><option>CBSE</option><option>ICSE</option><option>State board</option>
-          </select></div>
+        <div><label class="form-label">First name <span style="color:#993C1D;">*</span></label>
+          <input class="form-input" id="s-fname" type="text" placeholder="e.g. Arjun" /></div>
+        <div><label class="form-label">Last name <span style="color:#993C1D;">*</span></label>
+          <input class="form-input" id="s-lname" type="text" placeholder="e.g. Patel" /></div>
       </div>
+      <div><label class="form-label">Grade <span style="color:#993C1D;">*</span></label>
+        <select class="form-input" id="s-grade">
+          <option value="">Select grade</option>
+          <option>Grade 5</option><option>Grade 6</option><option>Grade 7</option>
+          <option>Grade 8</option><option>Grade 9</option><option>Grade 10</option>
+          <option>Grade 11</option><option>Grade 12</option><option>Undergraduate</option>
+        </select></div>
       <div><label class="form-label">Subjects you study</label>
         <div class="chip-wrap" id="stu-subjects"></div></div>
       <div><label class="form-label">Are you enrolled in a school on hAIsir?</label>
@@ -184,42 +175,7 @@ input,select,textarea{font-family:inherit;}
   </div>
 </div>
 
-<!-- S4: TEACHER SETUP -->
-<div class="screen" id="s-setup-teacher">
-  <div class="topbar"><span class="tb-brand">hAIsir</span><span class="tb-step" id="lbl-teacher">Step 2 of 3</span></div>
-  <div class="progress-bar"><div class="progress-fill" id="p-teacher" style="width:60%"></div></div>
-  <div class="center-body">
-    <div class="card card-md">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="width:36px;height:36px;border-radius:8px;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-size:18px;">&#128105;&#8205;&#127979;</div>
-        <div><div class="h2" style="margin:0;">Teacher profile</div><div class="form-hint" style="margin:0;">Teach at institutions, tutor independently, or both</div></div>
-      </div>
-      <div class="form-row">
-        <div><label class="form-label">Subjects you teach</label>
-          <div class="chip-wrap" id="tch-subjects"></div></div>
-        <div><label class="form-label">Grades</label>
-          <div class="chip-wrap" id="tch-grades"></div></div>
-      </div>
-      <div><label class="form-label">How will you use hAIsir?</label>
-        <div id="tch-types"></div></div>
-      <div id="tch-code-section" style="display:none;">
-        <label class="form-label">Institution invite code</label>
-        <div class="code-box cbb">
-          <div class="code-lbl cll-b">Your institution admin will email you an invite</div>
-          <input class="code-input" id="tch-code" type="text" placeholder="e.g. INST-TEACHER-2026" oninput="chkCode('tch-code','tch-code-msg',tchCodes)" />
-          <div id="tch-code-msg"></div>
-        </div>
-        <div class="form-hint">No code yet? Skip &mdash; your admin will send it when ready.</div>
-      </div>
-      <div class="btn-row">
-        <button class="btn-secondary" onclick="goRoles()">&larr; Back</button>
-        <button class="btn-primary" onclick="nextSetup()">Continue &rarr;</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- S5: PARENT SETUP -->
+<!-- S4: PARENT SETUP (ON05) -->
 <div class="screen" id="s-setup-parent">
   <div class="topbar"><span class="tb-brand">hAIsir</span><span class="tb-step" id="lbl-parent">Step 2 of 3</span></div>
   <div class="progress-bar"><div class="progress-fill" id="p-parent" style="width:60%"></div></div>
@@ -242,79 +198,14 @@ input,select,textarea{font-family:inherit;}
       </div>
       <div class="btn-row">
         <button class="btn-secondary" onclick="goRoles()">&larr; Back</button>
-        <button class="btn-primary" onclick="nextSetup()">Continue &rarr;</button>
+        <button class="btn-primary" id="par-next" disabled onclick="nextSetup()">Continue &rarr;</button>
       </div>
+      <div style="text-align:center;"><span style="font-size:11px;color:#b4b2a9;">No code yet? <span style="color:#185FA5;cursor:pointer;" onclick="nextSetup()">Skip &mdash; link later from dashboard</span></span></div>
     </div>
   </div>
 </div>
 
-<!-- S6: TUTOR SETUP -->
-<div class="screen" id="s-setup-tutor">
-  <div class="topbar"><span class="tb-brand">hAIsir</span><span class="tb-step" id="lbl-tutor">Step 2 of 3</span></div>
-  <div class="progress-bar"><div class="progress-fill" id="p-tutor" style="width:60%"></div></div>
-  <div class="center-body">
-    <div class="card card-md">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="width:36px;height:36px;border-radius:8px;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:18px;">&#129489;&#8205;&#128188;</div>
-        <div><div class="h2" style="margin:0;">Tutor profile</div><div class="form-hint" style="margin:0;">Students discover you through the marketplace</div></div>
-      </div>
-      <div><label class="form-label">Subjects you teach</label>
-        <div class="chip-wrap" id="tut-subjects"></div></div>
-      <div class="form-row">
-        <div><label class="form-label">Grade range</label>
-          <select class="form-input">
-            <option>Grade 5-8</option><option>Grade 6-10</option><option>Grade 9-12</option><option>All grades</option>
-          </select></div>
-        <div><label class="form-label">Session rate (per hour)</label>
-          <input class="form-input" type="text" placeholder="e.g. Rs.300" /></div>
-      </div>
-      <div><label class="form-label">Short bio</label>
-        <textarea class="form-input" style="height:66px;resize:none;" placeholder="e.g. 5 years experience in NCERT Maths, specialising in Algebra for Grade 6-10 students."></textarea></div>
-      <div><label class="form-label">Availability</label>
-        <div class="chip-wrap" id="tut-avail"></div></div>
-      <div style="display:flex;align-items:center;gap:10px;background:#EEEDFE;border-radius:8px;padding:11px 14px;">
-        <input type="checkbox" id="tut-mkt" checked style="width:16px;height:16px;accent-color:#534AB7;" />
-        <label for="tut-mkt" style="font-size:12px;color:#3C3489;cursor:pointer;">List me in the tutor marketplace so students can discover me</label>
-      </div>
-      <div class="btn-row">
-        <button class="btn-secondary" onclick="goRoles()">&larr; Back</button>
-        <button class="btn-primary" onclick="nextSetup()">Continue &rarr;</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- S7: ADMIN SETUP -->
-<div class="screen" id="s-setup-admin">
-  <div class="topbar"><span class="tb-brand">hAIsir</span><span class="tb-step" id="lbl-admin">Step 2 of 3</span></div>
-  <div class="progress-bar"><div class="progress-fill" id="p-admin" style="width:60%"></div></div>
-  <div class="center-body">
-    <div class="card card-md">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="width:36px;height:36px;border-radius:8px;background:#e8ebf0;display:flex;align-items:center;justify-content:center;font-size:18px;">&#127979;</div>
-        <div><div class="h2" style="margin:0;">Institution setup</div><div class="form-hint" style="margin:0;">You were invited as an institution admin</div></div>
-      </div>
-      <div class="code-box cbn">
-        <div class="code-lbl cll-n">Enter the admin invite code from your platform email</div>
-        <input class="code-input" id="adm-code" type="text" placeholder="e.g. ADMIN-MARYS-2026" oninput="chkCode('adm-code','adm-code-msg',admCodes)" />
-        <div id="adm-code-msg"></div>
-      </div>
-      <div style="background:#f5f4f0;border-radius:10px;padding:14px;">
-        <div style="font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:10px;">Once you're in, you'll be able to:</div>
-        <div style="display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:0.5px solid #e5e3dc;"><span style="font-size:16px;">&#128218;</span><span style="font-size:12px;color:#5f5e5a;line-height:1.5;">Import board curriculum (NCERT, JNV, CBE) or build your own</span></div>
-        <div style="display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:0.5px solid #e5e3dc;"><span style="font-size:16px;">&#127979;</span><span style="font-size:12px;color:#5f5e5a;line-height:1.5;">Create classes and assign teachers</span></div>
-        <div style="display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:0.5px solid #e5e3dc;"><span style="font-size:16px;">&#128101;</span><span style="font-size:12px;color:#5f5e5a;line-height:1.5;">Enroll students via CSV or invite code</span></div>
-        <div style="display:flex;align-items:flex-start;gap:10px;padding:6px 0;"><span style="font-size:16px;">&#128202;</span><span style="font-size:12px;color:#5f5e5a;line-height:1.5;">Track progress, doubts and escalation rates across all classes</span></div>
-      </div>
-      <div class="btn-row">
-        <button class="btn-secondary" onclick="goRoles()">&larr; Back</button>
-        <button class="btn-primary" onclick="nextSetup()">Continue &rarr;</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- S8: ROLE SWITCHER EXPLAINER -->
+<!-- S5: ROLE SWITCHER EXPLAINER (ON07) -->
 <div class="screen" id="s-switcher">
   <div class="topbar"><span class="tb-brand">hAIsir</span><span class="tb-step">Almost there!</span></div>
   <div class="progress-bar"><div class="progress-fill" style="width:88%"></div></div>
@@ -323,7 +214,7 @@ input,select,textarea{font-family:inherit;}
   </div>
 </div>
 
-<!-- S9: READY -->
+<!-- S6: READY (ON08) -->
 <div class="screen" id="s-ready">
   <div class="topbar"><span class="tb-brand">hAIsir</span></div>
   <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
@@ -342,51 +233,60 @@ input,select,textarea{font-family:inherit;}
 <div class="toast" id="toast"></div>
 
 <script>
+// ON02: Only Student and Parent are self-selectable at onboarding.
+// Instructor = invited by institution_admin (first login inline setup).
+// Tutor = separate "Become a tutor" flow (post sign-up).
+// Institution Admin / Platform Admin = created directly, no onboarding.
 const ROLES=[
-  {id:'student',label:'Student',            icon:'🎓',desc:"I want to learn, track progress, and get help from hAITU.",tag:'Learner',    tagBg:'#E6F1FB',tagC:'#185FA5',color:'#185FA5',bg:'#f4f8fd'},
-  {id:'teacher',label:'Teacher/Instructor', icon:'👩‍🏫',desc:"I teach at a school and manage classes, content and doubts.", tag:'Educator',   tagBg:'#E1F5EE',tagC:'#0F6E56',color:'#0F6E56',bg:'#f2fbf7'},
-  {id:'parent', label:'Parent/Guardian',    icon:'👨‍👩‍👧',desc:"I want to follow my child's progress and stay in touch with teachers.",tag:'Family',     tagBg:'#FAEEDA',tagC:'#854F0B',color:'#BA7517',bg:'#fdf8f2'},
-  {id:'tutor',  label:'Independent Tutor',  icon:'🧑‍💼',desc:"I offer private tutoring and want students to discover me.", tag:'Marketplace',tagBg:'#EEEDFE',tagC:'#3C3489',color:'#534AB7',bg:'#f7f6fe'},
-  {id:'admin',  label:'Institution Admin',  icon:'🏫', desc:"I manage a school — curriculum, classes, teachers and students.",tag:'Admin',      tagBg:'#e8ebf0',tagC:'#0D1B2A',color:'#0D1B2A',bg:'#f0f1f3'},
+  {id:'student',label:'Student',     icon:'🎓',desc:"I want to learn, track progress, and get help from hAITU.",   tag:'Learner',tagBg:'#E6F1FB',tagC:'#185FA5',color:'#185FA5',bg:'#f4f8fd'},
+  {id:'parent', label:'Parent / Guardian',icon:'👨‍👩‍👧',desc:"I want to follow my child's progress and stay informed.",tag:'Family', tagBg:'#FAEEDA',tagC:'#854F0B',color:'#BA7517',bg:'#fdf8f2'},
 ];
-const TC={student:'#0A1F5C',teacher:'#0A3D2B',parent:'#3D2000',tutor:'#2B1A5C',admin:'#0D1B2A'};
+
+// Topbar colours per role (BR-ON-023)
+const TC={student:'#0A1F5C',parent:'#3D2000'};
+
 const SUBJ=['Maths','Science','English','Hindi','Social Studies','History','Physics','Chemistry','Biology','Computer Science'];
-const GRD=['Gr 5','Gr 6','Gr 7','Gr 8','Gr 9','Gr 10'];
-const AVAIL=['Weekday mornings','Weekday afternoons','Weekday evenings','Weekends','Flexible'];
+
 const stuCodes={'STMARY-2026-G6':"St. Mary's School · Grade 6",'JNV-2026-G6':'JNV Hyderabad · Grade 6'};
-const tchCodes={'INST-TEACHER-2026':"St. Mary's School — Teacher invite"};
 const parCodes={'ARJUN-2026':'Arjun Patel · Grade 6','PRIYA-2026':'Priya Patel · Grade 8'};
-const admCodes={'ADMIN-MARYS-2026':"St. Mary's School — Admin access"};
+
 const FIRST_STEPS={
-  student:[{icon:'🏫',l:'Join your school',s:'Enter invite code or search by name',bg:'#E6F1FB',c:'#185FA5'},{icon:'📚',l:'Browse open courses',s:'Find topics and tutors',bg:'#EEEDFE',c:'#534AB7'},{icon:'🤖',l:'Ask hAITU a question',s:'Start learning right now',bg:'#E1F5EE',c:'#0F6E56'}],
-  teacher:[{icon:'🏫',l:'Join your institution',s:"Enter your admin's invite code",bg:'#E1F5EE',c:'#0F6E56'},{icon:'📝',l:'Build a curriculum',s:'Create topics, upload content',bg:'#E1F5EE',c:'#0F6E56'},{icon:'👥',l:'Invite students',s:'Share a class invite code',bg:'#E1F5EE',c:'#0F6E56'}],
-  parent: [{icon:'🔗',l:'Link your child',s:"Enter their hAIsir link code",bg:'#FAEEDA',c:'#BA7517'},{icon:'📊',l:'View progress',s:"See how they're doing this week",bg:'#FAEEDA',c:'#BA7517'}],
-  tutor:  [{icon:'🧑‍💼',l:'Complete your profile',s:'Add bio, subjects and availability',bg:'#EEEDFE',c:'#534AB7'},{icon:'🔍',l:'List in marketplace',s:'Students will start discovering you',bg:'#EEEDFE',c:'#534AB7'}],
-  admin:  [{icon:'📚',l:'Import board curriculum',s:'NCERT, JNV, CBE or custom',bg:'#e8ebf0',c:'#0D1B2A'},{icon:'🏫',l:'Create your first class',s:'Assign teacher and enroll students',bg:'#e8ebf0',c:'#0D1B2A'}],
+  student:[
+    {icon:'🏫',l:'Join your school',   s:'Enter invite code or search by name',  bg:'#E6F1FB',c:'#185FA5'},
+    {icon:'📚',l:'Browse open courses', s:'Find topics and tutors',               bg:'#EEEDFE',c:'#534AB7'},
+    {icon:'🤖',l:'Ask hAITU a question',s:'Start learning right now',             bg:'#E1F5EE',c:'#0F6E56'},
+  ],
+  parent:[
+    {icon:'🔗',l:'Link your child',  s:"Enter their hAIsir link code",       bg:'#FAEEDA',c:'#BA7517'},
+    {icon:'📊',l:'View progress',    s:"See how they're doing this week",     bg:'#FAEEDA',c:'#BA7517'},
+  ],
 };
 
-let sel=new Set(), queue=[], idx=0, demoR='student';
-const cs={stuSub:new Set(['Maths','Science']),tchSub:new Set(['Maths']),tchGrd:new Set(['Gr 6','Gr 7']),tutSub:new Set(['Maths']),tutAvl:new Set(['Weekday evenings']),tchType:'inst'};
+// BR-ON-005: single-select — clear any previous selection before adding
+let sel=new Set(), queue=[], idx=0;
+const cs={stuSub:new Set(['Maths','Science'])};
 
 function goScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0);}
 function goRoles(){buildGrid();goScreen('s-roles');}
 function goSetup(){queue=[...sel];idx=0;advance();}
 function nextSetup(){idx++;advance();}
 function advance(){
-  if(idx>=queue.length){if(sel.size>1){buildSwitcher();goScreen('s-switcher');}else buildReady();return;}
+  if(idx>=queue.length){buildSwitcher();return;}
   const r=queue[idx],total=queue.length+2,step=idx+2,pct=Math.round((step/total)*100);
   const lbl=document.getElementById('lbl-'+r),bar=document.getElementById('p-'+r);
   if(lbl)lbl.textContent=`Step ${step} of ${total}`;
   if(bar)bar.style.width=pct+'%';
   if(r==='student')initStuChips();
-  if(r==='teacher')initTchChips();
-  if(r==='tutor')initTutChips();
+  // Bug fix: apply role topbar colour (BR-ON-023)
+  const screen=document.getElementById('s-setup-'+r);
+  const tb=screen?.querySelector('.topbar');
+  if(tb)tb.style.background=TC[r]||'#0A1F5C';
   goScreen('s-setup-'+r);
 }
 
 function buildGrid(){
   document.getElementById('role-grid').innerHTML=ROLES.map(r=>`
-    <div class="role-card ${sel.has(r.id)?'selected':''}" style="--rc:${r.color};--rcbg:${r.bg};" onclick="toggleRole('${r.id}')">
+    <div class="role-card ${sel.has(r.id)?'selected':''}" style="--rc:${r.color};--rcbg:${r.bg};" onclick="pickRole('${r.id}')">
       <div class="rc-check">${sel.has(r.id)?'✓':''}</div>
       <div class="rc-icon">${r.icon}</div>
       <div class="rc-title">${r.label}</div>
@@ -394,79 +294,52 @@ function buildGrid(){
       <span class="rc-tag" style="background:${r.tagBg};color:${r.tagC};">${r.tag}</span>
     </div>`).join('');
   document.getElementById('roles-next').disabled=sel.size===0;
-  document.getElementById('multi-note').style.display=sel.size>1?'flex':'none';
 }
-function toggleRole(id){sel.has(id)?sel.delete(id):sel.add(id);buildGrid();}
+
+// Single-select: clicking a card selects it exclusively (BR-ON-005)
+function pickRole(id){sel.clear();sel.add(id);buildGrid();}
 
 function initStuChips(){
   document.getElementById('stu-subjects').innerHTML=SUBJ.map(s=>`<button class="chip ${cs.stuSub.has(s)?'on':''}" onclick="tc('stuSub','${s}',this)">${s}</button>`).join('');
 }
-function initTchChips(){
-  document.getElementById('tch-subjects').innerHTML=SUBJ.slice(0,8).map(s=>`<button class="chip ${cs.tchSub.has(s)?'on':''}" onclick="tc('tchSub','${s}',this)">${s}</button>`).join('');
-  document.getElementById('tch-grades').innerHTML=GRD.map(g=>`<button class="chip ${cs.tchGrd.has(g)?'on':''}" onclick="tc('tchGrd','${g}',this)">${g}</button>`).join('');
-  buildTchTypes();
-}
-function buildTchTypes(){
-  const opts=[{id:'inst',t:'Teach at an institution',s:"You'll be assigned classes by your school admin."},{id:'tutor',t:'Offer independent tutoring',s:'Students discover you in the tutor marketplace.'},{id:'both',t:'Both — institution + tutoring',s:'Manage classes and take private students.'}];
-  document.getElementById('tch-types').innerHTML=opts.map(o=>`
-    <div class="type-opt ${cs.tchType===o.id?'sel':''}" onclick="setTchType('${o.id}')">
-      <div class="type-radio">${cs.tchType===o.id?'✓':''}</div>
-      <div><div class="type-title">${o.t}</div><div class="type-sub">${o.s}</div></div>
-    </div>`).join('');
-  document.getElementById('tch-code-section').style.display=(cs.tchType==='inst'||cs.tchType==='both')?'block':'none';
-}
-function setTchType(id){cs.tchType=id;buildTchTypes();}
-function initTutChips(){
-  document.getElementById('tut-subjects').innerHTML=SUBJ.map(s=>`<button class="chip ${cs.tutSub.has(s)?'on':''}" onclick="tc('tutSub','${s}',this)">${s}</button>`).join('');
-  document.getElementById('tut-avail').innerHTML=AVAIL.map(a=>`<button class="chip ${cs.tutAvl.has(a)?'on':''}" onclick="tc('tutAvl','${a}',this)">${a}</button>`).join('');
-}
 function tc(key,val,btn){cs[key].has(val)?cs[key].delete(val):cs[key].add(val);btn.classList.toggle('on',cs[key].has(val));}
 
 function buildSwitcher(){
-  demoR=[...sel][0];
-  const rl=[...sel].map(id=>ROLES.find(r=>r.id===id)).filter(Boolean);
+  const role=[...sel][0];
+  const r=ROLES.find(x=>x.id===role)||ROLES[0];
+  const color=TC[role]||'#0A1F5C';
+  // Apply colour to switcher topbar too
+  const stb=document.querySelector('#s-switcher .topbar');
+  if(stb)stb.style.background=color;
   document.getElementById('switcher-body').innerHTML=`
-    <div><div class="h2">You have ${rl.length} roles — here's how switching works</div>
-      <div class="subtitle">Each role has its own view and tools. Switch any time from the topbar — no logout needed.</div></div>
-    <div class="sw-demo" id="sw-demo"></div>
-    <div style="display:flex;flex-direction:column;gap:8px;">
-      ${rl.map(r=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${r.bg};border-radius:8px;">
-        <span style="font-size:20px;">${r.icon}</span>
-        <div><div style="font-size:12px;font-weight:600;color:${r.color};">${r.label}</div>
-             <div style="font-size:11px;color:#888780;">${r.desc}</div></div>
-      </div>`).join('')}
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:36px;height:36px;border-radius:8px;background:${r.bg};display:flex;align-items:center;justify-content:center;font-size:18px;">${r.icon}</div>
+      <div><div class="h2" style="margin:0;">Your hAIsir looks like this</div><div class="form-hint" style="margin:0;">The top bar changes colour for each role</div></div>
     </div>
-    <div style="background:#E6F1FB;border-radius:8px;padding:11px 14px;font-size:12px;color:#0C447C;">
-      Your data is kept separate per role. Switching doesn't log you out — it just changes your view and tools.
-    </div>
-    <button class="btn-primary" onclick="buildReady()">Got it — let's go! &rarr;</button>`;
-  buildSwDemo();
-}
-function buildSwDemo(){
-  const rl=[...sel].map(id=>ROLES.find(r=>r.id===id)).filter(Boolean);
-  const ar=ROLES.find(r=>r.id===demoR);
-  const bg=TC[demoR]||'#0A1F5C';
-  document.getElementById('sw-demo').innerHTML=`
-    <div class="sw-topbar" style="background:${bg};">
-      <span class="sw-brand">hAIsir</span>
-      <div class="sw-btns">
-        ${rl.map(r=>`<button class="sw-btn ${r.id===demoR?'sw-btn-on':'sw-btn-off'}" onclick="swDemo('${r.id}')">${r.icon} ${r.label.split('/')[0].trim().split(' ')[0]}</button>`).join('')}
+    <div class="sw-demo">
+      <div class="sw-topbar" style="background:${color};">
+        <span class="sw-brand">hAIsir</span>
+        <div class="sw-btns"><button class="sw-btn sw-btn-on">${r.icon} ${r.label}</button></div>
+      </div>
+      <div class="sw-content">
+        <span class="sw-icon">${r.icon}</span>
+        <div><div class="sw-name">${r.label} dashboard</div><div class="sw-desc">This is your default view after login</div></div>
       </div>
     </div>
-    <div class="sw-content">
-      <span class="sw-icon">${ar?.icon||'🎓'}</span>
-      <div><div class="sw-name">Viewing as ${ar?.label}</div><div class="sw-desc">${ar?.desc}</div></div>
-    </div>`;
+    <div style="background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:8px;padding:11px 14px;font-size:12px;color:#0C447C;">
+      Want to add another role later? Go to your <strong>Profile</strong> and select <strong>Add a role</strong> &mdash; the top bar colour changes to match whichever role you&rsquo;re using.
+    </div>
+    <button class="btn-primary" onclick="buildReady()">Got it &mdash; let&rsquo;s go &rarr;</button>`;
+  goScreen('s-switcher');
 }
-function swDemo(id){demoR=id;buildSwDemo();}
 
 function buildReady(){
   const rl=[...sel].map(id=>ROLES.find(r=>r.id===id)).filter(Boolean);
   const primary=rl[0];
   const name=(document.getElementById('w-name')?.value||'').split(' ')[0]||'there';
   const steps=FIRST_STEPS[primary?.id||'student']||[];
-  document.getElementById('ready-title').textContent=rl.length>1?`You're set up with ${rl.length} roles!`:`You're all set, ${name}!`;
-  document.getElementById('ready-sub').textContent=rl.length>1?`Switch between roles from the topbar any time. Here's what to do first as a ${primary?.label}.`:`Your ${primary?.label} account is ready. Here's what to do first.`;
+  document.getElementById('ready-title').textContent=`You're all set, ${name}!`;
+  document.getElementById('ready-sub').textContent=`Your ${primary?.label} account is ready. Here's what to do first.`;
   document.getElementById('ready-pills').innerHTML=rl.map(r=>`<span class="rpl" style="background:${r.bg};color:${r.color};">${r.icon} ${r.label}</span>`).join('');
   document.getElementById('ready-actions').innerHTML=steps.map(a=>`
     <div class="action-row" style="background:${a.bg};" onclick="showToast('Opening: ${a.l}')">
@@ -481,9 +354,14 @@ function chkCode(inp,msg,map){
   const v=document.getElementById(inp)?.value?.toUpperCase().trim();
   const m=document.getElementById(msg);
   if(!m)return;
-  if(!v){m.innerHTML='';return;}
+  if(!v){
+    m.innerHTML='';
+    if(inp==='par-code'){const b=document.getElementById('par-next');if(b)b.disabled=true;}
+    return;
+  }
   const f=map[v];
   m.innerHTML=f?`<div class="code-msg code-ok">Found: ${f}</div>`:`<div class="code-msg code-err">Code not recognised. Double-check and try again.</div>`;
+  if(inp==='par-code'){const b=document.getElementById('par-next');if(b)b.disabled=!f;}
 }
 
 let tt;
@@ -495,8 +373,6 @@ function showToast(msg){
 
 buildGrid();
 initStuChips();
-initTchChips();
-initTutChips();
 </script>
 </body>
 </html>

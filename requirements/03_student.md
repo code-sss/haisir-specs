@@ -341,7 +341,7 @@ GET /api/tutors/marketplace?subject={}&grade={}&q={}
 → Returns: [{
     idp_sub, name, initials, color, subjects, grades,
     topics: [str], content_rating: float | null, review_count: int,
-    student_count, rate_per_session, availability
+    student_count, availability
   }]
 ```
 
@@ -352,7 +352,7 @@ GET /api/tutors/marketplace?subject={}&grade={}&q={}
 **Purpose:** Full tutor profile with bio, topics, and content reviews. Informational only — no session booking in this phase.
 
 **Layout:**
-- Hero: avatar, name, subjects, grade range, bio, content rating (aggregate stars + count), student count, rate and availability (shown as info text — no booking button).
+- Hero: avatar, name, subjects, grade range, bio, content rating (aggregate stars + count), student count, availability (shown as info text — no booking button).
 - Left main: About section, Topics covered (with per-topic avg rating shown as small stars next to each topic pill), Content reviews.
 - Right sidebar: "Enroll with this tutor" CTA (starts open enrollment — same flow as S03), "Why hAIsir" trust card.
 
@@ -364,7 +364,7 @@ GET /api/tutors/marketplace?subject={}&grade={}&q={}
 - "Enroll with this tutor" → creates an open enrollment for this tutor → navigates to S04 scoped to that enrollment.
 
 **Business rules:**
-- **BR-STU-021:** Rate and availability are displayed as informational text only. There is no slot picker or booking flow.
+- **BR-STU-021:** Availability is displayed as informational text only. There is no slot picker or booking flow.
 - **BR-STU-022:** Content rating shown is `teacher_profiles.content_rating` — the aggregate across all of the tutor's topics. Tutors with no reviews yet show "No reviews yet" instead of a star rating.
 
 **API calls:**
@@ -374,7 +374,7 @@ GET /api/tutors/{idp_sub}/profile
 → Returns: {
     idp_sub, name, bio, subjects, grades, topics,
     content_rating: float | null, review_count: int, student_count,
-    rate_per_session, availability,
+    availability,
     reviews: [{
       reviewer_initials, reviewer_color, topic_title,
       rating: int, comment: str | null, created_at

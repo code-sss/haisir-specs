@@ -159,7 +159,7 @@ POST /api/users/me/assign-role
 
 POST /api/users/me/become-tutor
 → Auth: any authenticated user (valid session cookie)
-→ Body: {subjects, grades, bio?, rate_per_session?, availability?, marketplace_listed}
+→ Body: {subjects, grades, bio?, availability?, marketplace_listed}
 → Action: assigns 'tutor' role in Keycloak, creates tutor profile
 → Returns: {assigned: true, role: "tutor", profile_id}
 → Errors: 409 if user already holds tutor role

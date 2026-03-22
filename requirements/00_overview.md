@@ -142,7 +142,7 @@ ProxyHeaders → SecurityHeaders → SecurityValidation
 - Full-text search handles keyword/exact matching. Vector search handles semantic similarity (e.g., "fractions" matching "rational numbers").
 - Search endpoints combine both result sets with a weighted ranking: `0.4 * text_rank + 0.6 * vector_similarity` (tunable per entity type).
 - **Infrastructure:** `pgvector` extension enabled on the existing PostgreSQL instance. No separate search service needed in v1.
-- **Embedding model:** Configurable via `SEARCH_EMBEDDING_MODEL` env var. Default TBD — select a lightweight model suitable for educational content in English and Hindi.
+- **Embedding model:** `all-MiniLM-L6-v2` (sentence-transformers, self-hosted). 384-dimension vectors. Served via a lightweight sidecar container; no external API dependency. Configurable via `SEARCH_EMBEDDING_MODEL` env var for future swap (e.g. multilingual model if Hindi search quality requires it).
 
 **Timezone convention:**
 - All timestamps are stored in PostgreSQL as `TIMESTAMP WITH TIME ZONE` (UTC).
@@ -180,6 +180,7 @@ For validation errors (422), FastAPI's default Pydantic validation response is u
 - `404` — Not found (also used instead of 403 for student data isolation — see BR-SEC-002)
 - `409` — Conflict (duplicate enrollment, already assigned role, etc.)
 - `422` — Validation error (Pydantic field validation failures)
+- `410` — Gone (expired resource, e.g. parent link code that has passed its expiry date)
 - `429` — Rate limited (hAITU calls, link code validation)
 - `502` — Bad gateway (upstream Keycloak or Claude API failure)
 - `504` — Gateway timeout (hAITU 30s timeout exceeded)
@@ -298,7 +299,6 @@ Key rule: hAITU must attempt before escalation is possible (`doubt.haitu_attempt
 | Exam session questions reference live question rows via FK (no JSONB snapshot) | Existing |
 | Images stored on disk at `data_dir/images/questions/`, base64 at API layer | Existing |
 | `is_active` soft delete on `exam_templates` | Existing |
-| No local users table | Existing |
 
 **New decisions (added for this build):**
 

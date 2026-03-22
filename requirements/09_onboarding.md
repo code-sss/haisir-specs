@@ -251,5 +251,6 @@ After onboarding, the role switcher lives in the topbar on every screen for mult
 | Google SSO user — name already in Keycloak profile | Pre-fill first/last name from Keycloak `given_name` / `family_name` claims |
 | Invite code valid but class is full | Show: "This class is currently full. Contact your institution admin." |
 | Parent code used — child already linked to this parent | 409 → show: "You are already linked to this child." |
-| User selects all 4 roles | Runs ON03 → ON04 → ON06 → ON05 in sequence. ON04 and ON06 share the same teacher profile (upsert). |
+| Invited instructor hits `/onboarding` | The `instructor` role is already in their JWT. Skip ON02–ON06 and go to ON07 (role switcher demo), then redirect to `/teacher` for inline profile setup. |
+| Institution admin hits `/onboarding` | The `institution_admin` role is already assigned. `onboarding_completed_at` was set on first login — redirect immediately to `/institution`. |
 | Admin user hits `/onboarding` | Redirect immediately to `/admin` — skip all onboarding steps. |

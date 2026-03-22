@@ -289,7 +289,7 @@ input,textarea,select{font-family:inherit;}
     <div class="main-tabs">
       <button class="mtab on"  onclick="switchHomeTab('overview',this)">Overview</button>
       <button class="mtab"     onclick="switchHomeTab('progress',this)">Progress</button>
-      <button class="mtab"     onclick="switchHomeTab('assessments',this)">Assessments</button>
+      <button class="mtab"     onclick="switchHomeTab('results',this)">Results</button>
       <button class="mtab"     onclick="switchHomeTab('teachers',this)">Teachers &amp; tutors</button>
     </div>
     <div class="page-body" id="home-body"></div>
@@ -368,7 +368,7 @@ const children = [
         dueItems:[],
         subjects:[
           {name:'Intro to Python',icon:'💻', bg:'#E1F5EE', score:60, plain:'Making good progress independently',  status:'ok'},
-          {name:'Photosynthesis', icon:'🔬', bg:'#E1F5EE', score:85, plain:'Excellent — mastered this topic',     status:'good'},
+          {name:'Variables & Loops',icon:'💻', bg:'#E1F5EE', score:85, plain:'Excellent — mastered this topic',  status:'good'},
         ]
       },
     ],
@@ -531,7 +531,7 @@ function switchHomeTab(tab, btn) {
 }
 
 function renderCurrentTab() {
-  const tabs = {overview:renderOverview, progress:renderProgress, assessments:renderAssessments, teachers:renderTeachers};
+  const tabs = {overview:renderOverview, progress:renderProgress, results:renderAssessments, teachers:renderTeachers};
   if (tabs[activeHomeTab]) tabs[activeHomeTab]();
 }
 
@@ -695,14 +695,14 @@ function renderProgress() {
     <div class="timeline-card">
       <div class="tl-header"><div class="tl-title">Recent activity</div></div>
       ${child.timeline.map((item,i)=>`
-        <div class="tl-item" style="${item.isDoubt?'background:#f2fbf7;cursor:pointer;':''}">
+        <div class="tl-item" style="${item.isDoubt?'background:#f2fbf7;':''}">
           <div class="tl-dot-col">
             <div class="tl-dot ${item.dot}"></div>
             ${i<child.timeline.length-1?'<div class="tl-line"></div>':''}
           </div>
           <div class="tl-content">
             <div class="tl-text" style="${item.isDoubt?'color:#085041;font-weight:500;':''}">${item.text}</div>
-            <div class="tl-time">${item.time}${item.isDoubt?' · <span style="color:#0F6E56;font-weight:500;">New response</span>':''}</div>
+            <div class="tl-time">${item.time}${item.isDoubt?' · <span style="color:#0F6E56;font-weight:500;">Arjun can read the reply in his account</span>':''}</div>
           </div>
         </div>`).join('')}
     </div>`;
@@ -771,7 +771,7 @@ function renderAssessments() {
       </div>` : ''}
 
     <div>
-      <div class="sec-hd"><span class="sec-title">Past assessments</span></div>
+      <div class="sec-hd"><span class="sec-title">Past results</span></div>
       <div class="assess-timeline">${completed.map(itemHtml).join('')}</div>
     </div>
 
