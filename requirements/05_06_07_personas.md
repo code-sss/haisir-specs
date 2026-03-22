@@ -13,8 +13,8 @@
 
 **Role:** `parent`
 **Topbar colour:** `#3D2000` (warm brown)
-**Can:** View linked child's progress in plain language, see assessment results (scores only), read teacher responses in doubt threads, message tutors (not institutional teachers), generate and manage child links.
-**Cannot:** See raw assessment questions, modify any content, access other children's data, contact institutional teachers directly.
+**Can:** View linked child's progress in plain language, see quiz/exam results (scores only), read teacher responses in doubt threads, message tutors (not institutional teachers), generate and manage child links.
+**Cannot:** See raw quiz/exam questions, modify any content, access other children's data, contact institutional teachers directly.
 
 ---
 
@@ -24,7 +24,7 @@
 |---|---|---|
 | P01 | `parent-home` | Home — overview tab |
 | P02 | `parent-progress` | Progress tab |
-| P03 | `parent-assessments` | Assessments tab |
+| P03 | `parent-results` | Results tab (quizzes + exams) |
 | P04 | `parent-teachers` | Teachers & tutors tab |
 | P05 | `parent-link` | Link child (onboarding / add child) |
 
@@ -64,7 +64,7 @@ Button → Progress tab.
 GET /api/parents/me/children
 → Auth: parent
 → Returns: [{
-    keycloak_sub, name, grade, color, initials,
+    idp_sub, name, grade, color, initials,
     streak, topics_this_week, active_courses,
     overall_status: "ok"|"warn"|"danger",
     courses: [{
@@ -90,7 +90,7 @@ GET /api/parents/me/children/{child_sub}/due-items
 
 **Activity timeline (sidebar):** Chronological feed of child's activity. Entries:
 - Study sessions.
-- Assessment completions with score.
+- Quiz/exam completions with score.
 - Doubts raised / teacher responses (highlighted in green with "New response" tag).
 - Course enrollments.
 
@@ -112,40 +112,40 @@ GET /api/parents/me/children/{child_sub}/progress
       }]
     }],
     timeline: [{
-      type: "study"|"assessment"|"doubt_replied"|"enrollment",
+      type: "study"|"quiz"|"exam"|"doubt_replied"|"enrollment",
       text: str, time: str, is_new_teacher_response: bool
     }],
     haitu_summary: str  // cached daily
   }
 ```
 
-### P03 — Assessments Tab
+### P03 — Results Tab (Quizzes + Exams)
 
-**Stat row:** Average score (across all completed attempts), Improving topics count, Upcoming count.
+**Stat row:** Average score (across all completed sessions), Improving topics count, Upcoming count.
 
-**Upcoming section:** Assessments due soon with amber left border.
+**Upcoming section:** Quizzes/exams due soon with amber left border. Type badge (Quiz / Exam) on each.
 
-**Past assessments:** Chronological list, newest first. Each item:
-- Assessment name, source course, date.
+**Past results:** Chronological list, newest first. Each item:
+- Title, type badge (Quiz / Exam), source course, date.
 - Score % (large, colour-coded).
 - Trend indicator: ↑ Improving / ↓ Dropped / → Steady (based on comparison with previous attempt on same topic).
 
 **Info note (blue):** "For detailed question-level feedback, ask their teacher directly."
 
 **Business rules:**
-- **BR-PAR-009:** Parent sees `score` from `assessment_attempts` but NOT the question list or individual answers.
-- **BR-PAR-010:** Trend is calculated by comparing current score to the previous attempt on the same assessment. First attempt shows no trend.
+- **BR-PAR-009:** Parent sees `score` from `exam_sessions` but NOT the question list or individual answers.
+- **BR-PAR-010:** Trend is calculated by comparing current score to the previous session on the same template. First attempt shows no trend.
 - **BR-PAR-011:** "Improving topics" = distinct topics where the most recent mastery score is higher than the one before it.
 
 **API calls:**
 ```
-GET /api/parents/me/children/{child_sub}/assessments
+GET /api/parents/me/children/{child_sub}/results
 → Auth: parent
 → Returns: {
     stats: {avg_score: float, improving_topics: int, upcoming: int},
-    upcoming: [{title, course, due_at}],
+    upcoming: [{title, purpose, course, due_at}],
     completed: [{
-      attempt_id, title, course, submitted_at,
+      session_id, title, purpose, course, submitted_at,
       score: float, trend: "up"|"down"|"flat"|null
     }]
   }
@@ -179,11 +179,11 @@ GET /api/parents/me/children/{child_sub}/educators
 → Auth: parent
 → Returns: {
     instructors: [{
-      keycloak_sub, name, role, institution, class_name,
+      idp_sub, name, role, institution, class_name,
       subjects: [str], last_assignment: str
     }],
     tutors: [{
-      keycloak_sub, name, role, next_session: str | null,
+      idp_sub, name, role, next_session: str | null,
       rate: int | null, subjects: [str],
       messages: [{from: "parent"|"tutor", text, time}]
     }]
@@ -223,7 +223,7 @@ GET /api/parent-link-codes/{code}
 POST /api/parent-child-links
 → Auth: parent
 → Body: {code: str}
-→ Returns: {link_id, student_keycloak_sub, student_name}
+→ Returns: {link_id, student_idp_sub, student_name}
 → Errors: 404 code not found, 410 code expired, 409 already linked
 ```
 
@@ -236,7 +236,7 @@ POST /api/parent-child-links
 **Role:** `institution_admin`
 **Topbar colour:** `#0D1B2A` (near-black navy)
 **Can:** Manage institution, classes, people (teachers + students + parents), curriculum, view class-level analytics.
-**Cannot:** View individual student assessment answers or doubt content, access other organizations' data, self-register (invited by SuperAdmin only).
+**Cannot:** View individual student quiz/exam answers or doubt content, access other organizations' data, self-register (invited by SuperAdmin only).
 
 ---
 
@@ -269,7 +269,7 @@ Navigation via persistent main nav tabs (Dashboard / Classes / Curriculum / Peop
 
 **Business rules:**
 - **BR-INST-001:** At-risk count = students where any `enrollment_topics.mastery_score < 50` across 3+ topics.
-- **BR-INST-002:** "Classes without teacher" = classes where `instructor_keycloak_sub IS NULL` and `status = 'active'`.
+- **BR-INST-002:** "Classes without teacher" = classes where `instructor_idp_sub IS NULL` and `status = 'active'`.
 - **BR-INST-003:** School avg progress = mean of all `enrollment_topics.mastery_score` for all active students in this organization.
 
 **API calls:**
@@ -346,7 +346,7 @@ POST /api/topics/{topic_id}/content
 - "View" / "Invite" row actions.
 
 **Business rules:**
-- **BR-INST-007:** Institution admin cannot view or modify individual student assessment content or doubt message bodies.
+- **BR-INST-007:** Institution admin cannot view or modify individual student quiz/exam answers or doubt message bodies.
 - **BR-INST-008:** Adding a teacher by email works in two paths depending on whether the email exists in Keycloak: (a) **New account** — backend calls Keycloak Admin API to create the account, assigns the `instructor` role, and adds the user to `organization_members` with `status = 'active'`; a Keycloak-managed welcome email is sent so the teacher can set their password. (b) **Existing account** — skip account creation, assign `instructor` role if not already held, and add to `organization_members` with `status = 'active'`. In both paths: no acceptance step is required — the institution admin is the authority for their organization. A `teacher_added_to_org` in-app notification is sent to the teacher. **Note:** No `teacher_profiles` row is created at invite time. The teacher completes their profile via the onboarding flow (ON04) on first login. API endpoints that display teacher data (e.g. class roster, people manager) must handle a missing `teacher_profiles` row gracefully — show the teacher's name from Keycloak claims and "Profile not completed" status until ON04 is done.
 - **BR-INST-009:** CSV enroll columns: `first_name, last_name, email, grade, section`. Email used to match or create Keycloak accounts.
 - **BR-INST-016:** Removed — merged into BR-INST-008.
@@ -356,7 +356,7 @@ POST /api/topics/{topic_id}/content
 ```
 GET /api/organizations/{org_id}/members?role=instructor
 → Auth: institution_admin
-→ Returns: [{keycloak_sub, name, subjects, classes: [str], student_count, avg_progress, status}]
+→ Returns: [{idp_sub, name, subjects, classes: [str], student_count, avg_progress, status}]
 
 POST /api/organizations/{org_id}/invite-teacher
 → Auth: institution_admin
@@ -366,7 +366,7 @@ POST /api/organizations/{org_id}/invite-teacher
 GET /api/organizations/{org_id}/students
 → Auth: institution_admin
 → Query: ?grade=&section=&limit=&offset=
-→ Returns: [{keycloak_sub, name, grade, section, classes: [str], progress, parent_linked: bool}]
+→ Returns: [{idp_sub, name, grade, section, classes: [str], progress, parent_linked: bool}]
 
 POST /api/organizations/{org_id}/enroll-students/csv
 → Auth: institution_admin
@@ -409,7 +409,7 @@ POST /api/organizations/{org_id}/classes
 
 PATCH /api/classes/{class_id}/instructor
 → Auth: institution_admin (own org only)
-→ Body: {instructor_keycloak_sub: str}
+→ Body: {instructor_idp_sub: str}
 → Returns: {updated_at}
 ```
 
@@ -440,7 +440,7 @@ GET /api/organizations/{org_id}/analytics
 → Auth: institution_admin
 → Query: ?period=month (default)
 → Returns: {
-    stats: {avg_progress, student_count, at_risk, assignment_completion, assessments_run},
+    stats: {avg_progress, student_count, at_risk, assignment_completion, templates_used},
     doubt_stats: {total, haitu_resolved_pct, escalated_pct, teacher_resolved_pct},
     subject_perf: [{subject, avg}],
     weak_topics: [{topic, avg}],
@@ -466,7 +466,7 @@ GET /api/organizations/{org_id}/analytics
 
 **Topic heatmap:** Same as T02 — per-topic class average bars. Read-only for institution admin (no "Add content" button).
 
-**Note:** Institution admin sees the full T02 layout (roster, heatmap, assignments) in read-only mode. They cannot take actions (assign assessments, add content, message students). This is consistent with "NO individual answers/doubts" — they see mastery scores and progress but cannot access T03's doubt history or individual assessment answers.
+**Note:** Institution admin sees the full T02 layout (roster, heatmap, assignments) in read-only mode. They cannot take actions (assign quizzes/exams, add content, message students). This is consistent with "NO individual answers/doubts" — they see mastery scores and progress but cannot access T03's doubt history or individual quiz/exam answers.
 
 **Business rules:**
 - **BR-INST-015:** Institution admin accessing T03 from I06 sees the teacher's student detail view **without** `teacher_notes` (private to the teacher) and **without** doubt message bodies (aggregate doubt status only — count and status, not content). They can see topic performance scores and overall progress.
@@ -478,7 +478,7 @@ GET /api/classes/{class_id}/detail
 → Returns: {
     class: {id, name, subject, grade, teacher_name?, student_count},
     stats: {avg_progress, at_risk, assignments},
-    students: [{keycloak_sub, name, progress, weak_topics, status}]
+    students: [{idp_sub, name, progress, weak_topics, status}]
   }
 ```
 
@@ -639,13 +639,13 @@ PATCH /api/admin/organizations/{org_id}/status
 ```
 GET /api/admin/tutors?status={published|suspended}
 → Auth: admin
-→ Returns: [{keycloak_sub, name, subjects, student_count, rating, marketplace_listed, marketplace_suspended, joined_at}]
+→ Returns: [{idp_sub, name, subjects, student_count, rating, marketplace_listed, marketplace_suspended, joined_at}]
 
-PATCH /api/admin/tutors/{keycloak_sub}/suspend
+PATCH /api/admin/tutors/{idp_sub}/suspend
 → Auth: admin
 → Returns: {marketplace_suspended: true}
 
-PATCH /api/admin/tutors/{keycloak_sub}/restore
+PATCH /api/admin/tutors/{idp_sub}/restore
 → Auth: admin
 → Returns: {marketplace_suspended: false}
 ```
@@ -667,14 +667,14 @@ PATCH /api/admin/tutors/{keycloak_sub}/restore
 ```
 GET /api/admin/users?role={}&institution_id={}&status={}&q={}&limit=&offset=
 → Auth: admin
-→ Returns: [{keycloak_sub, name, email, roles: [str], institution, status}]
+→ Returns: [{idp_sub, name, email, roles: [str], institution, status}]
 
-PATCH /api/admin/users/{keycloak_sub}/suspend
+PATCH /api/admin/users/{idp_sub}/suspend
 → Auth: admin
 → Side effect: disables Keycloak account
 → Returns: {status: "suspended"}
 
-PATCH /api/admin/users/{keycloak_sub}/restore
+PATCH /api/admin/users/{idp_sub}/restore
 → Auth: admin
 → Side effect: enables Keycloak account
 → Returns: {status: "active"}
@@ -722,7 +722,7 @@ POST /api/admin/purge-ai-logs
 |---|---|---|
 | Parent | Child link code expired | Show "Code expired. Ask your child to generate a new one." |
 | Parent | All children's links revoked | Show empty state — "No children linked" with link child CTA |
-| Parent | Child has no assessments | Assessments tab shows empty state with explanation |
+| Parent | Child has no quiz/exam results | Results tab shows empty state with explanation |
 | Institution Admin | No classes created yet | Home shows empty quick action cards and "Create your first class" CTA |
 | Institution Admin | Board import conflicts with existing topics | Show diff — new topics highlighted, existing preserved. Admin confirms merge. |
 | Institution Admin | Teacher invite email already registered | Skip Keycloak invite, directly link existing account to org |

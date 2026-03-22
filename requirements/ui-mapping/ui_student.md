@@ -16,7 +16,7 @@
 | S04 | `s-nav` | `/home/topics/:enrollment_id` | `renderNav()` |
 | S05 | `s-review` | `/home/review/:attempt_id` | `renderReview()` |
 | S06 | `s-tutors` | `/tutors` | `renderTutors()` |
-| S07 | `s-tutor-profile` | `/tutors/:keycloak_sub` | `renderTutorProfile()` |
+| S07 | `s-tutor-profile` | `/tutors/:idp_sub` | `renderTutorProfile()` |
 | S08 | `s-doubts` | `/doubts` | `renderDoubtInbox()` |
 | S09 | `s-doubt-thread` | `/doubts/:doubt_id` | `renderDoubtThread()` |
 | S10 | `s-profile` | `/profile` | `renderProfile()` |

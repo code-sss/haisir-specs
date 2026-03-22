@@ -1,7 +1,7 @@
 # hAIsir — Student Specification
 > Version 1.1 | Updated to reflect actual baseline from `haisir_current.md`.
 > The student role (`student`) already exists in Keycloak and the codebase.
-> Existing routes `/assess` and `/exam` remain unchanged. New routes extend the student experience.
+> Existing routes `/assess` and `/exam` will be rewritten to use unified `exam_templates` model. New routes extend the student experience.
 > → Depends on: `00_overview.md`, `01_data_model.md`, `02_auth_and_roles.md`
 > → Prototype: `haisir_student_flow.html`
 
@@ -11,7 +11,7 @@
 
 **Role:** `student`
 **Topbar colour:** `#0A1F5C` (navy)
-**Can:** Study topics, ask hAITU doubts, take assessments, request teacher help, track own progress, browse and enroll in open courses, generate parent link code.
+**Can:** Study topics, ask hAITU doubts, take quizzes and exams, request teacher help, track own progress, browse and enroll in open courses, generate parent link code.
 **Cannot:** See other students' data, modify curriculum, access institution-level analytics.
 
 ---
@@ -22,7 +22,7 @@
 
 | Route | Status | Action |
 |---|---|---|
-| `/assess` | ✅ Existing | Leave as-is — student quiz experience unchanged |
+| `/assess` | ✅ Existing | **Rewrite** to use `exam_templates` with `purpose = 'quiz'` under the hood |
 | `/exam` | ✅ Existing | Leave as-is — student exam browsing unchanged |
 | `/home` | ✅ Existing (single-course view) | Extend — add unified dashboard as default view |
 
@@ -36,7 +36,7 @@
 | S04 | `topic-navigator` | `/home/topics/:enrollment_id` | Topic navigator | Home → enrollment card |
 | S05 | `exam-review` | `/home/review/:attempt_id` | Post-exam AI review | Home → "Review exam" |
 | S06 | `tutor-discovery` | `/tutors` | Find a tutor | Home → "Browse tutors" |
-| S07 | `tutor-profile` | `/tutors/:keycloak_sub` | Tutor profile | Tutor discovery → card |
+| S07 | `tutor-profile` | `/tutors/:idp_sub` | Tutor profile | Tutor discovery → card |
 | S08 | `doubt-inbox` | `/doubts` | My doubts | Topbar → "Doubts" |
 | S09 | `doubt-thread` | `/doubts/:doubt_id` | Doubt thread | Doubt inbox → row |
 | S10 | `profile` | `/profile` | Student profile | Topbar → "Profile" |
@@ -61,7 +61,7 @@
 - Enrollment cards: one card per active enrollment. Each card shows: enrollment name, source (institution name or tutor name), track pill (School / Open), progress bar (%), weak topic alerts, due item alerts, next session info (if tutor), last studied date.
 - Institutions section and Open courses section are separately grouped.
 - Find-tutor CTA card (purple) at bottom.
-- Review-exam CTA card (blue) at bottom — links to most recent completed assessment.
+- Review-exam CTA card (blue) at bottom — links to most recent completed quiz or exam.
 
 **Actions:**
 - Click enrollment card → S04 Topic Navigator scoped to that enrollment.
@@ -78,7 +78,7 @@
 - **BR-STU-002:** Due items show all `class_assignments` where `due_at` is within the next 7 days and student has not yet submitted.
 - **BR-STU-003:** "Continue where you left off" uses the enrollment with the most recent `last_active_at`.
 - **BR-STU-004:** A topic is flagged as weak on the enrollment card if `enrollment_topics.status = 'weak'`. Count shown as "X weak topics".
-- **BR-STU-005:** The Doubts badge count = `doubts` where `student_keycloak_sub = self` and `status IN ('pending', 'answered')`.
+- **BR-STU-005:** The Doubts badge count = `doubts` where `student_idp_sub = self` and `status IN ('pending', 'answered')`.
 
 **API calls:**
 ```
@@ -86,7 +86,7 @@ GET /api/students/me/home
 → Auth: student
 → Returns: {
     enrollments: [{id, type, label, sublabel, progress, weak_count, due_items, last_topic, session_info}],
-    recent_attempt: {assessment_id, title, score, submitted_at} | null,
+    recent_attempt: {exam_session_id, title, purpose, score, submitted_at} | null,
     unread_doubts: int
   }
 ```
@@ -159,11 +159,11 @@ POST /api/enrollments
 ```
 GET /api/open-catalog?subject={subject}&q={query}
 → Auth: student
-→ Returns: [{topic_id, title, subject, tutor_keycloak_sub, tutor_name, topic_count, icon}]
+→ Returns: [{topic_id, title, subject, tutor_idp_sub, tutor_name, topic_count, icon}]
 
 POST /api/enrollments/open/bulk
 → Auth: student
-→ Body: {items: [{topic_id, tutor_keycloak_sub | null}]}
+→ Body: {items: [{topic_id, tutor_idp_sub | null}]}
 → Returns: {enrollment_ids: [uuid]}
 ```
 
@@ -339,7 +339,7 @@ POST /api/haitu/exam-review-chat
 GET /api/tutors/marketplace?subject={}&grade={}&q={}
 → Auth: student
 → Returns: [{
-    keycloak_sub, name, initials, color, subjects, grades,
+    idp_sub, name, initials, color, subjects, grades,
     topics: [str], content_rating: float | null, review_count: int,
     student_count, rate_per_session, availability
   }]
@@ -369,10 +369,10 @@ GET /api/tutors/marketplace?subject={}&grade={}&q={}
 
 **API calls:**
 ```
-GET /api/tutors/{keycloak_sub}/profile
+GET /api/tutors/{idp_sub}/profile
 → Auth: student
 → Returns: {
-    keycloak_sub, name, bio, subjects, grades, topics,
+    idp_sub, name, bio, subjects, grades, topics,
     content_rating: float | null, review_count: int, student_count,
     rate_per_session, availability,
     reviews: [{
@@ -383,7 +383,7 @@ GET /api/tutors/{keycloak_sub}/profile
 
 POST /api/enrollments/open/bulk
 → Auth: student
-→ Body: {items: [{tutor_keycloak_sub}]}
+→ Body: {items: [{tutor_idp_sub}]}
 → Returns: {enrollment_ids: [uuid]}
 ```
 
@@ -409,7 +409,7 @@ POST /api/enrollments/open/bulk
 - Click doubt row → S09 Doubt Thread.
 
 **Business rules:**
-- **BR-STU-023:** Shows all doubts where `student_keycloak_sub = self`, all statuses.
+- **BR-STU-023:** Shows all doubts where `student_idp_sub = self`, all statuses.
 - **BR-STU-024:** Unread count in topbar badge = doubts where `status IN ('pending', 'answered')`.
 
 **API calls:**
@@ -499,7 +499,7 @@ PATCH /api/doubts/{doubt_id}/resolve
 ```
 GET /api/students/me/profile
 → Auth: student
-→ Returns: {keycloak_sub, first_name, last_name, grade, subjects, created_at}
+→ Returns: {idp_sub, first_name, last_name, grade, subjects, created_at}
 
 PATCH /api/students/me/profile
 → Auth: student

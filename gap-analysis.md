@@ -4,8 +4,8 @@
 
 | Layer | Current State |
 |-------|--------------|
-| **Backend** | 11 domain entities, 40+ endpoints, 3 roles (student/instructor/admin), CRUD for courses/topics/questions/assessments/exams, CSRF, JWT validation, 100% test coverage |
-| **Frontend** | 6 pages (home, exam, add-exam, assess, add-assessment, manage-categories), auth hooks, CSRF retry, exam authoring, PDF viewer |
+| **Backend** | 11 domain entities, 40+ endpoints, 3 roles (student/instructor/admin), CRUD for courses/topics/questions/exam-templates/exam-sessions, CSRF, JWT validation, 100% test coverage. Note: `assessments` module deprecated — unified under `exam_templates` (Phase 0 decision). |
+| **Frontend** | 6 pages (home, exam, add-exam, assess, add-assessment, manage-categories), auth hooks, CSRF retry, exam authoring, PDF viewer. Note: `/assess` and `/add-assessment` to be rewritten to use `exam_templates` with `purpose = 'quiz'` (Phase 0 decision). |
 | **Deploy** | APISIX gateway (20 plugins, WAF, rate limiting), Keycloak OIDC, PostgreSQL, Docker Compose (dev/staging/prod), release manifests |
 
 ---
@@ -14,8 +14,8 @@
 
 | Domain | New Tables | New Endpoints | New Frontend Routes | Priority |
 |--------|-----------|---------------|-------------------|----------|
-| **Role Migration** | 0 (Keycloak config) | 1 (assign-role) | Role switcher, route guards | P0 — blocks everything |
-| **User Profiles** | 3 (student/teacher/parent_profiles) + user_metadata | ~8 (CRUD + onboarding) | /profile, /onboarding (8 screens) | P0 |
+| **Role Migration** | 0 (IdP config) | 3 (assign-role, become-tutor, invite-role) | Role switcher, route guards | P0 — blocks everything |
+| **User Profiles** | 3 (student/teacher/parent_profiles) + user_metadata | ~8 (CRUD + onboarding) | /profile, /onboarding (6 screens — ON04/ON06 removed) | P0 |
 | **Organizations** | 4 (organizations, org_members, classes, class_enrollments) | ~12 | /teacher/class/*, /institution/* (6 screens) | P1 |
 | **Enrollments** | 2 (enrollments, enrollment_topics) | ~6 | /home/dashboard, /home/join-institution, /home/browse | P1 |
 | **Doubts** | 2 (doubts, doubt_messages) | ~6 | /doubts, /doubts/:id (4 screens) | P1 |
@@ -25,7 +25,7 @@
 | **Tutor Features** | 2 (tutor_student_relationships, topic_reviews) | ~6 | /tutors, /tutors/:sub (discovery + profile) | P2 |
 | **Institution Admin** | 1 (board_adoptions) | ~8 | /institution/* (6 screens) | P2 |
 | **Platform Admin** | 1 (platform_events) | ~6 | /admin/* (6 screens) | P3 |
-| **Schema Extensions** | ALTER on 3 existing tables | Migration endpoints | N/A | P0 |
+| **Schema Extensions** | ALTER on 4 existing tables + assessment data migration | Migration endpoints | N/A | P0 |
 
 ---
 
@@ -112,6 +112,6 @@
 3. ~~**File storage**: S3/cloud or local disk for PDFs/images?~~ **Resolved:** Local disk in v1 via `StorageBackend` abstract interface in `infrastructure/storage/`. `STORAGE_BACKEND` env var selects backend (default: `local`). S3/GCS/Azure can be swapped in later. See `00_overview.md` file storage convention.
 4. **Search backend**: PostgreSQL full-text or dedicated search service?
 5. ~~**Dynamic exam algorithm**: Random, weighted, or coverage-based question selection?~~ **Resolved:** Random selection within matching candidates, with difficulty fallback (`hard → medium → easy`). Full ruleset JSON schema defined in `01_data_model.md` under `exam_templates`. Validated at creation time.
-6. **Topic archived correction**: Can tutors clone an archived topic to create a corrected version?
+6. ~~**Topic archived correction**: Can tutors clone an archived topic to create a corrected version?~~ **Resolved:** Yes — tutors can clone archived topics. Clone creates a new `draft` topic with copied content. See `01_data_model.md` BR-CONTENT-005.
 7. ~~**Mastery initial value**: First attempt — is previous_mastery = 0 or = latest_score?~~ **Resolved:** First attempt sets `mastery_score = latest_score` directly. See `01_data_model.md` BR-PROGRESS-003.
 8. ~~**Payment extensibility** (flagged): Payment processing is deferred. Before building the tutor-student enrollment record, Tech Lead must confirm the `enrollments` or `tutor_student_relationships` table has a clean place to attach payment/subscription status later without restructuring. No build action needed now — confirmation only.~~ **Resolved:** `subscription_status` (`'free'`|`'paid'`, default `'free'`) and `payment_id` (nullable) columns have been added to `enrollments` and `tutor_student_relationships` tables to support future payment integration without restructuring. All records default to free tier in v1. See `01_data_model.md` BR-ENROLL-PAY-001 and BR-TUTOR-PAY-001.

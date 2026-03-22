@@ -191,8 +191,10 @@ This file is a record of all decisions made during the Phase 1 human review of h
 
 | Item | Status | Owner |
 |---|---|---|
-| Archived topic clone flow — can tutors clone an archived topic? | ❓ Unresolved | PM to decide |
+| Archived topic clone flow — can tutors clone an archived topic? | ✅ Yes — tutors can clone archived topics to create corrected versions (BR-CONTENT-005) | PM decided |
 | Phase 2 persona review (Student, Teacher/Tutor, Parent, Institution Admin, Platform Admin) | 🔜 Not started | PM + Tech Lead as needed |
+
+> **Note:** Phase 0 review (see `phase0-review-decisions.md`) made significant changes that supersede some Phase 1 decisions: assessment module deprecated (unified under `exam_templates`), role assignment model overhauled (instructor invited, tutor explicit flow), `keycloak_sub` renamed to `idp_sub`, BR-SEC-009 updated. Phase 1 decisions above remain valid as historical record but the current spec state reflects Phase 0 updates.
 
 ---
 

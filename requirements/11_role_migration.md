@@ -68,9 +68,12 @@ POST /admin/realms/haisir/roles
 
 | Role | Assignment method |
 |---|---|
-| `institution_admin` | Admin assigns via Keycloak Admin API — never self-assigned |
-| `tutor` | Auto-assigned by backend on onboarding completion (see section 6) |
-| `parent` | Auto-assigned by backend on onboarding completion (see section 6) |
+| `student` | Self-selected during onboarding (see section 6) |
+| `parent` | Self-selected during onboarding (see section 6). Institution admin can also invite a parent to link them to a specific student within the institution |
+| `tutor` | Explicit "Become a tutor" registration flow, separate from onboarding (like Udemy's instructor signup) |
+| `instructor` | Invited by institution_admin via email/userid — never self-assigned |
+| `institution_admin` | Assigned by platform admin via Keycloak Admin API — never self-assigned |
+| `admin` | Dedicated accounts — never assigned via API |
 
 ### 3.3 No changes to existing role definitions
 
@@ -146,27 +149,44 @@ A new backend endpoint is needed to assign Keycloak roles programmatically durin
 ```
 POST /api/users/me/assign-role
 → Auth: any authenticated user (valid session cookie)
-→ Body: {role: "tutor" | "parent" | "student" | "instructor"}
+→ Body: {role: "student" | "parent"}
 → Action: calls Keycloak Admin API to assign realm role to current user's Keycloak account
 → Returns: {assigned: true, role: str}
 → Errors:
-    400 if role not in assignable set
-    403 if role is 'institution_admin' or 'admin' (these are never self-assigned)
+    400 if role not in self-assignable set
+    403 if role is 'instructor', 'tutor', 'institution_admin', or 'admin'
 → Note: Does NOT require X-Current-Role — user may not have an active role yet during onboarding
+
+POST /api/users/me/become-tutor
+→ Auth: any authenticated user (valid session cookie)
+→ Body: {subjects, grades, bio?, rate_per_session?, availability?, marketplace_listed}
+→ Action: assigns 'tutor' role in Keycloak, creates tutor profile
+→ Returns: {assigned: true, role: "tutor", profile_id}
+→ Errors: 409 if user already holds tutor role
+→ Note: Separate explicit flow — not part of onboarding role selection
+
+POST /api/admin/invite-role
+→ Auth: institution_admin (for instructor/parent invites) or admin (for institution_admin)
+→ Body: {email_or_sub: str, role: "instructor" | "parent", organization_id?: uuid}
+→ Action: sends invite; on acceptance, backend assigns role in Keycloak
+→ Returns: {invite_id, status: "sent"}
+→ Errors: 403 if caller lacks permission for target role
 ```
 
 **Assignable roles via this endpoint:**
 ```python
-SELF_ASSIGNABLE_ROLES = {'student', 'instructor', 'tutor', 'parent'}
+SELF_ASSIGNABLE_ROLES = {'student', 'parent'}
+TUTOR_REGISTRATION_ROLES = {'tutor'}  # separate "Become a tutor" flow
+INVITE_ONLY_ROLES = {'instructor'}     # institution_admin invites via email/userid
 ADMIN_ONLY_ROLES = {'institution_admin', 'admin'}
 ```
 
 **Keycloak Admin API call (backend-to-Keycloak):**
 ```python
 # Pseudocode — adapt to your Keycloak client library
-async def assign_role_to_user(keycloak_sub: str, role_name: str):
+async def assign_role_to_user(idp_sub: str, role_name: str):
     role = await keycloak_admin.get_realm_role(role_name)
-    await keycloak_admin.assign_realm_roles(keycloak_sub, [role])
+    await keycloak_admin.assign_realm_roles(idp_sub, [role])
 ```
 
 The backend needs Keycloak Admin credentials (client_id + client_secret with role management permissions). These should already exist for admin operations — check `haisir-deploy` config.
@@ -223,22 +243,59 @@ New role-specific route guards for new pages:
 
 ---
 
-## 6. Onboarding Role Assignment Flow
+## 6. Role Assignment Flows
 
-During onboarding, when a user completes a role setup screen, the frontend calls `POST /api/users/me/assign-role` to assign the role in Keycloak. The JWT must then be refreshed so the new role appears in `realm_access.roles` before the next screen sets `X-Current-Role` for that role.
+### 6.1 Onboarding (Student / Parent only)
+
+During onboarding, when a user completes a role setup screen, the frontend calls `POST /api/users/me/assign-role` to assign the role in Keycloak. The JWT must then be refreshed so the new role appears in `realm_access.roles`.
 
 **Sequence:**
 
 ```
-1. User selects "Student" on role selection screen (ON02)
-2. User completes student setup (ON03)
-3. Frontend calls POST /api/users/me/assign-role {role: "student"}
+1. User selects "Student" and/or "Parent" on role selection screen (ON02)
+2. User completes student setup (ON03) and/or parent setup (ON05)
+3. Frontend calls POST /api/users/me/assign-role {role: "student"} (and/or "parent")
 4. Backend assigns role in Keycloak via Admin API
 5. Frontend triggers token refresh via silent re-authentication (hidden iframe with prompt=none to /auth/login)
-6. APISIX OIDC plugin re-authenticates → new JWT containing "student" in realm_access.roles
+6. APISIX OIDC plugin re-authenticates → new JWT containing new role in realm_access.roles
 7. Session cookie updated in-place; useAuth picks up new role, adds to switcher
-8. Repeat for each selected role
 ```
+
+### 6.2 "Become a Tutor" (separate flow)
+
+Any authenticated user can register as a tutor via an explicit flow (similar to Udemy's "Become an instructor"). This is NOT part of onboarding — it's accessible from the user's profile page or a "Become a tutor" link.
+
+**Sequence:**
+```
+1. User clicks "Become a tutor" from profile or marketing page
+2. User fills in tutor profile (subjects, grades, bio, marketplace preference)
+3. Frontend calls POST /api/users/me/become-tutor with profile data
+4. Backend assigns 'tutor' role in Keycloak + creates tutor profile in one transaction
+5. Frontend triggers token refresh (same iframe mechanism as 6.1)
+6. Tutor role appears in switcher
+```
+
+### 6.3 Instructor Invite (institution_admin flow)
+
+Instructors are never self-assigned. Institution admins invite them.
+
+**Sequence:**
+```
+1. Institution admin calls POST /api/admin/invite-role {email_or_sub, role: "instructor", organization_id}
+2. Backend sends invite (email or in-app notification if user exists)
+3. Invited user accepts invite
+4. Backend assigns 'instructor' role in Keycloak + creates org membership
+5. On next login / token refresh, instructor role appears in switcher
+6. First visit to /teacher triggers inline profile setup (subjects, grades, experience)
+```
+
+### 6.4 Parent–Child Linking
+
+**Institutional context:** Institution admin invites a parent via `POST /api/admin/invite-role {email_or_sub, role: "parent", organization_id}` and links them to a specific student.
+
+**Open course context:** Either party can initiate:
+- Student generates a link code from their profile → parent enters it during onboarding (ON05) or from parent dashboard
+- Parent generates an invite from their dashboard → student accepts
 
 **JWT refresh after role assignment:**
 

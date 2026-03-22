@@ -11,7 +11,7 @@
 
 | Route | Status | Action |
 |---|---|---|
-| `/add-assessment` | ✅ Existing | Leave as-is for now. Class-scoped assignment flow (assigning to a class with a due date) is a new modal on the class dashboard, not a replacement of this page. |
+| `/add-assessment` | ✅ Existing | **Rewrite** to use `exam_templates` with `purpose = 'quiz'`. Class-scoped assignment flow (assigning to a class with a due date) is a new modal on the class dashboard. |
 | `/add-exam` | ✅ Existing | Leave as-is. Already supports `paragraph_questions`. New exam builder features (if any) extend this page. |
 | `/manage-categories` | ✅ Existing | Will be superseded by `/institution/curriculum` for institution-scoped work, but remains for backward compatibility. |
 
@@ -44,9 +44,11 @@ A single user can hold both `instructor` and `tutor` roles. The workspace adapts
 **Tutor role** (`tutor`):
 - Topbar colour: `#3C1F6E` (deep purple, shown as teal in combined view)
 - Operates independently — owns their curriculum fully
-- Manages individual student relationships asynchronously
+- Publishes courses; students subscribe and unsubscribe on their own
+- Can send invites to students (student chooses to accept)
 - Marketplace listing is immediate (no approval gate) — admin can suspend post-hoc
-- Answers doubts from their own students
+- Answers doubts from subscribed students
+- Student roster is read-only — tutor cannot remove students
 
 When both roles are active, the home screen shows both contexts. The teacher home topbar uses `#0A3D2B`. Role context within the home is visual (section labels and card borders distinguish institutional from open).
 
@@ -79,12 +81,12 @@ When both roles are active, the home screen shows both contexts. The teacher hom
 
 **Alert cards (injected at top on render, if applicable):**
 - Amber alert: "{N} student doubt(s) waiting for your reply" → links to T06.
-- Green alert: "{Assessment name} results are ready" → links to T08.
+- Green alert: "{Quiz/Exam name} results are ready" → links to T08.
 - Red alert: "{Student name} is at risk" (triggered by STUDENT_AT_RISK notification) → links to T03.
 
 **Sections:**
 - **My classes (institutional):** One card per assigned class. Card shows: institution name, class name, subject, average progress, at-risk count, active assignments, "View class →" and "Add content" buttons. Dashed "+ Join institution" card at end.
-- **Open tutoring:** One card per tutor context. Card shows: student count, subject, at-risk count, "View students →" button. Dashed "+ New open course" card at end.
+- **Open tutoring:** One card per published course. Card shows: subscriber count, subject, at-risk count, "View course →" button. Dashed "+ New open course" card at end.
 
 **Topbar:** "Doubts" button with amber badge showing count of new (unanswered) doubts.
 
@@ -96,7 +98,7 @@ When both roles are active, the home screen shows both contexts. The teacher hom
 - "Doubts" → T06.
 
 **Business rules:**
-- **BR-TCH-001:** Shows only classes where `instructor_keycloak_sub = self` and `status = 'active'`.
+- **BR-TCH-001:** Shows only classes where `instructor_idp_sub = self` and `status = 'active'`.
 - **BR-TCH-002:** Doubt badge count = `doubts` where `escalated_to = self` and `status = 'pending'`.
 - **BR-TCH-003:** Average progress per class = mean of `enrollment_topics.mastery_score` across all students in that class, for all topics in that class.
 - **BR-TCH-004:** At-risk count = students in class where `enrollment_topics.mastery_score < 50` across 3 or more topics (after at least one attempt). This matches the institution-level definition (BR-INST-001).
@@ -127,7 +129,7 @@ GET /api/teachers/me/home
 
 **Works for both instructor (structured) and tutor (open) contexts.** Layout adapts:
 - Instructor: shows class name, institution, subject, grade. Student roster with assignment column. Topic performance heatmap.
-- Tutor: shows tutoring context label. Student roster with current topic and session info columns (no heatmap — tutor curriculum is per-student not per-class).
+- Tutor: shows course label. Read-only subscriber list with current topic and progress columns (no heatmap — tutor curriculum is per-course not per-class). Tutor cannot remove subscribers.
 
 **Stat row:**
 - Students, Class average (instructor) / Students on track (tutor), Needs attention, At-risk / Sessions this week.
@@ -141,19 +143,19 @@ GET /api/teachers/me/home
 - "Add content" button → T04.
 
 **Assignments panel (instructor only):**
-- List of assigned assessments: name, due date, submission count vs total, average score (if completed).
-- "+ Assign assessment" button → opens assignment modal.
+- List of assigned quizzes/exams: name, type badge (Quiz/Exam), due date, submission count vs total, average score (if completed).
+- "+ Assign quiz/exam" button → opens assignment modal.
 
 **Actions:**
 - Click student row or "View →" → T03 Student Detail.
-- "+ Assign assessment" → modal with assessment picker, due date, optional note.
+- "+ Assign quiz/exam" → modal with template picker (filtered by purpose), due date, optional note.
 - Click topic in heatmap (future) → topic detail.
 - "Add content" → T04.
 
 **Business rules:**
 - **BR-TCH-005:** Last active = most recent `enrollment_topics.last_studied_at` across all topics for that student in this class.
 - **BR-TCH-006:** Heatmap shows only topics assigned to this class's curriculum (`class.board_adoption_id` or custom topics).
-- **BR-TCH-007:** Assignment modal assessment picker shows assessments available for the class's subject/grade.
+- **BR-TCH-007:** Assignment modal template picker shows `exam_templates` available for the class's subject/grade, with a purpose filter (Quiz / Exam / All).
 
 **API calls:**
 ```
@@ -162,7 +164,7 @@ GET /api/classes/{class_id}/dashboard
 → Returns: {
     class: {id, name, organization, subject, grade, student_count},
     students: [{
-      keycloak_sub, name, initials, color, progress,
+      idp_sub, name, initials, color, progress,
       weak_topics: int, last_active_at, status
     }],
     topic_perf: [{topic_id, title, class_avg}],
@@ -171,9 +173,9 @@ GET /api/classes/{class_id}/dashboard
 
 POST /api/classes/{class_id}/assignments
 → Auth: instructor (own class only)
-→ Body: {assessment_id: uuid, due_at: datetime, note?: str}
+→ Body: {exam_template_id: uuid, due_at: datetime, note?: str}
 → Returns: {assignment_id}
-→ Side effect: creates notification ASSESSMENT_DUE_SOON for all enrolled students
+→ Side effect: creates notification ASSIGNMENT_DUE_SOON for all enrolled students
 ```
 
 ---
@@ -203,22 +205,22 @@ POST /api/classes/{class_id}/assignments
 
 **API calls:**
 ```
-GET /api/classes/{class_id}/students/{student_keycloak_sub}
+GET /api/classes/{class_id}/students/{student_idp_sub}
 → Auth: instructor (own class only) OR institution_admin (own org only; teacher_notes excluded per BR-INST-015)
 → Returns: {
-    student: {keycloak_sub, name, initials, grade},
+    student: {idp_sub, name, initials, grade},
     overall_progress: float,
     weak_topic_count: int,
     topic_perf: [{topic_id, title, mastery_score, status, last_attempted_at}],
     doubt_history: [{doubt_id, topic_title, status, created_at, message_count}]
   }
 
-GET /api/tutors/me/students/{student_keycloak_sub}?enrollment_id={id}
+GET /api/tutors/me/students/{student_idp_sub}?enrollment_id={id}
 → Auth: tutor
 → Returns: same shape + teacher_notes field
 → Errors: 404 if enrollment_id does not belong to this tutor–student pair
 
-PATCH /api/tutors/me/students/{student_keycloak_sub}/notes?enrollment_id={id}
+PATCH /api/tutors/me/students/{student_idp_sub}/notes?enrollment_id={id}
 → Auth: tutor
 → Body: {notes: str}
 → Returns: {updated_at}
@@ -228,7 +230,7 @@ POST /api/haitu/teacher-tools
 → Auth: instructor OR tutor
 → Body: {
     tool: "plan_session" | "generate_questions" | "progress_report",
-    student_keycloak_sub: str,
+    student_idp_sub: str,
     context: {weak_topics, recent_scores, enrollment_label}
   }
 → Returns: {output: str}
@@ -251,7 +253,7 @@ POST /api/haitu/teacher-tools
 
 **Content item types:** PDF (file upload), Video link (URL input), Text notes (rich text), Question bank (future).
 
-**Assessment and exam authoring:** The existing `/add-assessment` and `/add-exam` routes handle question bank authoring including `paragraph_questions` (reading passages with embedded question IDs). The curriculum builder does not duplicate this — it links to the existing authoring tools. "Add questions" actions in the curriculum builder open the existing `/add-assessment` flow scoped to this topic.
+**Quiz and exam authoring:** The `/add-exam` route is the unified authoring tool for both quizzes (`purpose = 'quiz'`) and exams (`purpose = 'exam'`), including `paragraph_questions` (reading passages with embedded question IDs). The curriculum builder does not duplicate this — it links to the existing authoring tool. "Add questions" actions in the curriculum builder open the `/add-exam` flow scoped to this topic.
 
 **Actions:**
 - Click tree node → loads content for that topic in right panel.
@@ -298,7 +300,6 @@ DELETE /api/content/{content_item_id}
 **Sections:**
 - Bio and details: name, subjects, grades, years of experience, bio text (textarea).
 - Availability: free text field (e.g. "Mon–Fri 4–8pm").
-- Session rate: INR amount input.
 - Marketplace toggle: "List me in tutor marketplace" checkbox. If off, profile is not discoverable by students.
 - Stats (read-only): active students, topics built, average student progress, content rating (aggregate of `topic_reviews` across all owned topics — shows "No reviews yet" if `review_count = 0`).
 
@@ -310,11 +311,11 @@ DELETE /api/content/{content_item_id}
 ```
 GET /api/teachers/me/profile
 → Auth: instructor OR tutor
-→ Returns: {keycloak_sub, first_name, last_name, teacher_type, subjects, grades, years_experience, bio, rate_per_session, availability, marketplace_listed, marketplace_suspended}
+→ Returns: {idp_sub, first_name, last_name, teacher_type, subjects, grades, years_experience, bio, availability, marketplace_listed, marketplace_suspended}
 
 PATCH /api/teachers/me/profile
 → Auth: instructor OR tutor
-→ Body: {first_name?, last_name?, bio?, subjects?, grades?, rate_per_session?, availability?, marketplace_listed?}
+→ Body: {first_name?, last_name?, bio?, subjects?, grades?, availability?, marketplace_listed?}
 → Returns: updated profile
 ```
 
@@ -404,10 +405,10 @@ POST /api/doubts/{doubt_id}/messages
 
 ### T08 — Class Exam Results
 
-**Purpose:** Post-exam analysis for teacher after a class completes an assessment.
+**Purpose:** Post-exam/quiz analysis for teacher after a class completes an assigned quiz or exam.
 
 **Layout:**
-- Header (dark teal): assessment name, class name, date. Stats: class average %, passed count, below 60% count, total submitted.
+- Header (dark teal): template title, type badge (Quiz/Exam), class name, date. Stats: class average %, passed count, below 60% count, total submitted.
 - Two-column grid:
   - Left: Per-student score table — name, progress bar, score %, status badge (Good / Review / Struggling), "View" action.
   - Right:
@@ -421,8 +422,8 @@ POST /api/doubts/{doubt_id}/messages
 - "Generate remedial assignment" → calls hAITU API to generate a focused assessment on weak topics → opens assignment modal pre-filled.
 
 **Business rules:**
-- **BR-TCH-020:** Only accessible for assessments where all enrolled students have submitted, OR assessment due date has passed (whichever comes first).
-- **BR-TCH-021:** Question heatmap score = `(students who answered correctly / total submissions) * 100`.
+- **BR-TCH-020:** Only accessible for assignments where all enrolled students have submitted, OR due date has passed (whichever comes first).
+- **BR-TCH-021:** Question heatmap score = `(students who answered correctly / total submissions) * 100`. Sourced from `exam_session_questions`.
 - **BR-TCH-022:** hAITU recommendations are generated once per attempt batch and cached. See `08_haitu_ai_layer.md #exam-analysis`.
 - **BR-TCH-023:** Publishing a draft topic (`draft → live`) takes effect immediately — no confirmation modal. The topic becomes visible to enrolled students.
 - **BR-TCH-024:** Unpublishing (`live → draft`) is not allowed. To hide a topic, archive it (`live → archived`). Archiving shows a confirmation: "Students will no longer see this topic. This cannot be undone."
@@ -432,11 +433,11 @@ POST /api/doubts/{doubt_id}/messages
 GET /api/classes/{class_id}/assignments/{assignment_id}/results
 → Auth: instructor (own class only)
 → Returns: {
-    assessment: {title, question_count, assigned_at, due_at},
+    template: {title, purpose, question_count, assigned_at, due_at},
     class: {id, name, student_count},
     summary: {avg_score, passed: int, failed: int, submitted: int},
     student_results: [{
-      keycloak_sub, name, initials, color,
+      idp_sub, name, initials, color,
       score, status
     }],
     question_perf: [{question_id, order_index, pct_correct}],
@@ -455,8 +456,8 @@ GET /api/classes/{class_id}/assignments/{assignment_id}/results
 | Doubt escalated to teacher who has since been removed from class | Still show in inbox — teacher should respond. Institution admin sees unassigned doubts separately |
 | Student sends follow-up on a resolved doubt | Doubt status returns to `pending`, teacher sees it in inbox again |
 | Teacher reply textarea is empty | "Send" button disabled; "Send & resolve" button disabled |
-| Assessment with no submissions yet | T08 shows "No submissions yet" state. Heatmap empty. Recommendations not generated |
-| Tutor with no students | Home shows open tutoring section with dashed card only |
+| Assignment with no submissions yet | T08 shows "No submissions yet" state. Heatmap empty. Recommendations not generated |
+| Tutor with no subscribers | Home shows open tutoring section with dashed card only |
 | PDF upload over 20MB | Client-side validation before upload. Error: "File too large — maximum 20MB" |
 | Video URL invalid | Server validates URL format. Error: "Please enter a valid URL" |
 | Teacher types reply < 10 characters | Show validation: "Reply must be at least 10 characters" |

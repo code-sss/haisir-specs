@@ -112,8 +112,8 @@ The notifications centre is a single screen with a persona switcher at the top.
 | Type | Icon | Icon bg |
 |---|---|---|
 | `doubt_teacher_replied` | 💬 | `#E6F1FB` (blue) |
-| `assessment_due_soon` | 📅 | `#FAEEDA` (amber) |
-| `assessment_results_ready` | 📊 | `#E1F5EE` (green) |
+| `assignment_due_soon` | 📅 | `#FAEEDA` (amber) |
+| `quiz_results_ready` | 📊 | `#E1F5EE` (green) |
 | `exam_results_ready` | 📊 | `#E1F5EE` (green) |
 | `topic_marked_weak` | ⚠️ | `#FAECE7` (red) |
 | `new_content_uploaded` | 📚 | `#E6F1FB` (blue) |
@@ -121,7 +121,7 @@ The notifications centre is a single screen with a persona switcher at the top.
 | `class_exam_submitted` | 📋 | `#E1F5EE` (green) |
 | `student_at_risk` | 🚨 | `#FAECE7` (red) |
 | `child_doubt_replied` | 💬 | `#E1F5EE` (green) |
-| `child_assessment_due` | 📅 | `#FAEEDA` (amber) |
+| `child_assignment_due` | 📅 | `#FAEEDA` (amber) |
 | `child_weekly_digest` | 📈 | `#FDF4E3` (amber-warm) |
 | `child_streak_milestone` | 🎉 | `#E1F5EE` (green) |
 | `teacher_added_to_org` | ✅ | `#E1F5EE` (green) |

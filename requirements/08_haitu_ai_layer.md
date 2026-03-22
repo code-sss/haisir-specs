@@ -11,7 +11,7 @@ hAITU is the AI tutor embedded in hAIsir. It is not a general-purpose chatbot �
 
 - A **user** (student, teacher, or parent)
 - A **role context** (what kind of help is being requested)
-- A **topic context** (which topic or assessment the interaction is about)
+- A **topic context** (which topic or quiz/exam the interaction is about)
 - An **enrollment context** (which board / institution / tutor the content belongs to)
 
 hAITU never operates without all of these. There is no global "ask hAITU anything" mode.
@@ -70,7 +70,7 @@ Rules:
 - Use simple language appropriate for a Grade {grade} student.
 - Use examples from everyday Indian life where possible.
 - If you cannot fully resolve the doubt, set escalation_ready to true in your response.
-- Never tell the student the answer to an assessment question directly — guide them to the answer.
+- Never tell the student the answer to a quiz/exam question directly — guide them to the answer.
 - Respond in the same language the student uses (English or Hindi or mixed).
 
 Always respond with a JSON object in this exact format:
@@ -109,7 +109,7 @@ Claude must return all `topic-doubt` and `escalation-attempt` responses as a JSO
 
 **System prompt template:**
 ```
-You are hAITU, reviewing a student's performance on "{assessment_title}" ({subject}, {board}).
+You are hAITU, reviewing a student's performance on "{template_title}" ({subject}, {board}).
 
 Their results: {correct} correct, {wrong} wrong, {skipped} skipped out of {total}.
 
@@ -244,7 +244,7 @@ Data:
 - Study streak: {streak} days
 - Topics studied this week: {topics_this_week}
 - Weak areas: {weak_topics}
-- Recent assessment scores: {recent_scores}
+- Recent quiz/exam scores: {recent_scores}
 - Teacher responses to doubts: {doubt_replies}
 
 Rules:
@@ -284,7 +284,7 @@ Keep it warm, practical, and under 120 words.
 
 **System prompt template:**
 ```
-You are helping a teacher understand their class's performance on "{assessment_title}".
+You are helping a teacher understand their class's performance on "{template_title}".
 
 Class results:
 - Average score: {avg_score}%
@@ -330,23 +330,23 @@ POST /api/haitu/pattern-analysis
 
 POST /api/haitu/teacher-tools
 → Auth: instructor OR tutor
-→ Body: {tool: str, student_keycloak_sub: str, context: object}
+→ Body: {tool: str, student_idp_sub: str, context: object}
 → Returns: {output: str}
 
 POST /api/haitu/parent-topic-descriptions
 → Auth: parent
-→ Body: {child_keycloak_sub: str, topics: [{topic_id, mastery_score, attempt_count, last_attempted_at}]}
+→ Body: {child_idp_sub: str, topics: [{topic_id, mastery_score, attempt_count, last_attempted_at}]}
 → Returns: [{topic_id, description: str}]
 → Cached per child per calendar day
 
 POST /api/haitu/parent-report
 → Auth: parent
-→ Body: {child_keycloak_sub: str}
+→ Body: {child_idp_sub: str}
 → Returns: {report: str}
 
 POST /api/haitu/parent-topic-explain
 → Auth: parent
-→ Body: {child_keycloak_sub: str, topic_id: uuid}
+→ Body: {child_idp_sub: str, topic_id: uuid}
 → Returns: {explanation: str}
 
 POST /api/haitu/exam-analysis
@@ -382,7 +382,7 @@ Configurable by SuperAdmin in platform settings. Defaults:
 | Output | Cache key | TTL |
 |---|---|---|
 | Pattern analysis | `attempt_id` | Session (never re-generated for same attempt) |
-| Parent topic descriptions | `child_keycloak_sub + date` | 24 hours |
+| Parent topic descriptions | `child_idp_sub + date` | 24 hours |
 | Exam analysis | `assignment_id` | Indefinite (until new submissions arrive) |
 | Escalation attempt | Not cached — one-shot | — |
 | All other interactions | Not cached — stateless | — |

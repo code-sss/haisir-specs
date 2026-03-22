@@ -13,7 +13,7 @@ Onboarding runs once — immediately after a new user verifies their email via K
 3. Runs a short role-specific setup sequence (1–2 steps per role)
 4. Lands them on the role switcher screen, then their primary dashboard
 
-Institution admins and platform admins (`admin`) are never onboarded through this flow — they are invited or created directly in Keycloak.
+Institution admins, instructors, and platform admins (`admin`) are never onboarded through this flow — they are invited or created directly. Tutors use a separate "Become a tutor" registration flow (not part of onboarding).
 
 ---
 
@@ -22,11 +22,11 @@ Institution admins and platform admins (`admin`) are never onboarded through thi
 | # | Screen ID | Name |
 |---|---|---|
 | ON01 | `welcome` | Welcome / sign-up |
-| ON02 | `role-select` | Role selection grid |
+| ON02 | `role-select` | Role selection grid (Student / Parent only) |
 | ON03 | `setup-student` | Student setup |
-| ON04 | `setup-teacher` | Teacher / instructor setup |
+| ON04 | ~~`setup-teacher`~~ | ~~Teacher / instructor setup~~ — **removed from onboarding** (instructor invited by institution_admin) |
 | ON05 | `setup-parent` | Parent setup — link child |
-| ON06 | `setup-tutor` | Tutor setup |
+| ON06 | ~~`setup-tutor`~~ | ~~Tutor setup~~ — **removed from onboarding** (separate "Become a tutor" flow) |
 | ON07 | `role-switcher` | Role switcher demo / confirmation |
 | ON08 | `ready` | Success — launch dashboard |
 
@@ -60,21 +60,19 @@ All subsequent onboarding calls require `X-CSRF-Token` and the session cookie se
 
 ### ON02 — Role Selection
 
-**Purpose:** User picks which role(s) they need. Multi-select allowed.
+**Purpose:** User picks one role to start with. Single selection only.
 
 **Roles shown:**
 - Student
-- Teacher / Instructor
-- Independent Tutor
 - Parent
 
-**Not shown:** `institution_admin`, `admin` — these are never self-selected.
+**Not shown:** `instructor` (invited by institution_admin), `tutor` (separate "Become a tutor" flow), `institution_admin`, `admin`.
 
 **Business rules:**
-- **BR-ON-005:** At least one role must be selected to proceed.
-- **BR-ON-006:** Selecting multiple roles queues them. Setup runs sequentially for each selected role (ON03 → ON04 → ON06 → ON05 in that order, skipping unselected ones). Teacher (ON04) and Tutor (ON06) run back-to-back so ON06 can pre-fill from ON04 data (see BR-ON-020). See `11_role_migration.md` section 8 for the full list of valid multi-role combinations and role switcher behaviour.
-- **BR-ON-006a:** All role combinations selectable on this screen are valid. Since `institution_admin` and `admin` are not shown (BR-ON-004), the possible self-selected combinations are: Student only, Teacher only, Tutor only, Parent only, Student+Teacher, Student+Tutor, Student+Parent, Teacher+Tutor, Teacher+Parent, Tutor+Parent, Student+Teacher+Tutor, Student+Teacher+Parent, Student+Tutor+Parent, Teacher+Tutor+Parent, and all four. No combination is forbidden — each role operates in an independent workspace.
-- **BR-ON-007:** A user who selects both "Teacher" and "Tutor" completes both setup screens — they get both `instructor` and `tutor` roles assigned.
+- **BR-ON-005:** Exactly one role must be selected to proceed. No multi-select — users pick either Student or Parent.
+- **BR-ON-006:** Selection determines which setup screen runs next: Student → ON03, Parent → ON05. No branching or sequential setup.
+- **BR-ON-006a:** A user who onboards as a Student can later add the Parent role (and vice versa) from their profile/settings page via `POST /api/users/me/assign-role`. This triggers the corresponding setup flow inline (not a full re-onboarding).
+- **BR-ON-007:** ~~Removed.~~ Teacher and Tutor are no longer selectable during onboarding.
 
 ---
 
@@ -111,27 +109,26 @@ GET /api/classes/by-invite-code/{code}
 
 ---
 
-### ON04 — Teacher / Instructor Setup
+### ON04 — Teacher / Instructor Setup — ~~REMOVED FROM ONBOARDING~~
 
-**Purpose:** Collect teaching type, subjects, and grades.
+> **This screen is no longer part of the onboarding flow.** Instructors are invited by institution_admin via email/userid. After accepting the invite, the instructor completes profile setup on their first login to the teacher dashboard (inline setup, not onboarding).
 
-**Fields:**
-- Teaching type (single select): Institutional teacher / Independent tutor / Both
+**Retained for reference — instructor profile setup fields (used in first-login flow):**
 - Subjects (multi-select tag picker)
 - Grades you teach (dropdown)
 - Years of experience (dropdown)
 
 **Business rules:**
-- **BR-ON-011:** If "Institutional teacher" or "Both" selected → assign `instructor` role in Keycloak.
-- **BR-ON-012:** If "Independent tutor" or "Both" selected → assign `tutor` role in Keycloak.
-- **BR-ON-013:** Teaching type, at least one subject, and grade range are required.
-- **BR-ON-014:** Institutional teachers are told: "Your institution admin will assign you to a class via email invite. You can start building your profile in the meantime."
+- **BR-ON-011:** ~~Removed.~~ Instructor role is assigned by institution_admin invite, not self-selected.
+- **BR-ON-012:** ~~Removed.~~ Tutor role uses separate "Become a tutor" flow.
+- **BR-ON-013:** At least one subject and grade range are required for profile completion.
+- **BR-ON-014:** On first login after invite acceptance: "Welcome! Complete your profile to start teaching."
 
 **API calls:**
 ```
 POST /api/teachers/me/profile
-→ Auth: instructor OR tutor (X-Current-Role: instructor)
-→ Body: {first_name, last_name, teacher_type, subjects, grades, years_experience}
+→ Auth: instructor (X-Current-Role: instructor)
+→ Body: {first_name, last_name, subjects, grades, years_experience}
 → Returns: {profile_id}
 ```
 
@@ -160,36 +157,35 @@ GET /api/parent-link-codes/{code}
 POST /api/parent-child-links
 → Auth: parent (X-Current-Role: parent)
 → Body: {code}
-→ Returns: {link_id, student_keycloak_sub, student_name}
+→ Returns: {link_id, student_idp_sub, student_name}
 → Errors: 404, 410 expired, 409 already linked
 ```
 
 ---
 
-### ON06 — Tutor Setup
+### ON06 — Tutor Setup — ~~REMOVED FROM ONBOARDING~~
 
-**Purpose:** Collect tutor subjects, grades, bio, and marketplace preference.
+> **This screen is no longer part of the onboarding flow.** Tutor registration is a separate explicit flow (like Udemy's "Become an instructor"), accessible from the user's profile or a "Become a tutor" link. See `POST /api/users/me/become-tutor` in `11_role_migration.md` section 4.5.
 
-**Fields:**
+**Retained for reference — tutor registration fields (used in "Become a tutor" flow):**
 - Subjects (multi-select tag picker)
 - Grades you teach (dropdown)
 - Bio (textarea, optional)
-- Session rate in INR (number input, optional)
 - Availability (free text, optional)
 - "List me in tutor marketplace" toggle — default OFF
 
 **Business rules:**
 - **BR-ON-018:** Subjects and grades are required. All other fields optional.
 - **BR-ON-019:** Marketplace listing toggle set to ON creates `marketplace_listed = true`. Profile is immediately visible in the student marketplace. Show note: "Your profile is now live in the marketplace."
-- **BR-ON-020:** If user selected both Teacher and Tutor in ON02, ON06 runs after ON04. Profile data from ON04 (subjects, grades) is pre-filled.
+- **BR-ON-020:** ~~Removed.~~ Tutor setup no longer follows teacher setup in onboarding.
 
 **API calls:**
 ```
-POST /api/teachers/me/profile
-→ Auth: tutor (X-Current-Role: tutor)
-→ Body: {subjects, grades, bio?, rate_per_session?, availability?, marketplace_listed}
-→ Returns: {profile_id}
-(Same endpoint as ON04 — upsert on keycloak_sub)
+POST /api/users/me/become-tutor
+→ Auth: any authenticated user
+→ Body: {subjects, grades, bio?, availability?, marketplace_listed}
+→ Returns: {assigned: true, role: "tutor", profile_id}
+→ Errors: 409 if already a tutor
 ```
 
 ---

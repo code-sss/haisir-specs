@@ -13,7 +13,7 @@
 |---|---|---|---|
 | P01 | `s-home` (overview tab) | `/parent` | `renderOverview()` |
 | P02 | `s-home` (progress tab) | `/parent` | `renderProgress()` |
-| P03 | `s-home` (assessments tab) | `/parent` | `renderAssessments()` |
+| P03 | `s-home` (results tab) | `/parent` | `renderResults()` |
 | P04 | `s-home` (teachers tab) | `/parent` | `renderTeachers()` |
 | P05 | `s-link` | `/parent/link` | `renderLink()` |
 

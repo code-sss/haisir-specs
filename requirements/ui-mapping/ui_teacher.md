@@ -81,10 +81,10 @@
 
 ### Assignments panel (instructor only)
 - List: name, due date, submitted/total, avg score (if completed)
-- "+ Assign assessment" button → modal
+- "+ Assign quiz/exam" button → modal
 
 ### Assignment modal
-- Assessment picker (dropdown of available assessments for subject/grade)
+- Template picker (dropdown of available exam_templates for subject/grade, filterable by purpose: Quiz/Exam)
 - Due date (date input)
 - Optional note to students
 - "Assign" confirm button (`#0F6E56`)

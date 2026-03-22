@@ -58,8 +58,8 @@ FastAPI validates the JWT that APISIX injects — not anything from the browser.
 
 | Role | Description |
 |---|---|
-| `student` | Can study, take assessments and exams |
-| `instructor` | Institutional teacher — manages classes, creates assessments and exams |
+| `student` | Can study, take quizzes and exams |
+| `instructor` | Institutional teacher — manages classes, creates quizzes and exams |
 | `admin` | Platform administrator — full access. Maps to the SuperAdmin persona in the new UI. |
 
 **New roles (to be added to Keycloak):**
@@ -252,7 +252,7 @@ ProxyHeaders → SecurityHeaders → SecurityValidation (content-type, 10MB limi
 # Extend existing CurrentUser — do not replace
 @dataclass
 class CurrentUser:
-    sub: str                    # Keycloak sub claim
+    sub: str                    # IdP sub claim (currently Keycloak)
     email: str | None
     name: str | None            # from Keycloak 'name' claim
     email_verified: bool
@@ -271,7 +271,7 @@ class CurrentUser:
 | Own profile | ✓ | ✓ |
 | `course_path_nodes` (within enrollment) | ✓ | ✗ |
 | `topic_contents` (within enrollment) | ✓ | ✗ |
-| Own `assessment_attempts` | ✓ | ✓ (submit only) |
+| Own `exam_sessions` (quiz + exam) | ✓ | ✓ (submit only) |
 | Own `exam_sessions` | ✓ | ✓ (submit only) |
 | Other students' attempts/sessions | ✗ | ✗ |
 | Own doubts (new) | ✓ | ✓ (create, message, resolve) |
@@ -284,7 +284,7 @@ class CurrentUser:
 | Resource | Read | Write |
 |---|---|---|
 | Own teacher profile | ✓ | ✓ |
-| `assessments` (own + class-scoped) | ✓ | ✓ (create, assign) |
+| `exam_templates` (own + class-scoped, quiz + exam) | ✓ | ✓ (create, assign) |
 | `exam_templates` (own) | ✓ | ✓ (create, edit) |
 | `questions` + `paragraph_questions` | ✓ | ✓ (create, edit own) |
 | `exam_sessions` (class only) | ✓ | ✗ |
@@ -318,12 +318,12 @@ Full read/write on all existing resources. New capabilities added:
 | `course_path_nodes` (platform-owned, `owner_type = 'platform'`) | ✓ | ✗ |
 | `topic_contents` (org-owned) | ✓ | ✓ |
 | Class-level analytics | ✓ | ✗ |
-| Individual student assessment answers | ✗ | ✗ |
+| Individual student exam/quiz answers | ✗ | ✗ |
 | Individual doubt message content | ✗ | ✗ |
 | Doubt escalation metrics (aggregate only) | ✓ | ✗ |
 | Own notifications | ✓ | ✓ (mark read) |
 
-**BR-ADMIN-001:** Institution admins can see individual student names, mastery scores, and progress (via I06/T02 read-only view), but never individual student assessment answers or doubt message content. They see doubt counts and status per student, not the actual messages.
+**BR-ADMIN-001:** Institution admins can see individual student names, mastery scores, and progress (via I06/T02 read-only view), but never individual student quiz/exam answers or doubt message content. They see doubt counts and status per student, not the actual messages.
 
 ### 6.5 Tutor (`tutor` — new role)
 
@@ -333,7 +333,7 @@ Full read/write on all existing resources. New capabilities added:
 | Own `course_path_nodes` (`owner_type = 'tutor'`) | ✓ | ✓ |
 | Own `topic_contents` | ✓ | ✓ |
 | Own `questions` + `paragraph_questions` | ✓ | ✓ |
-| Own `assessments` + `exam_templates` | ✓ | ✓ |
+| Own `exam_templates` (quiz + exam) | ✓ | ✓ |
 | Own students' progress | ✓ | ✗ |
 | Doubts escalated to them | ✓ | ✓ (respond, resolve) |
 | Tutor-student relationships | ✓ | ✓ (manage own) |
@@ -346,13 +346,13 @@ Full read/write on all existing resources. New capabilities added:
 |---|---|---|
 | Own parent profile | ✓ | ✓ |
 | Linked child's enrollment progress | ✓ | ✗ |
-| Linked child's assessment result scores (not questions) | ✓ | ✗ |
+| Linked child's quiz/exam result scores (not questions) | ✓ | ✗ |
 | Linked child's doubt status + teacher responses | ✓ | ✗ |
 | Linked child's activity timeline | ✓ | ✗ |
 | Tutor profiles of child's tutors | ✓ | ✗ |
 | Message thread with child's tutors | ✓ | ✓ (send messages) |
 | Other children's data | ✗ | ✗ |
-| Child's assessment or exam questions | ✗ | ✗ |
+| Child's quiz/exam questions | ✗ | ✗ |
 | Own notifications | ✓ | ✓ (mark read) |
 
 **BR-PARENT-005:** Parents can message tutors directly. They cannot message institutional teachers — contact goes through the institution.
@@ -377,7 +377,12 @@ Full read/write on all existing resources. New capabilities added:
 
 **BR-SEC-008:** Never log JWT contents, CSRF tokens, or session cookies. Use `structlog` with sensitive field redaction as established in the existing middleware stack.
 
-**BR-SEC-009:** `POST /api/users/me/assign-role` must reject requests to assign `admin` or `institution_admin` with HTTP 403. These roles are never self-assigned — `admin` is assigned manually via Keycloak console, `institution_admin` is assigned by `admin` only via the backend Keycloak Admin service client.
+**BR-SEC-009:** `POST /api/users/me/assign-role` only accepts `student` or `parent`. All other roles must return HTTP 403:
+- `instructor` — invited by institution_admin via `POST /api/admin/invite-role`
+- `tutor` — explicit registration via `POST /api/users/me/become-tutor`
+- `institution_admin` — assigned by platform admin via backend IdP Admin service client
+- `admin` — dedicated accounts, assigned manually via IdP console
+See `11_role_migration.md` §3.2 and §4.5 for full assignment flows.
 
 ---
 
@@ -386,8 +391,8 @@ Full read/write on all existing resources. New capabilities added:
 | NotificationType | Delivered to role |
 |---|---|
 | `doubt_teacher_replied` | `student` |
-| `assessment_due_soon` | `student` |
-| `assessment_results_ready` | `student` |
+| `assignment_due_soon` | `student` |
+| `quiz_results_ready` | `student` |
 | `exam_results_ready` | `student` |
 | `topic_marked_weak` | `student` |
 | `new_content_uploaded` | `student` |
@@ -397,7 +402,7 @@ Full read/write on all existing resources. New capabilities added:
 | `student_at_risk` | `instructor` |
 | `content_published` | `instructor` |
 | `child_doubt_replied` | `parent` |
-| `child_assessment_due` | `parent` |
+| `child_assignment_due` | `parent` |
 | `child_weekly_digest` | `parent` |
 | `child_streak_milestone` | `parent` |
 | `child_doubt_auto_closed` | `parent` |

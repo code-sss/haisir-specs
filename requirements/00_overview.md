@@ -64,10 +64,10 @@ Browser
 | Route | What it does |
 |---|---|
 | `/home` | Category/course navigation tree + PDF viewer |
-| `/assess` | Student quiz-taking experience |
-| `/add-assessment` | Instructor assessment authoring |
+| `/assess` | Student quiz-taking experience — **rewrite to use `exam_templates` with `purpose = 'quiz'`** |
+| `/add-assessment` | Instructor quiz authoring — **rewrite to use `exam_templates` with `purpose = 'quiz'`** |
 | `/exam` | Student exam browsing and sessions |
-| `/add-exam` | Instructor exam builder (multi-question types, paragraphs) |
+| `/add-exam` | Instructor exam builder (multi-question types, paragraphs) — **unified authoring for both quizzes and exams** |
 | `/manage-categories` | Category CRUD |
 
 **New routes to add** (do not modify the existing ones above except where explicitly noted in the persona specs):
@@ -149,9 +149,9 @@ ProxyHeaders → SecurityHeaders → SecurityValidation
 | `/api/topics-contents` | Content items (PDF, video, text) per topic |
 | `/api/questions` | Question bank CRUD |
 | `/api/paragraph-questions` | Reading passages with embedded question IDs |
-| `/api/assessments` | Topic-based quizzes + attempt lifecycle |
-| `/api/exams` | Exam templates |
-| `/api/exam-sessions` | Per-student exam session lifecycle |
+| `/api/assessments` | **DEPRECATED** — migrate to `/api/exam-templates` with `purpose = 'quiz'` |
+| `/api/exam-templates` | Unified quiz and exam templates (replaces both `/api/assessments` and `/api/exams`) |
+| `/api/exam-sessions` | Per-student session lifecycle (covers both quizzes and exams) |
 | `/api/answers` | Answer submissions |
 | `/api/health` | Health check (unauthenticated) |
 
@@ -205,8 +205,8 @@ Platform Admin (admin role)
 ### Open Track
 ```
 Independent Tutor
-    └── builds own curriculum (owner_type = 'tutor')
-            └── Student enrolls (tutor invite or self-discovery)
+    └── builds and publishes courses (owner_type = 'tutor')
+            └── Student subscribes (tutor invite or self-discovery — student controls enrollment)
                     └── hAITU + async tutor support → Parent tracks
 ```
 
@@ -237,7 +237,7 @@ Key rule: hAITU must attempt before escalation is possible (`doubt.haitu_attempt
 
 | Decision | Source |
 |---|---|
-| No local users table — Keycloak `sub` as identity | Existing |
+| No local users table — IdP `sub` as identity (currently Keycloak) | Existing |
 | APISIX injects JWT upstream — clients never send Bearer tokens | Existing |
 | CSRF double-submit cookie pattern (`fastapi-csrf-protect`) | Existing |
 | `X-Current-Role` header for active role context | Existing |

@@ -60,11 +60,12 @@
   - ~~Verify: escalation trigger relies on LLM phrase match ("ask your teacher") — confirm this is robust enough or replace with structured output / sentinel token approach. Flag for Tech Lead.~~ **Resolved:** Replaced with structured JSON output.
   - Verify: escalation trigger uses structured JSON output (`escalation_ready` flag) — confirm system prompts in sections 3.1 and 3.3 enforce JSON-only responses and no phrase-match logic remains.
 
-- [ ] `requirements/09_onboarding.md` — 8 screens, 29 business rules
-  - Walk through ON01-ON08 with prototype (`prototypes/haisir_onboarding_flow.html`)
-  - Verify: Multi-role selection UX — user selects up to 4 roles, sees forms for each sequentially
+- [ ] `requirements/09_onboarding.md` — 6 screens (ON04/ON06 removed), business rules updated
+  - Walk through ON01→ON02→ON03/ON05→ON07→ON08 with prototype (`prototypes/haisir_onboarding_flow.html`)
+  - Verify: Single-select role selection — Student OR Parent only (instructor invited, tutor separate flow)
   - Verify: Google SSO + email/password — both paths tested?
   - Verify: Existing user detection — what if someone onboards, deletes cookies, re-visits?
+  - Verify: "Add role later" flow from profile/settings page works (BR-ON-006a)
 
 - [ ] `requirements/10_notifications.md` — 22 types, polling model, generation rules
   - Verify: 60s polling is sufficient (vs WebSocket for real-time needs)
