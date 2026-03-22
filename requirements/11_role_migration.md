@@ -390,7 +390,8 @@ These combinations are valid and must work correctly through the role switcher:
 After implementing these changes, verify:
 
 - [ ] New roles appear in Keycloak Admin Console → Realm roles
-- [ ] `POST /api/users/me/assign-role` with `tutor` → assigns role in Keycloak → JWT refresh contains new role
+- [ ] `POST /api/users/me/assign-role` with `tutor` → returns 403 (tutor requires separate `POST /api/users/me/become-tutor`)
+- [ ] `POST /api/users/me/become-tutor` with valid profile data → assigns tutor role in Keycloak + creates profile → JWT refresh contains new role
 - [ ] `POST /api/users/me/assign-role` with `institution_admin` → returns 403
 - [ ] `POST /api/users/me/assign-role` with `admin` → returns 403
 - [ ] `X-Current-Role: institution_admin` on any request → accepted (not 400)

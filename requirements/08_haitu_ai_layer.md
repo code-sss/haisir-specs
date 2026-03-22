@@ -54,7 +54,13 @@ Each interaction type has a fixed system prompt and a defined input/output contr
 - For `pdf` type items: extract text using a server-side PDF text extractor (e.g., `pdfplumber` or `PyMuPDF`). Truncate extracted text to **2000 characters** per PDF. If the PDF has no extractable text (scanned image), include only the content item title.
 - For `video` type items: include only the content item title (no transcript extraction in this phase).
 - Total `{content_summary}` must not exceed **4000 characters**. If the combined content exceeds this, truncate the longest items proportionally, preserving at least the title of each item.
-- Content extraction results should be cached per topic (invalidate on `topic_contents` change) to avoid repeated PDF parsing on every doubt message.
+**Content extraction pipeline:**
+- On `topic_contents` create or update, an async background job is triggered to extract text (PDF parsing via `pdfplumber`/`PyMuPDF`, plain text passthrough).
+- Extracted text is stored in `topic_contents.text_extracted` (see `01_data_model.md` section 6a) and also batch-indexed to pgvector for search.
+- If a student asks a hAITU doubt before extraction is complete, the backend returns a fallback response: "hAITU is still reviewing the materials for this topic — please try again in a moment." (HTTP 202 with `retry_after: 30` header).
+- Extraction status is tracked via `topic_contents.extraction_status` (`'pending'` | `'complete'` | `'failed'`). No notification is sent to the student when extraction completes — the student simply retries and it works.
+- The pgvector embedding for each `topic_contents` item is generated as part of the same async job, ensuring search indexes stay current with content changes.
+- Invalidation: any update to a `topic_contents` row resets `extraction_status = 'pending'` and re-triggers extraction + re-indexing.
 
 **System prompt template:**
 ```
@@ -400,6 +406,8 @@ Configurable by SuperAdmin in platform settings. Defaults:
 
 **BR-AI-003:** Rate limiting: Max 20 hAITU calls per student per hour. Max 50 per teacher per hour. Exceeding returns 429 with message: "You've reached the limit for AI assistance this hour. Please try again later."
 
+> **Phase 2+ consideration:** More granular rate limiting (per-interaction-type limits, burst rate controls, daily/monthly cost-based quotas, per-institution quotas for managed deployments) is deferred to a later phase. The current flat per-role hourly limits are sufficient for v1 launch. Revisit when usage data is available.
+
 **BR-AI-004:** hAITU interactions are not logged to persistent storage (privacy). Only `doubt_messages` with `sender_type = 'ai'` are stored — these are the messages that appear in the student's doubt thread. All other hAITU chat history is ephemeral (client-side session only).
 
 ---
@@ -417,3 +425,5 @@ These rules are enforced server-side regardless of what the client sends.
 **BR-AI-008:** hAITU never answers questions about other students, even if the question appears in a teacher-tools context. The student context is always singular.
 
 **BR-AI-009:** The model used for hAITU is determined by the `platform_settings.model` value at request time. Changing the model in settings takes effect on the next API call — no restart required.
+
+**BR-AI-010:** Content extraction is async. The hAITU `topic-doubt` interaction gracefully degrades to a topic-title-only context if `extraction_status != 'complete'` for all content items in the topic, returning HTTP 202 with a `retry_after: 30` hint and the fallback message: "hAITU is still reviewing the materials for this topic — please try again in a moment."

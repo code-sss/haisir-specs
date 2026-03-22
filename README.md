@@ -210,7 +210,7 @@ Read files in this exact order for each task:
 | `05_06_07_personas.md` | Parent (5), Institution Admin (6), Admin (6) screens — all APIs | ~700 |
 | `08_haitu_ai_layer.md` | 8 hAITU interaction types, prompt contracts, caching, token limits, failure handling | ~250 |
 | `09_onboarding.md` | 8 onboarding screens, role switcher spec, 29 business rules | ~200 |
-| `10_notifications.md` | 20 notification types, delivery model, generation rules, API | ~180 |
+| `10_notifications.md` | Notification types, delivery model, generation rules, API | ~180 |
 | `11_role_migration.md` | Exact changes to existing auth code for 3 new roles — Keycloak, backend, frontend | ~340 |
 
 ### UI Mapping Files (`requirements/ui-mapping/`)

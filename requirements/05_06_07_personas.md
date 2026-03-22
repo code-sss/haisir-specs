@@ -305,7 +305,11 @@ GET /api/organizations/{org_id}/dashboard
 **Business rules:**
 - **BR-INST-004:** Institution admin can add topics but cannot delete platform-adopted topics. Only topics with `owner_type = 'institution'` can be deleted.
 - **BR-INST-005:** Completion % per topic = mean of `enrollment_topics.mastery_score` across all students in all classes that have this topic assigned.
-- **BR-INST-006:** Board import creates topics with `owner_type = 'institution'` and records the board adoption in `board_adoptions`.
+- **BR-INST-006:** Board import (board adoption) performs the following in a single transaction:
+  1. Creates a `board_adoptions` record (`status = 'active'`).
+  2. Clones `course_path_nodes` and `topics` from the platform board as institution-owned copies (`owner_type = 'institution'`, `owner_id = org_id`). Platform originals are unchanged.
+  3. Clones all `exam_templates` associated with the board's `course_path_nodes` as institution-owned copies (`owner_type = 'institution'`, `organization_id = org_id`) per BR-EXAM-OWNER-002 in `01_data_model.md`. Platform originals are unchanged.
+  4. Institution admins can then customize cloned topics and exam templates without affecting the platform source.
 - **BR-INST-018:** Board import matches existing topics by `(course_path_node_id, title)`. Three outcomes per topic: new (no match) — create with `owner_type = 'institution'`; exists and unchanged — skip silently; exists but content differs — skip and preserve institution's version. Import shows a preview summary (N new, N skipped, N conflicts) before confirmation. Institution-created custom topics not in the board are never touched.
 
 **API calls:**

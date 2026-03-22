@@ -67,9 +67,9 @@
   - Verify: Existing user detection — what if someone onboards, deletes cookies, re-visits?
   - Verify: "Add role later" flow from profile/settings page works (BR-ON-006a)
 
-- [ ] `requirements/10_notifications.md` — 22 types, polling model, generation rules
+- [ ] `requirements/10_notifications.md` — all types, polling model, generation rules
   - Verify: 60s polling is sufficient (vs WebSocket for real-time needs)
-  - Verify: Each of 22 notification types — is the trigger correct? Any missing?
+  - Verify: Each notification type — is the trigger correct? Any missing?
   - Verify: Cron schedules (hourly due_soon, weekly digest) — timezone handling?
   - ✅ Verified: `doubt_auto_closed` (student) and `child_doubt_auto_closed` (parent) are defined in `10_notifications.md` sections 3.1 and 3.4, with generation rules in BR-NOTIF-011.
 

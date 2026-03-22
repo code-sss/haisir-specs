@@ -69,7 +69,7 @@ Each notification belongs to a specific role context. A user with multiple roles
 |---|---|---|---|---|
 | `child_doubt_replied` | Teacher replies to child's doubt | "Teacher responded to {child_name}" | "{teacher_name} answered {child_name}'s question about {topic_title}" | `/parent` (progress tab) |
 | `child_assignment_due` | 24hrs before child's assignment due | "{child_name} has an assignment due" | "{title} ({purpose}) — due tomorrow" | `/parent` (results tab) |
-| `child_weekly_digest` | Every Monday 8am | "Weekly update for {child_name}" | "{child_name} studied {n} topics this week. {status_summary}" | `/parent` |
+| `child_weekly_digest` | Every Monday 02:30 UTC (≈8:00 AM IST) | "Weekly update for {child_name}" | "{child_name} studied {n} topics this week. {status_summary}" | `/parent` |
 | `child_streak_milestone` | Child hits 7, 14, 30 day streak | "{child_name} is on a streak! 🎉" | "{child_name} has studied for {n} days in a row" | `/parent` |
 | `child_doubt_auto_closed` | Child's doubt auto-closed after 7 days | "{child_name}'s question was closed" | "{child_name}'s question about {topic_title} was closed after 7 days without resolution" | `/parent` (progress tab) |
 

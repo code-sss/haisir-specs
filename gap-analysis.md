@@ -37,7 +37,7 @@
 |--------|------|------|--------|
 | ADD `owner_type`, `owner_id` to `course_path_nodes` | ALTER TABLE | **Medium** | Existing rows need backfill (`owner_type = 'platform'`, `owner_id = NULL`). All queries touching this table need updating. |
 | ADD `status`, `owner_type`, `owner_id` to `topics` | ALTER TABLE | **Medium** | Existing topics get `status = 'live'`, `owner_type = 'platform'`. Topic service must enforce state transitions. |
-| ADD `owner_type`, `organization_id` to `exam_templates` | ALTER TABLE | **Low** | Backfill `owner_type = 'platform'`. |
+| ADD `owner_type`, `organization_id` to `exam_templates` | ALTER TABLE | **Low** | Backfill `owner_type = 'platform'`, `organization_id = NULL`. Enum unified with `course_path_nodes` and `topics`: `('platform', 'institution', 'tutor')`. |
 | ADD `paragraph_question_id` to `exam_template_questions` | ALTER TABLE | **Low** | Nullable FK → `paragraph_questions`. Required for paragraph question support in exams (see BR-EXAM-001 in `01_data_model.md`). Plan backfill: existing rows get `paragraph_question_id = NULL`. |
 | 24 new tables | CREATE TABLE | **None** | Additive, no existing data affected. |
 
@@ -95,7 +95,7 @@
 
 ### Phase 2 — AI, Notifications & Parent
 10. hAITU AI layer (Claude integration, 8 interaction types)
-11. Notification system (22 types, polling, cron jobs)
+11. Notification system (all notification types, polling, cron jobs)
 12. Parent portal (5 screens + child linking) — depends on doubt system (Phase 1 item 9) and notification types (`child_doubt_replied`, `child_doubt_auto_closed`, `child_weekly_digest`)
 
 ### Phase 3 — Extended Personas
@@ -110,8 +110,14 @@
 1. ~~**Tutor marketplace gate**: Immediate visibility or admin approval required?~~ **Resolved:** Immediate on toggle, admin can suspend post-hoc. See `02_auth_and_roles.md` section 2.3.
 2. ~~**Pagination strategy**: Cursor-based or offset-based? Max page size?~~ **Resolved:** Cursor-based for append-heavy feeds (notifications, activity timeline, doubt threads, chat history); offset-based for management/admin tables (page default 1, page_size default 20, max 100). See `00_overview.md` pagination convention.
 3. ~~**File storage**: S3/cloud or local disk for PDFs/images?~~ **Resolved:** Local disk in v1 via `StorageBackend` abstract interface in `infrastructure/storage/`. `STORAGE_BACKEND` env var selects backend (default: `local`). S3/GCS/Azure can be swapped in later. See `00_overview.md` file storage convention.
-4. **Search backend**: PostgreSQL full-text or dedicated search service?
+4. ~~**Search backend**: PostgreSQL full-text or dedicated search service?~~ **Resolved:** PostgreSQL hybrid search — full-text (`tsvector` + GIN) combined with `pgvector` for semantic search. See `00_overview.md` search convention and `01_data_model.md` section 6.
 5. ~~**Dynamic exam algorithm**: Random, weighted, or coverage-based question selection?~~ **Resolved:** Random selection within matching candidates, with difficulty fallback (`hard → medium → easy`). Full ruleset JSON schema defined in `01_data_model.md` under `exam_templates`. Validated at creation time.
 6. ~~**Topic archived correction**: Can tutors clone an archived topic to create a corrected version?~~ **Resolved:** Yes — tutors can clone archived topics. Clone creates a new `draft` topic with copied content. See `01_data_model.md` BR-CONTENT-005.
 7. ~~**Mastery initial value**: First attempt — is previous_mastery = 0 or = latest_score?~~ **Resolved:** First attempt sets `mastery_score = latest_score` directly. See `01_data_model.md` BR-PROGRESS-003.
 8. ~~**Payment extensibility** (flagged): Payment processing is deferred. Before building the tutor-student enrollment record, Tech Lead must confirm the `enrollments` or `tutor_student_relationships` table has a clean place to attach payment/subscription status later without restructuring. No build action needed now — confirmation only.~~ **Resolved:** `subscription_status` (`'free'`|`'paid'`, default `'free'`) and `payment_id` (nullable) columns have been added to `enrollments` and `tutor_student_relationships` tables to support future payment integration without restructuring. All records default to free tier in v1. See `01_data_model.md` BR-ENROLL-PAY-001 and BR-TUTOR-PAY-001.
+
+---
+
+## Deferred to Later Phase
+
+- **hAITU granular rate limiting** — per-interaction-type limits, burst rate controls, cost-based quotas, per-institution quotas for managed deployments. Current v1 limits: 20/student/hour, 50/teacher/hour (BR-AI-003 in `08_haitu_ai_layer.md`). Revisit with real usage data post-launch.

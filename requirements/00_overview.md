@@ -51,7 +51,7 @@ Browser
 | Backend | FastAPI 0.135, Python 3.14, SQLAlchemy 2 async, asyncpg, Pydantic v2, structlog |
 | Auth | Keycloak 26 (OIDC + Google SSO), PyJWT, fastapi-csrf-protect |
 | Gateway | Apache APISIX, Coraza WASM WAF (OWASP CRS v4), CrowdSec Bouncer |
-| Database | PostgreSQL, Alembic (migrations) |
+| Database | PostgreSQL + pgvector, Alembic (migrations) |
 | Infra | Docker Compose, Cloudflare Tunnel, Jenkins CI/CD, Tailscale VPN |
 | AI | Anthropic Claude (model configurable by admin — default: `claude-sonnet-4-6`) |
 
@@ -135,6 +135,56 @@ ProxyHeaders → SecurityHeaders → SecurityValidation
 - **v1: Local disk storage.** All files stored at `data_dir/` following existing pattern for question images. Applies to all new content uploads — PDFs, and any content uploaded by tutors and institution admins.
 - **Architecture:** A `StorageBackend` abstract interface must be implemented in `infrastructure/storage/` with two methods: `upload(file, path) → url` and `download(path) → bytes`. A `LocalDiskBackend` concrete implementation is used in v1. Active backend is selected via `STORAGE_BACKEND` environment variable (default: `local`).
 - **Future:** `S3Backend`, `GCSBackend`, `AzureBackend` can be swapped in without any application code changes — only a new concrete implementation and environment variable change required.
+
+**Search convention:**
+- **Hybrid search** using PostgreSQL full-text (`tsvector` + GIN indexes) combined with `pgvector` for semantic vector search.
+- All searchable content (topics, courses, tutor profiles, organizations, questions) is batch-indexed into pgvector on creation/update. Indexes are kept up to date via async background jobs triggered on content changes.
+- Full-text search handles keyword/exact matching. Vector search handles semantic similarity (e.g., "fractions" matching "rational numbers").
+- Search endpoints combine both result sets with a weighted ranking: `0.4 * text_rank + 0.6 * vector_similarity` (tunable per entity type).
+- **Infrastructure:** `pgvector` extension enabled on the existing PostgreSQL instance. No separate search service needed in v1.
+- **Embedding model:** Configurable via `SEARCH_EMBEDDING_MODEL` env var. Default TBD — select a lightweight model suitable for educational content in English and Hindi.
+
+**Timezone convention:**
+- All timestamps are stored in PostgreSQL as `TIMESTAMP WITH TIME ZONE` (UTC).
+- All API responses return timestamps in ISO 8601 UTC format (e.g., `2026-03-22T14:30:00Z`).
+- The frontend converts UTC timestamps to the user's device local timezone for display using the browser's `Intl.DateTimeFormat` or equivalent.
+- No server-side timezone configuration or per-user timezone storage is needed.
+- Cron jobs (e.g., `assignment_due_soon` notifications, weekly parent digest) run on UTC schedules. The `child_weekly_digest` notification runs every Monday at 02:30 UTC (approximately 8:00 AM IST).
+
+**Error response convention:**
+All API error responses use this standard shape (FastAPI's default `HTTPException` format):
+
+```json
+{
+  "detail": "Human-readable error message"
+}
+```
+
+For validation errors (422), FastAPI's default Pydantic validation response is used:
+
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "field_name"],
+      "msg": "field required",
+      "type": "value_error.missing"
+    }
+  ]
+}
+```
+
+**HTTP status codes used:**
+- `400` — Bad request (invalid input that isn't a validation error)
+- `403` — Forbidden (role/permission failure)
+- `404` — Not found (also used instead of 403 for student data isolation — see BR-SEC-002)
+- `409` — Conflict (duplicate enrollment, already assigned role, etc.)
+- `422` — Validation error (Pydantic field validation failures)
+- `429` — Rate limited (hAITU calls, link code validation)
+- `502` — Bad gateway (upstream Keycloak or Claude API failure)
+- `504` — Gateway timeout (hAITU 30s timeout exceeded)
+
+**Frontend convention:** The Next.js frontend checks `response.ok` first, then parses `response.json()` to read `detail` for user-facing error messages. No custom error wrapper is needed — use FastAPI's built-in `HTTPException(status_code=..., detail="...")` consistently.
 
 **Existing API routes (all prefixed `/api/`):**
 

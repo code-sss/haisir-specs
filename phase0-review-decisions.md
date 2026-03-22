@@ -206,4 +206,4 @@ ON01 (Welcome/Sign-up)
 |---|---|---|
 | Phase 1 persona review (Student, Teacher/Tutor, Parent, Institution Admin, Platform Admin screens) | 🔜 Not started | PM |
 | Search backend decision (PostgreSQL full-text or dedicated service) | ❓ Unresolved | Tech Lead |
-| Assessment data migration plan (existing data → exam_templates) | 🔜 Needs detailed Alembic migration spec | Tech Lead |
+| Assessment data migration plan (existing data → exam_templates) | ✅ Complete — migration already handled. Existing data migrated to `exam_templates` with `mode = 'static'` and `purpose = 'quiz'`. | — |
