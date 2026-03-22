@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hAIsir – Content Ownership Model</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --blue-50: #E6F1FB; --blue-200: #85B7EB; --blue-600: #185FA5; --blue-800: #0C447C; --blue-900: #042C53;
+    --purple-50: #EEEDFE; --purple-200: #AFA9EC; --purple-600: #534AB7; --purple-800: #3C3489;
+    --teal-50: #E1F5EE; --teal-600: #0F6E56; --teal-800: #085041;
+    --amber-50: #FAEEDA; --amber-600: #854F0B;
+    --coral-50: #FAECE7; --coral-600: #993C1D;
+    --gray-50: #F1EFE8; --gray-200: #B4B2A9; --gray-600: #5F5E5A; --gray-900: #1a1a18;
+    --border: #e5e3dc;
+    --bg: #F7F6F2;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--gray-900);
+    padding: 40px 24px;
+    min-height: 100vh;
+  }
+
+  .page-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--gray-200);
+    margin-bottom: 6px;
+  }
+  .page-heading {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 32px;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .model-card {
+    background: #fff;
+    border: 0.5px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    border-top: 3px solid transparent;
+  }
+  .model-card.blue { border-top-color: var(--blue-600); }
+  .model-card.purple { border-top-color: var(--purple-600); }
+
+  .model-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .model-title.blue { color: var(--blue-600); }
+  .model-title.purple { color: var(--purple-600); }
+
+  .model-desc {
+    font-size: 12px;
+    color: var(--gray-600);
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  .chain { display: flex; flex-direction: column; gap: 4px; }
+  .chain-row {
+    font-size: 12px;
+    padding: 7px 10px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+  }
+  .chain-row.blue { background: var(--blue-50); color: var(--blue-800); }
+  .chain-row.purple { background: var(--purple-50); color: var(--purple-800); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .dot-blue { background: var(--blue-600); }
+  .dot-purple { background: var(--purple-600); }
+  .arrow {
+    font-size: 10px;
+    color: var(--gray-200);
+    padding-left: 16px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--gray-200);
+    margin-bottom: 12px;
+  }
+
+  .compare-grid {
+    background: #fff;
+    border: 0.5px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .compare-header {
+    display: grid;
+    grid-template-columns: 1fr 180px 1fr;
+    background: var(--gray-50);
+    border-bottom: 0.5px solid var(--border);
+  }
+  .ch-cell {
+    padding: 10px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  .ch-cell.blue { color: var(--blue-600); }
+  .ch-cell.purple { color: var(--purple-600); text-align: right; }
+  .ch-cell.mid { color: var(--gray-200); text-align: center; }
+
+  .compare-row {
+    display: grid;
+    grid-template-columns: 1fr 180px 1fr;
+    border-bottom: 0.5px solid var(--border);
+    align-items: center;
+  }
+  .compare-row:last-child { border-bottom: none; }
+  .cr-left {
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--blue-800);
+  }
+  .cr-mid {
+    padding: 10px 16px;
+    font-size: 11px;
+    color: var(--gray-600);
+    text-align: center;
+    border-left: 0.5px solid var(--border);
+    border-right: 0.5px solid var(--border);
+    background: var(--gray-50);
+  }
+  .cr-right {
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--purple-800);
+    text-align: right;
+  }
+
+  .role-tag {
+    margin-left: auto;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    font-weight: 600;
+    white-space: nowrap;
+    font-family: 'DM Mono', monospace;
+  }
+  .role-blue { background: var(--blue-200); color: var(--blue-900); }
+  .role-purple { background: var(--purple-200); color: var(--purple-800); }
+
+  .open-note {
+    margin-top: 14px;
+    font-size: 11px;
+    color: var(--purple-600);
+    background: var(--purple-50);
+    border-radius: 7px;
+    padding: 8px 10px;
+    line-height: 1.5;
+    border-left: 2px solid var(--purple-600);
+  }
+
+  .role-grid {
+    background: #fff;
+    border: 0.5px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .role-row {
+    display: grid;
+    grid-template-columns: 2fr 1.4fr 1fr 1.4fr;
+    border-bottom: 0.5px solid var(--border);
+    align-items: center;
+  }
+  .role-row:last-child { border-bottom: none; }
+  .role-header {
+    background: var(--gray-50);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--gray-200);
+  }
+  .role-row > div { padding: 9px 16px; font-size: 12px; color: var(--gray-600); }
+  .role-header > div { padding: 9px 16px; }
+  .role-row code {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    background: var(--gray-50);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--gray-900);
+  }
+  .status-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .status-exists { background: var(--teal-50); color: var(--teal-800); }
+  .status-new    { background: var(--blue-50); color: var(--blue-800); }
+  .status-warn   { background: var(--amber-50); color: var(--amber-600); }
+
+  @media (max-width: 640px) {
+    .two-col { grid-template-columns: 1fr; }
+    .compare-grid, .role-grid { overflow-x: auto; }
+    .compare-header, .compare-row, .role-row { min-width: 500px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-title">hAIsir · Platform design</div>
+<div class="page-heading">Content ownership model</div>
+
+<div class="two-col">
+  <!-- STRUCTURED -->
+  <div class="model-card blue">
+    <div class="model-title blue">Structured learning</div>
+    <div class="model-desc">Curriculum fixed by board or school. Student follows a defined, institution-controlled path.</div>
+    <div class="chain">
+      <div class="chain-row blue">
+        <span class="dot dot-blue"></span>
+        <span>Platform admin maintains board content</span>
+        <span class="role-tag role-blue">admin ✅</span>
+      </div>
+      <div class="arrow">↓ board content adopted by</div>
+      <div class="chain-row blue">
+        <span class="dot dot-blue"></span>
+        <span>Institution / Curriculum builder</span>
+        <span class="role-tag role-blue">institution_admin ❶</span>
+      </div>
+      <div class="arrow">↓ uploads content · creates classes · invites teachers</div>
+      <div class="chain-row blue">
+        <span class="dot dot-blue"></span>
+        <span>Institutional teacher</span>
+        <span class="role-tag role-blue">instructor ✅</span>
+      </div>
+      <div class="arrow">↓ assigns assessments · answers doubts (async)</div>
+      <div class="chain-row blue">
+        <span class="dot dot-blue"></span>
+        <span>Student</span>
+        <span class="role-tag role-blue">student ✅</span>
+      </div>
+      <div class="arrow">↓ progress visible to</div>
+      <div class="chain-row blue" style="opacity:.7;">
+        <span class="dot dot-blue"></span>
+        <span>School admin analytics</span>
+        <span class="role-tag role-blue">institution_admin ❶</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- OPEN -->
+  <div class="model-card purple">
+    <div class="model-title purple">Open / personal learning</div>
+    <div class="model-desc">Curriculum built by tutor or self-selected by student. Both paths coexist — not mutually exclusive.</div>
+    <div class="chain">
+      <div class="chain-row purple">
+        <span class="dot dot-purple"></span>
+        <span>Independent tutor builds curriculum</span>
+        <span class="role-tag role-purple">tutor ❷</span>
+      </div>
+      <div class="arrow">↓ and / or</div>
+      <div class="chain-row purple">
+        <span class="dot dot-purple"></span>
+        <span>Student self-selects topics</span>
+        <span class="role-tag role-purple">student ✅</span>
+      </div>
+      <div class="arrow">↓ both learn via</div>
+      <div class="chain-row purple">
+        <span class="dot dot-purple"></span>
+        <span>hAITU (AI) + async tutor support</span>
+      </div>
+      <div class="arrow">↓ progress tracked by</div>
+      <div class="chain-row purple">
+        <span class="dot dot-purple"></span>
+        <span>Parent / guardian (optional)</span>
+        <span class="role-tag role-purple">parent ❸</span>
+      </div>
+    </div>
+    <div class="open-note">
+      A student can be enrolled in structured courses <em>and</em> open courses simultaneously — the home dashboard shows both side by side. No live sessions — all tutor interaction is async.
+    </div>
+  </div>
+</div>
+
+<!-- hAITU ESCALATION CHAIN -->
+<div class="section-label">hAITU doubt escalation — applies to both tracks</div>
+<div style="background:#fff;border:0.5px solid var(--border);border-radius:14px;padding:20px;margin-bottom:32px;">
+  <div style="font-size:12px;color:var(--gray-600);margin-bottom:14px;line-height:1.6;">
+    hAITU must attempt to resolve every doubt before a student can escalate to a human. This applies in both structured and open tracks — only the escalation target differs.
+  </div>
+  <div class="chain" style="flex-direction:row;align-items:center;gap:0;flex-wrap:wrap;">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:120px;">
+      <div style="font-size:11px;font-weight:600;padding:8px 12px;border-radius:8px;background:var(--blue-50);color:var(--blue-800);text-align:center;">Student asks doubt</div>
+    </div>
+    <div style="font-size:11px;color:var(--gray-200);padding:0 8px;">→</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:130px;">
+      <div style="font-size:11px;font-weight:600;padding:8px 12px;border-radius:8px;background:#E6F1FB;color:#0C447C;text-align:center;">hAITU attempts<br><span style="font-weight:400;font-size:10px;">scoped to topic</span></div>
+    </div>
+    <div style="font-size:11px;color:var(--gray-200);padding:0 8px;">→</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+      <div style="font-size:11px;font-weight:600;padding:8px 12px;border-radius:8px;background:var(--teal-50);color:var(--teal-800);text-align:center;">✓ Resolved<br><span style="font-weight:400;font-size:10px;">auto-closes 7 days</span></div>
+      <div style="font-size:10px;color:var(--gray-200);">or if not resolved</div>
+      <div style="font-size:11px;font-weight:600;padding:8px 12px;border-radius:8px;background:var(--amber-50);color:var(--amber-600);text-align:center;">→ Request teacher help</div>
+    </div>
+    <div style="font-size:11px;color:var(--gray-200);padding:0 8px;">→</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+      <div style="font-size:11px;font-weight:600;padding:8px 12px;border-radius:8px;background:var(--blue-50);color:var(--blue-800);text-align:center;">instructor inbox<br><span style="font-weight:400;font-size:10px;">structured track</span></div>
+      <div style="font-size:10px;color:var(--gray-200);">or</div>
+      <div style="font-size:11px;font-weight:600;padding:8px 12px;border-radius:8px;background:var(--purple-50);color:var(--purple-800);text-align:center;">tutor inbox<br><span style="font-weight:400;font-size:10px;">open track</span></div>
+    </div>
+    <div style="font-size:11px;color:var(--gray-200);padding:0 8px;">→</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:120px;">
+      <div style="font-size:11px;font-weight:600;padding:8px 12px;border-radius:8px;background:var(--teal-50);color:var(--teal-800);text-align:center;">Async reply<br><span style="font-weight:400;font-size:10px;">student notified</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- COMPARISON TABLE -->
+<div class="section-label">How the two modes differ</div>
+<div class="compare-grid" style="margin-bottom:32px;">
+  <div class="compare-header">
+    <div class="ch-cell blue">Structured</div>
+    <div class="ch-cell mid">Property</div>
+    <div class="ch-cell purple">Open</div>
+  </div>
+  <div class="compare-row">
+    <div class="cr-left">institution_admin</div>
+    <div class="cr-mid">Curriculum owned by</div>
+    <div class="cr-right">tutor or student</div>
+  </div>
+  <div class="compare-row">
+    <div class="cr-left">Platform admin → board → institution</div>
+    <div class="cr-mid">Who sets topics</div>
+    <div class="cr-right">Tutor or student</div>
+  </div>
+  <div class="compare-row">
+    <div class="cr-left">Fixed order</div>
+    <div class="cr-mid">Topic sequence</div>
+    <div class="cr-right">Flexible</div>
+  </div>
+  <div class="compare-row">
+    <div class="cr-left">Class invite / CSV</div>
+    <div class="cr-mid">Enrollment</div>
+    <div class="cr-right">Tutor invite or self-start</div>
+  </div>
+  <div class="compare-row">
+    <div class="cr-left">Class-level</div>
+    <div class="cr-mid">Progress tracking</div>
+    <div class="cr-right">Individual</div>
+  </div>
+  <div class="compare-row">
+    <div class="cr-left">instructor (school-assigned, async)</div>
+    <div class="cr-mid">Human help</div>
+    <div class="cr-right">tutor (marketplace, async)</div>
+  </div>
+  <div class="compare-row">
+    <div class="cr-left">instructor inbox — class students only</div>
+    <div class="cr-mid">Doubt escalation target</div>
+    <div class="cr-right">tutor inbox — own students only</div>
+  </div>
+  <div class="compare-row">
+    <div class="cr-left">institution_admin</div>
+    <div class="cr-mid">Analytics for</div>
+    <div class="cr-right">parent + tutor</div>
+  </div>
+  <div class="compare-row">
+    <div class="cr-left">owner_type: institution</div>
+    <div class="cr-mid">Content ownership</div>
+    <div class="cr-right">owner_type: tutor / platform</div>
+  </div>
+  <div class="compare-row">
+    <div class="cr-left">NCERT / JNV / CBE (maintained by platform admin)</div>
+    <div class="cr-mid">Content source</div>
+    <div class="cr-right">Any + custom</div>
+  </div>
+</div>
+
+<!-- ROLE MAP -->
+<div class="section-label">Role map &amp; status</div>
+<div class="role-grid">
+  <div class="role-row role-header">
+    <div>Persona</div>
+    <div>Keycloak role</div>
+    <div>Track</div>
+    <div>Status</div>
+  </div>
+  <div class="role-row">
+    <div>Student</div>
+    <div><code>student</code></div>
+    <div>Both</div>
+    <div><span class="status-badge status-exists">✅ exists</span></div>
+  </div>
+  <div class="role-row">
+    <div>Institutional teacher</div>
+    <div><code>instructor</code></div>
+    <div>Structured</div>
+    <div><span class="status-badge status-exists">✅ exists</span></div>
+  </div>
+  <div class="role-row">
+    <div>Platform admin (SuperAdmin)</div>
+    <div><code>admin</code></div>
+    <div>Both</div>
+    <div><span class="status-badge status-exists">✅ exists</span></div>
+  </div>
+  <div class="role-row">
+    <div>Institution / Curriculum builder</div>
+    <div><code>institution_admin</code></div>
+    <div>Structured</div>
+    <div><span class="status-badge status-new">❶ new — see 11_role_migration.md</span></div>
+  </div>
+  <div class="role-row">
+    <div>Independent tutor</div>
+    <div><code>tutor</code></div>
+    <div>Open</div>
+    <div><span class="status-badge status-new">❷ new — see 11_role_migration.md</span></div>
+  </div>
+  <div class="role-row">
+    <div>Parent</div>
+    <div><code>parent</code></div>
+    <div>Open</div>
+    <div><span class="status-badge status-new">❸ new — see 11_role_migration.md</span></div>
+  </div>
+</div>
+
+</body>
+</html>

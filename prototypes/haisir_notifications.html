@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hAIsir – Notifications</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#F7F6F2;min-height:100vh;display:flex;flex-direction:column;}
+button{cursor:pointer;font-family:inherit;}
+
+/* TOPBAR */
+.topbar{padding:0 20px;display:flex;align-items:center;height:48px;flex-shrink:0;transition:background .3s;}
+.tb-brand{color:#fff;font-size:15px;font-weight:700;letter-spacing:-.3px;}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.tb-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;}
+
+/* ROLE SWITCHER STRIP */
+.role-strip{background:#fff;border-bottom:0.5px solid #e5e3dc;padding:0 20px;display:flex;align-items:stretch;overflow-x:auto;flex-shrink:0;}
+.role-tab{display:flex;align-items:center;gap:7px;padding:10px 16px;border-bottom:2.5px solid transparent;border-top:none;border-left:none;border-right:none;background:none;cursor:pointer;font-size:12px;font-weight:500;color:#888780;white-space:nowrap;transition:color .12s;flex-shrink:0;}
+.role-tab:hover{color:#1a1a18;}
+.role-tab.active{color:var(--rtc);border-bottom-color:var(--rtc);}
+.rt-badge{font-size:9px;padding:1px 5px;border-radius:20px;font-weight:700;}
+
+/* PAGE BODY */
+.page-body{padding:16px 20px;max-width:720px;margin:0 auto;width:100%;display:flex;flex-direction:column;gap:12px;flex:1;}
+
+/* TOOLBAR */
+.notif-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.notif-title{font-size:15px;font-weight:600;color:#1a1a18;flex:1;}
+.mark-all{font-size:11px;color:#185FA5;background:none;border:none;text-decoration:underline;}
+.filter-chips{display:flex;gap:6px;}
+.fchip{font-size:11px;padding:4px 12px;border-radius:20px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;cursor:pointer;}
+.fchip.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* NOTIFICATION ITEMS */
+.notif-group-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;padding:4px 0 2px;}
+.notif-item{background:#fff;border:0.5px solid #e5e3dc;border-radius:10px;padding:13px 16px;display:flex;gap:12px;align-items:flex-start;transition:border-color .12s;cursor:pointer;position:relative;}
+.notif-item:hover{border-color:var(--accent);}
+.notif-item.unread{border-left:3px solid var(--accent);}
+.notif-item.unread::before{content:'';position:absolute;top:12px;right:12px;width:7px;height:7px;border-radius:50%;background:var(--accent);}
+.notif-icon{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.notif-main{flex:1;min-width:0;}
+.notif-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:3px;}
+.notif-heading{font-size:13px;font-weight:500;color:#1a1a18;line-height:1.4;}
+.notif-time{font-size:10px;color:#b4b2a9;white-space:nowrap;flex-shrink:0;margin-top:2px;}
+.notif-body{font-size:12px;color:#5f5e5a;line-height:1.5;margin-bottom:6px;}
+.notif-action{font-size:11px;padding:4px 10px;border-radius:6px;border:none;font-weight:500;cursor:pointer;}
+
+/* EMPTY STATE */
+.empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;gap:10px;}
+.empty-icon{font-size:40px;}
+.empty-title{font-size:14px;font-weight:500;color:#1a1a18;}
+.empty-sub{font-size:12px;color:#888780;line-height:1.6;max-width:280px;}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a18;color:#fff;font-size:12px;padding:10px 18px;border-radius:8px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;white-space:nowrap;}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<div class="topbar" id="topbar">
+  <span class="tb-brand">hAIsir</span>
+  <div class="tb-right">
+    <div class="tb-avatar" id="tb-av">AR</div>
+  </div>
+</div>
+
+<div class="role-strip" id="role-strip"></div>
+
+<div class="page-body" id="page-body"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ══════════════════════════════════════════════
+   PERSONA CONFIG
+══════════════════════════════════════════════ */
+const PERSONAS = [
+  {id:'student', label:'Student',          icon:'🎓', color:'#185FA5', topbar:'#0A1F5C', av:'AR', badge:3},
+  {id:'teacher', label:'Teacher',          icon:'👩‍🏫', color:'#0F6E56', topbar:'#0A3D2B', av:'RS', badge:4},
+  {id:'parent',  label:'Parent',           icon:'👨‍👩‍👧', color:'#BA7517', topbar:'#3D2000', av:'MP', badge:2},
+  {id:'admin',   label:'Institution Admin',icon:'🏫',  color:'#0D1B2A', topbar:'#0D1B2A', av:'SA', badge:2},
+  {id:'super',   label:'SuperAdmin',       icon:'⚙',   color:'#E24B4A', topbar:'#080F17', av:'SU', badge:3},
+];
+
+/* ══════════════════════════════════════════════
+   NOTIFICATION DATA
+══════════════════════════════════════════════ */
+const NOTIFS = {
+  student:[
+    {id:'s1',type:'doubt',    unread:true,  time:'Just now',    icon:'💬', iconBg:'#E1F5EE', heading:'Teacher replied to your doubt about Fractions',       body:'Ravi Kumar: "Great question Arjun! To convert 2/5 → 6/15, multiply both numerator AND denominator by the same number..."', action:'View thread',   actionBg:'#E6F1FB', actionC:'#185FA5'},
+    {id:'s2',type:'due',      unread:true,  time:'2 hrs ago',   icon:'📅', iconBg:'#FAEEDA', heading:'Maths Quiz 3 is due tomorrow',                        body:"St. Mary's School · Fractions – Set A · 15 questions · Due: Tomorrow 11:59pm",                                              action:'Start quiz',    actionBg:'#FAEEDA', actionC:'#633806'},
+    {id:'s3',type:'weak',     unread:true,  time:'5 hrs ago',   icon:'⚠',  iconBg:'#FAECE7', heading:'You have 3 weak topics that need attention',           body:'Fractions (52%), Ratio & Proportion (not started), Motion & Forces (45%). hAITU has practice exercises ready.',              action:'Practice now',  actionBg:'#FAECE7', actionC:'#712B13'},
+    {id:'s4',type:'content',  unread:false, time:'Yesterday',   icon:'📚', iconBg:'#E6F1FB', heading:'New content uploaded for Algebra Basics',              body:'Ravi Sir uploaded 2 new PDFs and a video explainer for Algebra Basics. Check it out in your open courses.',                action:'View content',  actionBg:'#E6F1FB', actionC:'#185FA5'},
+    {id:'s5',type:'streak',   unread:false, time:'Yesterday',   icon:'🔥', iconBg:'#FAEEDA', heading:'5-day streak! Keep it going',                          body:"You've studied every day this week. You're on a 5-day streak — keep it up to hit 7 days!",                                action:'Continue',      actionBg:'#FAEEDA', actionC:'#633806'},
+    {id:'s6',type:'content',  unread:false, time:'3 days ago',  icon:'📚', iconBg:'#E6F1FB', heading:'New assessment assigned: Decimals Quiz',               body:"St. Mary's School · Due in 3 days · 10 questions · Set by Ravi Kumar",                                                    action:'View',          actionBg:'#E6F1FB', actionC:'#185FA5'},
+  ],
+  teacher:[
+    {id:'t1',type:'doubt',    unread:true,  time:'45 min ago',  icon:'💬', iconBg:'#FAEEDA', heading:'Arjun K. escalated a doubt about Fractions',           body:"hAITU couldn't fully resolve it. Arjun asked: \"I understand LCM but don't know how to convert 2/5 to 6/15.\"",           action:'Reply now',     actionBg:'#FAEEDA', actionC:'#633806'},
+    {id:'t2',type:'doubt',    unread:true,  time:'1 hr ago',    icon:'💬', iconBg:'#FAEEDA', heading:'Mohan S. escalated a doubt about Ratio & Proportion',   body:"hAITU couldn't resolve it. Mohan asked: \"What do I do when equivalent ratios don't divide evenly?\"",                  action:'Reply',         actionBg:'#FAEEDA', actionC:'#633806'},
+    {id:'t3',type:'exam',     unread:true,  time:'3 hrs ago',   icon:'📊', iconBg:'#E1F5EE', heading:'Chapter 1 Mock results ready for Grade 6-A',            body:'All 6 students submitted. Class avg: 76%. 2 students need attention. Q3, Q8, Q11 had lowest pass rates.',                action:'View results',  actionBg:'#E1F5EE', actionC:'#0F6E56'},
+    {id:'t4',type:'risk',     unread:true,  time:'5 hrs ago',   icon:'⚠',  iconBg:'#FAECE7', heading:'Mohan S. is at risk — 45% across 3 topics',            body:"St. Mary's School · Grade 6-A · Progress has dropped 12% this week. Consider checking in.",                             action:'View student',  actionBg:'#FAECE7', actionC:'#712B13'},
+    {id:'t5',type:'content',  unread:false, time:'Yesterday',   icon:'✓',  iconBg:'#E1F5EE', heading:'Your Fractions content published successfully',         body:'5 topics, 3 PDFs and 2 video links are now live for Grade 6-A students. Students will be notified.',                     action:'View',          actionBg:'#E1F5EE', actionC:'#0F6E56'},
+    {id:'t6',type:'exam',     unread:false, time:'2 days ago',  icon:'📋', iconBg:'#E6F1FB', heading:'Fractions Set A submitted by 4 of 6 students',         body:'2 students have not submitted yet. Due: Tomorrow. Consider sending a reminder.',                                          action:'View class',    actionBg:'#E6F1FB', actionC:'#185FA5'},
+  ],
+  parent:[
+    {id:'p1',type:'doubt',    unread:true,  time:'45 min ago',  icon:'💬', iconBg:'#E1F5EE', heading:"Arjun's teacher replied to a Fractions doubt",         body:'Ravi Kumar responded to a question Arjun had about adding fractions. hAITU had tried but Arjun needed more help.',       action:'See response',  actionBg:'#FAEEDA', actionC:'#854F0B'},
+    {id:'p2',type:'due',      unread:true,  time:'2 hrs ago',   icon:'📅', iconBg:'#FAEEDA', heading:"Arjun has a quiz due tomorrow",                        body:"Maths Quiz 3 — Fractions · St. Mary's School · Due: Tomorrow 11:59pm · 15 questions",                                    action:'Remind Arjun',  actionBg:'#FAEEDA', actionC:'#854F0B'},
+    {id:'p3',type:'report',   unread:false, time:'Monday 8am',  icon:'📈', iconBg:'#E6F1FB', heading:"Arjun's weekly progress report is ready",              body:'This week: 5-day streak, 4 topics studied. Needs attention: Fractions and Motion & Forces. Improved: Decimals.',          action:'Read report',   actionBg:'#FAEEDA', actionC:'#854F0B'},
+    {id:'p4',type:'report',   unread:false, time:'Monday 8am',  icon:'📈', iconBg:'#E1F5EE', heading:"Priya's weekly progress report is ready",              body:"This week: 12-day streak, 6 topics studied. Doing excellently. Teacher says she's ready for JEE-level concepts.",        action:'Read report',   actionBg:'#FAEEDA', actionC:'#854F0B'},
+  ],
+  admin:[
+    {id:'a1',type:'alert',    unread:true,  time:'1 hr ago',    icon:'⚠',  iconBg:'#FAECE7', heading:"Grade 6 English class has no teacher assigned",        body:'24 students are enrolled but no instructor has been assigned. Students cannot receive content or assessments.',           action:'Assign teacher',actionBg:'#FAECE7', actionC:'#712B13'},
+    {id:'a2',type:'alert',    unread:true,  time:'3 hrs ago',   icon:'📉', iconBg:'#FAEEDA', heading:'Grade 7 Hindi class average dropped below 60%',        body:'Class avg is now 55%. 6 students are at risk. Suresh Nair\'s doubt response rate is also below 75%.',                  action:'View analytics',actionBg:'#FAEEDA', actionC:'#633806'},
+    {id:'a3',type:'enroll',   unread:false, time:'Yesterday',   icon:'👤', iconBg:'#E6F1FB', heading:'8 new students enrolled this week',                    body:'4 in Grade 6-A (Maths), 3 in Grade 6-B (Science), 1 in Grade 7-A (Maths). All enrolled via invite code.',             action:'View students', actionBg:'#E6F1FB', actionC:'#185FA5'},
+    {id:'a4',type:'content',  unread:false, time:'2 days ago',  icon:'📚', iconBg:'#E1F5EE', heading:'NCERT Grade 6 Maths v2.4 has been updated',            body:'SuperAdmin published an update to the board curriculum. 2 new topics added: Algebra Intro and Data Handling.',          action:'Review update', actionBg:'#E1F5EE', actionC:'#0F6E56'},
+  ],
+  super:[
+    {id:'su1',type:'alert',   unread:true,  time:'2 hrs ago',   icon:'📉', iconBg:'#FCEBEB', heading:"hAITU resolution rate dipped to 82% — below target",  body:'CBE board topics have the lowest resolution rate (79%). Fractions and Ratio & Proportion are the top escalated topics.', action:'View analytics',actionBg:'#FCEBEB', actionC:'#A32D2D'},
+    {id:'su2',type:'pending', unread:true,  time:'3 hrs ago',   icon:'🏫', iconBg:'#FAEEDA', heading:'3 institutions pending approval',                      body:'Sunrise Academy (Pune), Bright Future School (Bangalore), Excel Institute (Kolkata) — all registered today.',             action:'Review now',   actionBg:'#FAEEDA', actionC:'#633806'},
+    {id:'su3',type:'pending', unread:true,  time:'4 hrs ago',   icon:'👤', iconBg:'#FAEEDA', heading:'4 tutor profiles awaiting review',                     body:'Ravi Kumar, Priya Sharma, Anita Rao, Suresh Nair submitted profiles today for marketplace listing.',                     action:'Review tutors',actionBg:'#FAEEDA', actionC:'#633806'},
+    {id:'su4',type:'content', unread:false, time:'Yesterday',   icon:'📚', iconBg:'#E6F1FB', heading:'NCERT Grade 6 Maths v2.4 published successfully',      body:'Propagated to 38 institutions. 38 institution admins notified by email. No errors reported.',                          action:'View boards',   actionBg:'#E6F1FB', actionC:'#185FA5'},
+    {id:'su5',type:'alert',   unread:false, time:'2 days ago',  icon:'🚩', iconBg:'#FCEBEB', heading:'Tutor Kiran J. has been flagged by 2 students',        body:"2 students reported Kiran J.'s content as inappropriate. Profile has been temporarily hidden pending review.",           action:'Review profile',actionBg:'#FCEBEB', actionC:'#A32D2D'},
+  ],
+};
+
+/* ══════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════ */
+let activePersona = 'student';
+let activeFilter  = 'all';
+let readSet       = {};
+
+PERSONAS.forEach(p=>{ readSet[p.id]=new Set(); });
+
+/* ══════════════════════════════════════════════
+   RENDER
+══════════════════════════════════════════════ */
+function getPersona(){ return PERSONAS.find(p=>p.id===activePersona); }
+
+function buildTopbar(){
+  const p = getPersona();
+  document.getElementById('topbar').style.background = p.topbar;
+  document.getElementById('tb-av').style.background   = p.color;
+  document.getElementById('tb-av').textContent         = p.av;
+}
+
+function buildRoleStrip(){
+  const strip = document.getElementById('role-strip');
+  strip.innerHTML = PERSONAS.map(p=>{
+    const unread = NOTIFS[p.id].filter(n=>n.unread&&!readSet[p.id].has(n.id)).length;
+    const isA    = p.id===activePersona;
+    return `
+      <button class="role-tab ${isA?'active':''}" style="--rtc:${p.color};" onclick="switchPersona('${p.id}')">
+        ${p.icon} ${p.label}
+        ${unread>0?`<span class="rt-badge" style="background:${isA?p.color+'22':'#FAECE7'};color:${isA?p.color:'#712B13'};">${unread}</span>`:''}
+      </button>`;
+  }).join('');
+}
+
+const FILTERS = {
+  student: [{id:'all',l:'All'},{id:'doubt',l:'Doubts'},{id:'due',l:'Due'},{id:'weak',l:'Weak topics'},{id:'content',l:'Content'}],
+  teacher: [{id:'all',l:'All'},{id:'doubt',l:'Doubts'},{id:'exam',l:'Exam results'},{id:'risk',l:'At risk'},{id:'content',l:'Content'}],
+  parent:  [{id:'all',l:'All'},{id:'doubt',l:'Teacher replies'},{id:'due',l:'Due items'},{id:'report',l:'Reports'}],
+  admin:   [{id:'all',l:'All'},{id:'alert',l:'Alerts'},{id:'enroll',l:'Enrollment'},{id:'content',l:'Content'}],
+  super:   [{id:'all',l:'All'},{id:'alert',l:'Alerts'},{id:'pending',l:'Pending'},{id:'content',l:'Content'}],
+};
+
+function buildBody(){
+  const p       = getPersona();
+  const accent  = p.color;
+  const filters = FILTERS[activePersona]||[];
+  let   items   = NOTIFS[activePersona]||[];
+  if (activeFilter!=='all') items = items.filter(n=>n.type===activeFilter);
+  const unreadItems = items.filter(n=>n.unread&&!readSet[activePersona].has(n.id));
+  const readItems   = items.filter(n=>!n.unread||readSet[activePersona].has(n.id));
+  const totalUnread = (NOTIFS[activePersona]||[]).filter(n=>n.unread&&!readSet[activePersona].has(n.id)).length;
+
+  document.getElementById('page-body').innerHTML = `
+    <div class="notif-toolbar">
+      <div class="notif-title">Notifications ${totalUnread>0?`<span style="font-size:12px;padding:2px 8px;border-radius:20px;background:${accent}22;color:${accent};font-weight:700;margin-left:4px;">${totalUnread} new</span>`:''}</div>
+      ${totalUnread>0?`<button class="mark-all" onclick="markAll()">Mark all read</button>`:''}
+    </div>
+    <div class="filter-chips" style="--accent:${accent};">
+      ${filters.map(f=>`<button class="fchip ${activeFilter===f.id?'on':''}" onclick="setFilter('${f.id}')">${f.l}</button>`).join('')}
+    </div>
+    ${unreadItems.length===0&&readItems.length===0 ? `
+      <div class="empty-state">
+        <div class="empty-icon">🔔</div>
+        <div class="empty-title">All caught up!</div>
+        <div class="empty-sub">No notifications here. Check back later.</div>
+      </div>` : ''}
+    ${unreadItems.length>0?`<div class="notif-group-title">New</div>`:''}
+    ${unreadItems.map(n=>renderItem(n,accent,true)).join('')}
+    ${readItems.length>0&&unreadItems.length>0?`<div class="notif-group-title" style="margin-top:8px;">Earlier</div>`:''}
+    ${readItems.map(n=>renderItem(n,accent,false)).join('')}`;
+}
+
+function renderItem(n, accent, isUnread) {
+  return `
+    <div class="notif-item ${isUnread?'unread':''}" style="--accent:${accent};" onclick="markRead('${n.id}')">
+      <div class="notif-icon" style="background:${n.iconBg};">${n.icon}</div>
+      <div class="notif-main">
+        <div class="notif-top">
+          <div class="notif-heading" style="${isUnread?'font-weight:600;':''}">${n.heading}</div>
+          <div class="notif-time">${n.time}</div>
+        </div>
+        <div class="notif-body">${n.body}</div>
+        <button class="notif-action" style="background:${n.actionBg};color:${n.actionC};" onclick="event.stopPropagation();showToast('${n.action}...')">${n.action} &rarr;</button>
+      </div>
+    </div>`;
+}
+
+function render(){
+  buildTopbar();
+  buildRoleStrip();
+  buildBody();
+}
+
+/* ══════════════════════════════════════════════
+   INTERACTIONS
+══════════════════════════════════════════════ */
+function switchPersona(id){
+  activePersona = id;
+  activeFilter  = 'all';
+  render();
+}
+
+function setFilter(f){ activeFilter=f; buildBody(); }
+
+function markRead(id){
+  readSet[activePersona].add(id);
+  buildRoleStrip();
+  buildBody();
+}
+
+function markAll(){
+  const items = NOTIFS[activePersona]||[];
+  items.forEach(n=>readSet[activePersona].add(n.id));
+  buildRoleStrip();
+  buildBody();
+  showToast('All notifications marked as read');
+}
+
+let tt;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+/* INIT */
+render();
+</script>
+</body>
+</html>

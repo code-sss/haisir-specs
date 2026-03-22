@@ -1,0 +1,369 @@
+# hAIsir — Auth and Roles
+> Version 1.1 | Updated to reflect actual baseline from `haisir_current.md`.
+> → Depends on: `00_overview.md`, `01_data_model.md`
+
+---
+
+## 1. Auth Architecture
+
+**This is the most important thing to understand before writing any auth code.**
+
+APISIX is the single entry point for all traffic. The frontend and backend **never communicate directly**. Auth is handled entirely at the gateway layer:
+
+```
+Browser
+  → Cloudflare CDN/Tunnel
+    → APISIX Gateway (port 9080/443)
+        ├── Coraza WASM WAF (OWASP CRS v4)
+        ├── CrowdSec Bouncer
+        ├── OIDC plugin → Keycloak 26 (Google SSO supported)
+        └── On successful auth:
+            ├── Sets session cookie on browser
+            └── Injects: Authorization: Bearer <JWT> upstream to FastAPI
+                        (FastAPI never receives auth from the client directly)
+```
+
+**What the client sends on every request:**
+```
+Cookie: <session_cookie>          # set by APISIX, managed by browser
+X-CSRF-Token: <csrf_token>        # double-submit CSRF pattern
+X-Current-Role: student           # active role context (see section 4)
+```
+
+**What FastAPI receives on every request (injected by APISIX):**
+```
+Authorization: Bearer <JWT>       # injected by APISIX, NOT sent by client
+X-CSRF-Token: <csrf_token>        # forwarded from client
+X-Current-Role: student           # forwarded from client
+```
+
+FastAPI validates the JWT that APISIX injects — not anything from the browser. Developers must never write code that expects the client to send a Bearer token.
+
+---
+
+## 2. Keycloak Configuration
+
+| Setting | Value |
+|---|---|
+| Realm | `haisir` |
+| Auth flow | OIDC / OAuth 2.0 Authorization Code Flow |
+| Token type | JWT (RS256) |
+| SSO providers | Google (configured as identity provider) |
+| User self-registration | Enabled (email verification required) |
+| JWT validation | FastAPI validates RS256 against Keycloak JWKS endpoint |
+
+### 2.1 Realm Roles — Existing vs New
+
+**Existing roles (already in Keycloak — do not recreate):**
+
+| Role | Description |
+|---|---|
+| `student` | Can study, take assessments and exams |
+| `instructor` | Institutional teacher — manages classes, creates assessments and exams |
+| `admin` | Platform administrator — full access. Maps to the SuperAdmin persona in the new UI. |
+
+**New roles (to be added to Keycloak):**
+
+| Role | Description |
+|---|---|
+| `institution_admin` | Manages institution, curriculum, teachers, students |
+| `tutor` | Independent tutor — owns curriculum, manages own students async |
+| `parent` | Read-only — tracks linked child's progress |
+
+**Important:** The existing `admin` role is the SuperAdmin persona. Do not create a `superadmin` role — extend the existing `admin` role with new screens and capabilities.
+
+A single Keycloak account can hold multiple roles simultaneously. This mechanism already exists in the codebase via `X-Current-Role`.
+
+### 2.2 JWT Claims Used
+
+FastAPI reads the following from the Keycloak JWT (which APISIX injects):
+
+```json
+{
+  "sub": "uuid-string",
+  "email": "user@example.com",
+  "email_verified": true,
+  "realm_access": {
+    "roles": ["student", "instructor"]
+  }
+}
+```
+
+The active role context is NOT in the JWT — it comes from the `X-Current-Role` request header.
+
+### 2.3 Role Assignment Rules
+
+| Role | How assigned |
+|---|---|
+| `student` | Auto-assigned on self-registration via onboarding flow (new) |
+| `instructor` | Auto-assigned on self-registration; OR invited by `institution_admin` |
+| `admin` | Assigned manually in Keycloak console — never through the application |
+| `institution_admin` | New — assigned by `admin` only, never self-registered |
+| `tutor` | New — auto-assigned on self-registration; marketplace listing is immediate (federated model), admin can suspend |
+| `parent` | New — auto-assigned on self-registration |
+
+---
+
+## 3. CSRF Protection
+
+The existing codebase uses `fastapi-csrf-protect` with the double-submit cookie pattern. **All new endpoints must follow this existing pattern.**
+
+### 3.1 How it works
+
+1. Client calls `GET /api/auth/csrf` to receive a CSRF token (this endpoint already exists).
+2. Token is stored client-side and sent as `X-CSRF-Token` header on every state-changing request (POST, PUT, PATCH, DELETE).
+3. FastAPI validates the token matches the cookie value on each request.
+4. On 403 (token expired or mismatch), the existing `fetchWithCSRFRetry()` wrapper automatically fetches a fresh token and retries once.
+
+### 3.2 Frontend convention
+
+All API calls use raw `fetch` — no Axios, no third-party HTTP client. Every request follows this existing pattern:
+
+```typescript
+const response = await fetch('/api/some-endpoint', {
+  method: 'POST',
+  credentials: 'include',           // session cookie
+  headers: {
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': csrfToken,       // from useAuth hook
+    'X-Current-Role': activeRole,    // from useAuth hook
+  },
+  body: JSON.stringify(payload),
+});
+```
+
+Use `fetchWithCSRFRetry()` (already in codebase) for any mutation that could fail on a stale CSRF token. All new frontend code must follow this pattern exactly.
+
+### 3.3 Backend convention
+
+All new FastAPI routes that mutate state must include CSRF validation via the existing `Depends` factory in `auth/csrf.py`. Do not roll custom CSRF logic in route files.
+
+---
+
+## 4. Role Switching
+
+### 4.1 How it works
+
+The role switching mechanism already exists. A user with multiple roles switches context via the topbar UI. The switch:
+1. Updates the active role in `localStorage`
+2. Sets `X-Current-Role` header on all subsequent requests
+3. Does NOT log the user out or require re-authentication
+
+The existing `useAuth` hook manages this. New roles (`tutor`, `institution_admin`, `parent`) must integrate into the existing `useAuth` hook — not a new one.
+
+### 4.2 `X-Current-Role` header
+
+> ⚠ Note: Earlier documentation incorrectly used `X-Active-Role`. The correct header name throughout the codebase is `X-Current-Role`.
+
+The backend enforces `X-Current-Role` on every request. The existing auth layer in `auth/roles.py` already handles `student`, `instructor`, `admin`. Extend it for new roles:
+
+```python
+# Existing pattern in auth/roles.py — extend, do not replace
+def require_role(required_role: str):
+    def dependency(current_user: CurrentUser = Depends(get_current_user)):
+        if current_user.current_role != required_role:
+            raise HTTPException(403, "Active role does not match required role")
+        if required_role not in current_user.roles:
+            raise HTTPException(403, "User does not hold this role")
+        return current_user
+    return dependency
+```
+
+**BR-SEC-006:** `X-Current-Role` must be sent with every request. Requests missing this header return 400 Bad Request.
+
+### 4.3 `institution_admin` + `instructor` dual role
+
+An institution admin who also teaches holds both roles. When they switch to `X-Current-Role: instructor`, the teacher workspace is scoped to their own organization — they see only their own classes.
+
+---
+
+## 5. FastAPI Auth Layer
+
+### 5.1 Existing folder structure (do not restructure)
+
+```
+auth/
+  jwt.py          → JWT validation against Keycloak JWKS (RS256)
+  csrf.py         → CSRF token validation (fastapi-csrf-protect)
+  roles.py        → Role Depends factories
+```
+
+All new endpoints use `Depends` from `auth/roles.py`. No auth logic in route files.
+
+### 5.2 Backend folder structure (DDD — do not deviate)
+
+```
+api/routes/          → HTTP layer (routers only)
+domain/models/       → Pure Python dataclasses (zero ORM imports)
+domain/services/     → Business logic
+domain/repositories/ → Abstract interfaces
+infrastructure/      → Concrete SQLAlchemy repos + imperative mapping
+schemas/             → Pydantic v2 request/response models
+auth/                → JWT, CSRF, role decorators
+```
+
+SQLAlchemy uses **imperative (classical) mapping** — domain models are plain dataclasses, not ORM subclasses. All new models must follow this pattern.
+
+### 5.3 Middleware stack (existing — do not modify)
+
+```
+ProxyHeaders → SecurityHeaders → SecurityValidation (content-type, 10MB limit, file type/size)
+→ request ID + structured logging (structlog)
+```
+
+### 5.4 CurrentUser model
+
+```python
+# Extend existing CurrentUser — do not replace
+@dataclass
+class CurrentUser:
+    sub: str                    # Keycloak sub claim
+    email: str
+    roles: list[str]            # all roles this user holds
+    current_role: str           # from X-Current-Role header
+```
+
+---
+
+## 6. Permission Matrix
+
+### 6.1 Student (`student` — existing role, extended)
+
+| Resource | Read | Write |
+|---|---|---|
+| Own profile | ✓ | ✓ |
+| `course_path_nodes` (within enrollment) | ✓ | ✗ |
+| `topic_contents` (within enrollment) | ✓ | ✗ |
+| Own `assessment_attempts` | ✓ | ✓ (submit only) |
+| Own `exam_sessions` | ✓ | ✓ (submit only) |
+| Other students' attempts/sessions | ✗ | ✗ |
+| Own doubts (new) | ✓ | ✓ (create, message, resolve) |
+| Own notifications (new) | ✓ | ✓ (mark read) |
+| Own parent link code (new) | ✓ | ✓ (generate) |
+| Tutor marketplace profiles (new) | ✓ | ✗ |
+
+### 6.2 Instructor (`instructor` — existing role, extended)
+
+| Resource | Read | Write |
+|---|---|---|
+| Own teacher profile | ✓ | ✓ |
+| `assessments` (own + class-scoped) | ✓ | ✓ (create, assign) |
+| `exam_templates` (own) | ✓ | ✓ (create, edit) |
+| `questions` + `paragraph_questions` | ✓ | ✓ (create, edit own) |
+| `exam_sessions` (class only) | ✓ | ✗ |
+| Students in assigned classes | ✓ | ✗ |
+| Student progress (class only) | ✓ | ✗ |
+| Doubts escalated to them (new) | ✓ | ✓ (respond, resolve) |
+| `topic_contents` — supplemental additions (new) | ✓ | ✓ (add only) |
+| `course_path_nodes` | ✓ | ✗ (read only — institution_admin owns structure) |
+| Own notifications (new) | ✓ | ✓ (mark read) |
+
+### 6.3 Admin (`admin` — existing role, extended with new SuperAdmin capabilities)
+
+Full read/write on all existing resources. New capabilities added:
+
+- Publish and manage board content (`course_path_nodes` with `owner_type = 'platform'`)
+- Approve / reject institution registrations
+- Suspend / restore tutor marketplace listings
+- Suspend / restore any user via Keycloak Admin API
+- Toggle platform-wide feature flags (`platform_settings` — new table)
+- View platform-wide AI resolution rate analytics
+
+### 6.4 Institution Admin (`institution_admin` — new role)
+
+| Resource | Read | Write |
+|---|---|---|
+| Own organization | ✓ | ✓ |
+| All classes in org | ✓ | ✓ (create, assign teacher, enroll students) |
+| All students in org (aggregate only) | ✓ | ✓ (enroll, remove) |
+| All instructors in org | ✓ | ✓ (invite, assign to class) |
+| `course_path_nodes` (org-owned, `owner_type = 'institution'`) | ✓ | ✓ |
+| `course_path_nodes` (platform-owned, `owner_type = 'platform'`) | ✓ | ✗ |
+| `topic_contents` (org-owned) | ✓ | ✓ |
+| Class-level analytics | ✓ | ✗ |
+| Individual student assessment answers | ✗ | ✗ |
+| Individual doubt message content | ✗ | ✗ |
+| Doubt escalation metrics (aggregate only) | ✓ | ✗ |
+| Own notifications | ✓ | ✓ (mark read) |
+
+**BR-ADMIN-001:** Institution admins see only aggregate metrics — never individual student assessment answers or doubt message content.
+
+### 6.5 Tutor (`tutor` — new role)
+
+| Resource | Read | Write |
+|---|---|---|
+| Own teacher profile | ✓ | ✓ |
+| Own `course_path_nodes` (`owner_type = 'tutor'`) | ✓ | ✓ |
+| Own `topic_contents` | ✓ | ✓ |
+| Own `questions` + `paragraph_questions` | ✓ | ✓ |
+| Own `assessments` + `exam_templates` | ✓ | ✓ |
+| Own students' progress | ✓ | ✗ |
+| Doubts escalated to them | ✓ | ✓ (respond, resolve) |
+| Tutor-student relationships | ✓ | ✓ (manage own) |
+| Marketplace profile | ✓ | ✓ (edit; visibility requires `admin` approval) |
+| Own notifications | ✓ | ✓ (mark read) |
+
+### 6.6 Parent (`parent` — new role)
+
+| Resource | Read | Write |
+|---|---|---|
+| Own parent profile | ✓ | ✓ |
+| Linked child's enrollment progress | ✓ | ✗ |
+| Linked child's assessment result scores (not questions) | ✓ | ✗ |
+| Linked child's doubt status + teacher responses | ✓ | ✗ |
+| Linked child's activity timeline | ✓ | ✗ |
+| Tutor profiles of child's tutors | ✓ | ✗ |
+| Message thread with child's tutors | ✓ | ✓ (send messages) |
+| Other children's data | ✗ | ✗ |
+| Child's assessment or exam questions | ✗ | ✗ |
+| Own notifications | ✓ | ✓ (mark read) |
+
+**BR-PARENT-005:** Parents can message tutors directly. They cannot message institutional teachers — contact goes through the institution.
+
+---
+
+## 7. Security Rules
+
+**BR-SEC-001:** All API endpoints require a valid JWT (APISIX-injected). The only unauthenticated endpoints are `/api/health` and Keycloak-managed OIDC endpoints.
+
+**BR-SEC-002:** Students get 404 (not 403) when querying another student's data — do not reveal existence of other users' resources.
+
+**BR-SEC-003:** Instructors can only access students in their assigned classes. Tutors can only access their own tutor-student relationships.
+
+**BR-SEC-004:** Parent access to child data requires an active `parent_child_links` record (`status = 'linked'`). Revoked links remove access immediately on the next request.
+
+**BR-SEC-005:** Institution admins can only manage data within their own organization. Cross-org access returns 403.
+
+**BR-SEC-006:** `X-Current-Role` must be present on every request. Missing header returns 400.
+
+**BR-SEC-007:** JWT public key caching is acceptable with a max TTL of 5 minutes for the JWKS response.
+
+**BR-SEC-008:** Never log JWT contents, CSRF tokens, or session cookies. Use `structlog` with sensitive field redaction as established in the existing middleware stack.
+
+---
+
+## 8. Notification Type — Role Routing
+
+| NotificationType | Delivered to role |
+|---|---|
+| `doubt_teacher_replied` | `student` |
+| `assessment_due_soon` | `student` |
+| `assessment_results_ready` | `student` |
+| `topic_marked_weak` | `student` |
+| `new_content_uploaded` | `student` |
+| `new_doubt_escalated` | `instructor` or `tutor` |
+| `class_exam_submitted` | `instructor` |
+| `student_at_risk` | `instructor` |
+| `content_published` | `instructor` |
+| `child_doubt_replied` | `parent` |
+| `child_assessment_due` | `parent` |
+| `child_weekly_digest` | `parent` |
+| `child_streak_milestone` | `parent` |
+| `class_no_teacher` | `institution_admin` |
+| `student_at_risk_admin` | `institution_admin` |
+| `teacher_invite_accepted` | `institution_admin` |
+| `board_content_updated` | `institution_admin` |
+| `institution_registration` | `admin` |
+| `tutor_published` | `admin` |
+| `haitu_resolution_dropped` | `admin` |
+| `board_publish_confirmed` | `admin` |

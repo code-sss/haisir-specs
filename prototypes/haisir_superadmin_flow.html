@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hAIsir – SuperAdmin</title>
+<style>
+/* ─── RESET ─────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#0D1117;min-height:100vh;}
+button{cursor:pointer;font-family:inherit;}
+input,textarea,select{font-family:inherit;}
+
+/* ─── SCREEN SYSTEM ─────────────────────────────── */
+.screen{display:none;flex-direction:column;min-height:100vh;}
+.screen.active{display:flex;}
+
+/* ─── SHELL ─────────────────────────────────────── */
+.shell{max-width:1140px;margin:0 auto;width:100%;flex:1;display:flex;flex-direction:column;}
+
+/* ─── TOPBAR — near black, elevated privilege ───── */
+.topbar{background:#080F17;padding:0 20px;display:flex;align-items:center;height:48px;gap:14px;flex-shrink:0;border-bottom:0.5px solid rgba(255,255,255,.06);}
+.tb-brand{color:#fff;font-size:15px;font-weight:700;letter-spacing:-.4px;}
+.tb-platform{font-size:11px;color:rgba(255,255,255,.35);border-left:0.5px solid rgba(255,255,255,.1);padding-left:14px;}
+.tb-role{font-size:10px;padding:3px 9px;border-radius:20px;background:rgba(210,40,40,.25);color:#F09595;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border:0.5px solid rgba(210,40,40,.3);}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.tb-avatar{width:28px;height:28px;border-radius:50%;background:#E24B4A;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;}
+.tb-back{font-size:11px;padding:4px 10px;border-radius:5px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.6);border:none;}
+.tb-back:hover{background:rgba(255,255,255,.12);color:#fff;}
+.tb-btn{font-size:11px;padding:5px 12px;border-radius:6px;background:rgba(255,255,255,.08);color:#fff;border:none;font-weight:500;}
+.tb-btn:hover{background:rgba(255,255,255,.14);}
+.tb-btn-red{background:rgba(210,40,40,.3);border:0.5px solid rgba(210,40,40,.4);}
+.tb-btn-red:hover{background:rgba(210,40,40,.5);}
+.tb-btn-blue{background:#185FA5;border:none;}
+.tb-btn-blue:hover{background:#0C447C;}
+
+/* ─── SIDEBAR NAV ───────────────────────────────── */
+.app-layout{display:flex;flex:1;overflow:hidden;}
+.sidenav{width:200px;min-width:200px;background:#080F17;border-right:0.5px solid rgba(255,255,255,.06);display:flex;flex-direction:column;padding:12px 8px;gap:2px;flex-shrink:0;}
+.snav-section{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.2);padding:10px 8px 4px;}
+.snav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;cursor:pointer;transition:background .12s;border:none;background:transparent;width:100%;text-align:left;}
+.snav-item:hover{background:rgba(255,255,255,.06);}
+.snav-item.active{background:rgba(255,255,255,.1);}
+.snav-icon{font-size:15px;flex-shrink:0;width:18px;text-align:center;}
+.snav-label{font-size:12px;color:rgba(255,255,255,.6);font-weight:500;}
+.snav-item.active .snav-label{color:#fff;}
+.snav-badge{font-size:9px;padding:1px 5px;border-radius:20px;background:rgba(210,40,40,.4);color:#F09595;font-weight:700;margin-left:auto;}
+
+/* ─── MAIN CONTENT ──────────────────────────────── */
+.main-area{flex:1;background:#F0EFE9;display:flex;flex-direction:column;overflow-y:auto;}
+.page-body{padding:20px;display:flex;flex-direction:column;gap:18px;flex:1;}
+
+/* ─── BREADCRUMB ────────────────────────────────── */
+.bc{background:#fff;border-bottom:0.5px solid #e5e3dc;padding:7px 20px;font-size:11px;color:#888780;display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.bc-link{color:#E24B4A;cursor:pointer;}
+.bc-link:hover{text-decoration:underline;}
+.bc-sep{color:#d3d1c7;}
+.bc-cur{color:#1a1a18;font-weight:500;}
+
+/* ─── SECTION HEADER ────────────────────────────── */
+.sec-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.sec-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;}
+.sec-btn{font-size:11px;padding:5px 12px;border-radius:6px;background:#080F17;color:#fff;border:none;font-weight:500;}
+.sec-btn:hover{background:#1a2535;}
+.sec-btn-outline{background:transparent;border:0.5px solid #d3d1c7;color:#5f5e5a;}
+.sec-btn-outline:hover{background:#f5f4f0;}
+.sec-btn-red{background:#A32D2D;color:#fff;border:none;}
+.sec-btn-red:hover{background:#791F1F;}
+
+/* ─── STAT CARDS ────────────────────────────────── */
+.stat-row{display:grid;gap:10px;}
+.stat-card{background:#fff;border:0.5px solid #e5e3dc;border-radius:10px;padding:14px 16px;}
+.stat-val{font-size:26px;font-weight:700;color:#080F17;margin-bottom:2px;line-height:1;}
+.stat-lbl{font-size:11px;color:#888780;margin-top:3px;}
+.stat-delta{font-size:10px;margin-top:5px;}
+.sd-up{color:#0F6E56;}
+.sd-dn{color:#993C1D;}
+.stat-card.red-left{border-left:3px solid #E24B4A;}
+.stat-card.grn-left{border-left:3px solid #1D9E75;}
+.stat-card.amb-left{border-left:3px solid #EF9F27;}
+
+/* ─── DATA TABLE ────────────────────────────────── */
+.data-table{background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;}
+.dt-toolbar{padding:12px 16px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.dt-title{font-size:13px;font-weight:600;color:#1a1a18;flex:1;}
+.dt-search{font-size:12px;border:0.5px solid #d3d1c7;border-radius:6px;padding:5px 10px;background:#fafaf8;color:#1a1a18;outline:none;}
+.dt-search:focus{border-color:#080F17;}
+.dt-header{display:grid;background:#f5f4f0;padding:9px 16px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#b4b2a9;border-bottom:0.5px solid #e5e3dc;}
+.dt-row{display:grid;padding:10px 16px;border-bottom:0.5px solid #f0efe9;align-items:center;transition:background .1s;}
+.dt-row:last-child{border-bottom:none;}
+.dt-row:hover{background:#fafaf8;}
+.av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;}
+.name-cell{display:flex;align-items:center;gap:9px;}
+.name-primary{font-size:12px;font-weight:500;color:#1a1a18;}
+.name-sub{font-size:11px;color:#888780;margin-top:1px;}
+.badge{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:500;white-space:nowrap;}
+.b-ok{background:#E1F5EE;color:#085041;}
+.b-warn{background:#FAEEDA;color:#633806;}
+.b-danger{background:#FAECE7;color:#712B13;}
+.b-new{background:#F1EFE8;color:#5F5E5A;}
+.b-blue{background:#E6F1FB;color:#185FA5;}
+.b-red{background:#FCEBEB;color:#A32D2D;}
+.b-navy{background:#e8ebf0;color:#080F17;}
+.row-btn{font-size:10px;padding:3px 8px;border-radius:5px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
+.row-btn:hover{background:#f0efe9;}
+.row-btn-red{border-color:#F7C1C1;color:#A32D2D;}
+.row-btn-red:hover{background:#FCEBEB;}
+.row-actions{display:flex;gap:5px;}
+.mini-bar{background:#e5e3dc;border-radius:3px;height:4px;width:60px;display:inline-block;vertical-align:middle;}
+.mini-fill{height:4px;border-radius:3px;}
+
+/* ─── PAGE TABS ─────────────────────────────────── */
+.page-tabs{display:flex;border-bottom:0.5px solid #e5e3dc;background:#fff;padding:0 16px;flex-shrink:0;}
+.ptab{font-size:12px;padding:9px 14px;border-bottom:2px solid transparent;border-top:none;border-left:none;border-right:none;background:none;color:#888780;cursor:pointer;font-weight:500;}
+.ptab.on{color:#080F17;border-bottom-color:#080F17;}
+.ptab-badge{font-size:9px;padding:1px 5px;border-radius:20px;background:#FAECE7;color:#993C1D;margin-left:3px;}
+
+/* ─── BOARD CONTENT MANAGER ─────────────────────── */
+.board-layout{display:flex;gap:0;background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;min-height:540px;}
+.board-tree{width:240px;border-right:0.5px solid #e5e3dc;display:flex;flex-direction:column;flex-shrink:0;}
+.bt-head{padding:12px 14px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:center;justify-content:space-between;}
+.bt-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;}
+.bt-add{width:22px;height:22px;border-radius:5px;background:#080F17;color:#fff;border:none;font-size:14px;display:flex;align-items:center;justify-content:center;}
+.tree-scroll{flex:1;overflow-y:auto;padding:8px;}
+.tnode{padding:6px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:background .1s;}
+.tnode:hover{background:#f5f4f0;}
+.tnode.sel{background:#e8ebf0;color:#080F17;font-weight:600;}
+.tnode-icon{font-size:12px;flex-shrink:0;}
+.tnode-label{font-size:12px;color:#5f5e5a;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tnode.sel .tnode-label{color:#080F17;}
+.tnode-right{display:flex;align-items:center;gap:4px;}
+.tnode-count{font-size:10px;color:#b4b2a9;}
+.pub-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.pub-dot-live{background:#1D9E75;}
+.pub-dot-draft{background:#EF9F27;}
+.tnode-l2{padding-left:20px;}
+.tnode-l3{padding-left:34px;}
+.tree-add-btn{margin:6px 8px;font-size:11px;padding:5px 8px;border-radius:6px;border:1px dashed #d3d1c7;background:transparent;color:#888780;width:calc(100% - 16px);text-align:center;}
+.tree-add-btn:hover{border-color:#080F17;color:#080F17;}
+
+.board-tabs{display:flex;border-bottom:0.5px solid #e5e3dc;padding:0 14px;background:#fff;flex-shrink:0;}
+.btab{font-size:11px;padding:8px 12px;border-bottom:2px solid transparent;border-top:none;border-left:none;border-right:none;background:none;color:#888780;cursor:pointer;}
+.btab.on{color:#080F17;border-bottom-color:#080F17;font-weight:500;}
+
+.board-detail{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.bd-head{padding:14px 18px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.bd-title{font-size:14px;font-weight:600;color:#1a1a18;}
+.bd-meta{font-size:11px;color:#888780;margin-top:2px;}
+.bd-actions{display:flex;gap:7px;flex-shrink:0;}
+.bd-body{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px;}
+
+.topic-card{border:0.5px solid #e5e3dc;border-radius:8px;overflow:hidden;}
+.tc-row{padding:11px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;}
+.tc-row:hover{background:#fafaf8;}
+.tc-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.tc-main{flex:1;min-width:0;}
+.tc-name{font-size:12px;font-weight:500;color:#1a1a18;}
+.tc-meta{font-size:11px;color:#888780;margin-top:1px;}
+.tc-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.adoption-pill{font-size:10px;padding:2px 8px;border-radius:20px;background:#E6F1FB;color:#185FA5;font-weight:500;}
+.version-pill{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:500;}
+.vp-live{background:#E1F5EE;color:#085041;}
+.vp-draft{background:#FAEEDA;color:#633806;}
+
+/* ─── ACTIVITY FEED ─────────────────────────────── */
+.feed{background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;}
+.feed-header{padding:12px 14px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:center;justify-content:space-between;}
+.feed-title{font-size:12px;font-weight:600;color:#1a1a18;}
+.feed-item{padding:10px 14px;border-bottom:0.5px solid #f0efe9;display:flex;gap:10px;align-items:flex-start;}
+.feed-item:last-child{border-bottom:none;}
+.feed-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.fd-green{background:#1D9E75;}
+.fd-amber{background:#EF9F27;}
+.fd-red{background:#E24B4A;}
+.fd-blue{background:#378ADD;}
+.feed-text{font-size:12px;color:#1a1a18;line-height:1.5;}
+.feed-time{font-size:10px;color:#b4b2a9;margin-top:2px;}
+
+/* ─── ANALYTICS CHARTS ──────────────────────────── */
+.chart-card{background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;padding:16px;}
+.chart-title{font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:14px;}
+.hbar-row{display:grid;grid-template-columns:130px 1fr 36px;gap:8px;align-items:center;margin-bottom:8px;}
+.hbar-label{font-size:11px;color:#5f5e5a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hbar-bg{background:#f0efe9;border-radius:4px;height:14px;overflow:hidden;}
+.hbar-fill{height:14px;border-radius:4px;}
+.hbar-val{font-size:11px;color:#888780;text-align:right;}
+.analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+
+/* ─── SETTINGS ──────────────────────────────────── */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.setting-card{background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;padding:16px;}
+.setting-title{font-size:13px;font-weight:600;color:#1a1a18;margin-bottom:12px;}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid #f0efe9;gap:10px;}
+.setting-row:last-child{border-bottom:none;}
+.setting-label{font-size:12px;color:#1a1a18;}
+.setting-sub{font-size:11px;color:#888780;margin-top:1px;}
+.toggle{width:36px;height:20px;border-radius:10px;background:#e5e3dc;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0;border:none;}
+.toggle.on{background:#080F17;}
+.toggle::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:3px;left:3px;transition:left .2s;}
+.toggle.on::after{left:19px;}
+.form-label{font-size:11px;font-weight:600;color:#5f5e5a;margin-bottom:5px;display:block;}
+.form-input{width:100%;font-size:12px;border:0.5px solid #d3d1c7;border-radius:6px;padding:8px 10px;background:#fafaf8;color:#1a1a18;outline:none;margin-bottom:8px;}
+.form-input:focus{border-color:#080F17;}
+.danger-zone{background:#FCEBEB;border:0.5px solid #F7C1C1;border-radius:12px;padding:16px;}
+.dz-title{font-size:12px;font-weight:700;color:#A32D2D;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.dz-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #F7C1C1;font-size:12px;}
+.dz-row:last-child{border-bottom:none;}
+
+/* ─── MODAL ─────────────────────────────────────── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s;}
+.overlay.open{opacity:1;pointer-events:all;}
+.modal{background:#fff;border-radius:14px;padding:24px;width:460px;max-width:calc(100vw-40px);display:flex;flex-direction:column;gap:14px;max-height:90vh;overflow-y:auto;}
+.modal-title{font-size:16px;font-weight:700;color:#080F17;}
+.modal-sub{font-size:12px;color:#888780;margin-top:2px;}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;}
+.modal-cancel{font-size:12px;padding:8px 16px;border-radius:7px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
+.modal-confirm{font-size:12px;padding:8px 18px;border-radius:7px;background:#080F17;color:#fff;border:none;font-weight:700;}
+.modal-confirm-red{background:#A32D2D;}
+
+/* ─── TOAST ─────────────────────────────────────── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#080F17;color:#fff;font-size:12px;padding:10px 18px;border-radius:8px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;white-space:nowrap;border:0.5px solid rgba(255,255,255,.1);}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<!-- SCREENS share the same sidebar nav layout -->
+
+<!-- ══ SCREEN: DASHBOARD ══════════════════════════════════ -->
+<div class="screen active" id="s-dashboard">
+  <div class="shell">
+    <div class="topbar">
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-platform">Platform console</span>
+      <span class="tb-role">Super Admin</span>
+      <div class="tb-right">
+        <button class="tb-btn" onclick="showToast('Platform status: All systems operational')">System status</button>
+        <div class="tb-avatar">SA</div>
+      </div>
+    </div>
+    <div class="app-layout">
+      <div class="sidenav" id="sidenav-dashboard"></div>
+      <div class="main-area"><div class="page-body" id="body-dashboard"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: BOARD CONTENT ══════════════════════════════ -->
+<div class="screen" id="s-boards">
+  <div class="shell">
+    <div class="topbar">
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-platform">Board content</span>
+      <span class="tb-role">Super Admin</span>
+      <div class="tb-right">
+        <button class="tb-btn" onclick="showToast('Draft saved')">Save draft</button>
+        <button class="tb-btn tb-btn-blue" onclick="showToast('Publishing — will propagate to all institutions that adopted this board')">Publish version</button>
+        <div class="tb-avatar">SA</div>
+      </div>
+    </div>
+    <div class="app-layout">
+      <div class="sidenav" id="sidenav-boards"></div>
+      <div class="main-area">
+        <div class="bc"><span class="bc-link" onclick="nav('dashboard')">Dashboard</span><span class="bc-sep">›</span><span class="bc-cur">Board content manager</span></div>
+        <div class="page-body" id="body-boards" style="padding:14px;flex:1;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: INSTITUTIONS ═══════════════════════════════ -->
+<div class="screen" id="s-institutions">
+  <div class="shell">
+    <div class="topbar">
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-platform">Institutions</span>
+      <span class="tb-role">Super Admin</span>
+      <div class="tb-right">
+        <button class="tb-btn tb-btn-blue" onclick="openModal('m-onboard')">+ Onboard institution</button>
+        <div class="tb-avatar">SA</div>
+      </div>
+    </div>
+    <div class="app-layout">
+      <div class="sidenav" id="sidenav-institutions"></div>
+      <div class="main-area">
+        <div class="bc"><span class="bc-link" onclick="nav('dashboard')">Dashboard</span><span class="bc-sep">›</span><span class="bc-cur">Institutions</span></div>
+        <div class="page-tabs">
+          <button class="ptab on" onclick="switchTab('inst','active',this)">Active <span style="font-size:10px;color:#888780;">(47)</span></button>
+          <button class="ptab" onclick="switchTab('inst','pending',this)">Pending approval <span class="ptab-badge">3</span></button>
+          <button class="ptab" onclick="switchTab('inst','inactive',this)">Inactive <span style="font-size:10px;color:#888780;">(5)</span></button>
+        </div>
+        <div class="page-body" id="body-institutions" style="padding-top:14px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: TUTOR MARKETPLACE ══════════════════════════ -->
+<div class="screen" id="s-tutors">
+  <div class="shell">
+    <div class="topbar">
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-platform">Tutor marketplace</span>
+      <span class="tb-role">Super Admin</span>
+      <div class="tb-right"><div class="tb-avatar">SA</div></div>
+    </div>
+    <div class="app-layout">
+      <div class="sidenav" id="sidenav-tutors"></div>
+      <div class="main-area">
+        <div class="bc"><span class="bc-link" onclick="nav('dashboard')">Dashboard</span><span class="bc-sep">›</span><span class="bc-cur">Tutor marketplace</span></div>
+        <div class="page-tabs">
+          <button class="ptab on" onclick="switchTab('tutor','pending',this)">Pending review <span class="ptab-badge">4</span></button>
+          <button class="ptab" onclick="switchTab('tutor','published',this)">Published <span style="font-size:10px;color:#888780;">(312)</span></button>
+          <button class="ptab" onclick="switchTab('tutor','flagged',this)">Flagged <span class="ptab-badge">2</span></button>
+        </div>
+        <div class="page-body" id="body-tutors" style="padding-top:14px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: USERS ═══════════════════════════════════════ -->
+<div class="screen" id="s-users">
+  <div class="shell">
+    <div class="topbar">
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-platform">User management</span>
+      <span class="tb-role">Super Admin</span>
+      <div class="tb-right"><div class="tb-avatar">SA</div></div>
+    </div>
+    <div class="app-layout">
+      <div class="sidenav" id="sidenav-users"></div>
+      <div class="main-area">
+        <div class="bc"><span class="bc-link" onclick="nav('dashboard')">Dashboard</span><span class="bc-sep">›</span><span class="bc-cur">Users &amp; roles</span></div>
+        <div class="page-body" id="body-users" style="padding-top:14px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: SETTINGS ════════════════════════════════════ -->
+<div class="screen" id="s-settings">
+  <div class="shell">
+    <div class="topbar">
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-platform">Platform settings</span>
+      <span class="tb-role">Super Admin</span>
+      <div class="tb-right">
+        <button class="tb-btn tb-btn-blue" onclick="showToast('Settings saved and applied')">Save changes</button>
+        <div class="tb-avatar">SA</div>
+      </div>
+    </div>
+    <div class="app-layout">
+      <div class="sidenav" id="sidenav-settings"></div>
+      <div class="main-area">
+        <div class="bc"><span class="bc-link" onclick="nav('dashboard')">Dashboard</span><span class="bc-sep">›</span><span class="bc-cur">Platform settings</span></div>
+        <div class="page-body" id="body-settings" style="padding-top:14px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODALS ══════════════════════════════════════════════ -->
+<div class="overlay" id="m-onboard" onclick="if(event.target===this)closeModal('m-onboard')">
+  <div class="modal">
+    <div><div class="modal-title">Onboard new institution</div><div class="modal-sub">Create the institution account and send admin invite.</div></div>
+    <div><label class="form-label">Institution name</label><input class="form-input" placeholder="e.g. Delhi Public School, Hyderabad"/></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div><label class="form-label">Board</label>
+        <select class="form-input"><option>NCERT</option><option>JNV</option><option>CBE</option><option>Custom</option></select>
+      </div>
+      <div><label class="form-label">City</label><input class="form-input" placeholder="City"/></div>
+    </div>
+    <div><label class="form-label">Admin email</label><input class="form-input" type="email" placeholder="admin@institution.edu"/></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div><label class="form-label">Grades offered</label>
+        <select class="form-input"><option>6–8</option><option>6–10</option><option>1–12</option><option>Custom</option></select>
+      </div>
+      <div><label class="form-label">Plan</label>
+        <select class="form-input"><option>Starter (free)</option><option>School (paid)</option><option>Enterprise</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeModal('m-onboard')">Cancel</button>
+      <button class="modal-confirm" onclick="confirmOnboard()">Create &amp; send invite</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="m-publish-board" onclick="if(event.target===this)closeModal('m-publish-board')">
+  <div class="modal">
+    <div><div class="modal-title">Publish board content update</div><div class="modal-sub">This will propagate to all institutions that have adopted this board.</div></div>
+    <div style="background:#FAEEDA;border-radius:8px;padding:12px;font-size:12px;color:#633806;">
+      ⚠ <strong>38 institutions</strong> are using NCERT Grade 6 Maths. Publishing will update their adopted curriculum. Custom changes institutions made will be preserved.
+    </div>
+    <div><label class="form-label">Version notes</label><textarea class="form-input" style="height:70px;resize:none;" placeholder="What changed in this version?"></textarea></div>
+    <div><label class="form-label">Notify institution admins?</label>
+      <select class="form-input"><option>Yes — send email notification</option><option>No — silent update</option></select>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeModal('m-publish-board')">Cancel</button>
+      <button class="modal-confirm" onclick="closeModal('m-publish-board');showToast('Published — 38 institutions notified')">Publish update</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ════════════════════════════════════════════════
+   DATA
+════════════════════════════════════════════════ */
+const boards = [
+  { id:'ncert', label:'NCERT', icon:'📗', version:'v2.4', status:'live', institutions:38,
+    grades:[
+      { id:'n6', label:'Grade 6', children:[
+        { id:'n6m', label:'Maths', icon:'📐', children:[
+          {id:'n6m1',label:'Number System',    topics:4, status:'live', adoptions:38},
+          {id:'n6m2',label:'Fractions',        topics:5, status:'live', adoptions:38},
+          {id:'n6m3',label:'Basic Geometry',   topics:4, status:'live', adoptions:35},
+          {id:'n6m4',label:'Data Handling',    topics:3, status:'draft',adoptions:0},
+          {id:'n6m5',label:'Algebra Intro',    topics:3, status:'draft',adoptions:0},
+        ]},
+        { id:'n6s', label:'Science', icon:'🔬', children:[
+          {id:'n6s1',label:'World of Science', topics:3, status:'live', adoptions:38},
+          {id:'n6s2',label:'Motion & Forces',  topics:4, status:'live', adoptions:36},
+          {id:'n6s3',label:'Light & Shadows',  topics:3, status:'live', adoptions:38},
+        ]},
+      ]},
+      { id:'n7', label:'Grade 7', children:[
+        { id:'n7m', label:'Maths', icon:'📐', children:[] },
+        { id:'n7s', label:'Science', icon:'🔬', children:[] },
+      ]},
+    ]
+  },
+  { id:'jnv',  label:'JNV',  icon:'📘', version:'v1.8', status:'live', institutions:12, grades:[] },
+  { id:'cbe',  label:'CBE',  icon:'📙', version:'v1.2', status:'live', institutions:8,  grades:[] },
+];
+
+const institutions = [
+  {id:'i1', name:"St. Mary's School",    city:'Hyderabad', board:'NCERT', plan:'School',     students:142, teachers:6,  status:'active', health:'ok',     joined:'Jan 2025'},
+  {id:'i2', name:'JNV Hyderabad',        city:'Hyderabad', board:'JNV',   plan:'Starter',    students:98,  teachers:4,  status:'active', health:'ok',     joined:'Feb 2025'},
+  {id:'i3', name:'Delhi Public School',  city:'Delhi',     board:'NCERT', plan:'Enterprise', students:680, teachers:28, status:'active', health:'ok',     joined:'Oct 2024'},
+  {id:'i4', name:'Kendriya Vidyalaya',   city:'Mumbai',    board:'NCERT', plan:'School',     students:320, teachers:14, status:'active', health:'warn',   joined:'Nov 2024'},
+  {id:'i5', name:'DAV Public School',    city:'Chennai',   board:'CBE',   plan:'School',     students:210, teachers:9,  status:'active', health:'danger', joined:'Mar 2025'},
+  {id:'i6', name:'Sunrise Academy',      city:'Pune',      board:'NCERT', plan:'Starter',    students:0,   teachers:0,  status:'pending',health:'new',    joined:'Applied'},
+  {id:'i7', name:'Bright Future School', city:'Bangalore', board:'JNV',   plan:'School',     students:0,   teachers:0,  status:'pending',health:'new',    joined:'Applied'},
+  {id:'i8', name:'Excel Institute',      city:'Kolkata',   board:'NCERT', plan:'Starter',    students:0,   teachers:0,  status:'pending',health:'new',    joined:'Applied'},
+];
+
+const tutors = [
+  {id:'t1', name:'Ravi Kumar',   subjects:['Maths','Algebra'],    students:4,  rating:null,  status:'pending', flagged:false, joined:'Today'},
+  {id:'t2', name:'Priya Sharma', subjects:['Science','Biology'],  students:7,  rating:4.8,   status:'pending', flagged:false, joined:'Yesterday'},
+  {id:'t3', name:'Anita Rao',    subjects:['English'],            students:12, rating:4.6,   status:'pending', flagged:false, joined:'2 days ago'},
+  {id:'t4', name:'Suresh Nair',  subjects:['Hindi','Social'],     students:3,  rating:null,  status:'pending', flagged:false, joined:'3 days ago'},
+  {id:'t5', name:'Deepa L.',     subjects:['Maths'],              students:18, rating:4.9,   status:'published',flagged:false,joined:'Jan 2025'},
+  {id:'t6', name:'Kiran J.',     subjects:['Science'],            students:9,  rating:4.4,   status:'flagged', flagged:true,  joined:'Feb 2025'},
+  {id:'t7', name:'Arun P.',      subjects:['Maths','Physics'],    students:22, rating:4.7,   status:'flagged', flagged:true,  joined:'Dec 2024'},
+];
+
+const platformUsers = [
+  {id:'u1', name:'Arjun K.',     email:'arjun@student.in',   role:'student',          institution:"St. Mary's", status:'active'},
+  {id:'u2', name:'Ravi Kumar',   email:'ravi@tutor.in',      role:'tutor',            institution:'—',          status:'active'},
+  {id:'u3', name:'Admin SA',     email:'admin@marys.edu',    role:'institution_admin',institution:"St. Mary's", status:'active'},
+  {id:'u4', name:'Priya Sharma', email:'priya@jnv.edu',      role:'instructor',       institution:'JNV Hyderabad',status:'active'},
+  {id:'u5', name:'Mohan S.',     email:'mohan@student.in',   role:'student',          institution:"St. Mary's", status:'suspended'},
+  {id:'u6', name:'Kavitha M.',   email:'kav@tutor.in',       role:'tutor',            institution:'—',          status:'active'},
+];
+
+const colors = ['#378ADD','#1D9E75','#D85A30','#534AB7','#BA7517','#0F6E56','#E24B4A','#7F77DD'];
+
+let activeScreen   = 'dashboard';
+let activeBoardId  = 'ncert';
+let activeBoardNode= 'n6m';
+let activeInstTab  = 'active';
+let activeTutorTab = 'pending';
+let boardDetailTab = 'topics';
+
+/* ════════════════════════════════════════════════
+   SIDEBAR
+════════════════════════════════════════════════ */
+const navItems = [
+  {id:'dashboard',    icon:'⌂',  label:'Dashboard'},
+  {id:'boards',       icon:'📚', label:'Board content'},
+  {id:'institutions', icon:'🏫', label:'Institutions', badge: institutions.filter(i=>i.status==='pending').length},
+  {id:'tutors',       icon:'👤', label:'Tutor marketplace', badge: tutors.filter(t=>t.status==='pending'||t.status==='flagged').length},
+  {id:'users',        icon:'👥', label:'Users & roles'},
+  {id:'settings',     icon:'⚙',  label:'Platform settings'},
+];
+
+function buildSidenav(screenId) {
+  const el = document.getElementById('sidenav-'+screenId);
+  if (!el) return;
+  el.innerHTML = navItems.map(n=>`
+    <button class="snav-item ${n.id===screenId?'active':''}" onclick="nav('${n.id}')">
+      <span class="snav-icon">${n.icon}</span>
+      <span class="snav-label">${n.label}</span>
+      ${n.badge ? `<span class="snav-badge">${n.badge}</span>` : ''}
+    </button>`).join('');
+}
+
+/* ════════════════════════════════════════════════
+   ROUTING
+════════════════════════════════════════════════ */
+function nav(id) {
+  activeScreen = id;
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s-'+id).classList.add('active');
+  buildSidenav(id);
+  const renders = {
+    dashboard:    renderDashboard,
+    boards:       renderBoards,
+    institutions: renderInstitutions,
+    tutors:       renderTutors,
+    users:        renderUsers,
+    settings:     renderSettings,
+  };
+  if (renders[id]) renders[id]();
+  window.scrollTo(0,0);
+}
+
+/* ════════════════════════════════════════════════
+   SCREEN 1 — DASHBOARD
+════════════════════════════════════════════════ */
+function renderDashboard() {
+  buildSidenav('dashboard');
+  const totalStudents = 18420;
+  const totalTeachers = 742;
+  const activeInst = institutions.filter(i=>i.status==='active').length;
+
+  const boardAdoptData = boards.map(b=>({label:b.label, val:b.institutions, color:'#378ADD'}));
+  const weakTopics = [
+    {label:'Fractions (NCERT G6)',    val:58, color:'#D85A30'},
+    {label:'Motion & Forces (NCERT)', val:44, color:'#D85A30'},
+    {label:'Ratio & Prop. (NCERT)',   val:47, color:'#D85A30'},
+    {label:'Hindi Grammar (JNV G7)',  val:52, color:'#EF9F27'},
+    {label:'Algebra Intro (NCERT)',   val:62, color:'#EF9F27'},
+  ];
+
+  document.getElementById('body-dashboard').innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-size:20px;font-weight:700;color:#080F17;margin-bottom:3px;">Platform overview</div>
+        <div style="font-size:12px;color:#888780;">hAIsir · All systems operational · Last updated just now</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="sec-btn sec-btn-outline" onclick="nav('settings')">Settings</button>
+        <button class="sec-btn" onclick="openModal('m-onboard')">+ Onboard institution</button>
+      </div>
+    </div>
+
+    <div class="stat-row" style="grid-template-columns:repeat(5,1fr);">
+      <div class="stat-card grn-left"><div class="stat-val">${activeInst}</div><div class="stat-lbl">Active institutions</div><div class="stat-delta sd-up">↑ 3 this month</div></div>
+      <div class="stat-card grn-left"><div class="stat-val">${totalStudents.toLocaleString()}</div><div class="stat-lbl">Total students</div><div class="stat-delta sd-up">↑ 420 this month</div></div>
+      <div class="stat-card grn-left"><div class="stat-val">${totalTeachers}</div><div class="stat-lbl">Teachers</div><div class="stat-delta sd-up">↑ 18 this month</div></div>
+      <div class="stat-card amb-left"><div class="stat-val" style="color:#854F0B;">${institutions.filter(i=>i.status==='pending').length}</div><div class="stat-lbl">Pending institution approvals</div><div class="stat-delta" style="color:#888780;">Needs review</div></div>
+      <div class="stat-card amb-left"><div class="stat-val" style="color:#854F0B;">${tutors.filter(t=>t.status==='pending').length}</div><div class="stat-lbl">Pending tutor approvals</div><div class="stat-delta" style="color:#888780;">Needs review</div></div>
+    </div>
+
+    <div class="stat-row" style="grid-template-columns:repeat(4,1fr);">
+      <div class="stat-card grn-left">
+        <div class="stat-val" style="color:#1D9E75;">86%</div>
+        <div class="stat-lbl">hAITU resolution rate</div>
+        <div class="stat-delta sd-up">↑ 3% from last month — AI improving</div>
+      </div>
+      <div class="stat-card grn-left">
+        <div class="stat-val">12,340</div>
+        <div class="stat-lbl">Doubts raised this month</div>
+        <div class="stat-delta sd-up">↑ 1,240 vs last month</div>
+      </div>
+      <div class="stat-card amb-left">
+        <div class="stat-val" style="color:#854F0B;">14%</div>
+        <div class="stat-lbl">Escalated to teacher</div>
+        <div class="stat-delta sd-up">↓ 3% — fewer escalations needed</div>
+      </div>
+      <div class="stat-card grn-left">
+        <div class="stat-val" style="color:#1D9E75;">89%</div>
+        <div class="stat-lbl">Escalations resolved by teacher</div>
+        <div class="stat-delta sd-up">Teachers responding within 24 hrs</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div class="chart-card">
+        <div class="chart-title">Board adoption (institutions)</div>
+        ${boardAdoptData.map(r=>`
+          <div class="hbar-row">
+            <div class="hbar-label">${r.label}</div>
+            <div class="hbar-bg"><div class="hbar-fill" style="background:${r.color};width:${(r.val/50)*100}%"></div></div>
+            <div class="hbar-val">${r.val}</div>
+          </div>`).join('')}
+        <button class="sec-btn-outline" style="font-size:11px;margin-top:8px;padding:5px 10px;border-radius:6px;border:0.5px solid #d3d1c7;background:transparent;cursor:pointer;" onclick="nav('boards')">Manage board content →</button>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Weakest topics platform-wide</div>
+        ${weakTopics.map(r=>`
+          <div class="hbar-row">
+            <div class="hbar-label" title="${r.label}">${r.label}</div>
+            <div class="hbar-bg"><div class="hbar-fill" style="background:${r.color};width:${r.val}%"></div></div>
+            <div class="hbar-val">${r.val}%</div>
+          </div>`).join('')}
+        <div style="font-size:11px;color:#888780;margin-top:8px;">Avg completion across all institutions</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div class="chart-card">
+        <div class="chart-title">Most escalated topics — hAITU couldn't resolve</div>
+        ${[
+          {label:'Fractions — LCM method',     val:342, color:'#D85A30'},
+          {label:'Ratio & Proportion',          val:218, color:'#D85A30'},
+          {label:'Speed vs Velocity',           val:196, color:'#EF9F27'},
+          {label:'Word problems — algebra',     val:174, color:'#EF9F27'},
+          {label:'Essay structure (English)',   val:121, color:'#378ADD'},
+        ].map(r=>`
+          <div class="hbar-row">
+            <div class="hbar-label" title="${r.label}">${r.label}</div>
+            <div class="hbar-bg"><div class="hbar-fill" style="background:${r.color};width:${(r.val/350)*100}%"></div></div>
+            <div class="hbar-val">${r.val}</div>
+          </div>`).join('')}
+        <div style="font-size:11px;color:#888780;margin-top:8px;">Count of escalations. High counts = gaps in hAITU board content for these topics. Consider improving explanations.</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">hAITU resolution rate by board</div>
+        ${[
+          {label:'NCERT', val:87, color:'#1D9E75'},
+          {label:'JNV',   val:82, color:'#378ADD'},
+          {label:'CBE',   val:79, color:'#7F77DD'},
+        ].map(r=>`
+          <div class="hbar-row">
+            <div class="hbar-label">${r.label}</div>
+            <div class="hbar-bg"><div class="hbar-fill" style="background:${r.color};width:${r.val}%"></div></div>
+            <div class="hbar-val">${r.val}%</div>
+          </div>`).join('')}
+        <div style="margin-top:12px;background:#FAEEDA;border-radius:7px;padding:9px 12px;font-size:11px;color:#633806;">
+          ⚠ CBE at 79% — lowest resolution rate. Consider reviewing and enriching CBE topic content to improve hAITU's ability to answer doubts without escalation.
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div>
+        <div class="sec-hd"><span class="sec-title">Institution health</span><button class="sec-btn sec-btn-outline" style="font-size:11px;padding:4px 10px;" onclick="nav('institutions')">View all →</button></div>
+        <div class="data-table">
+          <div class="dt-header" style="grid-template-columns:1.8fr .8fr .8fr 80px;">
+            <div>Institution</div><div>Students</div><div>Avg progress</div><div>Health</div>
+          </div>
+          ${institutions.filter(i=>i.status==='active').slice(0,5).map(i=>{
+            const hc = i.health==='ok'?'b-ok':i.health==='warn'?'b-warn':'b-danger';
+            const hl = i.health==='ok'?'Healthy':i.health==='warn'?'Review':'At risk';
+            return `
+              <div class="dt-row" style="grid-template-columns:1.8fr .8fr .8fr 80px;cursor:default;">
+                <div class="name-cell">
+                  <div class="av" style="background:${colors[Math.floor(Math.random()*colors.length)]}">${i.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
+                  <div><div class="name-primary">${i.name}</div><div class="name-sub">${i.board} · ${i.city}</div></div>
+                </div>
+                <div style="font-size:12px;color:#5f5e5a;">${i.students}</div>
+                <div style="font-size:12px;color:#5f5e5a;">${i.students>0?Math.floor(55+Math.random()*30)+'%':'—'}</div>
+                <div><span class="badge ${hc}">${hl}</span></div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div>
+        <div class="sec-hd"><span class="sec-title">Recent activity</span></div>
+        <div class="feed">
+          ${[
+            {dot:'fd-green',text:"St. Mary's School enrolled 8 new students",time:'5 min ago'},
+            {dot:'fd-blue', text:'Ravi Kumar tutor profile submitted for review',time:'23 min ago'},
+            {dot:'fd-amber',text:'Kendriya Vidyalaya — 14 students at risk flagged',time:'1 hr ago'},
+            {dot:'fd-green',text:'NCERT Grade 6 Maths v2.4 published to 38 institutions',time:'2 hrs ago'},
+            {dot:'fd-red',  text:'Sunrise Academy registration request received',time:'3 hrs ago'},
+            {dot:'fd-blue', text:'Tutor Deepa L. received 3 new student enrollments',time:'4 hrs ago'},
+          ].map(f=>`
+            <div class="feed-item">
+              <div class="feed-dot ${f.dot}"></div>
+              <div><div class="feed-text">${f.text}</div><div class="feed-time">${f.time}</div></div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ════════════════════════════════════════════════
+   SCREEN 2 — BOARD CONTENT
+════════════════════════════════════════════════ */
+function renderBoards() {
+  buildSidenav('boards');
+
+  const activeBoard  = boards.find(b=>b.id===activeBoardId);
+  const allNodes     = flattenTree(activeBoard?.grades||[]);
+  const activeNode   = allNodes.find(n=>n.id===activeBoardNode);
+  const isLeaf       = activeNode && Array.isArray(activeNode.children) && activeNode.children.length===0 && activeNode.topics;
+
+  function treeHtml(nodes, level=0) {
+    return nodes.map(n=>{
+      const indent = level===1?'tnode-l2':level===2?'tnode-l3':'';
+      const isSel  = n.id===activeBoardNode;
+      const icon   = level===0?'📁':level===1?(n.icon||'📁'):'📄';
+      const dot    = n.status ? `<span class="pub-dot ${n.status==='live'?'pub-dot-live':'pub-dot-draft'}"></span>` : '';
+      const cnt    = n.topics  ? `<span class="tnode-count">${n.topics}t</span>` :
+                     n.children? `<span class="tnode-count">${n.children.length}</span>` : '';
+      let html = `<div class="tnode ${indent} ${isSel?'sel':''}" onclick="setBoardNode('${n.id}')">
+        <span class="tnode-icon">${icon}</span>
+        <span class="tnode-label">${n.label}</span>
+        <div class="tnode-right">${cnt}${dot}</div>
+      </div>`;
+      if (n.children?.length && (isSel || n.children.some(c=>c.id===activeBoardNode)))
+        html += treeHtml(n.children, level+1);
+      return html;
+    }).join('');
+  }
+
+  const boardTabsHtml = `
+    <div style="display:flex;gap:0;border-bottom:0.5px solid #e5e3dc;padding:0 14px;background:#f5f4f0;">
+      ${boards.map(b=>`
+        <button class="btab ${b.id===activeBoardId?'on':''}" onclick="setBoard('${b.id}')">
+          ${b.icon} ${b.label}
+          <span style="font-size:9px;padding:1px 5px;border-radius:20px;margin-left:4px;background:${b.status==='live'?'#E1F5EE':'#FAEEDA'};color:${b.status==='live'?'#085041':'#633806'};font-weight:600;">${b.version}</span>
+        </button>`).join('')}
+      <button class="btab" onclick="showToast('Add new board')">+ Board</button>
+    </div>`;
+
+  const detailHtml = isLeaf ? `
+    <div class="bd-head">
+      <div>
+        <div class="bd-title">${activeNode.label}</div>
+        <div class="bd-meta">${activeNode.topics} topics · <span style="color:${activeNode.status==='live'?'#0F6E56':'#854F0B'}">${activeNode.status==='live'?'Live':'Draft'}</span> · ${activeNode.adoptions} institutions using this</div>
+      </div>
+      <div class="bd-actions">
+        <button class="sec-btn sec-btn-outline" onclick="showToast('Adding topic')">+ Topic</button>
+        ${activeNode.adoptions>0 ? `<button class="sec-btn" onclick="openModal('m-publish-board')">Publish update</button>` : `<button class="sec-btn tb-btn-blue" onclick="showToast('Published!')">Publish</button>`}
+      </div>
+    </div>
+    <div class="bd-body">
+      ${[
+        {name:'Introduction & overview', status:'live',  content:3, adoptions:activeNode.adoptions},
+        {name:'Core concepts',            status:'live',  content:4, adoptions:activeNode.adoptions},
+        {name:'Practice problems',        status:'live',  content:2, adoptions:activeNode.adoptions},
+        {name:'Assessment bank',          status:'draft', content:0, adoptions:0},
+      ].map(t=>`
+        <div class="topic-card">
+          <div class="tc-row">
+            <div class="tc-icon" style="background:${t.status==='live'?'#E1F5EE':'#FAEEDA'}">${t.status==='live'?'✓':'✎'}</div>
+            <div class="tc-main">
+              <div class="tc-name">${t.name}</div>
+              <div class="tc-meta">${t.content} content items · ${t.status==='live'?`Used by ${t.adoptions} institutions`:'Not yet published'}</div>
+            </div>
+            <div class="tc-right">
+              <span class="adoption-pill">${t.adoptions} institutions</span>
+              <span class="version-pill ${t.status==='live'?'vp-live':'vp-draft'}">${t.status==='live'?'Live':'Draft'}</span>
+              <button class="row-btn" onclick="showToast('Editing ${t.name}')">Edit</button>
+            </div>
+          </div>
+        </div>`).join('')}
+    </div>` : `
+    <div class="bd-head">
+      <div class="bd-title">${activeNode?activeNode.label:'Select a topic'}</div>
+    </div>
+    <div class="bd-body"><div style="color:#888780;font-size:12px;">Select a subject or topic from the tree to view and edit its content.</div></div>`;
+
+  document.getElementById('body-boards').innerHTML = `
+    <div class="board-layout">
+      <div class="board-tree">
+        <div class="bt-head">
+          <span class="bt-title">${activeBoard?.label||'Board'} structure</span>
+          <button class="bt-add" onclick="showToast('Add grade')">+</button>
+        </div>
+        ${boardTabsHtml}
+        <div class="tree-scroll">
+          ${treeHtml(activeBoard?.grades||[])}
+          <button class="tree-add-btn" onclick="showToast('Adding grade')">+ Add grade</button>
+        </div>
+      </div>
+      <div class="board-detail">${detailHtml}</div>
+    </div>
+
+    <div style="background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;padding:14px 18px;">
+      <div style="font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:10px;">Board adoption summary</div>
+      <div class="stat-row" style="grid-template-columns:repeat(4,1fr);">
+        <div class="stat-card" style="padding:10px 12px;">
+          <div class="stat-val" style="font-size:20px;">${boards.reduce((a,b)=>a+b.institutions,0)}</div>
+          <div class="stat-lbl">Total adoptions</div>
+        </div>
+        ${boards.map(b=>`
+          <div class="stat-card" style="padding:10px 12px;">
+            <div class="stat-val" style="font-size:20px;">${b.institutions}</div>
+            <div class="stat-lbl">${b.label} · ${b.version}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function setBoard(id)     { activeBoardId=id; renderBoards(); }
+function setBoardNode(id) { activeBoardNode=id; renderBoards(); }
+function flattenTree(nodes,r=[]){ nodes.forEach(n=>{r.push(n);if(n.children)flattenTree(n.children,r);});return r; }
+
+/* ════════════════════════════════════════════════
+   SCREEN 3 — INSTITUTIONS
+════════════════════════════════════════════════ */
+function renderInstitutions() {
+  buildSidenav('institutions');
+  switchTab('inst', activeInstTab, null);
+}
+
+function switchTab(screen, tab, btn) {
+  if (screen==='inst') {
+    activeInstTab = tab;
+    document.querySelectorAll('#s-institutions .ptab').forEach(b=>b.classList.remove('on'));
+    if (btn) btn.classList.add('on');
+    else document.querySelectorAll('#s-institutions .ptab').forEach(b=>{if(b.textContent.trim().toLowerCase().startsWith(tab.toLowerCase()))b.classList.add('on');});
+
+    const list = institutions.filter(i=>
+      tab==='active'   ? i.status==='active' :
+      tab==='pending'  ? i.status==='pending' :
+      i.status==='inactive'
+    );
+    const body = document.getElementById('body-institutions');
+
+    body.innerHTML = tab==='pending' ? `
+      <div class="sec-hd"><span class="sec-title">${list.length} pending registration${list.length!==1?'s':''}</span></div>
+      ${list.map(i=>`
+        <div style="background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;padding:16px;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
+          <div style="display:flex;align-items:flex-start;gap:12px;">
+            <div class="av" style="background:#378ADD;width:36px;height:36px;font-size:13px;">${i.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
+            <div>
+              <div style="font-size:14px;font-weight:600;color:#1a1a18;margin-bottom:3px;">${i.name}</div>
+              <div style="font-size:12px;color:#888780;margin-bottom:6px;">${i.board} · ${i.city} · ${i.plan} plan</div>
+              <span class="badge b-warn">Pending review</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0;">
+            <button class="sec-btn sec-btn-outline" onclick="showToast('Rejected ${i.name}')">Reject</button>
+            <button class="sec-btn" onclick="showToast('Approved! Invite sent to admin.')">Approve &amp; invite admin</button>
+          </div>
+        </div>`).join('')}
+    ` : `
+      <div class="stat-row" style="grid-template-columns:repeat(4,1fr);">
+        <div class="stat-card grn-left"><div class="stat-val">${list.length}</div><div class="stat-lbl">${tab==='active'?'Active':'Inactive'} institutions</div></div>
+        <div class="stat-card"><div class="stat-val">${list.reduce((a,i)=>a+i.students,0).toLocaleString()}</div><div class="stat-lbl">Total students</div></div>
+        <div class="stat-card"><div class="stat-val">${list.reduce((a,i)=>a+i.teachers,0)}</div><div class="stat-lbl">Total teachers</div></div>
+        <div class="stat-card amb-left"><div class="stat-val" style="color:#854F0B;">${list.filter(i=>i.health!=='ok').length}</div><div class="stat-lbl">Need attention</div></div>
+      </div>
+      <div class="data-table">
+        <div class="dt-toolbar">
+          <span class="dt-title">All ${tab} institutions</span>
+          <input class="dt-search" type="text" placeholder="Search…"/>
+          <button class="sec-btn" onclick="openModal('m-onboard')">+ Onboard</button>
+        </div>
+        <div class="dt-header" style="grid-template-columns:2fr .8fr .8fr .6fr .8fr .8fr 100px;">
+          <div>Institution</div><div>Board</div><div>Students</div><div>Teachers</div><div>Plan</div><div>Health</div><div>Action</div>
+        </div>
+        ${list.map(i=>{
+          const hc=i.health==='ok'?'b-ok':i.health==='warn'?'b-warn':i.health==='new'?'b-new':'b-danger';
+          const hl=i.health==='ok'?'Healthy':i.health==='warn'?'Review':i.health==='new'?'New':'At risk';
+          const plan=i.plan==='Enterprise'?'b-navy':i.plan==='School'?'b-blue':'b-new';
+          return `
+          <div class="dt-row" style="grid-template-columns:2fr .8fr .8fr .6fr .8fr .8fr 100px;">
+            <div class="name-cell">
+              <div class="av" style="background:${colors[institutions.indexOf(i)%colors.length]}">${i.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
+              <div><div class="name-primary">${i.name}</div><div class="name-sub">${i.city} · ${i.joined}</div></div>
+            </div>
+            <div style="font-size:12px;color:#5f5e5a;">${i.board}</div>
+            <div style="font-size:12px;color:#5f5e5a;">${i.students}</div>
+            <div style="font-size:12px;color:#5f5e5a;">${i.teachers}</div>
+            <div><span class="badge ${plan}">${i.plan}</span></div>
+            <div><span class="badge ${hc}">${hl}</span></div>
+            <div class="row-actions">
+              <button class="row-btn" onclick="showToast('Viewing ${i.name}')">View</button>
+              <button class="row-btn row-btn-red" onclick="showToast('${tab==='active'?'Deactivating':'Activating'} ${i.name}…')">
+                ${tab==='active'?'Deactivate':'Activate'}
+              </button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  if (screen==='tutor') {
+    activeTutorTab = tab;
+    document.querySelectorAll('#s-tutors .ptab').forEach(b=>b.classList.remove('on'));
+    if (btn) btn.classList.add('on');
+    const list = tutors.filter(t=>
+      tab==='pending'  ? t.status==='pending' :
+      tab==='published'? t.status==='published' :
+      t.status==='flagged'
+    );
+    const body = document.getElementById('body-tutors');
+    body.innerHTML = `
+      <div class="data-table">
+        <div class="dt-toolbar">
+          <span class="dt-title">${tab==='pending'?'Pending review':tab==='published'?'Published tutors':'Flagged profiles'} (${list.length})</span>
+          <input class="dt-search" type="text" placeholder="Search tutors…"/>
+        </div>
+        <div class="dt-header" style="grid-template-columns:2fr 1.2fr .8fr .8fr 1fr 120px;">
+          <div>Tutor</div><div>Subjects</div><div>Students</div><div>Rating</div><div>Status</div><div>Action</div>
+        </div>
+        ${list.map(t=>{
+          const sc = t.status==='published'?'b-ok':t.status==='pending'?'b-warn':'b-danger';
+          const sl = t.status==='published'?'Published':t.status==='pending'?'Pending':'Flagged';
+          return `
+          <div class="dt-row" style="grid-template-columns:2fr 1.2fr .8fr .8fr 1fr 120px;">
+            <div class="name-cell">
+              <div class="av" style="background:${colors[tutors.indexOf(t)%colors.length]}">${t.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
+              <div><div class="name-primary">${t.name}</div><div class="name-sub">Joined ${t.joined}</div></div>
+            </div>
+            <div style="font-size:11px;color:#5f5e5a;">${t.subjects.join(', ')}</div>
+            <div style="font-size:12px;color:#5f5e5a;">${t.students}</div>
+            <div style="font-size:12px;color:#5f5e5a;">${t.rating?'★ '+t.rating:'—'}</div>
+            <div><span class="badge ${sc}">${sl}</span></div>
+            <div class="row-actions">
+              <button class="row-btn" onclick="showToast('Viewing ${t.name} profile')">View</button>
+              ${t.status==='pending'  ? `<button class="row-btn" onclick="showToast('${t.name} approved!')">Approve</button>` : ''}
+              ${t.status==='flagged'  ? `<button class="row-btn row-btn-red" onclick="showToast('${t.name} suspended')">Suspend</button>` : ''}
+              ${t.status==='published'? `<button class="row-btn row-btn-red" onclick="showToast('Unpublishing ${t.name}')">Unpublish</button>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+}
+
+/* ════════════════════════════════════════════════
+   SCREEN 4 — TUTORS (initial render)
+════════════════════════════════════════════════ */
+function renderTutors() {
+  buildSidenav('tutors');
+  switchTab('tutor','pending',null);
+}
+
+/* ════════════════════════════════════════════════
+   SCREEN 5 — USERS
+════════════════════════════════════════════════ */
+function renderUsers() {
+  buildSidenav('users');
+  const roleColors = {student:'#E6F1FB',instructor:'#E1F5EE',tutor:'#EEEDFE',institution_admin:'#FAEEDA',admin:'#FCEBEB'};
+  const roleText   = {student:'#185FA5',instructor:'#085041',tutor:'#3C3489',institution_admin:'#633806',admin:'#A32D2D'};
+
+  document.getElementById('body-users').innerHTML = `
+    <div class="stat-row" style="grid-template-columns:repeat(5,1fr);">
+      <div class="stat-card"><div class="stat-val">18,420</div><div class="stat-lbl">Students</div></div>
+      <div class="stat-card"><div class="stat-val">742</div><div class="stat-lbl">Instructors</div></div>
+      <div class="stat-card"><div class="stat-val">312</div><div class="stat-lbl">Tutors</div></div>
+      <div class="stat-card"><div class="stat-val">47</div><div class="stat-lbl">Institution admins</div></div>
+      <div class="stat-card red-left"><div class="stat-val" style="color:#A32D2D;">3</div><div class="stat-lbl">Suspended users</div></div>
+    </div>
+
+    <div class="data-table">
+      <div class="dt-toolbar">
+        <span class="dt-title">User search</span>
+        <input class="dt-search" type="text" placeholder="Search by name or email…" style="width:220px;"/>
+        <select class="dt-search" style="width:140px;">
+          <option>All roles</option><option>student</option><option>instructor</option><option>tutor</option><option>institution_admin</option>
+        </select>
+        <select class="dt-search" style="width:130px;">
+          <option>All institutions</option><option>St. Mary's</option><option>JNV Hyderabad</option>
+        </select>
+      </div>
+      <div class="dt-header" style="grid-template-columns:2fr 1.5fr 1.2fr 1.2fr .8fr 120px;">
+        <div>User</div><div>Email</div><div>Role</div><div>Institution</div><div>Status</div><div>Action</div>
+      </div>
+      ${platformUsers.map(u=>{
+        const sc = u.status==='active'?'b-ok':'b-danger';
+        return `
+          <div class="dt-row" style="grid-template-columns:2fr 1.5fr 1.2fr 1.2fr .8fr 120px;">
+            <div class="name-cell">
+              <div class="av" style="background:${colors[platformUsers.indexOf(u)%colors.length]}">${u.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
+              <div class="name-primary">${u.name}</div>
+            </div>
+            <div style="font-size:11px;color:#888780;">${u.email}</div>
+            <div><span class="badge" style="background:${roleColors[u.role]||'#f0efe9'};color:${roleText[u.role]||'#5f5e5a'};">${u.role}</span></div>
+            <div style="font-size:12px;color:#5f5e5a;">${u.institution}</div>
+            <div><span class="badge ${sc}">${u.status}</span></div>
+            <div class="row-actions">
+              <button class="row-btn" onclick="showToast('Viewing ${u.name}')">View</button>
+              <button class="row-btn" onclick="showToast('Editing role for ${u.name}')">Role</button>
+              <button class="row-btn row-btn-red" onclick="showToast('${u.status==='active'?'Suspending':'Reactivating'} ${u.name}')">
+                ${u.status==='active'?'Suspend':'Restore'}
+              </button>
+            </div>
+          </div>`;
+      }).join('')}
+      <div style="padding:10px 16px;font-size:11px;color:#888780;background:#fafaf8;">Showing 6 of 19,521 users · Use search to filter</div>
+    </div>`;
+}
+
+/* ════════════════════════════════════════════════
+   SCREEN 6 — SETTINGS
+════════════════════════════════════════════════ */
+function renderSettings() {
+  buildSidenav('settings');
+  document.getElementById('body-settings').innerHTML = `
+    <div class="settings-grid">
+
+      <div class="setting-card">
+        <div class="setting-title">AI configuration</div>
+        <div class="setting-row">
+          <div><div class="setting-label">hAITU model</div><div class="setting-sub">Active model for student doubt resolution</div></div>
+          <select class="dt-search" style="width:160px;"><option>claude-sonnet-4-6</option><option>claude-opus-4-6</option><option>claude-haiku-4-5</option></select>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">hAITU — student role</div><div class="setting-sub">Enabled for all students</div></div>
+          <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">hAITU — teacher tools</div><div class="setting-sub">Lesson planning, worksheet generation</div></div>
+          <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">hAITU — parent summaries</div><div class="setting-sub">AI-generated weekly progress emails</div></div>
+          <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Max tokens per student query</div><div class="setting-sub">Controls response length and cost</div></div>
+          <input class="dt-search" type="number" value="1000" style="width:80px;"/>
+        </div>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title">Platform features</div>
+        <div class="setting-row">
+          <div><div class="setting-label">Tutor marketplace</div><div class="setting-sub">Allow students to discover and book tutors</div></div>
+          <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Open learning track</div><div class="setting-sub">Students can self-enroll in open courses</div></div>
+          <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Parent portal</div><div class="setting-sub">Parents can link accounts and view progress</div></div>
+          <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Tutor session booking</div><div class="setting-sub">In-app session scheduling</div></div>
+          <button class="toggle" onclick="this.classList.toggle('on')"></button>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Public tutor profiles</div><div class="setting-sub">Tutors visible in marketplace search</div></div>
+          <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+        </div>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title">Announcements</div>
+        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
+          <div class="setting-label">Platform banner message</div>
+          <textarea class="form-input" style="height:60px;resize:none;width:100%;margin:0;" placeholder="Leave blank to hide banner…">Maintenance window: Sunday 2–4am IST. Brief downtime expected.</textarea>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select class="dt-search" style="width:120px;"><option>Info (blue)</option><option>Warning (amber)</option><option>Critical (red)</option></select>
+            <button class="sec-btn" onclick="showToast('Banner updated!')">Update banner</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title">Board content settings</div>
+        <div class="setting-row">
+          <div><div class="setting-label">Auto-notify institutions on publish</div><div class="setting-sub">Email admins when board content updates</div></div>
+          <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Allow institution customisation</div><div class="setting-sub">Institutions can add topics on top of board</div></div>
+          <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Require publish approval</div><div class="setting-sub">Second SuperAdmin must approve before publish</div></div>
+          <button class="toggle" onclick="this.classList.toggle('on')"></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="danger-zone">
+      <div class="dz-title">⚠ Danger zone</div>
+      <div class="dz-row">
+        <div><div style="font-size:12px;font-weight:500;color:#A32D2D;">Put platform in maintenance mode</div><div style="font-size:11px;color:#993C1D;margin-top:2px;">All users will see a maintenance page. Only SuperAdmins can log in.</div></div>
+        <button class="sec-btn sec-btn-red" onclick="showToast('Maintenance mode toggled')">Enable</button>
+      </div>
+      <div class="dz-row">
+        <div><div style="font-size:12px;font-weight:500;color:#A32D2D;">Reset all hAITU conversation logs</div><div style="font-size:11px;color:#993C1D;margin-top:2px;">Permanently deletes all stored AI conversation history across the platform.</div></div>
+        <button class="sec-btn sec-btn-red" onclick="showToast('This action requires 2FA confirmation')">Purge logs</button>
+      </div>
+    </div>`;
+}
+
+/* ════════════════════════════════════════════════
+   MODALS
+════════════════════════════════════════════════ */
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function confirmOnboard(){ closeModal('m-onboard'); showToast('Institution created — invite email sent to admin!'); }
+
+/* ════════════════════════════════════════════════
+   TOAST
+════════════════════════════════════════════════ */
+let tt;
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+/* INIT */
+nav('dashboard');
+</script>
+</body>
+</html>

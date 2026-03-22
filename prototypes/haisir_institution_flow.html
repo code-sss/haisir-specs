@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hAIsir – Institution Admin</title>
+<style>
+/* ─── RESET ─────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#F0EFE9;min-height:100vh;}
+button{cursor:pointer;font-family:inherit;}
+input,textarea,select{font-family:inherit;}
+
+/* ─── SCREEN SYSTEM ─────────────────────────────────── */
+.screen{display:none;flex-direction:column;min-height:100vh;}
+.screen.active{display:flex;}
+
+/* ─── SHELL ─────────────────────────────────────────── */
+.shell{max-width:1100px;margin:0 auto;width:100%;flex:1;display:flex;flex-direction:column;}
+
+/* ─── TOPBAR — dark navy control room ───────────────── */
+.topbar{background:#0D1B2A;padding:0 20px;display:flex;align-items:center;height:48px;gap:14px;flex-shrink:0;}
+.tb-brand{color:#fff;font-size:15px;font-weight:700;letter-spacing:-.3px;}
+.tb-inst{font-size:12px;color:rgba(255,255,255,.6);border-left:0.5px solid rgba(255,255,255,.15);padding-left:14px;white-space:nowrap;}
+.tb-role{font-size:10px;padding:3px 9px;border-radius:20px;background:rgba(255,165,0,.2);color:#FAC775;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.tb-avatar{width:28px;height:28px;border-radius:50%;background:#378ADD;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;}
+.tb-back{font-size:11px;padding:4px 10px;border-radius:5px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:none;}
+.tb-back:hover{background:rgba(255,255,255,.15);color:#fff;}
+.tb-btn{font-size:11px;padding:5px 12px;border-radius:6px;background:rgba(255,255,255,.1);color:#fff;border:none;font-weight:500;}
+.tb-btn:hover{background:rgba(255,255,255,.18);}
+.tb-btn-accent{background:#185FA5;border:none;}
+.tb-btn-accent:hover{background:#0C447C;}
+
+/* ─── NAV TABS (main nav) ────────────────────────────── */
+.main-nav{background:#fff;border-bottom:0.5px solid #e5e3dc;padding:0 20px;display:flex;align-items:stretch;flex-shrink:0;}
+.nav-tab{display:flex;align-items:center;gap:7px;padding:11px 16px;border-bottom:2.5px solid transparent;border-top:none;border-left:none;border-right:none;background:none;font-size:12px;font-weight:500;color:#888780;cursor:pointer;white-space:nowrap;transition:color .12s;}
+.nav-tab:hover{color:#1a1a18;}
+.nav-tab.active{color:#1a1a18;border-bottom-color:#0D1B2A;}
+.nav-tab-icon{font-size:14px;}
+.nav-badge{font-size:9px;padding:1px 5px;border-radius:20px;background:#FAECE7;color:#993C1D;font-weight:700;margin-left:2px;}
+
+/* ─── BREADCRUMB ─────────────────────────────────────── */
+.bc{background:#fff;border-bottom:0.5px solid #e5e3dc;padding:7px 20px;font-size:11px;color:#888780;display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.bc-link{color:#185FA5;cursor:pointer;}
+.bc-link:hover{text-decoration:underline;}
+.bc-sep{color:#d3d1c7;}
+.bc-cur{color:#1a1a18;font-weight:500;}
+
+/* ─── PAGE BODY ──────────────────────────────────────── */
+.page-body{padding:20px;flex:1;display:flex;flex-direction:column;gap:18px;}
+
+/* ─── SECTION HEADER ─────────────────────────────────── */
+.sec-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.sec-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;}
+.sec-btn{font-size:11px;padding:5px 12px;border-radius:6px;background:#0D1B2A;color:#fff;border:none;font-weight:500;}
+.sec-btn:hover{background:#1a2f45;}
+.sec-btn-outline{background:transparent;border:0.5px solid #d3d1c7;color:#5f5e5a;}
+.sec-btn-outline:hover{background:#f5f4f0;}
+
+/* ─── STAT CARDS ─────────────────────────────────────── */
+.stat-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}
+.stat-card{background:#fff;border:0.5px solid #e5e3dc;border-radius:10px;padding:14px 16px;position:relative;}
+.stat-val{font-size:24px;font-weight:700;color:#0D1B2A;margin-bottom:2px;}
+.stat-lbl{font-size:11px;color:#888780;}
+.stat-delta{font-size:10px;margin-top:4px;}
+.sd-up{color:#0F6E56;}
+.sd-down{color:#993C1D;}
+.stat-card.alert-card{border-left:3px solid #D85A30;}
+.stat-card.warn-card{border-left:3px solid #EF9F27;}
+.stat-card.ok-card{border-left:3px solid #1D9E75;}
+
+/* ─── ALERT STRIP ────────────────────────────────────── */
+.alert-strip{background:#fff;border:0.5px solid #FAC775;border-left:3px solid #EF9F27;border-radius:10px;padding:12px 16px;display:flex;flex-direction:column;gap:7px;}
+.alert-strip-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#854F0B;margin-bottom:2px;}
+.alert-item{display:flex;align-items:center;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:0.5px solid #f0efe9;}
+.alert-item:last-child{border-bottom:none;}
+.alert-text{color:#1a1a18;}
+.alert-sub{font-size:11px;color:#888780;margin-top:1px;}
+.alert-fix{font-size:11px;color:#185FA5;background:none;border:none;text-decoration:underline;}
+
+/* ─── QUICK ACTIONS ──────────────────────────────────── */
+.qa-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.qa-card{background:#fff;border:0.5px solid #e5e3dc;border-radius:10px;padding:16px;cursor:pointer;transition:border-color .15s,box-shadow .15s;text-align:center;}
+.qa-card:hover{border-color:#0D1B2A;box-shadow:0 2px 8px rgba(13,27,42,.08);}
+.qa-icon{font-size:24px;margin-bottom:8px;}
+.qa-title{font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:3px;}
+.qa-sub{font-size:11px;color:#888780;}
+
+/* ─── DATA TABLE ─────────────────────────────────────── */
+.data-table{background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;}
+.dt-toolbar{padding:12px 16px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:center;gap:10px;}
+.dt-title{font-size:13px;font-weight:600;color:#1a1a18;flex:1;}
+.dt-search{font-size:12px;border:0.5px solid #d3d1c7;border-radius:6px;padding:5px 10px;background:#fafaf8;color:#1a1a18;outline:none;width:180px;}
+.dt-search:focus{border-color:#0D1B2A;}
+.dt-header{display:grid;background:#f5f4f0;padding:9px 16px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#b4b2a9;border-bottom:0.5px solid #e5e3dc;}
+.dt-row{display:grid;padding:11px 16px;border-bottom:0.5px solid #f0efe9;align-items:center;transition:background .1s;cursor:pointer;}
+.dt-row:last-child{border-bottom:none;}
+.dt-row:hover{background:#fafaf8;}
+.av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;}
+.name-cell{display:flex;align-items:center;gap:9px;}
+.name-primary{font-size:12px;font-weight:500;color:#1a1a18;}
+.name-sub{font-size:11px;color:#888780;margin-top:1px;}
+.badge{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:500;white-space:nowrap;}
+.b-ok{background:#E1F5EE;color:#085041;}
+.b-warn{background:#FAEEDA;color:#633806;}
+.b-danger{background:#FAECE7;color:#712B13;}
+.b-new{background:#F1EFE8;color:#5F5E5A;}
+.b-blue{background:#E6F1FB;color:#185FA5;}
+.b-navy{background:#e8ebf0;color:#0D1B2A;}
+.mini-bar-wrap{display:flex;align-items:center;gap:6px;}
+.mini-bar{background:#e5e3dc;border-radius:3px;height:5px;width:64px;}
+.mini-fill{height:5px;border-radius:3px;}
+.row-actions{display:flex;gap:5px;}
+.row-btn{font-size:10px;padding:3px 8px;border-radius:5px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
+.row-btn:hover{background:#f0efe9;}
+
+/* ─── TABS inside pages ──────────────────────────────── */
+.page-tabs{display:flex;border-bottom:0.5px solid #e5e3dc;background:#fff;padding:0 16px;flex-shrink:0;}
+.ptab{font-size:12px;padding:9px 14px;border-bottom:2px solid transparent;border-top:none;border-left:none;border-right:none;background:none;color:#888780;cursor:pointer;font-weight:500;}
+.ptab.on{color:#0D1B2A;border-bottom-color:#0D1B2A;}
+.ptab-badge{font-size:9px;padding:1px 5px;border-radius:20px;background:#FAECE7;color:#993C1D;margin-left:3px;}
+
+/* ─── CURRICULUM TREE ────────────────────────────────── */
+.curr-layout{display:flex;flex:1;gap:0;background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;min-height:520px;}
+.curr-tree{width:260px;border-right:0.5px solid #e5e3dc;display:flex;flex-direction:column;flex-shrink:0;}
+.ct-header{padding:12px 14px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:center;justify-content:space-between;}
+.ct-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;}
+.ct-add{width:22px;height:22px;border-radius:5px;background:#0D1B2A;color:#fff;border:none;font-size:14px;display:flex;align-items:center;justify-content:center;}
+.tree-scroll{flex:1;overflow-y:auto;padding:8px;}
+.tnode{padding:6px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:background .1s;}
+.tnode:hover{background:#f5f4f0;}
+.tnode.sel{background:#e8ebf0;color:#0D1B2A;font-weight:600;}
+.tnode-icon{font-size:12px;flex-shrink:0;}
+.tnode-label{font-size:12px;color:#5f5e5a;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tnode.sel .tnode-label{color:#0D1B2A;}
+.tnode-count{font-size:10px;color:#b4b2a9;}
+.tnode-l2{padding-left:22px;}
+.tnode-l3{padding-left:38px;}
+.tnode-l2 .tnode-label,.tnode-l3 .tnode-label{font-size:11px;}
+.tree-add-btn{margin:6px 8px;font-size:11px;padding:5px 8px;border-radius:6px;border:1px dashed #d3d1c7;background:transparent;color:#888780;width:calc(100% - 16px);text-align:center;}
+.tree-add-btn:hover{border-color:#0D1B2A;color:#0D1B2A;}
+
+.curr-detail{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.cd-header{padding:14px 18px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:center;justify-content:space-between;}
+.cd-title{font-size:14px;font-weight:600;color:#1a1a18;}
+.cd-meta{font-size:11px;color:#888780;margin-top:2px;}
+.cd-actions{display:flex;gap:8px;}
+.cd-body{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:14px;}
+
+.topic-item{border:0.5px solid #e5e3dc;border-radius:8px;padding:12px 14px;}
+.ti-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.ti-name{font-size:13px;font-weight:500;color:#1a1a18;}
+.ti-meta{font-size:11px;color:#888780;}
+.ti-stats{display:flex;gap:12px;font-size:11px;color:#888780;}
+.ti-stat{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.ti-stat-val{font-size:14px;font-weight:600;color:#0D1B2A;}
+
+.import-card{background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:14px;}
+.ic-left{}
+.ic-title{font-size:13px;font-weight:600;color:#185FA5;margin-bottom:3px;}
+.ic-sub{font-size:11px;color:#0C447C;line-height:1.5;}
+.ic-btn{font-size:12px;padding:7px 16px;border-radius:7px;background:#185FA5;color:#fff;border:none;font-weight:600;white-space:nowrap;flex-shrink:0;}
+
+/* ─── ANALYTICS ──────────────────────────────────────── */
+.analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.chart-card{background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;padding:16px;}
+.chart-title{font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:14px;}
+.hbar-row{display:grid;grid-template-columns:120px 1fr 36px;gap:8px;align-items:center;margin-bottom:8px;}
+.hbar-label{font-size:11px;color:#5f5e5a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hbar-bg{background:#f0efe9;border-radius:4px;height:14px;overflow:hidden;}
+.hbar-fill{height:14px;border-radius:4px;}
+.hbar-val{font-size:11px;color:#888780;text-align:right;}
+
+.cohort-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.cohort-card{border:0.5px solid #e5e3dc;border-radius:8px;padding:10px;text-align:center;}
+.cohort-name{font-size:11px;font-weight:600;color:#1a1a18;margin-bottom:6px;}
+.cohort-val{font-size:20px;font-weight:700;color:#0D1B2A;margin-bottom:3px;}
+.cohort-lbl{font-size:10px;color:#888780;}
+.cohort-bar{background:#e5e3dc;border-radius:3px;height:4px;margin-top:8px;}
+.cohort-fill{height:4px;border-radius:3px;background:#0D1B2A;}
+
+/* ─── CLASS CARD ─────────────────────────────────────── */
+.class-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;}
+.class-card{background:#fff;border:0.5px solid #e5e3dc;border-top:2.5px solid #0D1B2A;border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s,box-shadow .15s;}
+.class-card:hover{box-shadow:0 2px 10px rgba(13,27,42,.1);}
+.class-card.warn-border{border-top-color:#EF9F27;}
+.class-card.danger-border{border-top-color:#D85A30;}
+.class-card.ok-border{border-top-color:#1D9E75;}
+.cc-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;}
+.cc-name{font-size:13px;font-weight:600;color:#1a1a18;margin-bottom:2px;}
+.cc-meta{font-size:11px;color:#888780;}
+.cc-teacher{display:flex;align-items:center;gap:7px;padding:6px 0;border-top:0.5px solid #f0efe9;border-bottom:0.5px solid #f0efe9;margin:8px 0;}
+.teacher-av{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;flex-shrink:0;}
+.teacher-name{font-size:11px;color:#5f5e5a;}
+.no-teacher{font-size:11px;color:#993C1D;font-style:italic;}
+.cc-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;}
+.cc-stat{text-align:center;}
+.cc-stat-val{font-size:14px;font-weight:600;color:#0D1B2A;}
+.cc-stat-lbl{font-size:10px;color:#888780;}
+.cc-footer{display:flex;gap:6px;}
+.btn-navy{font-size:11px;padding:6px 12px;border-radius:6px;background:#0D1B2A;color:#fff;border:none;font-weight:500;flex:1;}
+.btn-navy:hover{background:#1a2f45;}
+.btn-ghost{font-size:11px;padding:6px 10px;border-radius:6px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
+.btn-ghost:hover{background:#f5f4f0;}
+.dashed-card{border:1.5px dashed #d3d1c7;border-top:1.5px dashed #d3d1c7;background:transparent;display:flex;align-items:center;justify-content:center;min-height:160px;border-radius:12px;cursor:pointer;}
+.dashed-card:hover{border-color:#0D1B2A;}
+
+/* ─── MODAL ──────────────────────────────────────────── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s;}
+.overlay.open{opacity:1;pointer-events:all;}
+.modal{background:#fff;border-radius:14px;padding:24px;width:460px;max-width:calc(100vw - 40px);display:flex;flex-direction:column;gap:14px;max-height:90vh;overflow-y:auto;}
+.modal-title{font-size:16px;font-weight:700;color:#0D1B2A;}
+.modal-sub{font-size:12px;color:#888780;margin-top:2px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.form-label{font-size:11px;font-weight:600;color:#5f5e5a;margin-bottom:5px;display:block;}
+.form-input{width:100%;font-size:13px;border:0.5px solid #d3d1c7;border-radius:7px;padding:9px 12px;background:#fafaf8;color:#1a1a18;outline:none;}
+.form-input:focus{border-color:#0D1B2A;}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;}
+.modal-cancel{font-size:12px;padding:8px 16px;border-radius:7px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
+.modal-confirm{font-size:12px;padding:8px 18px;border-radius:7px;background:#0D1B2A;color:#fff;border:none;font-weight:700;}
+.step-indicator{display:flex;gap:6px;align-items:center;margin-bottom:4px;}
+.step{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;}
+.step.done{background:#0D1B2A;color:#fff;}
+.step.active{background:#E6F1FB;color:#185FA5;border:1.5px solid #185FA5;}
+.step.future{background:#f0efe9;color:#b4b2a9;}
+.step-line{flex:1;height:0.5px;background:#e5e3dc;}
+
+/* ─── TOAST ──────────────────────────────────────────── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0D1B2A;color:#fff;font-size:12px;padding:10px 18px;border-radius:8px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;white-space:nowrap;}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<!-- ══ SCREEN 1: HOME DASHBOARD ═══════════════════════════ -->
+<div class="screen active" id="s-home">
+  <div class="shell">
+    <div class="topbar">
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-inst">St. Mary's School</span>
+      <span class="tb-role">Institution Admin</span>
+      <div class="tb-right">
+        <button class="tb-btn tb-btn-accent" onclick="openModal('m-class')">+ New class</button>
+        <div class="tb-avatar">SA</div>
+      </div>
+    </div>
+    <div class="main-nav" id="main-nav"></div>
+    <div class="page-body" id="home-body"></div>
+  </div>
+</div>
+
+<!-- ══ SCREEN 2: CURRICULUM ════════════════════════════════ -->
+<div class="screen" id="s-curr">
+  <div class="shell">
+    <div class="topbar">
+      <button class="tb-back" onclick="goHome()">← Home</button>
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-inst">St. Mary's School</span>
+      <div class="tb-right">
+        <button class="tb-btn" onclick="showToast('Draft saved!')">Save draft</button>
+        <button class="tb-btn tb-btn-accent" onclick="showToast('Curriculum published to all classes!')">Publish</button>
+        <div class="tb-avatar">SA</div>
+      </div>
+    </div>
+    <div class="bc">
+      <span class="bc-link" onclick="goHome()">Home</span>
+      <span class="bc-sep">›</span>
+      <span class="bc-cur">Curriculum manager</span>
+    </div>
+    <div class="page-body" id="curr-body" style="padding-top:14px;flex:1;"></div>
+  </div>
+</div>
+
+<!-- ══ SCREEN 3: PEOPLE ════════════════════════════════════ -->
+<div class="screen" id="s-people">
+  <div class="shell">
+    <div class="topbar">
+      <button class="tb-back" onclick="goHome()">← Home</button>
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-inst">St. Mary's School</span>
+      <div class="tb-right">
+        <button class="tb-btn" onclick="openModal('m-invite-teacher')">+ Invite teacher</button>
+        <button class="tb-btn tb-btn-accent" onclick="openModal('m-enroll-students')">+ Enroll students</button>
+        <div class="tb-avatar">SA</div>
+      </div>
+    </div>
+    <div class="bc">
+      <span class="bc-link" onclick="goHome()">Home</span>
+      <span class="bc-sep">›</span>
+      <span class="bc-cur">People</span>
+    </div>
+    <div class="page-tabs">
+      <button class="ptab on" onclick="switchPeopleTab('teachers',this)">Teachers <span style="font-size:10px;color:#888780;">(6)</span></button>
+      <button class="ptab" onclick="switchPeopleTab('students',this)">Students <span style="font-size:10px;color:#888780;">(142)</span></button>
+      <button class="ptab" onclick="switchPeopleTab('parents',this)">Parents <span style="font-size:10px;color:#888780;">(98)</span></button>
+    </div>
+    <div class="page-body" id="people-body" style="padding-top:14px;"></div>
+  </div>
+</div>
+
+<!-- ══ SCREEN 4: CLASSES ═══════════════════════════════════ -->
+<div class="screen" id="s-classes">
+  <div class="shell">
+    <div class="topbar">
+      <button class="tb-back" onclick="goHome()">← Home</button>
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-inst">St. Mary's School</span>
+      <div class="tb-right">
+        <button class="tb-btn tb-btn-accent" onclick="openModal('m-class')">+ New class</button>
+        <div class="tb-avatar">SA</div>
+      </div>
+    </div>
+    <div class="bc">
+      <span class="bc-link" onclick="goHome()">Home</span>
+      <span class="bc-sep">›</span>
+      <span class="bc-cur">Classes</span>
+    </div>
+    <div class="page-body" id="classes-body" style="padding-top:14px;"></div>
+  </div>
+</div>
+
+<!-- ══ SCREEN 5: ANALYTICS ════════════════════════════════ -->
+<div class="screen" id="s-analytics">
+  <div class="shell">
+    <div class="topbar">
+      <button class="tb-back" onclick="goHome()">← Home</button>
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-inst">St. Mary's School</span>
+      <div class="tb-right">
+        <button class="tb-btn" onclick="showToast('Downloading PDF report…')">Export report</button>
+        <div class="tb-avatar">SA</div>
+      </div>
+    </div>
+    <div class="bc">
+      <span class="bc-link" onclick="goHome()">Home</span>
+      <span class="bc-sep">›</span>
+      <span class="bc-cur">Analytics</span>
+    </div>
+    <div class="page-body" id="analytics-body" style="padding-top:14px;"></div>
+  </div>
+</div>
+
+<!-- ══ CLASS DETAIL (sub-screen) ══════════════════════════ -->
+<div class="screen" id="s-class-detail">
+  <div class="shell">
+    <div class="topbar">
+      <button class="tb-back" onclick="goScreen('s-classes')">← Classes</button>
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-inst">St. Mary's School</span>
+      <div class="tb-right">
+        <button class="tb-btn" onclick="showToast('Assignment panel open')">+ Assign</button>
+        <div class="tb-avatar">SA</div>
+      </div>
+    </div>
+    <div class="bc" id="class-detail-bc"></div>
+    <div class="page-body" id="class-detail-body" style="padding-top:14px;"></div>
+  </div>
+</div>
+
+<!-- ══ MODALS ═══════════════════════════════════════════════ -->
+<!-- New Class Modal -->
+<div class="overlay" id="m-class" onclick="if(event.target===this)closeModal('m-class')">
+  <div class="modal">
+    <div>
+      <div class="modal-title">Create a new class</div>
+      <div class="modal-sub">Set up a class, assign a teacher, and enroll students.</div>
+    </div>
+    <div class="step-indicator">
+      <div class="step done">1</div><div class="step-line"></div>
+      <div class="step active">2</div><div class="step-line"></div>
+      <div class="step future">3</div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label class="form-label">Class name</label>
+        <input class="form-input" placeholder="e.g. Grade 6 – Section A" />
+      </div>
+      <div>
+        <label class="form-label">Academic year</label>
+        <input class="form-input" value="2025–2026" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label class="form-label">Grade</label>
+        <select class="form-input"><option>Grade 6</option><option>Grade 7</option><option>Grade 8</option></select>
+      </div>
+      <div>
+        <label class="form-label">Subject</label>
+        <select class="form-input"><option>Maths</option><option>Science</option><option>English</option><option>Hindi</option></select>
+      </div>
+    </div>
+    <div>
+      <label class="form-label">Assign teacher</label>
+      <select class="form-input">
+        <option>Ravi Kumar — Maths</option>
+        <option>Priya Sharma — Science</option>
+        <option>Anita Rao — English</option>
+        <option value="">— Unassigned —</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Curriculum</label>
+      <select class="form-input">
+        <option>NCERT Grade 6 Maths (imported)</option>
+        <option>Custom curriculum</option>
+        <option>JNV Grade 6 Maths</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeModal('m-class')">Cancel</button>
+      <button class="modal-confirm" onclick="confirmCreateClass()">Create class</button>
+    </div>
+  </div>
+</div>
+
+<!-- Invite Teacher Modal -->
+<div class="overlay" id="m-invite-teacher" onclick="if(event.target===this)closeModal('m-invite-teacher')">
+  <div class="modal">
+    <div>
+      <div class="modal-title">Invite a teacher</div>
+      <div class="modal-sub">They'll receive an email with a link to join your institution. You can assign them to a class once they accept.</div>
+    </div>
+    <div>
+      <label class="form-label">Email address</label>
+      <input class="form-input" type="email" placeholder="teacher@school.edu" />
+    </div>
+    <div>
+      <label class="form-label">Role within institution</label>
+      <select class="form-input">
+        <option>Class teacher (instructor)</option>
+        <option>Department head</option>
+        <option>Admin + teacher</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Assign to class (optional)</label>
+      <select class="form-input">
+        <option>— Select later —</option>
+        <option>Grade 6 – Section A (Maths)</option>
+        <option>Grade 7 – Science B</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeModal('m-invite-teacher')">Cancel</button>
+      <button class="modal-confirm" onclick="confirmInvite('m-invite-teacher','Teacher invited!')">Send invite</button>
+    </div>
+  </div>
+</div>
+
+<!-- Enroll Students Modal -->
+<div class="overlay" id="m-enroll-students" onclick="if(event.target===this)closeModal('m-enroll-students')">
+  <div class="modal">
+    <div>
+      <div class="modal-title">Enroll students</div>
+      <div class="modal-sub">Upload a CSV or share an invite code. Students can self-enroll with the code.</div>
+    </div>
+    <div style="background:#f0efe9;border-radius:10px;padding:16px;text-align:center;cursor:pointer;border:1.5px dashed #d3d1c7;" onclick="showToast('File picker open — upload CSV')">
+      <div style="font-size:22px;margin-bottom:6px;">📎</div>
+      <div style="font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:3px;">Upload CSV</div>
+      <div style="font-size:11px;color:#888780;">Columns: name, email, grade, section</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;font-size:11px;color:#b4b2a9;"><div style="flex:1;height:0.5px;background:#e5e3dc;"></div>or share invite code<div style="flex:1;height:0.5px;background:#e5e3dc;"></div></div>
+    <div style="background:#E6F1FB;border-radius:8px;padding:14px;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:11px;color:#888780;margin-bottom:3px;">Invite code for Grade 6</div>
+        <div style="font-size:16px;font-weight:700;color:#0D1B2A;letter-spacing:.1em;">STMARY-2026-G6</div>
+      </div>
+      <button class="btn-navy" style="width:auto;" onclick="showToast('Code copied!')">Copy</button>
+    </div>
+    <div>
+      <label class="form-label">Assign to class</label>
+      <select class="form-input">
+        <option>Grade 6 – Section A (Maths)</option>
+        <option>Grade 6 – Section B (Science)</option>
+        <option>Grade 7 – Section A (Maths)</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeModal('m-enroll-students')">Close</button>
+      <button class="modal-confirm" onclick="confirmInvite('m-enroll-students','Students enrolled!')">Confirm enrollment</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ════════════════════════════════════════════════════
+   DATA
+════════════════════════════════════════════════════ */
+const institution = { name:"St. Mary's School", board:'NCERT', city:'Hyderabad' };
+
+const teachers = [
+  {id:'t1', name:'Ravi Kumar',  initials:'RK', color:'#378ADD', subjects:['Maths'],    classes:['Grade 6-A','Grade 7-A'], students:42, avgProgress:68, status:'ok'},
+  {id:'t2', name:'Priya Sharma',initials:'PS', color:'#1D9E75', subjects:['Science'],  classes:['Grade 6-B','Grade 7-B'], students:38, avgProgress:74, status:'ok'},
+  {id:'t3', name:'Anita Rao',   initials:'AR', color:'#7F77DD', subjects:['English'],  classes:['Grade 6-A','Grade 6-B'], students:56, avgProgress:71, status:'ok'},
+  {id:'t4', name:'Suresh Nair', initials:'SN', color:'#D85A30', subjects:['Hindi'],    classes:['Grade 7-A'],              students:28, avgProgress:55, status:'warn'},
+  {id:'t5', name:'Kavitha M.',  initials:'KM', color:'#BA7517', subjects:['Maths'],    classes:['Grade 8-A'],              students:32, avgProgress:80, status:'ok'},
+  {id:'t6', name:'Deepa L.',    initials:'DL', color:'#534AB7', subjects:['Science'],  classes:[],                         students:0,  avgProgress:0,  status:'new'},
+];
+
+const students = [
+  {id:'s1', name:'Arjun K.',    initials:'AK', color:'#378ADD', grade:'6', section:'A', subjects:['Maths','English'],    parent:true,  progress:72, status:'ok'},
+  {id:'s2', name:'Priya R.',    initials:'PR', color:'#1D9E75', grade:'6', section:'A', subjects:['Maths','Science'],    parent:true,  progress:88, status:'ok'},
+  {id:'s3', name:'Mohan S.',    initials:'MS', color:'#D85A30', grade:'6', section:'B', subjects:['Science','English'],  parent:false, progress:41, status:'danger'},
+  {id:'s4', name:'Sneha T.',    initials:'ST', color:'#7F77DD', grade:'7', section:'A', subjects:['Maths','Hindi'],      parent:true,  progress:65, status:'warn'},
+  {id:'s5', name:'Rahul V.',    initials:'RV', color:'#BA7517', grade:'7', section:'A', subjects:['Maths','Science'],    parent:false, progress:55, status:'warn'},
+  {id:'s6', name:'Kavitha M.',  initials:'KM', color:'#0F6E56', grade:'8', section:'A', subjects:['Maths','English'],   parent:true,  progress:94, status:'ok'},
+  {id:'s7', name:'Deepa L.',    initials:'DL', color:'#534AB7', grade:'6', section:'B', subjects:['Science'],            parent:false, progress:60, status:'warn'},
+  {id:'s8', name:'Kiran J.',    initials:'KJ', color:'#1D9E75', grade:'6', section:'B', subjects:['Science','Hindi'],    parent:true,  progress:82, status:'ok'},
+];
+
+const classes = [
+  {id:'c1', name:'Grade 6 – Section A', grade:'6', subject:'Maths',   teacher:'Ravi Kumar',  teacherColor:'#378ADD', teacherInitials:'RK', students:24, avgProgress:68, atRisk:3, assignments:2, status:'warn'},
+  {id:'c2', name:'Grade 6 – Section B', grade:'6', subject:'Science', teacher:'Priya Sharma',teacherColor:'#1D9E75', teacherInitials:'PS', students:22, avgProgress:74, atRisk:1, assignments:1, status:'ok'},
+  {id:'c3', name:'Grade 7 – Section A', grade:'7', subject:'Maths',   teacher:'Ravi Kumar',  teacherColor:'#378ADD', teacherInitials:'RK', students:28, avgProgress:71, atRisk:2, assignments:3, status:'warn'},
+  {id:'c4', name:'Grade 7 – Section B', grade:'7', subject:'Hindi',   teacher:'Suresh Nair', teacherColor:'#D85A30', teacherInitials:'SN', students:26, avgProgress:55, atRisk:6, assignments:1, status:'danger'},
+  {id:'c5', name:'Grade 8 – Section A', grade:'8', subject:'Maths',   teacher:'Kavitha M.',  teacherColor:'#BA7517', teacherInitials:'KM', students:32, avgProgress:80, atRisk:1, assignments:2, status:'ok'},
+  {id:'c6', name:'Grade 6 – Section A', grade:'6', subject:'English', teacher:null,           teacherColor:null,      teacherInitials:null, students:24, avgProgress:0,  atRisk:0, assignments:0, status:'new'},
+];
+
+const curriculum = [
+  {id:'g6', label:'Grade 6', icon:'📚', count:3, children:[
+    {id:'g6m', label:'Maths', icon:'📐', count:6, children:[
+      {id:'g6m1', label:'Number System',   topics:4, completion:82},
+      {id:'g6m2', label:'Arithmetic',      topics:5, completion:61},
+      {id:'g6m3', label:'Basic Geometry',  topics:4, completion:74},
+      {id:'g6m4', label:'Data Handling',   topics:3, completion:55},
+      {id:'g6m5', label:'Fractions',       topics:5, completion:58},
+      {id:'g6m6', label:'Algebra Intro',   topics:3, completion:0},
+    ]},
+    {id:'g6s', label:'Science', icon:'🔬', count:4, children:[
+      {id:'g6s1', label:'World of Science',  topics:3, completion:79},
+      {id:'g6s2', label:'Motion & Forces',   topics:4, completion:44},
+      {id:'g6s3', label:'Light & Shadows',   topics:3, completion:68},
+      {id:'g6s4', label:'Electricity',       topics:4, completion:0},
+    ]},
+    {id:'g6e', label:'English', icon:'📖', count:3, children:[
+      {id:'g6e1', label:'Reading Comp.', topics:4, completion:71},
+      {id:'g6e2', label:'Grammar',       topics:5, completion:65},
+      {id:'g6e3', label:'Writing',       topics:3, completion:48},
+    ]},
+  ]},
+  {id:'g7', label:'Grade 7', icon:'📚', count:2, children:[
+    {id:'g7m', label:'Maths',   icon:'📐', count:5, children:[]},
+    {id:'g7s', label:'Science', icon:'🔬', count:4, children:[]},
+  ]},
+  {id:'g8', label:'Grade 8', icon:'📚', count:2, children:[
+    {id:'g8m', label:'Maths',    icon:'📐', count:6, children:[]},
+    {id:'g8e', label:'English',  icon:'📖', count:3, children:[]},
+  ]},
+];
+
+let activeNav      = 'home';
+let activeCurrNode = 'g6m';
+let activePeopleTab= 'teachers';
+let activeClassId  = null;
+
+/* ════════════════════════════════════════════════════
+   ROUTING
+════════════════════════════════════════════════════ */
+function goScreen(id) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+
+function goHome()      { activeNav='home';      renderHome();      goScreen('s-home'); }
+function goCurr()      { activeNav='curr';      renderCurr();      goScreen('s-curr'); }
+function goPeople()    { activeNav='people';    renderPeople();    goScreen('s-people'); }
+function goClasses()   { activeNav='classes';   renderClasses();   goScreen('s-classes'); }
+function goAnalytics() { activeNav='analytics'; renderAnalytics(); goScreen('s-analytics'); }
+
+function goClassDetail(cid) {
+  activeClassId = cid;
+  renderClassDetail();
+  goScreen('s-class-detail');
+}
+
+function buildNav() {
+  const tabs = [
+    {id:'home',      label:'Dashboard', icon:'⌂'},
+    {id:'classes',   label:'Classes',   icon:'🏫', badge: classes.filter(c=>!c.teacher).length||null},
+    {id:'curr',      label:'Curriculum',icon:'📚'},
+    {id:'people',    label:'People',    icon:'👥', badge: teachers.filter(t=>t.status==='new').length||null},
+    {id:'analytics', label:'Analytics', icon:'📊'},
+  ];
+  const fns = {home:goHome, classes:goClasses, curr:goCurr, people:goPeople, analytics:goAnalytics};
+  document.querySelectorAll('.main-nav').forEach(el => {
+    el.innerHTML = tabs.map(t => `
+      <button class="nav-tab ${activeNav===t.id?'active':''}" onclick="${t.id==='home'?'goHome':t.id==='classes'?'goClasses':t.id==='curr'?'goCurr':t.id==='people'?'goPeople':'goAnalytics'}()">
+        <span class="nav-tab-icon">${t.icon}</span>
+        ${t.label}
+        ${t.badge ? `<span class="nav-badge">${t.badge}</span>` : ''}
+      </button>`).join('');
+  });
+}
+
+/* ════════════════════════════════════════════════════
+   SCREEN 1 — HOME DASHBOARD
+════════════════════════════════════════════════════ */
+function renderHome() {
+  buildNav();
+  const totalStudents = students.length;
+  const atRisk = students.filter(s=>s.status==='danger').length;
+  const schoolAvg = Math.round(students.reduce((a,s)=>a+s.progress,0)/students.length);
+  const noTeacher = classes.filter(c=>!c.teacher).length;
+  const noParent  = students.filter(s=>!s.parent).length;
+
+  document.getElementById('home-body').innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-size:20px;font-weight:700;color:#0D1B2A;margin-bottom:3px;">Good morning, Admin</div>
+        <div style="font-size:12px;color:#888780;">${institution.name} · ${institution.board} · ${institution.city}</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn-ghost" style="font-size:12px;padding:7px 14px;border-radius:7px;" onclick="goPeople()">Manage people</button>
+        <button class="btn-navy" style="font-size:12px;padding:7px 14px;border-radius:7px;width:auto;" onclick="openModal('m-class')">+ New class</button>
+      </div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-card ok-card">
+        <div class="stat-val">${teachers.length}</div>
+        <div class="stat-lbl">Teachers</div>
+        <div class="stat-delta sd-up">↑ 1 pending invite</div>
+      </div>
+      <div class="stat-card ok-card">
+        <div class="stat-val">142</div>
+        <div class="stat-lbl">Students</div>
+        <div class="stat-delta sd-up">↑ 8 this month</div>
+      </div>
+      <div class="stat-card ok-card">
+        <div class="stat-val">${classes.length}</div>
+        <div class="stat-lbl">Active classes</div>
+        <div class="stat-delta ${noTeacher>0?'sd-down':'sd-up'}">${noTeacher>0?noTeacher+' unassigned':'All assigned'}</div>
+      </div>
+      <div class="stat-card ${schoolAvg>=70?'ok-card':'warn-card'}">
+        <div class="stat-val ${schoolAvg>=70?'green':'amber'}">${schoolAvg}%</div>
+        <div class="stat-lbl">School avg. progress</div>
+        <div class="stat-delta sd-up">↑ 4% from last month</div>
+      </div>
+      <div class="stat-card ${atRisk>0?'alert-card':'ok-card'}">
+        <div class="stat-val ${atRisk>0?'':'green'}" style="${atRisk>0?'color:#993C1D;':''}">${atRisk}</div>
+        <div class="stat-lbl">Students at risk</div>
+        <div class="stat-delta ${atRisk>0?'sd-down':'sd-up'}">${atRisk>0?'Needs attention':'All on track'}</div>
+      </div>
+    </div>
+
+    ${(noTeacher>0 || noParent>0 || atRisk>0) ? `
+    <div>
+      <div class="sec-hd"><span class="sec-title">Action required</span></div>
+      <div class="alert-strip">
+        <div class="alert-strip-title">⚠ Issues to resolve</div>
+        ${noTeacher>0 ? `
+          <div class="alert-item">
+            <div>
+              <div class="alert-text">${noTeacher} class${noTeacher>1?'es':''} without a teacher</div>
+              <div class="alert-sub">Students enrolled but no teacher assigned yet</div>
+            </div>
+            <button class="alert-fix" onclick="goClasses()">Fix now →</button>
+          </div>` : ''}
+        ${noParent>0 ? `
+          <div class="alert-item">
+            <div>
+              <div class="alert-text">${noParent} students without linked parent</div>
+              <div class="alert-sub">Parents won't receive progress reports</div>
+            </div>
+            <button class="alert-fix" onclick="goPeople()">View students →</button>
+          </div>` : ''}
+        ${atRisk>0 ? `
+          <div class="alert-item">
+            <div>
+              <div class="alert-text">${atRisk} student${atRisk>1?'s':''} at risk (below 50% across multiple topics)</div>
+              <div class="alert-sub">Consider intervention or additional support</div>
+            </div>
+            <button class="alert-fix" onclick="goAnalytics()">View analytics →</button>
+          </div>` : ''}
+      </div>
+    </div>` : ''}
+
+    <div>
+      <div class="sec-hd"><span class="sec-title">Quick actions</span></div>
+      <div class="qa-grid">
+        <div class="qa-card" onclick="openModal('m-class')">
+          <div class="qa-icon">🏫</div>
+          <div class="qa-title">New class</div>
+          <div class="qa-sub">Create class, assign teacher, enroll students</div>
+        </div>
+        <div class="qa-card" onclick="openModal('m-invite-teacher')">
+          <div class="qa-icon">👩‍🏫</div>
+          <div class="qa-title">Invite teacher</div>
+          <div class="qa-sub">Send email invite and assign to a class</div>
+        </div>
+        <div class="qa-card" onclick="openModal('m-enroll-students')">
+          <div class="qa-icon">👨‍🎓</div>
+          <div class="qa-title">Enroll students</div>
+          <div class="qa-sub">CSV upload or share invite code</div>
+        </div>
+        <div class="qa-card" onclick="goCurr()">
+          <div class="qa-icon">📚</div>
+          <div class="qa-title">Manage curriculum</div>
+          <div class="qa-sub">Edit topics, upload content, import boards</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-hd">
+        <span class="sec-title">Classes overview</span>
+        <button class="sec-btn sec-btn-outline" onclick="goClasses()">View all →</button>
+      </div>
+      <div class="class-grid">
+        ${classes.slice(0,4).map(renderClassCard).join('')}
+      </div>
+    </div>`;
+}
+
+/* ════════════════════════════════════════════════════
+   SCREEN 2 — CURRICULUM
+════════════════════════════════════════════════════ */
+function renderCurr() {
+  const flat = flattenTree(curriculum);
+  const activeNode = flat.find(n=>n.id===activeCurrNode);
+  const parentNode = activeNode ? flat.find(p=>p.children&&p.children.some(c=>c.id===activeCurrNode)) : null;
+
+  function treeHtml(nodes, level=0) {
+    return nodes.map(n => {
+      const indent = level===1?'tnode-l2':level===2?'tnode-l3':'';
+      const isActive = n.id===activeCurrNode;
+      const icon = level===0?'📚':level===1?'📁':'📄';
+      const countTxt = n.count?` <span class="tnode-count">${n.count}</span>`:n.topics?` <span class="tnode-count">${n.topics} topics</span>`:'';
+      let html = `<div class="tnode ${indent} ${isActive?'sel':''}" onclick="setCurrNode('${n.id}')">
+        <span class="tnode-icon">${icon}</span>
+        <span class="tnode-label">${n.label}</span>${countTxt}
+      </div>`;
+      if (n.children&&n.children.length&&(isActive||n.children.some(c=>c.id===activeCurrNode))) {
+        html += treeHtml(n.children, level+1);
+      }
+      return html;
+    }).join('');
+  }
+
+  const detailHtml = activeNode && activeNode.topics ? `
+    <div class="cd-header">
+      <div>
+        <div class="cd-title">${activeNode.label}</div>
+        <div class="cd-meta">${parentNode?parentNode.label+' · ':''} ${activeNode.topics} topics · ${activeNode.completion}% avg completion</div>
+      </div>
+      <div class="cd-actions">
+        <button class="btn-ghost" onclick="showToast('Adding topic…')">+ Topic</button>
+        <button class="btn-navy" style="width:auto;font-size:11px;padding:6px 12px;" onclick="showToast('Upload panel open')">+ Upload content</button>
+      </div>
+    </div>
+    <div class="cd-body">
+      ${[
+        {name:'Introduction & basics', classes:6, completion:activeNode.completion+10>100?95:activeNode.completion+10, hasContent:true},
+        {name:'Core concepts',          classes:6, completion:activeNode.completion,                                    hasContent:true},
+        {name:'Practice problems',      classes:6, completion:activeNode.completion-8<0?0:activeNode.completion-8,     hasContent:true},
+        {name:'Assessment prep',        classes:4, completion:activeNode.completion-20<0?0:activeNode.completion-20,   hasContent:false},
+      ].map(t => {
+        const color = t.completion>=75?'#0F6E56':t.completion>=50?'#EF9F27':'#D85A30';
+        return `
+          <div class="topic-item">
+            <div class="ti-row">
+              <div>
+                <div class="ti-name">${t.name}</div>
+                <div class="ti-meta">${t.classes} classes using this · ${t.hasContent?'3 content items':'No content yet'}</div>
+              </div>
+              <div class="ti-stats">
+                <div class="ti-stat"><div class="ti-stat-val" style="color:${color}">${t.completion}%</div><div style="font-size:10px;color:#888780;">avg</div></div>
+              </div>
+            </div>
+            <div style="background:#e5e3dc;border-radius:4px;height:5px;"><div style="background:${color};width:${t.completion}%;height:5px;border-radius:4px;"></div></div>
+            ${!t.hasContent ? `<div style="font-size:11px;color:#993C1D;margin-top:8px;">⚠ No content uploaded — teachers cannot deliver this topic yet</div>` : ''}
+            <div style="display:flex;gap:6px;margin-top:10px;">
+              <button class="row-btn" onclick="showToast('Edit topic')">Edit</button>
+              <button class="row-btn" onclick="showToast('Upload content for this topic')">Upload content</button>
+              <button class="row-btn" onclick="showToast('View questions')">Questions (${Math.floor(Math.random()*10)+5})</button>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>` : `
+    <div class="cd-header"><div class="cd-title">Select a subject from the tree</div></div>
+    <div class="cd-body"><div style="color:#888780;font-size:12px;">Click any subject or topic on the left to view and edit its content.</div></div>`;
+
+  document.getElementById('curr-body').innerHTML = `
+    <div class="import-card">
+      <div class="ic-left">
+        <div class="ic-title">Import from NCERT / JNV / CBE</div>
+        <div class="ic-sub">Instantly adopt a board's full topic structure. You can customise it after import.</div>
+      </div>
+      <button class="ic-btn" onclick="showToast('Importing NCERT Grade 6–8 curriculum…')">Import board curriculum</button>
+    </div>
+    <div class="curr-layout">
+      <div class="curr-tree">
+        <div class="ct-header">
+          <span class="ct-title">Structure</span>
+          <button class="ct-add" onclick="showToast('Add grade or subject')">+</button>
+        </div>
+        <div class="tree-scroll">
+          ${treeHtml(curriculum)}
+          <button class="tree-add-btn" onclick="showToast('Adding new grade…')">+ Add grade</button>
+        </div>
+      </div>
+      <div class="curr-detail">${detailHtml}</div>
+    </div>`;
+}
+
+function flattenTree(nodes, result=[]) {
+  nodes.forEach(n => { result.push(n); if(n.children) flattenTree(n.children,result); });
+  return result;
+}
+function setCurrNode(id) { activeCurrNode=id; renderCurr(); }
+
+/* ════════════════════════════════════════════════════
+   SCREEN 3 — PEOPLE
+════════════════════════════════════════════════════ */
+function renderPeople() {
+  switchPeopleTab(activePeopleTab, null);
+}
+
+function switchPeopleTab(tab, btn) {
+  activePeopleTab = tab;
+  document.querySelectorAll('.ptab').forEach(b=>b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  else document.querySelectorAll('.ptab').forEach(b=>{if(b.textContent.trim().toLowerCase().startsWith(tab))b.classList.add('on');});
+
+  const body = document.getElementById('people-body');
+
+  if (tab==='teachers') {
+    body.innerHTML = `
+      <div class="data-table">
+        <div class="dt-toolbar">
+          <span class="dt-title">All teachers (${teachers.length})</span>
+          <input class="dt-search" type="text" placeholder="Search teachers…" />
+          <button class="sec-btn sec-btn-outline" onclick="openModal('m-invite-teacher')">+ Invite teacher</button>
+        </div>
+        <div class="dt-header" style="grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 100px;">
+          <div>Teacher</div><div>Classes</div><div>Students</div><div>Avg progress</div><div>Status</div><div>Action</div>
+        </div>
+        ${teachers.map(t=>{
+          const sc = t.status==='ok'?'b-ok':t.status==='warn'?'b-warn':'b-new';
+          const sl = t.status==='ok'?'Active':t.status==='warn'?'Needs review':'Pending';
+          const progColor = t.avgProgress>=70?'#0F6E56':t.avgProgress>=50?'#EF9F27':'#D85A30';
+          return `
+          <div class="dt-row" style="grid-template-columns:2fr 1.2fr 1fr 1fr 1fr 100px;">
+            <div class="name-cell">
+              <div class="av" style="background:${t.color}">${t.initials}</div>
+              <div><div class="name-primary">${t.name}</div><div class="name-sub">${t.subjects.join(', ')}</div></div>
+            </div>
+            <div style="font-size:12px;color:#5f5e5a;">${t.classes.length>0?t.classes.join(', '):'<span style="color:#993C1D;font-style:italic;">Unassigned</span>'}</div>
+            <div style="font-size:12px;color:#5f5e5a;">${t.students}</div>
+            <div>
+              ${t.avgProgress>0?`
+              <div class="mini-bar-wrap">
+                <div class="mini-bar"><div class="mini-fill" style="background:${progColor};width:${t.avgProgress}%"></div></div>
+                <span style="font-size:11px;color:#888780;">${t.avgProgress}%</span>
+              </div>`:'<span style="font-size:11px;color:#b4b2a9;">—</span>'}
+            </div>
+            <div><span class="badge ${sc}">${sl}</span></div>
+            <div class="row-actions">
+              <button class="row-btn" onclick="showToast('Viewing ${t.name}')">View</button>
+              <button class="row-btn" onclick="showToast('Assign class to ${t.name}')">Assign</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+
+  } else if (tab==='students') {
+    body.innerHTML = `
+      <div class="sec-hd">
+        <span class="sec-title">All students (142)</span>
+        <div style="display:flex;gap:8px;">
+          <button class="sec-btn sec-btn-outline" onclick="showToast('Downloading CSV…')">Export CSV</button>
+          <button class="sec-btn" onclick="openModal('m-enroll-students')">+ Enroll students</button>
+        </div>
+      </div>
+      <div class="data-table">
+        <div class="dt-toolbar">
+          <input class="dt-search" type="text" placeholder="Search students…" style="width:220px;" />
+          <select class="dt-search" style="width:120px;">
+            <option>All grades</option><option>Grade 6</option><option>Grade 7</option><option>Grade 8</option>
+          </select>
+          <select class="dt-search" style="width:130px;">
+            <option>All sections</option><option>Section A</option><option>Section B</option>
+          </select>
+        </div>
+        <div class="dt-header" style="grid-template-columns:2fr .8fr .8fr 1.2fr 1fr 1fr 100px;">
+          <div>Student</div><div>Grade</div><div>Section</div><div>Classes</div><div>Progress</div><div>Parent</div><div>Action</div>
+        </div>
+        ${students.map(s=>{
+          const sc = s.status==='ok'?'b-ok':s.status==='warn'?'b-warn':'b-danger';
+          const progColor = s.progress>=75?'#0F6E56':s.progress>=50?'#EF9F27':'#D85A30';
+          return `
+          <div class="dt-row" style="grid-template-columns:2fr .8fr .8fr 1.2fr 1fr 1fr 100px;">
+            <div class="name-cell">
+              <div class="av" style="background:${s.color}">${s.initials}</div>
+              <div><div class="name-primary">${s.name}</div></div>
+            </div>
+            <div style="font-size:12px;color:#5f5e5a;">${s.grade}</div>
+            <div style="font-size:12px;color:#5f5e5a;">${s.section}</div>
+            <div style="font-size:11px;color:#888780;">${s.subjects.join(', ')}</div>
+            <div>
+              <div class="mini-bar-wrap">
+                <div class="mini-bar"><div class="mini-fill" style="background:${progColor};width:${s.progress}%"></div></div>
+                <span style="font-size:11px;color:#888780;">${s.progress}%</span>
+              </div>
+            </div>
+            <div><span class="badge ${s.parent?'b-ok':'b-warn'}">${s.parent?'Linked':'Not linked'}</span></div>
+            <div class="row-actions">
+              <button class="row-btn" onclick="showToast('Viewing ${s.name}')">View</button>
+            </div>
+          </div>`;
+        }).join('')}
+        <div style="padding:10px 16px;font-size:11px;color:#888780;background:#fafaf8;">Showing 8 of 142 students</div>
+      </div>`;
+
+  } else {
+    body.innerHTML = `
+      <div class="sec-hd">
+        <span class="sec-title">Parents (98 linked · ${students.filter(s=>!s.parent).length*12} unlinked)</span>
+      </div>
+      <div class="data-table">
+        <div class="dt-toolbar">
+          <span class="dt-title">Parent–student links</span>
+          <input class="dt-search" type="text" placeholder="Search by student or parent…" />
+          <button class="sec-btn sec-btn-outline" onclick="showToast('Sharing bulk invite link…')">Share invite link</button>
+        </div>
+        <div class="dt-header" style="grid-template-columns:1.5fr 1.5fr 1fr 1fr 100px;">
+          <div>Student</div><div>Parent</div><div>Grade</div><div>Status</div><div>Action</div>
+        </div>
+        ${students.map(s=>`
+          <div class="dt-row" style="grid-template-columns:1.5fr 1.5fr 1fr 1fr 100px;">
+            <div class="name-cell">
+              <div class="av" style="background:${s.color}">${s.initials}</div>
+              <div class="name-primary">${s.name}</div>
+            </div>
+            <div style="font-size:12px;color:${s.parent?'#5f5e5a':'#993C1D'};">${s.parent?'Parent linked':'Not linked'}</div>
+            <div style="font-size:12px;color:#888780;">Grade ${s.grade}</div>
+            <div><span class="badge ${s.parent?'b-ok':'b-warn'}">${s.parent?'Linked':'Pending'}</span></div>
+            <div class="row-actions">
+              <button class="row-btn" onclick="showToast('${s.parent?'View parent details':'Send parent invite'}')">${s.parent?'View':'Invite'}</button>
+            </div>
+          </div>`).join('')}
+      </div>
+      <div style="background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:10px;padding:14px 16px;font-size:12px;color:#0C447C;">
+        ℹ Students generate their own parent invite code from their profile. Share this guide with students: Settings → Profile → Generate parent code → Share with parent.
+      </div>`;
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   SCREEN 4 — CLASSES
+════════════════════════════════════════════════════ */
+function renderClassCard(c) {
+  const borderCls = c.status==='danger'?'danger-border':c.status==='warn'?'warn-border':c.status==='new'?'':'ok-border';
+  const avgColor  = c.avgProgress>=70?'#0F6E56':c.avgProgress>=50?'#854F0B':'#993C1D';
+  return `
+    <div class="class-card ${borderCls}" onclick="goClassDetail('${c.id}')">
+      <div class="cc-head">
+        <div>
+          <div class="cc-name">${c.name}</div>
+          <div class="cc-meta">${c.subject} · NCERT Grade ${c.grade}</div>
+        </div>
+        <span class="badge ${c.status==='danger'?'b-danger':c.status==='warn'?'b-warn':c.status==='new'?'b-new':'b-ok'}">
+          ${c.status==='danger'?'At risk':c.status==='warn'?'Attention':c.status==='new'?'No teacher':'On track'}
+        </span>
+      </div>
+      <div class="cc-teacher">
+        ${c.teacher
+          ? `<div class="teacher-av" style="background:${c.teacherColor}">${c.teacherInitials}</div><span class="teacher-name">${c.teacher}</span>`
+          : `<span class="no-teacher">⚠ No teacher assigned</span>`}
+      </div>
+      <div class="cc-stats">
+        <div class="cc-stat"><div class="cc-stat-val">${c.students}</div><div class="cc-stat-lbl">Students</div></div>
+        <div class="cc-stat"><div class="cc-stat-val" style="color:${avgColor}">${c.avgProgress>0?c.avgProgress+'%':'—'}</div><div class="cc-stat-lbl">Avg progress</div></div>
+        <div class="cc-stat"><div class="cc-stat-val" style="${c.atRisk>2?'color:#993C1D;':''}">${c.atRisk}</div><div class="cc-stat-lbl">At risk</div></div>
+      </div>
+      <div class="cc-footer" onclick="event.stopPropagation()">
+        <button class="btn-navy" onclick="goClassDetail('${c.id}')">View class →</button>
+        ${!c.teacher ? `<button class="btn-ghost" onclick="event.stopPropagation();showToast('Assign teacher to ${c.name}')">Assign teacher</button>` : `<button class="btn-ghost" onclick="event.stopPropagation();showToast('${c.assignments} active assignment${c.assignments!==1?'s':''}')">${c.assignments} assignments</button>`}
+      </div>
+    </div>`;
+}
+
+function renderClasses() {
+  document.getElementById('classes-body').innerHTML = `
+    <div class="stat-row" style="grid-template-columns:repeat(4,1fr);">
+      <div class="stat-card ok-card"><div class="stat-val">${classes.length}</div><div class="stat-lbl">Total classes</div></div>
+      <div class="stat-card ${classes.filter(c=>!c.teacher).length>0?'warn-card':'ok-card'}"><div class="stat-val ${classes.filter(c=>!c.teacher).length>0?'amber':''}">${classes.filter(c=>!c.teacher).length}</div><div class="stat-lbl">No teacher</div></div>
+      <div class="stat-card warn-card"><div class="stat-val amber">${classes.filter(c=>c.status==='warn').length}</div><div class="stat-lbl">Need attention</div></div>
+      <div class="stat-card alert-card"><div class="stat-val" style="color:#993C1D;">${classes.filter(c=>c.status==='danger').length}</div><div class="stat-lbl">At risk</div></div>
+    </div>
+    <div class="sec-hd"><span class="sec-title">All classes</span></div>
+    <div class="class-grid">
+      ${classes.map(renderClassCard).join('')}
+      <div class="dashed-card" onclick="openModal('m-class')">
+        <div style="text-align:center;color:#b4b2a9;">
+          <div style="font-size:26px;margin-bottom:6px;">+</div>
+          <div style="font-size:12px;font-weight:600;">Create new class</div>
+          <div style="font-size:11px;margin-top:3px;">Assign teacher · enroll students</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderClassDetail() {
+  const c = classes.find(x=>x.id===activeClassId);
+  if (!c) return;
+  const classStudents = students.filter(s=>s.grade===c.grade).slice(0,5);
+
+  document.getElementById('class-detail-bc').innerHTML = `
+    <span class="bc-link" onclick="goHome()">Home</span>
+    <span class="bc-sep">›</span>
+    <span class="bc-link" onclick="goClasses()">Classes</span>
+    <span class="bc-sep">›</span>
+    <span class="bc-cur">${c.name}</span>`;
+
+  const avgColor = c.avgProgress>=70?'#0F6E56':c.avgProgress>=50?'#854F0B':'#993C1D';
+  document.getElementById('class-detail-body').innerHTML = `
+    <div style="background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div>
+        <div style="font-size:17px;font-weight:700;color:#0D1B2A;margin-bottom:3px;">${c.name}</div>
+        <div style="font-size:12px;color:#888780;">${c.subject} · NCERT Grade ${c.grade} · ${c.students} students</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        ${c.teacher
+          ? `<div style="display:flex;align-items:center;gap:7px;background:#f5f4f0;border-radius:20px;padding:4px 12px 4px 6px;">
+              <div class="teacher-av" style="background:${c.teacherColor}">${c.teacherInitials}</div>
+              <span style="font-size:12px;color:#5f5e5a;">${c.teacher}</span>
+             </div>`
+          : `<span style="font-size:12px;color:#993C1D;font-style:italic;">No teacher assigned</span>`}
+        <button class="btn-navy" style="width:auto;font-size:11px;" onclick="showToast('${c.teacher?'Reassign teacher':'Assign teacher'}')">
+          ${c.teacher?'Reassign teacher':'Assign teacher'}
+        </button>
+      </div>
+    </div>
+
+    <div class="stat-row" style="grid-template-columns:repeat(4,1fr);">
+      <div class="stat-card ok-card"><div class="stat-val">${c.students}</div><div class="stat-lbl">Students</div></div>
+      <div class="stat-card ${c.avgProgress>=70?'ok-card':'warn-card'}"><div class="stat-val" style="color:${avgColor}">${c.avgProgress>0?c.avgProgress+'%':'—'}</div><div class="stat-lbl">Avg progress</div></div>
+      <div class="stat-card ${c.atRisk>0?'alert-card':'ok-card'}"><div class="stat-val" style="${c.atRisk>0?'color:#993C1D;':''}">${c.atRisk}</div><div class="stat-lbl">At risk</div></div>
+      <div class="stat-card ok-card"><div class="stat-val">${c.assignments}</div><div class="stat-lbl">Assignments</div></div>
+    </div>
+
+    <div class="sec-hd"><span class="sec-title">Students in this class</span><button class="sec-btn sec-btn-outline" onclick="showToast('Adding students…')">+ Add students</button></div>
+    <div class="data-table">
+      <div class="dt-header" style="grid-template-columns:2fr 1fr 1fr 1fr 80px;">
+        <div>Student</div><div>Progress</div><div>Weak topics</div><div>Status</div><div>Action</div>
+      </div>
+      ${classStudents.map(s=>{
+        const progColor = s.progress>=75?'#0F6E56':s.progress>=50?'#EF9F27':'#D85A30';
+        const sc = s.status==='ok'?'b-ok':s.status==='warn'?'b-warn':'b-danger';
+        const weakN = Math.floor(Math.random()*4);
+        return `
+          <div class="dt-row" style="grid-template-columns:2fr 1fr 1fr 1fr 80px;">
+            <div class="name-cell">
+              <div class="av" style="background:${s.color}">${s.initials}</div>
+              <div class="name-primary">${s.name}</div>
+            </div>
+            <div class="mini-bar-wrap">
+              <div class="mini-bar"><div class="mini-fill" style="background:${progColor};width:${s.progress}%"></div></div>
+              <span style="font-size:11px;color:#888780;">${s.progress}%</span>
+            </div>
+            <div><span class="badge ${weakN>2?'b-danger':weakN>0?'b-warn':'b-ok'}">${weakN>0?weakN:0}</span></div>
+            <div><span class="badge ${sc}">${s.status==='ok'?'On track':s.status==='warn'?'Review':'At risk'}</span></div>
+            <div><button class="row-btn" onclick="showToast('Viewing ${s.name}')">View</button></div>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+/* ════════════════════════════════════════════════════
+   SCREEN 5 — ANALYTICS
+════════════════════════════════════════════════════ */
+function renderAnalytics() {
+  const subjectData = [
+    {label:'Maths',         avg:65, color:'#378ADD'},
+    {label:'Science',       avg:71, color:'#1D9E75'},
+    {label:'English',       avg:68, color:'#7F77DD'},
+    {label:'Hindi',         avg:55, color:'#D85A30'},
+  ];
+  const topicData = [
+    {label:'Fractions',         avg:58, color:'#D85A30'},
+    {label:'Ratio & Proportion',avg:47, color:'#D85A30'},
+    {label:'Motion & Forces',   avg:44, color:'#D85A30'},
+    {label:'Algebra Intro',     avg:62, color:'#EF9F27'},
+    {label:'Writing',           avg:48, color:'#D85A30'},
+    {label:'Grammar',           avg:65, color:'#EF9F27'},
+  ];
+  const teacherData = [
+    {name:'Kavitha M.',  avg:80, students:32, color:'#BA7517'},
+    {name:'Priya Sharma',avg:74, students:38, color:'#1D9E75'},
+    {name:'Anita Rao',   avg:71, students:56, color:'#7F77DD'},
+    {name:'Ravi Kumar',  avg:68, students:42, color:'#378ADD'},
+    {name:'Suresh Nair', avg:55, students:28, color:'#D85A30'},
+  ];
+  const cohorts = [
+    {name:'Grade 6',avg:66,students:46,bar:66},
+    {name:'Grade 7',avg:63,students:54,bar:63},
+    {name:'Grade 8',avg:80,students:32,bar:80},
+  ];
+
+  const hBar = (rows, maxVal=100) => rows.map(r=>`
+    <div class="hbar-row">
+      <div class="hbar-label" title="${r.label}">${r.label}</div>
+      <div class="hbar-bg"><div class="hbar-fill" style="background:${r.color};width:${(r.avg/maxVal)*100}%"></div></div>
+      <div class="hbar-val">${r.avg}%</div>
+    </div>`).join('');
+
+  document.getElementById('analytics-body').innerHTML = `
+    <div class="stat-row">
+      <div class="stat-card ok-card"><div class="stat-val green">69%</div><div class="stat-lbl">School avg. this month</div><div class="stat-delta sd-up">↑ 4% vs last month</div></div>
+      <div class="stat-card ok-card"><div class="stat-val">142</div><div class="stat-lbl">Active students</div><div class="stat-delta sd-up">↑ 8 enrolled this month</div></div>
+      <div class="stat-card warn-card"><div class="stat-val amber">14</div><div class="stat-lbl">At-risk students</div><div class="stat-delta sd-down">↑ 2 from last month</div></div>
+      <div class="stat-card ok-card"><div class="stat-val green">78%</div><div class="stat-lbl">Assignment completion</div><div class="stat-delta sd-up">↑ 5% vs last month</div></div>
+      <div class="stat-card ok-card"><div class="stat-val">23</div><div class="stat-lbl">Assessments run</div><div class="stat-delta" style="color:#888780;">This month</div></div>
+    </div>
+
+    <div class="stat-row" style="grid-template-columns:repeat(4,1fr);">
+      <div class="stat-card ok-card"><div class="stat-val">147</div><div class="stat-lbl">Doubts raised this month</div><div class="stat-delta sd-up">↑ 23 vs last month</div></div>
+      <div class="stat-card grn-left"><div class="stat-val green">83%</div><div class="stat-lbl">Resolved by hAITU</div><div class="stat-delta sd-up">↑ 4% — AI improving</div></div>
+      <div class="stat-card amb-left"><div class="stat-val amber">17%</div><div class="stat-lbl">Escalated to teacher</div><div class="stat-delta" style="color:#888780;">25 doubts this month</div></div>
+      <div class="stat-card ok-card"><div class="stat-val green">91%</div><div class="stat-lbl">Escalations resolved</div><div class="stat-delta sd-up">Teachers responding well</div></div>
+    </div>
+
+    <div class="analytics-grid">
+      <div class="chart-card">
+        <div class="chart-title">Subject performance — school average</div>
+        ${hBar(subjectData)}
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Weakest topics (needs intervention)</div>
+        ${hBar(topicData)}
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Teacher class averages</div>
+        ${hBar(teacherData.map(t=>({label:t.name, avg:t.avg, color:t.color})))}
+        <div style="font-size:11px;color:#888780;margin-top:10px;">Lower avg may indicate at-risk cohort, not teacher performance.</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Doubt resolution by teacher</div>
+        ${hBar([
+          {label:'Ravi Kumar',  avg:94, color:'#378ADD'},
+          {label:'Priya Sharma',avg:89, color:'#1D9E75'},
+          {label:'Anita Rao',   avg:91, color:'#7F77DD'},
+          {label:'Kavitha M.',  avg:96, color:'#BA7517'},
+          {label:'Suresh Nair', avg:72, color:'#D85A30'},
+        ])}
+        <div style="font-size:11px;color:#888780;margin-top:8px;">% of escalated doubts replied to within 24 hrs. Suresh Nair at 72% — may need a reminder.</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Cohort comparison (grade level)</div>
+        <div class="cohort-grid">
+          ${cohorts.map(c=>{
+            const color = c.avg>=75?'#0F6E56':c.avg>=60?'#EF9F27':'#D85A30';
+            return `
+              <div class="cohort-card">
+                <div class="cohort-name">${c.name}</div>
+                <div class="cohort-val" style="color:${color}">${c.avg}%</div>
+                <div class="cohort-lbl">${c.students} students</div>
+                <div class="cohort-bar"><div class="cohort-fill" style="background:${color};width:${c.bar}%"></div></div>
+              </div>`;
+          }).join('')}
+        </div>
+        <div style="margin-top:12px;background:#E1F5EE;border-radius:7px;padding:9px 12px;font-size:11px;color:#085041;">
+          ✓ Grade 8 leads in performance. Grade 7 shows a dip — recommend review of Algebra and Science delivery.
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Most escalated topics (hAITU couldn't resolve)</div>
+        ${hBar([
+          {label:'Fractions — LCM method',    avg:28, color:'#D85A30'},
+          {label:'Ratio & Proportion',         avg:19, color:'#D85A30'},
+          {label:'Speed vs Velocity',          avg:14, color:'#EF9F27'},
+          {label:'Word problems — algebra',    avg:12, color:'#EF9F27'},
+          {label:'Essay structure',            avg:8,  color:'#378ADD'},
+        ], 30)}
+        <div style="font-size:11px;color:#888780;margin-top:8px;">Count of escalations per topic. High counts signal gaps in hAITU's training on these concepts.</div>
+      </div>
+    </div>
+
+    <div class="chart-card" style="background:#fff;">
+      <div class="chart-title">At-risk students (below 50% progress)</div>
+      <div class="data-table" style="border:none;border-radius:0;">
+        <div class="dt-header" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr;">
+          <div>Student</div><div>Grade</div><div>Progress</div><div>Weak topics</div><div>Teacher</div>
+        </div>
+        ${students.filter(s=>s.status!=='ok').slice(0,4).map(s=>{
+          const progColor = s.progress>=50?'#EF9F27':'#D85A30';
+          const teacher = teachers.find(t=>t.classes.some(c=>c.includes('Grade '+s.grade)));
+          return `
+            <div class="dt-row" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr;">
+              <div class="name-cell"><div class="av" style="background:${s.color}">${s.initials}</div><div class="name-primary">${s.name}</div></div>
+              <div style="font-size:12px;color:#5f5e5a;">Grade ${s.grade}</div>
+              <div class="mini-bar-wrap"><div class="mini-bar"><div class="mini-fill" style="background:${progColor};width:${s.progress}%"></div></div><span style="font-size:11px;color:#888780;">${s.progress}%</span></div>
+              <div><span class="badge b-danger">${Math.floor(Math.random()*3)+1} topics</span></div>
+              <div style="font-size:11px;color:#5f5e5a;">${teacher?teacher.name:'—'}</div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+/* ════════════════════════════════════════════════════
+   MODALS
+════════════════════════════════════════════════════ */
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function confirmCreateClass() {
+  closeModal('m-class');
+  showToast('Class created successfully!');
+}
+function confirmInvite(modal, msg) {
+  closeModal(modal);
+  showToast(msg);
+}
+
+/* ════════════════════════════════════════════════════
+   TOAST
+════════════════════════════════════════════════════ */
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2400);
+}
+
+/* INIT */
+renderHome();
+renderAnalytics();
+</script>
+</body>
+</html>
