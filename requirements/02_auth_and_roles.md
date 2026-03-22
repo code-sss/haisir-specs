@@ -72,7 +72,7 @@ FastAPI validates the JWT that APISIX injects — not anything from the browser.
 
 **Important:** The existing `admin` role is the SuperAdmin persona. Do not create a `superadmin` role — extend the existing `admin` role with new screens and capabilities.
 
-A single Keycloak account can hold multiple roles simultaneously. This mechanism already exists in the codebase via `X-Current-Role`.
+A single Keycloak account can hold multiple roles simultaneously. This mechanism already exists in the codebase via `X-Current-Role`. All non-admin role combinations are allowed (see `11_role_migration.md` §8 for the full matrix). The `admin` role must not be combined with any other role — see BR-ROLE-004.
 
 ### 2.2 JWT Claims Used
 
@@ -376,6 +376,8 @@ Full read/write on all existing resources. New capabilities added:
 **BR-SEC-007:** JWT public key caching — APISIX caches JWKS for 24 hours (`jwk_expires_in: 86400`). The backend PyJWKClient uses library-default caching. Rotate Keycloak signing keys with at least 24 hours overlap to avoid validation failures.
 
 **BR-SEC-008:** Never log JWT contents, CSRF tokens, or session cookies. Use `structlog` with sensitive field redaction as established in the existing middleware stack.
+
+**BR-SEC-009:** `POST /api/users/me/assign-role` must reject requests to assign `admin` or `institution_admin` with HTTP 403. These roles are never self-assigned — `admin` is assigned manually via Keycloak console, `institution_admin` is assigned by `admin` only via the backend Keycloak Admin service client.
 
 ---
 

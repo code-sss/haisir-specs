@@ -15,6 +15,7 @@
   - Verify: Mastery formula `(0.6 * latest + 0.4 * previous)` — is this pedagogically sound?
   - Verify: Soft-delete patterns — consistent across entities?
   - Verify: JSON fields (ruleset, tags) — should any be normalized tables instead?
+  - Verify: if `correct_answers` is edited on a question used in a completed exam session, `is_correct` on existing session rows becomes stale — confirm UI warning is in place and no backend guard is needed.
 
 - [ ] `requirements/02_auth_and_roles.md` — JWT flow, CSRF, permission matrix
   - Verify: Permission matrix — every cell (role x resource x action) is correct
@@ -54,8 +55,10 @@
 - [ ] `requirements/08_haitu_ai_layer.md` — 8 interaction types, prompt contracts, token limits
   - Verify: Token limits per interaction (200-800) — are these sufficient for quality responses?
   - Verify: `claude-sonnet-4-6` as default — cost implications at scale?
-  - Verify: Escalation trigger phrase ("ask your teacher") — robust enough? What if AI says it differently?
+  - ~~Verify: Escalation trigger phrase ("ask your teacher") — robust enough? What if AI says it differently?~~ **Resolved:** Now uses structured JSON output with `escalation_ready` flag.
   - Verify: Which interactions are cached vs generated on-demand?
+  - ~~Verify: escalation trigger relies on LLM phrase match ("ask your teacher") — confirm this is robust enough or replace with structured output / sentinel token approach. Flag for Tech Lead.~~ **Resolved:** Replaced with structured JSON output.
+  - Verify: escalation trigger uses structured JSON output (`escalation_ready` flag) — confirm system prompts in sections 3.1 and 3.3 enforce JSON-only responses and no phrase-match logic remains.
 
 - [ ] `requirements/09_onboarding.md` — 8 screens, 29 business rules
   - Walk through ON01-ON08 with prototype (`prototypes/haisir_onboarding_flow.html`)
@@ -67,7 +70,7 @@
   - Verify: 60s polling is sufficient (vs WebSocket for real-time needs)
   - Verify: Each of 22 notification types — is the trigger correct? Any missing?
   - Verify: Cron schedules (hourly due_soon, weekly digest) — timezone handling?
-  - ~~**Missing:** Notification for doubt auto-close (7 days)~~ **Present:** `doubt_auto_closed` (student) and `child_doubt_auto_closed` (parent) are defined in `10_notifications.md` sections 3.1 and 3.4, with generation rules in BR-NOTIF-011.
+  - ✅ Verified: `doubt_auto_closed` (student) and `child_doubt_auto_closed` (parent) are defined in `10_notifications.md` sections 3.1 and 3.4, with generation rules in BR-NOTIF-011.
 
 ### Phase 4 — Visual & UX validation
 
@@ -87,3 +90,4 @@
 - [ ] Verify every API endpoint mentioned in specs has a corresponding permission entry
 - [ ] Verify every notification type has a clear generation trigger and recipient
 - [ ] Check for orphan business rules (referenced but not defined, or defined but never referenced)
+- [ ] Verify: all unresolved decisions in `gap-analysis.md` are resolved before implementation of their respective phases. Current unresolved: ~~pagination strategy~~ (now resolved), ~~file storage~~ (now resolved), ~~dynamic exam ruleset schema~~ (now resolved), archived topic clone flow (pending), ~~payment extensibility~~ (now resolved).

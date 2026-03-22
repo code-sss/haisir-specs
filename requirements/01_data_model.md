@@ -109,12 +109,35 @@ class ExamTemplate(BaseModel):
     title: str
     description: str | None
     mode: str                   # 'static' | 'dynamic' | 'custom' (Enum: ExamMode)
-    ruleset: dict | None        # JSON — dynamic exam generation rules
+    ruleset: dict | None        # JSON ruleset for dynamic exam generation. Required when mode = 'dynamic', null otherwise. Schema below.
     duration_minutes: int | None  # NOTE: column is 'duration_minutes', not 'time_limit_minutes'
     passing_score: float | None # 0.0–1.0
     created_by: UUID            # Keycloak sub of creating instructor; NOTE: column is 'created_by', not 'instructor_id'
     is_active: bool             # soft delete — False means archived
 ```
+
+**`ruleset` JSON schema (for `mode = 'dynamic'`):**
+```json
+{
+  "total_questions": 10,
+  "difficulty_mix": {
+    "easy": 4,
+    "medium": 4,
+    "hard": 2
+  },
+  "topics": ["uuid-1", "uuid-2"],
+  "tags_include": ["algebra", "fractions"],
+  "tags_exclude": ["advanced"],
+  "question_types": ["single_choice", "multiple_choice", "fill_in_the_blank"]
+}
+```
+
+**Ruleset validation rules:**
+- `total_questions` is required. All other fields are optional.
+- Question selection is random within matching candidates.
+- **Difficulty fallback:** If insufficient questions exist at a requested difficulty level, remaining slots are filled from the next difficulty down (`hard → medium → easy`). If still insufficient after fallback, return an error at exam creation time indicating how many questions are available vs requested.
+- Ruleset is validated at `POST /api/exam-templates` creation time, not at session creation time.
+- `difficulty_mix` values must sum to `total_questions` if both are provided — validate at creation time.
 
 **`exam_template_questions`** — ordered list of questions within a template.
 
@@ -147,6 +170,8 @@ class ExamSession(BaseModel):
 ```
 
 **`exam_session_questions`** — per-question records for a specific session. **Key design decision: exam session questions reference live question rows via FK, not JSONB snapshots.** Answers (`user_answer`, `is_correct`, `earned_points`) are stored directly on the session question row. Template edits after session creation may affect question content — the current design does not snapshot.
+
+> **UI note:** When a teacher edits a question that has been used in one or more completed exam sessions, the frontend must display a warning: "This question has been used in X completed exams. Editing it will affect how those exams display and may affect grading if correct answers are changed." Editing is not blocked — this is awareness only.
 
 ```python
 class ExamSessionQuestion(BaseModel):
@@ -198,6 +223,8 @@ ALTER TABLE topics
 - `draft` → topic created but not visible to students. Only the creator can view and edit.
 - `live` → visible to students within their enrollment scope. **Content (title, topic_contents) remains editable in-place** — the creator can fix errors, add content, or update materials without changing the topic's status. Status transitions remain one-way.
 - `archived` → hidden from students and read-only. Cannot be reverted to `live` (create a new topic instead).
+
+> **UI note:** The frontend must show a confirmation dialog before archiving a topic: "This cannot be undone — are you sure you want to archive this topic?" No revert mechanism is needed at the data layer.
 
 **Transitions:** `draft → live` (creator publishes), `live → archived` (creator or admin archives). No other transitions are valid. Note: while status transitions are one-way, topic content (title, attached content items) can be edited at any status except `archived`.
 
@@ -367,7 +394,11 @@ class Enrollment(BaseModel):
     status: Literal['active', 'paused', 'completed', 'removed']
     enrolled_at: datetime
     last_active_at: datetime | None
+    subscription_status: str    # 'free' | 'paid' — default 'free', not null
+    payment_id: str | None      # null for free courses; populated when payment processing is added
 ```
+
+**BR-ENROLL-PAY-001:** All enrollments default to `subscription_status = 'free'` on launch. A future per-course setting will determine whether enrollment requires payment. Payment processing is out of scope for v1 — `payment_id` will be `null` for all records in this phase.
 
 **`enrollment_topics`** ❌ NEW — tracks a student's progress per topic within an enrollment context.
 
@@ -423,7 +454,11 @@ class TutorStudentRelationship(BaseModel):
     started_at: datetime
     ended_at: datetime | None
     teacher_notes: str | None   # private — only tutor can read/write
+    subscription_status: str    # 'free' | 'paid' — default 'free', not null
+    payment_id: str | None      # null for free courses; populated when payment processing is added
 ```
+
+**BR-TUTOR-PAY-001:** All tutor courses default to `subscription_status = 'free'` on launch. A future per-course setting will determine whether enrollment requires payment. Payment processing is out of scope for v1 — `payment_id` will be `null` for all records in this phase.
 
 ### 4.5 Parent–Child Links
 

@@ -103,6 +103,11 @@ Browser
 - Use `fetchWithCSRFRetry()` wrapper for all mutations.
 - No Axios or other HTTP libraries.
 
+**Pagination convention (all new list endpoints must follow this):**
+- **Cursor-based pagination** — used for append-heavy feeds: notifications, activity timeline, doubt threads, hAITU chat history. Response includes a `next_cursor` field, `null` when no more results. Request param: `cursor`.
+- **Offset-based pagination** — used for management and admin tables: student lists, class rosters, institution people manager, platform admin views. Request params: `page` (default 1) and `page_size` (default 20, max 100).
+- Each endpoint specification must explicitly state which pagination type it uses.
+
 ---
 
 ## 6. Backend Structure (DDD — do not deviate)
@@ -125,6 +130,11 @@ ProxyHeaders → SecurityHeaders → SecurityValidation
 (content-type enforcement, 10MB limit, file type/size)
 → request ID assignment → structlog structured logging
 ```
+
+**File storage convention:**
+- **v1: Local disk storage.** All files stored at `data_dir/` following existing pattern for question images. Applies to all new content uploads — PDFs, and any content uploaded by tutors and institution admins.
+- **Architecture:** A `StorageBackend` abstract interface must be implemented in `infrastructure/storage/` with two methods: `upload(file, path) → url` and `download(path) → bytes`. A `LocalDiskBackend` concrete implementation is used in v1. Active backend is selected via `STORAGE_BACKEND` environment variable (default: `local`).
+- **Future:** `S3Backend`, `GCSBackend`, `AzureBackend` can be swapped in without any application code changes — only a new concrete implementation and environment variable change required.
 
 **Existing API routes (all prefixed `/api/`):**
 

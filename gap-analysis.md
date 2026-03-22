@@ -108,9 +108,10 @@
 ## Decisions Needed Before Implementation
 
 1. ~~**Tutor marketplace gate**: Immediate visibility or admin approval required?~~ **Resolved:** Immediate on toggle, admin can suspend post-hoc. See `02_auth_and_roles.md` section 2.3.
-2. **Pagination strategy**: Cursor-based or offset-based? Max page size?
-3. **File storage**: S3/cloud or local disk for PDFs/images?
+2. ~~**Pagination strategy**: Cursor-based or offset-based? Max page size?~~ **Resolved:** Cursor-based for append-heavy feeds (notifications, activity timeline, doubt threads, chat history); offset-based for management/admin tables (page default 1, page_size default 20, max 100). See `00_overview.md` pagination convention.
+3. ~~**File storage**: S3/cloud or local disk for PDFs/images?~~ **Resolved:** Local disk in v1 via `StorageBackend` abstract interface in `infrastructure/storage/`. `STORAGE_BACKEND` env var selects backend (default: `local`). S3/GCS/Azure can be swapped in later. See `00_overview.md` file storage convention.
 4. **Search backend**: PostgreSQL full-text or dedicated search service?
-5. **Dynamic exam algorithm**: Random, weighted, or coverage-based question selection?
+5. ~~**Dynamic exam algorithm**: Random, weighted, or coverage-based question selection?~~ **Resolved:** Random selection within matching candidates, with difficulty fallback (`hard → medium → easy`). Full ruleset JSON schema defined in `01_data_model.md` under `exam_templates`. Validated at creation time.
 6. **Topic archived correction**: Can tutors clone an archived topic to create a corrected version?
 7. ~~**Mastery initial value**: First attempt — is previous_mastery = 0 or = latest_score?~~ **Resolved:** First attempt sets `mastery_score = latest_score` directly. See `01_data_model.md` BR-PROGRESS-003.
+8. ~~**Payment extensibility** (flagged): Payment processing is deferred. Before building the tutor-student enrollment record, Tech Lead must confirm the `enrollments` or `tutor_student_relationships` table has a clean place to attach payment/subscription status later without restructuring. No build action needed now — confirmation only.~~ **Resolved:** `subscription_status` (`'free'`|`'paid'`, default `'free'`) and `payment_id` (nullable) columns have been added to `enrollments` and `tutor_student_relationships` tables to support future payment integration without restructuring. All records default to free tier in v1. See `01_data_model.md` BR-ENROLL-PAY-001 and BR-TUTOR-PAY-001.

@@ -69,14 +69,31 @@ Rules:
 - Answer only questions related to this topic. If asked something off-topic, redirect kindly.
 - Use simple language appropriate for a Grade {grade} student.
 - Use examples from everyday Indian life where possible.
-- If you cannot fully resolve the doubt, say: "This is a tricky one — let me suggest you ask your teacher for a deeper explanation."
+- If you cannot fully resolve the doubt, set escalation_ready to true in your response.
 - Never tell the student the answer to an assessment question directly — guide them to the answer.
 - Respond in the same language the student uses (English or Hindi or mixed).
+
+Always respond with a JSON object in this exact format:
+{"response": "<your response text here>", "escalation_ready": <true or false>}
+Do not include any text outside this JSON object.
 ```
 
-**Output:** Plain text response, max 400 tokens (configurable via `haitu_max_tokens_topic_doubt` in `platform_settings`).
+**Output:** JSON object, max 400 tokens (configurable via `haitu_max_tokens_topic_doubt` in `platform_settings`).
 
-**Escalation trigger:** If hAITU response contains the phrase "ask your teacher" OR if the student explicitly clicks "Request teacher help", set `doubt.haitu_attempted = true` and allow escalation.
+**Escalation trigger — structured output:**
+Claude must return all `topic-doubt` and `escalation-attempt` responses as a JSON object in this exact format:
+```json
+{
+  "response": "The explanation text shown to the student...",
+  "escalation_ready": true
+}
+```
+- `escalation_ready: true` when Claude cannot fully resolve the doubt.
+- `escalation_ready: false` in all other cases.
+- The system prompt must instruct Claude to always return valid JSON in this exact format with no prose outside the JSON structure.
+- The backend sets `doubt.haitu_attempted = true` and enables the "Request teacher help" button when `escalation_ready: true` is returned.
+- The student can also explicitly click "Request teacher help" at any time after `haitu_attempted = true`.
+- Remove all phrase-match logic from escalation detection — `escalation_ready` flag is the only trigger.
 
 ---
 
@@ -133,10 +150,14 @@ Previous hAITU response that did not help: "{previous_haitu_response}"
 
 Make one final detailed attempt to explain this. Use a different approach — if you used abstract explanation before, try a concrete example. If you used an example, try a step-by-step breakdown.
 
-If you still cannot fully resolve it, end with: "I've done my best to explain this — your teacher will be able to help further."
+If you still cannot fully resolve it, set escalation_ready to true.
+
+Always respond with a JSON object in this exact format:
+{"response": "<your response text here>", "escalation_ready": <true or false>}
+Do not include any text outside this JSON object.
 ```
 
-**After this response:** Set `doubt.haitu_attempted = true`. If student still requests teacher help, create the escalation.
+**After this response:** The backend parses the `escalation_ready` flag from the JSON response. Set `doubt.haitu_attempted = true`. If `escalation_ready: true` or student still requests teacher help, create the escalation.
 
 ---
 
@@ -293,8 +314,8 @@ POST /api/haitu/topic-doubt
     message: str,
     history: [{role: "user"|"assistant", content: str}]  // last 5 turns
   }
-→ Returns: {response: str, escalation_suggested: bool}
-→ Side effect: if escalation_suggested, sets doubt.haitu_attempted = true on any open doubt for this topic
+→ Returns: {response: str, escalation_ready: bool}
+→ Side effect: if escalation_ready, sets doubt.haitu_attempted = true on any open doubt for this topic
 
 POST /api/haitu/exam-review-chat
 → Auth: student

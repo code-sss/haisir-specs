@@ -295,6 +295,37 @@ These combinations are valid and must work correctly through the role switcher:
 
 **BR-ROLE-003:** There is no combination of `parent` + `institution_admin` that requires special handling — these are fully independent workspaces.
 
+**BR-ROLE-004:** The `admin` role must not be combined with any other role on the same Keycloak account. Admin accounts are dedicated platform operator accounts. Enforcement:
+1. Keycloak Admin API calls that assign `admin` must first verify the user holds no other realm roles, and vice versa.
+2. The backend must reject role assignment requests that would create an `admin` + other-role combination.
+3. The `POST /api/users/me/assign-role` endpoint already rejects `admin` (403). Additionally, if the caller already holds `admin`, the endpoint must reject any further role assignment with 403.
+
+**BR-ROLE-005:** All combinations of non-admin roles (`student`, `instructor`, `tutor`, `parent`, `institution_admin`) are allowed without restriction. Each role operates in an independent workspace scoped by its own data boundaries (class enrollment, org membership, parent-child link, tutor-student relationship). This includes combinations of three or more roles — e.g., a user holding `student` + `instructor` + `parent` simultaneously is valid.
+
+### 8.1 Full Combination Matrix
+
+| Combination | Allowed? | Notes |
+|---|---|---|
+| `student` + `parent` | ✅ Allow | College student who is also a young parent |
+| `student` + `tutor` | ✅ Allow | Senior student tutoring juniors (common in Indian coaching culture) |
+| `student` + `instructor` | ✅ Allow | Grad student / TA who also teaches |
+| `student` + `institution_admin` | ✅ Allow | Unlikely but valid — independent workspaces |
+| `instructor` + `tutor` | ✅ Allow | School teacher moonlighting as private tutor (very common in India). See BR-ROLE-001 |
+| `instructor` + `institution_admin` | ✅ Allow | Admin who also teaches. See BR-ROLE-002 |
+| `instructor` + `parent` | ✅ Allow | Teacher tracking their own child's progress |
+| `tutor` + `parent` | ✅ Allow | Tutor monitoring their own child |
+| `tutor` + `institution_admin` | ✅ Allow | Institution manager who also tutors independently |
+| `parent` + `institution_admin` | ✅ Allow | School manager who is also a parent. See BR-ROLE-003 |
+| `admin` + any other role | ❌ Forbid | Admin is a dedicated platform operator account. See BR-ROLE-004 |
+
+### 8.2 Enforcement Layers
+
+| Rule | Enforcement layer | Mechanism |
+|---|---|---|
+| `admin` cannot combine with other roles | Keycloak (primary) + Backend API (secondary) | Keycloak Admin API calls verify no other roles before assigning `admin`, and vice versa. Backend rejects role assignment if user already holds `admin`. |
+| `institution_admin` is never self-assigned | Backend API | `POST /api/users/me/assign-role` returns 403. Only backend Keycloak Admin service client assigns it. |
+| All non-admin combos allowed | No enforcement needed | Role switcher and workspace scoping handle separation. |
+
 ---
 
 ## 9. Testing Checklist
@@ -315,3 +346,7 @@ After implementing these changes, verify:
 - [ ] Route `/institution` → accessible only with `institution_admin` active role
 - [ ] Route `/parent` → accessible only with `parent` active role
 - [ ] Existing `student`, `instructor`, `admin` role behaviour → unchanged
+- [ ] User holding `admin` → cannot be assigned any additional role (403)
+- [ ] User holding any non-admin role → cannot be assigned `admin` via Keycloak Admin API (rejected)
+- [ ] User with `student` + `tutor` + `parent` → all three pills shown in switcher
+- [ ] User with `instructor` + `institution_admin` + `parent` → all three pills shown, scoping correct per role
