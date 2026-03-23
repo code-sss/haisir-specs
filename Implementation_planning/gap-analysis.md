@@ -122,3 +122,12 @@
 ## Deferred to Later Phase
 
 - **hAITU granular rate limiting** — per-interaction-type limits, burst rate controls, cost-based quotas, per-institution quotas for managed deployments. Current v1 limits: 20/student/hour, 50/teacher/hour (BR-AI-003 in `08_haitu_ai_layer.md`). Revisit with real usage data post-launch.
+- **Teacher notes admin override (safeguarding)** — Institution admin cannot see teacher notes under any circumstance in v1 (BR-TCH-009). Any safeguarding override feature requires a dedicated audit-logged implementation plus legal review before building. Deferred post-launch.
+- **"Generate remedial assignment" button (T08)** — hAITU generates a focused assignment on weak topics. Excluded from Phase 1 T08 build entirely. To be added in Phase 2 alongside the full hAITU build.
+- **P02 hAITU plain-language descriptions (BR-PAR-006)** — Phase 1 uses static score-based strings. Phase 2 replaces these with hAITU-generated prose cached per child per day. No UI change required for the upgrade.
+- **Weekly digest hAITU prose (BR-PAR-015)** — Phase 1 sends stats-only CHILD_WEEKLY_DIGEST (streak, topics, courses, weak count). Phase 2 generates hAITU prose summary. No notification schema change required.
+- **Institution self-registration** — Feature flag `institution_self_registration` is defined in v1 platform settings but defaults to off. The public-facing institution signup form and the SA03 "Pending approval" tab are deferred to the phase when this feature is implemented.
+
+## Phase 1 Implementation Notes (Persona Review)
+
+- **Invite-link enrollment (BR-INST-017)** — CSV upload for unknown student emails generates invite URLs. Onboarding flow must detect the invite URL parameter and auto-enroll the student after sign-up. Tracked as a Phase 1 implementation requirement. See `11_role_migration.md` §6.4 note and BR-INST-017 in `05_06_07_personas.md`.

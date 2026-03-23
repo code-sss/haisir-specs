@@ -199,7 +199,7 @@ POST /api/classes/{class_id}/assignments
 
 **Business rules:**
 - **BR-TCH-008:** Topic performance table shows all topics the student has started or been assigned in this context, with their individual mastery scores.
-- **BR-TCH-009:** Teacher notes are private — only the teacher/tutor who wrote them can read them. Not visible to student, parent, or institution admin.
+- **BR-TCH-009:** Teacher notes are private — only the teacher/tutor who wrote them can read them. Not visible to student, parent, or institution admin. **No admin override in v1.** If a safeguarding override is ever needed post-launch, it requires a separate audit-logged override feature with legal review before implementation.
 - **BR-TCH-010:** The hAITU analysis is generated fresh on each page load. It analyses: weak topics, recent attempt trends, doubt frequency.
 - **BR-TCH-011:** The tutor student detail view (T03) is always opened with an enrollment context. When a student appears on the tutor's roster, each enrollment is shown as a separate row. The `enrollment_id` from that row is passed to T03 and used to scope all API calls, including `teacher_notes` lookup. A student with two active enrollments with the same tutor appears as two separate rows in the roster.
 
@@ -263,8 +263,11 @@ POST /api/haitu/teacher-tools
 - Delete content item (tutor only) → confirms, removes.
 - "Publish" button (tutor only) → sets topic status to `live`.
 
+> **UI note:** Publish button triggers immediately — no confirmation modal. Archive triggers a confirmation modal: "Students will no longer see this topic. This cannot be undone."
+
 **Business rules:**
 - **BR-TCH-025:** Instructors can only add content items to topics they are assigned to via their class. They cannot add content to topics outside their class curriculum.
+- **BR-TCH-026:** Instructors can delete only content items they themselves uploaded (`owner_type = 'instructor'`, `owner_id = self`). They cannot delete platform-owned or institution-owned content items. Tutors follow BR-TCH-012 (own topics only).
 - **BR-TCH-012:** Tutors can only modify topics where `owner_type = 'tutor'` and `owner_id = self`.
 - **BR-TCH-013:** A topic with `status = 'draft'` is not visible to students.
 - **BR-TCH-014:** Uploaded PDFs are stored server-side. File size limit: 20MB. Accepted types: PDF only.
@@ -287,8 +290,9 @@ POST /api/topics/{topic_id}/content
 → Returns: {content_item_id}
 
 DELETE /api/content/{content_item_id}
-→ Auth: tutor (own content only)
+→ Auth: tutor (own content only per BR-TCH-012) OR instructor (own uploaded content only per BR-TCH-026)
 → Returns: 204
+→ Errors: 403 if content is platform-owned or institution-owned
 ```
 
 ---
@@ -381,7 +385,7 @@ GET /api/teachers/me/doubts?status={}
 - "View student →" → T03 Student Detail.
 
 **Business rules:**
-- **BR-DOUBT-011:** Teacher cannot edit or delete their own messages once sent.
+- **BR-DOUBT-011:** Teacher can edit their own messages within 5 minutes of sending. After 5 minutes, messages are locked and cannot be edited or deleted. Edits are tracked via `edited_at` on `doubt_messages` (see `01_data_model.md`).
 - **BR-DOUBT-012:** Sending a reply to a `resolved` doubt re-opens it to `answered`.
 - **BR-DOUBT-013:** Teacher reply must not be empty. Minimum 10 characters.
 
@@ -422,11 +426,13 @@ POST /api/doubts/{doubt_id}/messages
 - "Generate remedial assignment" → calls hAITU API to generate a focused assessment on weak topics → opens assignment modal pre-filled.
 
 **Business rules:**
-- **BR-TCH-020:** Only accessible for assignments where all enrolled students have submitted, OR due date has passed (whichever comes first).
+- **BR-TCH-020:** Two-state access model: **While assignment is open** — `GET` returns `submission_count` and `total` only; all result fields (`student_results`, `question_perf`, `weak_topics`, `haitu_recommendations`) are `null`. **After due date or full submission** (whichever comes first) — full results are returned.
 - **BR-TCH-021:** Question heatmap score = `(students who answered correctly / total submissions) * 100`. Sourced from `exam_session_questions`.
 - **BR-TCH-022:** hAITU recommendations are generated once per attempt batch and cached. See `08_haitu_ai_layer.md #exam-analysis`.
 - **BR-TCH-023:** Publishing a draft topic (`draft → live`) takes effect immediately — no confirmation modal. The topic becomes visible to enrolled students.
 - **BR-TCH-024:** Unpublishing (`live → draft`) is not allowed. To hide a topic, archive it (`live → archived`). Archiving shows a confirmation: "Students will no longer see this topic. This cannot be undone."
+
+> **Phase note — "Generate remedial assignment" button:** This button is **not included in Phase 1**. The T08 layout excludes it entirely (no stub, no disabled state). It will be added in Phase 2 alongside the hAITU build.
 
 **API calls:**
 ```

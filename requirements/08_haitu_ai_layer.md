@@ -165,6 +165,49 @@ Do not include any text outside this JSON object.
 
 **After this response:** The backend parses the `escalation_ready` flag from the JSON response. Set `doubt.haitu_attempted = true`. If `escalation_ready: true` or student still requests teacher help, create the escalation.
 
+The following diagram shows the full doubt lifecycle — from initial hAITU response through escalation, teacher reply, and student notification:
+
+```mermaid
+sequenceDiagram
+    participant S as Student
+    participant FE as Frontend
+    participant BE as Backend
+    participant AI as hAITU (Anthropic API)
+    participant T as Teacher
+    participant N as Notification Service
+
+    S->>FE: Ask doubt on topic (S08)
+    FE->>BE: POST /api/haitu/topic-doubt
+    BE->>AI: topic-doubt prompt (assembled server-side)
+    AI-->>BE: {response, escalation_ready: false}
+    BE-->>FE: {response, escalation_ready: false}
+    FE-->>S: Show hAITU response
+
+    Note over S,AI: Student still stuck — clicks "Request teacher help"
+    FE->>BE: POST /api/haitu/topic-doubt (escalation-attempt type)
+    BE->>AI: escalation-attempt prompt (one shot, different approach)
+    AI-->>BE: {response, escalation_ready: true}
+    BE->>BE: SET doubt.haitu_attempted = true
+    BE-->>FE: {response, escalation_ready: true}
+    FE-->>S: Final hAITU attempt shown + "Ask teacher" button enabled
+
+    S->>FE: Confirm escalation
+    FE->>BE: POST /api/doubts/{id}/escalate
+    BE->>N: Emit new_doubt_escalated event
+    N->>N: INSERT notification for teacher role
+    BE-->>FE: {escalated: true}
+
+    T->>BE: POST /api/doubts/{id}/reply {message}
+    BE->>N: Emit doubt_teacher_replied event
+    N->>N: INSERT notification for student
+    BE-->>T: {message_id}
+
+    S->>FE: Sees doubt_teacher_replied notification
+    FE->>BE: GET /api/doubts/{id}
+    BE-->>FE: Full doubt thread with teacher reply
+    FE-->>S: Teacher's reply shown
+```
+
 ---
 
 ### 3.4 `teacher-tools`

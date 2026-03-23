@@ -38,19 +38,20 @@
   - ✅ Topic locking confirmed — grade comparison at API layer, edge cases covered in BR-STU-012
   - ✅ Weak threshold (<60) and completed threshold (≥75) confirmed correct
 
-- [ ] `requirements/04_teacher_tutor.md` — 8 screens, instructor vs tutor divergence
-  - Walk through T01-T08 with prototype open (`prototypes/haisir_teacher_flow.html`)
-  - Verify: Instructor read-only curriculum vs tutor full control — clear enough?
-  - Verify: Assignment flow (T02) — is class-level assignment sufficient?
-  - Verify: Teacher notes (tutor only) — privacy implications clear?
+- [x] `requirements/04_teacher_tutor.md` — 8 screens, instructor vs tutor divergence
+  - ✅ Instructor read-only curriculum vs tutor full control — clear. BR-TCH-025, BR-TCH-026 added.
+  - ✅ Assignment flow (T02) — class-level assignment confirmed sufficient.
+  - ✅ Teacher notes (tutor only) — absolute privacy confirmed, no admin override in v1 (BR-TCH-009).
+  - ✅ Teacher reply edit window — 5-minute window added (BR-DOUBT-011).
+  - ✅ Exam results while open — two-state model added (BR-TCH-020).
+  - ✅ "Generate remedial assignment" — deferred to Phase 2 (T08 phase note added).
   - ~~**Decision needed:** Tutor marketplace — immediate visibility or admin approval gate?~~ **Resolved:** Immediate on toggle, admin can suspend post-hoc. See `02_auth_and_roles.md` section 2.3.
 
-- [ ] `requirements/05_06_07_personas.md` — Parent (5 screens), Institution Admin (6), Platform Admin (6)
-  - Walk through each set with respective prototypes open
-  - **Parent:** Verify plain-language descriptions are feasible at scale (daily cache per child)
-  - **Parent:** Verify "no question-level detail" is the right boundary (vs showing question text without answers)
-  - **Institution Admin:** Verify aggregate-only access is sufficient (teachers may want admin to see specifics)
-  - **Platform Admin:** Verify SA05 feature flags cover the right set (6 flags listed)
+- [x] `requirements/05_06_07_personas.md` — Parent (5 screens), Institution Admin (6), Platform Admin (6)
+  - ✅ **Parent:** Plain-language descriptions — Phase 1 static fallback added (BR-PAR-006); hAITU in Phase 2.
+  - ✅ **Parent:** "No question-level detail" confirmed correct (BR-PAR-009). Status banner thresholds refined (BR-PAR-004). Max 10 children added (BR-PAR-016).
+  - ✅ **Institution Admin:** Aggregate-only access confirmed (BR-INST-007, BR-INST-015). CSV invite-link enrollment added (BR-INST-017). Analytics periods added.
+  - ✅ **Platform Admin:** 6 feature flags confirmed: marketplace, open_learning, parent_portal, public_tutor_profiles, haitu_enabled_global, institution_self_registration. SA03 pending tab removed for Phase 1. Retention period configurable (BR-SA-018).
 
 ### Phase 3 — Cross-cutting concerns
 

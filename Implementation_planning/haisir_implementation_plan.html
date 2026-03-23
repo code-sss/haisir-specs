@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hAIsir — Implementation Plan</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #484f58;
+    --teal-fill: #0d2b1f;   --teal-stroke: #1d9e75;  --teal-text: #5dcaa5;
+    --purple-fill: #1a1030; --purple-stroke: #7f77dd; --purple-text: #afa9ec;
+    --coral-fill: #2b1410;  --coral-stroke: #d85a30;  --coral-text: #f0997b;
+    --amber-fill: #2b1f08;  --amber-stroke: #ba7517;  --amber-text: #ef9f27;
+    --gray-fill: #1c1f23;   --gray-stroke: #5f5e5a;   --gray-text: #b4b2a9;
+    --s1-bg:#0c1f2e; --s1-bd:#1f6feb; --s1-tx:#58a6ff;
+    --s2-bg:#2b1f08; --s2-bd:#ba7517; --s2-tx:#ef9f27;
+    --s3-bg:#12261e; --s3-bd:#238636; --s3-tx:#3fb950;
+    --s4-bg:#0d2b1f; --s4-bd:#1d9e75; --s4-tx:#5dcaa5;
+  }
+
+  body {
+    background: var(--bg);
+    font-family: 'IBM Plex Sans', sans-serif;
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px 64px;
+  }
+
+  header { width: 100%; max-width: 800px; margin-bottom: 24px; }
+  .eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--teal-text); letter-spacing:.12em; text-transform:uppercase; margin-bottom:8px; }
+  h1 { font-size:22px; font-weight:500; color:var(--text-primary); margin-bottom:6px; }
+  .subtitle { font-size:13px; color:var(--text-secondary); line-height:1.6; }
+
+  /* Status legend */
+  .status-legend { width:100%; max-width:800px; display:flex; gap:6px; margin-bottom:20px; flex-wrap:wrap; }
+  .sl-item { display:flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:10px; padding:4px 10px; border-radius:4px; border:0.5px solid; }
+  .sl-0 { background:#1c1f23; border-color:#30363d; color:#484f58; }
+  .sl-1 { background:var(--s1-bg); border-color:var(--s1-bd); color:var(--s1-tx); }
+  .sl-2 { background:var(--s2-bg); border-color:var(--s2-bd); color:var(--s2-tx); }
+  .sl-3 { background:var(--s3-bg); border-color:var(--s3-bd); color:var(--s3-tx); }
+  .sl-4 { background:var(--s4-bg); border-color:var(--s4-bd); color:var(--s4-tx); }
+  .sl-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+  .sl-0 .sl-dot{background:#484f58;} .sl-1 .sl-dot{background:var(--s1-tx);} .sl-2 .sl-dot{background:var(--s2-tx);} .sl-3 .sl-dot{background:var(--s3-tx);} .sl-4 .sl-dot{background:var(--s4-tx);}
+
+  .plan { width:100%; max-width:800px; }
+
+  .phase-block { border:0.5px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:12px; }
+  .phase-header { padding:10px 16px; border-bottom:0.5px solid var(--border); display:flex; align-items:center; gap:10px; background:var(--surface); }
+  .phase-label { font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-muted); }
+  .phase-name { font-size:12px; font-weight:500; color:var(--text-secondary); }
+  .phase-progress { margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--text-muted); }
+  .phase-body { padding:16px; background:var(--bg); }
+
+  .items-row { display:grid; gap:8px; margin-bottom:8px; }
+  .items-row:last-child { margin-bottom:0; }
+  .cols-4 { grid-template-columns:repeat(4,1fr); }
+  .cols-2 { grid-template-columns:repeat(2,1fr); }
+  .cols-3 { grid-template-columns:repeat(3,1fr); }
+  .cols-1 { grid-template-columns:1fr; }
+  .col-center { display:flex; justify-content:center; }
+  .col-center .item { width:340px; }
+
+  .item { border-radius:8px; padding:11px 14px 10px; border:0.5px solid; position:relative; }
+  .item-num { font-family:'IBM Plex Mono',monospace; font-size:10px; margin-bottom:4px; }
+  .item-title { font-size:12px; font-weight:500; line-height:1.4; margin-bottom:3px; }
+  .item-sub { font-size:11px; line-height:1.4; opacity:.7; }
+
+  /* Status track */
+  .status-track { display:flex; gap:3px; margin-top:9px; border-top:0.5px solid rgba(255,255,255,0.06); padding-top:8px; }
+  .st-step { flex:1; padding:3px 0; text-align:center; font-family:'IBM Plex Mono',monospace; font-size:9px; border-radius:3px; cursor:pointer; border:0.5px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.03); color:var(--text-muted); transition:all .15s; line-height:1.3; user-select:none; }
+  .st-step:hover { background:rgba(255,255,255,0.07); color:var(--text-secondary); }
+  .st-step.active-1 { background:var(--s1-bg); border-color:var(--s1-bd); color:var(--s1-tx); }
+  .st-step.active-2 { background:var(--s2-bg); border-color:var(--s2-bd); color:var(--s2-tx); }
+  .st-step.active-3 { background:var(--s3-bg); border-color:var(--s3-bd); color:var(--s3-tx); }
+  .st-step.active-4 { background:var(--s4-bg); border-color:var(--s4-bd); color:var(--s4-tx); }
+  .st-step.done-1 { background:rgba(31,111,235,.1); border-color:rgba(31,111,235,.25); color:#58a6ff; opacity:.5; }
+  .st-step.done-2 { background:rgba(186,117,23,.1); border-color:rgba(186,117,23,.25); color:#ef9f27; opacity:.5; }
+  .st-step.done-3 { background:rgba(35,134,54,.1); border-color:rgba(35,134,54,.25); color:#3fb950; opacity:.5; }
+
+  /* Theme colours */
+  .teal { background:var(--teal-fill); border-color:var(--teal-stroke); }
+  .teal .item-num{color:var(--teal-stroke);} .teal .item-title{color:var(--teal-text);} .teal .item-sub{color:var(--teal-text);}
+  .purple { background:var(--purple-fill); border-color:var(--purple-stroke); }
+  .purple .item-num{color:var(--purple-stroke);} .purple .item-title{color:var(--purple-text);} .purple .item-sub{color:var(--purple-text);}
+  .coral { background:var(--coral-fill); border-color:var(--coral-stroke); }
+  .coral .item-num{color:var(--coral-stroke);} .coral .item-title{color:var(--coral-text);} .coral .item-sub{color:var(--coral-text);}
+  .gray { background:var(--gray-fill); border-color:var(--gray-stroke); }
+  .gray .item-num{color:var(--gray-stroke);} .gray .item-title{color:var(--gray-text);} .gray .item-sub{color:var(--gray-text);}
+
+  .connector { display:flex; justify-content:center; align-items:center; height:20px; }
+  .connector-line { width:0.5px; height:100%; background:var(--border); }
+  .parallel-label { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--text-muted); text-align:center; margin:2px 0 4px; letter-spacing:.05em; }
+
+  .gate-row { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; }
+  .gate-items { display:flex; flex-direction:column; gap:8px; }
+  .gate-note { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .gate-arrow { font-size:11px; color:var(--amber-stroke); }
+  .gate-box { background:var(--amber-fill); border:0.5px solid var(--amber-stroke); border-radius:8px; padding:10px 12px; text-align:center; width:144px; }
+  .gate-box .gate-title { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--amber-text); margin-bottom:4px; font-weight:500; }
+  .gate-box .gate-desc { font-size:10px; color:var(--amber-text); opacity:.75; line-height:1.4; }
+
+  /* Overall progress */
+  .overall { width:100%; max-width:800px; margin-top:8px; padding:14px 16px; border:0.5px solid var(--border); border-radius:8px; background:var(--surface); }
+  .overall-top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+  .overall-label { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-secondary); }
+  .overall-pct { font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:500; color:var(--teal-text); }
+  .bar-track { height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
+  .bar-fill { height:100%; background:var(--teal-stroke); border-radius:2px; transition:width .4s ease; }
+  .phase-bars { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:12px; }
+  .phase-bar-item { display:flex; flex-direction:column; gap:4px; }
+  .pb-label { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--text-muted); display:flex; justify-content:space-between; }
+  .pb-track { height:3px; background:var(--border); border-radius:2px; overflow:hidden; }
+  .pb-fill { height:100%; border-radius:2px; transition:width .4s ease; }
+  .pb-0 .pb-fill{background:var(--teal-stroke);} .pb-1 .pb-fill{background:var(--purple-stroke);} .pb-2 .pb-fill{background:var(--coral-stroke);} .pb-3 .pb-fill{background:var(--gray-stroke);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">hAIsir · specs</div>
+  <h1>Implementation Plan</h1>
+  <p class="subtitle">Click any status step on a card to update it. Progress is saved in your browser.</p>
+  <p class="subtitle" style="margin-top:4px; font-size:11px; color:var(--text-muted);">Spec last updated: 2026-03-23 — Phase 0 &amp; Phase 1 persona review complete</p>
+</header>
+
+<div class="status-legend">
+  <div class="sl-item sl-0"><div class="sl-dot"></div>not started</div>
+  <div class="sl-item sl-1"><div class="sl-dot"></div>spec review complete</div>
+  <div class="sl-item sl-2"><div class="sl-dot"></div>implementation complete</div>
+  <div class="sl-item sl-3"><div class="sl-dot"></div>testing complete</div>
+  <div class="sl-item sl-4"><div class="sl-dot"></div>released to production</div>
+</div>
+
+<div class="plan">
+
+  <!-- Phase 0 -->
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-label">Phase 0</span>
+      <span class="phase-name">Foundation</span>
+      <span class="phase-progress" id="ph0-prog"></span>
+    </div>
+    <div class="phase-body">
+      <div class="items-row cols-4">
+        <div class="item teal"><div class="item-num">01</div><div class="item-title">Role migration</div><div class="item-sub">Keycloak → backend → frontend</div><div class="status-track" data-id="1"></div></div>
+        <div class="item teal"><div class="item-num">02</div><div class="item-title">Schema extensions</div><div class="item-sub">4 tables altered + backfill</div><div class="status-track" data-id="2"></div></div>
+        <div class="item teal"><div class="item-num">03</div><div class="item-title">User metadata</div><div class="item-sub">profiles + 7 endpoints</div><div class="status-track" data-id="3"></div></div>
+        <div class="item teal"><div class="item-num">04</div><div class="item-title">Onboarding</div><div class="item-sub">6 screens, ON04/06 removed</div><div class="status-track" data-id="4"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 1 -->
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-label">Phase 1</span>
+      <span class="phase-name">Core personas</span>
+      <span class="phase-progress" id="ph1-prog"></span>
+    </div>
+    <div class="phase-body">
+      <div class="items-row cols-1 col-center">
+        <div class="item purple"><div class="item-num">05 · must build first</div><div class="item-title">Organizations + classes</div><div class="item-sub">orgs, org_members, classes, class_enrollments — everything else depends on this</div><div class="status-track" data-id="5"></div></div>
+      </div>
+      <div class="connector"><div class="connector-line"></div></div>
+      <div class="parallel-label">parallel tracks ↓</div>
+      <div class="items-row cols-2">
+        <div class="item purple"><div class="item-num">06</div><div class="item-title">Student dashboard + enrollment</div><div class="item-sub">S01–S07, browse, join institution, topic navigator</div><div class="status-track" data-id="6"></div></div>
+        <div class="item purple"><div class="item-num">07</div><div class="item-title">Teacher / tutor home</div><div class="item-sub">T01–T08, class dashboard, doubt inbox; 5-min edit window; two-state results (open→counts / closed→full); no admin override v1</div><div class="status-track" data-id="7"></div></div>
+      </div>
+      <div class="connector"><div class="connector-line"></div></div>
+      <div class="items-row cols-1 col-center">
+        <div class="item purple"><div class="item-num">08</div><div class="item-title">Curriculum builder</div><div class="item-sub">instructor supplemental content + tutor full curriculum control</div><div class="status-track" data-id="8"></div></div>
+      </div>
+      <div class="connector"><div class="connector-line"></div></div>
+      <div class="items-row cols-1 col-center">
+        <div class="item purple"><div class="item-num">09</div><div class="item-title">Doubt system</div><div class="item-sub">doubts, doubt_messages, hAITU escalation chain</div><div class="status-track" data-id="9"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 2 -->
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-label">Phase 2</span>
+      <span class="phase-name">AI, notifications &amp; parent</span>
+      <span class="phase-progress" id="ph2-prog"></span>
+    </div>
+    <div class="phase-body">
+      <div class="gate-row">
+        <div class="gate-items">
+          <div class="items-row cols-2">
+            <div class="item coral"><div class="item-num">10</div><div class="item-title">hAITU AI layer</div><div class="item-sub">8 interaction types, Claude API, structured JSON escalation</div><div class="status-track" data-id="10"></div></div>
+            <div class="item coral"><div class="item-num">11</div><div class="item-title">Notification system</div><div class="item-sub">all types, 60s polling, cron jobs</div><div class="status-track" data-id="11"></div></div>
+          </div>
+          <div class="connector"><div class="connector-line"></div></div>
+          <div class="items-row cols-1 col-center">
+            <div class="item coral"><div class="item-num">12</div><div class="item-title">Parent portal</div><div class="item-sub">P01–P05, child linking (max 10), two-level thresholds (warn 40–59% / danger &lt;40%), activity feed, tutor messaging; Ph1 static AI fallback</div><div class="status-track" data-id="12"></div></div>
+          </div>
+        </div>
+        <div class="gate-note">
+          <div class="gate-arrow">← spec gate</div>
+          <div class="gate-box" style="border-color:#238636; background:#12261e;">
+            <div class="gate-title" style="color:#3fb950;">✓ gate cleared</div>
+            <div class="gate-desc" style="color:#3fb950;">05_06_07_personas.md review complete 2026-03-23. Item 12 unblocked.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 3 -->
+  <div class="phase-block">
+    <div class="phase-header">
+      <span class="phase-label">Phase 3</span>
+      <span class="phase-name">Extended personas</span>
+      <span class="phase-progress" id="ph3-prog"></span>
+    </div>
+    <div class="phase-body">
+      <div class="items-row cols-3">
+        <div class="item gray"><div class="item-num">13</div><div class="item-title">Institution admin</div><div class="item-sub">I01–I06, analytics (month/term/all), board adoption, invite links for unknown emails, auto-resolve conflicts</div><div class="status-track" data-id="13"></div></div>
+        <div class="item gray"><div class="item-num">14</div><div class="item-title">Platform admin</div><div class="item-sub">SA01–SA06, 6 feature flags incl. haitu_enabled_global + institution_self_registration + ai_log_retention_days</div><div class="status-track" data-id="14"></div></div>
+        <div class="item gray"><div class="item-num">15</div><div class="item-title">Tutor marketplace</div><div class="item-sub">discovery, profiles, topic reviews</div><div class="status-track" data-id="15"></div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Overall progress -->
+<div class="overall">
+  <div class="overall-top">
+    <span class="overall-label">overall progress</span>
+    <span class="overall-pct" id="overall-pct">0%</span>
+  </div>
+  <div class="bar-track"><div class="bar-fill" id="overall-bar" style="width:0%"></div></div>
+  <div class="phase-bars">
+    <div class="phase-bar-item pb-0"><div class="pb-label"><span>Phase 0</span><span id="pb0-pct">0%</span></div><div class="pb-track"><div class="pb-fill" id="pb0-fill" style="width:0%"></div></div></div>
+    <div class="phase-bar-item pb-1"><div class="pb-label"><span>Phase 1</span><span id="pb1-pct">0%</span></div><div class="pb-track"><div class="pb-fill" id="pb1-fill" style="width:0%"></div></div></div>
+    <div class="phase-bar-item pb-2"><div class="pb-label"><span>Phase 2</span><span id="pb2-pct">0%</span></div><div class="pb-track"><div class="pb-fill" id="pb2-fill" style="width:0%"></div></div></div>
+    <div class="phase-bar-item pb-3"><div class="pb-label"><span>Phase 3</span><span id="pb3-pct">0%</span></div><div class="pb-track"><div class="pb-fill" id="pb3-fill" style="width:0%"></div></div></div>
+  </div>
+</div>
+
+<script>
+const STEPS = ['spec review','impl','testing','released'];
+const PHASE_ITEMS = { 0:[1,2,3,4], 1:[5,6,7,8,9], 2:[10,11,12], 3:[13,14,15] };
+const KEY = 'haisir_status_v2';
+
+let state = {};
+try { const s = localStorage.getItem(KEY); if (s) state = JSON.parse(s); } catch(e) {}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e) {} }
+function get(id) { return state[id] || 0; }
+
+function set(id, step) {
+  state[id] = get(id) === step ? step - 1 : step;
+  if (state[id] < 0) state[id] = 0;
+  save();
+  renderItem(id);
+  renderProgress();
+}
+
+function renderItem(id) {
+  const track = document.querySelector(`.status-track[data-id="${id}"]`);
+  if (!track) return;
+  const cur = get(id);
+  track.innerHTML = '';
+  STEPS.forEach((label, i) => {
+    const step = i + 1;
+    const btn = document.createElement('button');
+    btn.className = 'st-step';
+    btn.textContent = label;
+    if (step < cur) btn.classList.add(`done-${step}`);
+    else if (step === cur) btn.classList.add(`active-${step}`);
+    btn.addEventListener('click', () => set(id, step));
+    track.appendChild(btn);
+  });
+}
+
+function pct(score, max) { return max ? Math.round((score / max) * 100) : 0; }
+
+function renderProgress() {
+  let totalScore = 0;
+  Object.entries(PHASE_ITEMS).forEach(([pi, items]) => {
+    const score = items.reduce((s, id) => s + get(id), 0);
+    const max = items.length * 4;
+    const p = pct(score, max);
+    totalScore += score;
+    document.getElementById(`pb${pi}-pct`).textContent = p + '%';
+    document.getElementById(`pb${pi}-fill`).style.width = p + '%';
+    const released = items.filter(id => get(id) === 4).length;
+    const prog = document.getElementById(`ph${pi}-prog`);
+    if (prog) prog.textContent = released === items.length && items.length > 0
+      ? '✓ all released'
+      : `${released}/${items.length} released`;
+  });
+  const allItems = Array.from({length:15},(_,i)=>i+1);
+  const op = pct(totalScore, 15 * 4);
+  document.getElementById('overall-pct').textContent = op + '%';
+  document.getElementById('overall-bar').style.width = op + '%';
+}
+
+for (let i = 1; i <= 15; i++) renderItem(i);
+renderProgress();
+</script>
+</body>
+</html>

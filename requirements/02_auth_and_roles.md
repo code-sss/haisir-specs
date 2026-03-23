@@ -39,6 +39,33 @@ X-Current-Role: student           # forwarded from client
 
 FastAPI validates the JWT that APISIX injects — not anything from the browser. Developers must never write code that expects the client to send a Bearer token.
 
+The following diagram shows the full request lifecycle — first login through steady-state requests:
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant A as APISIX
+    participant K as Keycloak
+    participant F as FastAPI
+
+    Note over B,F: First login
+    B->>A: Request (no session cookie)
+    A->>K: Redirect — OIDC Authorization Code Flow
+    K-->>B: Login page (email/password or Google SSO)
+    B->>K: Credentials
+    K-->>A: Auth code → JWT (RS256)
+    A->>A: Validate JWT via Keycloak JWKS
+    A-->>B: Set session cookie (httpOnly, managed by APISIX)
+
+    Note over B,F: Every subsequent request
+    B->>A: Cookie + X-CSRF-Token + X-Current-Role
+    A->>A: Validate session cookie
+    A->>F: Inject Authorization: Bearer JWT<br/>+ forward X-CSRF-Token, X-Current-Role
+    F->>F: Validate injected JWT (RS256)<br/>Check X-CSRF-Token and X-Current-Role
+    F-->>A: Response
+    A-->>B: Response
+```
+
 ---
 
 ## 2. Keycloak Configuration
@@ -115,6 +142,29 @@ The existing codebase uses `fastapi-csrf-protect` with the double-submit cookie 
 3. FastAPI validates the token matches the cookie value on each request.
 4. On 403 (token expired or mismatch), the existing `fetchWithCSRFRetry()` wrapper automatically fetches a fresh token and retries once.
 
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant F as FastAPI
+
+    Note over B,F: Bootstrap — once per session
+    B->>F: GET /api/auth/csrf
+    F-->>B: {csrf_token} + Set-Cookie: csrf_cookie
+
+    Note over B,F: Every mutation (POST / PUT / PATCH / DELETE)
+    B->>F: Request + Cookie + X-CSRF-Token: <token>
+    F->>F: Compare header value vs csrf_cookie value
+    alt Tokens match
+        F-->>B: 200 OK
+    else Mismatch or expired
+        F-->>B: 403 Forbidden
+        B->>F: GET /api/auth/csrf (fetchWithCSRFRetry auto-retry)
+        F-->>B: New {csrf_token}
+        B->>F: Original request — retry with new token
+        F-->>B: 200 OK
+    end
+```
+
 ### 3.2 Frontend convention
 
 All API calls use raw `fetch` — no Axios, no third-party HTTP client. Every request follows this existing pattern:
@@ -150,6 +200,21 @@ The role switching mechanism already exists. A user with multiple roles switches
 3. Does NOT log the user out or require re-authentication
 
 The existing `useAuth` hook manages this. New roles (`tutor`, `institution_admin`, `parent`) must integrate into the existing `useAuth` hook — not a new one.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant BE as Backend
+
+    U->>FE: Click role pill (e.g. "Parent")
+    FE->>FE: localStorage.setItem('currentRole', 'parent')
+    Note over FE,BE: No logout. Same session cookie. No token refresh.
+    FE->>BE: Any API call + Cookie + X-Current-Role: parent
+    BE->>BE: require_role('parent') passes<br/>Data filtered to parent workspace
+    BE-->>FE: Parent-scoped response
+    FE->>FE: Re-render workspace for parent role<br/>Topbar colour → #3D2000
+```
 
 ### 4.2 `X-Current-Role` header
 

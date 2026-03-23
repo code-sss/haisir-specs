@@ -10,6 +10,20 @@ This is a **specs-only** repo (`haisir-specs`) — no build system, no tests, no
 - `haisir-backend` — FastAPI backend (`../haisir-backend`)
 - `haisir-deploy` — Docker Compose / infrastructure (`../haisir-deploy`)
 
+## Implementation Planning
+
+The `Implementation_planning/` directory contains decision records and the implementation roadmap. Read these before starting any feature build:
+
+| File | Purpose |
+|---|---|
+| `gap-analysis.md` | Full gap list by domain — new tables, endpoints, routes needed per phase. Implementation phases and dependency graph. |
+| `phase0-review-decisions.md` | PM decisions from Phase 0 review — role model, schema extensions, assessment deprecation, onboarding. |
+| `phase1-review-decisions.md` | PM + Tech Lead decisions from Phase 1 review — all 6 personas, auth patterns, hAITU, data model edge cases. |
+| `review-checklist.md` | Human review order and status — tracks which spec files have been reviewed and what was decided. |
+| `haisir_implementation_plan.html` | Interactive implementation tracker — 15 work items across 4 phases with dependency visualization. Open in a browser. |
+
+> When building any feature, read the relevant decision record first. The "why" behind every spec choice is documented there.
+
 ## Read Order for Any Task
 
 Always read specs in this order before generating code in any sibling repo:

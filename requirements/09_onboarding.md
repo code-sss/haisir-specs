@@ -15,6 +15,57 @@ Onboarding runs once — immediately after a new user verifies their email via K
 
 Institution admins, instructors, and platform admins (`admin`) are never onboarded through this flow — they are invited or created directly. Tutors use a separate "Become a tutor" registration flow (not part of onboarding).
 
+The following diagram shows the full onboarding sequence, including the branching between Student and Parent paths and the token refresh after role assignment:
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant K as Keycloak
+    participant BE as Backend
+
+    U->>FE: Sign up (ON01)
+    FE->>K: Register via email or Google SSO
+    K-->>U: Email verification link
+    U->>K: Verify email
+    K-->>FE: Session cookie set by APISIX
+
+    FE->>BE: GET /api/users/me
+    BE-->>FE: {onboarding_completed: false, roles: []}
+    FE->>FE: Redirect to /onboarding → ON02
+
+    alt Student path
+        U->>FE: Select "Student" (ON02) → ON03
+        U->>FE: Submit profile (name, grade, subjects)
+        FE->>BE: POST /api/students/me/profile
+        opt Invite code entered
+            FE->>BE: GET /api/classes/by-invite-code/{code}
+            BE-->>FE: {class_name, org, grade}
+        end
+        FE->>BE: POST /api/users/me/assign-role {role: "student"}
+        BE->>K: Assign "student" realm role (Admin API)
+        FE->>K: Silent re-auth (hidden iframe, prompt=none)
+        K-->>FE: New JWT — realm_access.roles includes "student"
+    else Parent path
+        U->>FE: Select "Parent" (ON02) → ON05
+        opt Child link code entered
+            FE->>BE: GET /api/parent-link-codes/{code}
+            BE-->>FE: {student_name, grade}
+            FE->>BE: POST /api/parent-child-links {code}
+        end
+        FE->>BE: POST /api/users/me/assign-role {role: "parent"}
+        BE->>K: Assign "parent" realm role (Admin API)
+        FE->>K: Silent re-auth (hidden iframe, prompt=none)
+        K-->>FE: New JWT — realm_access.roles includes "parent"
+    end
+
+    FE->>FE: ON07 — role switcher demo
+    U->>FE: Click "Launch Dashboard" (ON08)
+    FE->>BE: PATCH /api/users/me/onboarding-complete
+    BE-->>FE: {completed_at}
+    FE->>FE: Redirect to role dashboard
+```
+
 ---
 
 ## 2. Screens

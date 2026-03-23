@@ -543,10 +543,11 @@ class DoubtMessage(BaseModel):
     sender_idp_sub: str | None  # null for 'ai'
     body: str
     created_at: datetime
+    edited_at: datetime | None  # null unless message has been edited; teacher-only, within 5-min window (BR-DOUBT-011)
 ```
 
 **BR-DOUBT-001:** Escalation only allowed when `haitu_attempted = true`.
-**BR-DOUBT-002:** Messages are append-only — no editing or deletion.
+**BR-DOUBT-002:** Messages are effectively append-only with one exception: teachers can edit their own messages within 5 minutes of sending (tracked via `edited_at`). After 5 minutes, all messages are immutable — no editing or deletion for any sender type. See BR-DOUBT-011 in `04_teacher_tutor.md`.
 **BR-DOUBT-003:** Auto-close at 7 days if not manually resolved.
 **BR-DOUBT-004:** When teacher sends a message, `doubt.status` → `answered`. When marked resolved, `status` → `resolved` and `resolved_at` is set.
 **BR-DOUBT-005:** `escalated_to` is resolved by `domain/services/doubts_service.py` at `POST /api/doubts` creation time — not at hAITU interaction time, and not in the route handler. Resolution chain:
