@@ -1,6 +1,7 @@
 # RAG, Curriculum Structure & hAITU — Design Decisions
 > Session date: 2026-03-24
 > Covers: content hierarchy, node types, RAG data model, multi-board support, open track mapping, curriculum builder gaps
+> See also: [`sample-structures.md`](sample-structures.md) — concrete table-level examples for all node types, owner types, and open-track course patterns discussed here
 
 ---
 
@@ -251,11 +252,11 @@ SA02 additional gap: no "add node" action described at all (only edit/publish ex
 
 ### Spec files to update (after prototype validation)
 
-- [ ] **`01_data_model.md`** — add `topic_content_chunks` table definition; update `CoursePathNode.node_type` to free string.
-- [ ] **`04_teacher_tutor.md` T04** — replace fixed 2-level tree description with arbitrary depth; add node-type picker; add leaf-node rule; rename `level` → `node_type` in API block.
-- [ ] **`05_06_07_personas.md` SA02** — same tree fixes as T04; add "Add node" action and API; show reserved type indicators for `grade` and `subject`.
-- [ ] **`08_haitu_ai_layer.md`** — replace context-stuffing with vector retrieval description; add `topic_content_chunks` to hAITU data dependencies; add video-only warning behaviour.
-- [ ] **`00_overview.md`** — update search convention to mention `topic_content_chunks` for hAITU (distinct from general hybrid search).
+- [x] **`01_data_model.md`** — add `topic_content_chunks` table definition; update `CoursePathNode.node_type` to free string.
+- [x] **`04_teacher_tutor.md` T04** — replace fixed 2-level tree description with arbitrary depth; add node-type picker; add leaf-node rule; rename `level` → `node_type` in API block.
+- [x] **`05_06_07_personas.md` SA02** — same tree fixes as T04; add "Add node" action and API; show reserved type indicators for `grade` and `subject`.
+- [x] **`08_haitu_ai_layer.md`** — replace context-stuffing with vector retrieval description; add `topic_content_chunks` to hAITU data dependencies; add video-only warning behaviour.
+- [x] **`00_overview.md`** — update search convention to mention `topic_content_chunks` for hAITU (distinct from general hybrid search).
 
 ### Prototype validation pending
 

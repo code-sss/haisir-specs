@@ -45,22 +45,30 @@ Each interaction type has a fixed system prompt and a defined input/output contr
 
 **Context assembled server-side:**
 - Topic title, level, subject, board
-- Topic's content items — see content extraction rules below
+- Top-5 relevant chunks from `topic_content_chunks` — retrieved via pgvector (see retrieval pipeline below)
 - Student's mastery score for this topic
 - Last 5 messages from this topic's hAITU session (rolling window)
 
-**Content extraction rules for `{content_summary}`:**
-- Include only `text` type `topic_contents` items (plain text notes) in full.
-- For `pdf` type items: extract text using a server-side PDF text extractor (e.g., `pdfplumber` or `PyMuPDF`). Truncate extracted text to **2000 characters** per PDF. If the PDF has no extractable text (scanned image), include only the content item title.
-- For `video` type items: include only the content item title (no transcript extraction in this phase).
-- Total `{content_summary}` must not exceed **4000 characters**. If the combined content exceeds this, truncate the longest items proportionally, preserving at least the title of each item.
-**Content extraction pipeline:**
-- On `topic_contents` create or update, an async background job is triggered to extract text (PDF parsing via `pdfplumber`/`PyMuPDF`, plain text passthrough).
-- Extracted text is stored in `topic_contents.text_extracted` (see `01_data_model.md` section 6a) and also batch-indexed to pgvector for search.
-- If a student asks a hAITU doubt before extraction is complete, the backend returns a fallback response: "hAITU is still reviewing the materials for this topic — please try again in a moment." (HTTP 202 with `retry_after: 30` header).
+**RAG retrieval pipeline for `{content_summary}`:**
+1. Embed the student's message using `all-MiniLM-L6-v2`.
+2. Query `topic_content_chunks`:
+   ```sql
+   SELECT content FROM topic_content_chunks
+   WHERE topic_id = :topic_id
+   ORDER BY embedding <=> :query_embedding
+   LIMIT 5;
+   ```
+3. Assemble the top-5 chunks (up to ~3000 chars total) as `{content_summary}` for the system prompt.
+
+**Video-only fallback:** If `topic_content_chunks` is empty for the topic (e.g. video-only content with no PDF/text), fall back to `topic_contents.text_extracted` truncated to 4000 characters (BR-AI-010 behaviour preserved).
+
+**Content ingestion pipeline (LlamaIndex):**
+- On `topic_contents` create or update, an async background job is triggered.
+- Extracted text is stored in `topic_contents.text_extracted` (see `01_data_model.md` section 6a) and chunked/embedded into `topic_content_chunks` (see section 6b).
+- Chunks: 600-char pieces, 100-char overlap, sentence-aware split. Embedded with `all-MiniLM-L6-v2`.
+- If a student asks a hAITU doubt before ingestion is complete, the backend returns a fallback response: "hAITU is still reviewing the materials for this topic — please try again in a moment." (HTTP 202 with `retry_after: 30` header).
 - Extraction status is tracked via `topic_contents.extraction_status` (`'pending'` | `'complete'` | `'failed'`). No notification is sent to the student when extraction completes — the student simply retries and it works.
-- The pgvector embedding for each `topic_contents` item is generated as part of the same async job, ensuring search indexes stay current with content changes.
-- Invalidation: any update to a `topic_contents` row resets `extraction_status = 'pending'` and re-triggers extraction + re-indexing.
+- Invalidation: any update to a `topic_contents` row resets `extraction_status = 'pending'` and re-triggers extraction + re-chunking.
 
 **System prompt template:**
 ```
@@ -469,4 +477,6 @@ These rules are enforced server-side regardless of what the client sends.
 
 **BR-AI-009:** The model used for hAITU is determined by the `platform_settings.model` value at request time. Changing the model in settings takes effect on the next API call — no restart required.
 
-**BR-AI-010:** Content extraction is async. The hAITU `topic-doubt` interaction gracefully degrades to a topic-title-only context if `extraction_status != 'complete'` for all content items in the topic, returning HTTP 202 with a `retry_after: 30` hint and the fallback message: "hAITU is still reviewing the materials for this topic — please try again in a moment."
+**BR-AI-010:** Content ingestion is async. The hAITU `topic-doubt` interaction gracefully degrades:
+- If `topic_content_chunks` is empty AND `extraction_status != 'complete'` for all topic content items: return HTTP 202 with `retry_after: 30` and the message "hAITU is still reviewing the materials for this topic — please try again in a moment."
+- If `topic_content_chunks` is empty but `extraction_status = 'complete'` (video-only topic with no extractable text): fall back to `text_extracted` truncated to 4000 chars if available, otherwise use topic title only. No retry hint — this is the steady-state for video-only topics.

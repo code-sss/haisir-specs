@@ -144,6 +144,10 @@ ProxyHeaders → SecurityHeaders → SecurityValidation
 - **Infrastructure:** `pgvector` extension enabled on the existing PostgreSQL instance. No separate search service needed in v1.
 - **Embedding model:** `all-MiniLM-L6-v2` (sentence-transformers, self-hosted). 384-dimension vectors. Served via a lightweight sidecar container; no external API dependency. Configurable via `SEARCH_EMBEDDING_MODEL` env var for future swap (e.g. multilingual model if Hindi search quality requires it).
 
+> **Two distinct pgvector uses — do not conflate:**
+> 1. **General hybrid search** (above): entity-level vectors for topics, courses, tutor profiles, organizations, questions — used by search endpoints for student/parent/teacher content discovery.
+> 2. **hAITU RAG retrieval** (`topic_content_chunks`): sub-document chunk vectors scoped to a specific `topic_id` — used only by the `POST /api/haitu/topic-doubt` endpoint to retrieve the 5 most relevant content chunks for the student's question. See `01_data_model.md` section 6b and `08_haitu_ai_layer.md` §3.1.
+
 **Timezone convention:**
 - All timestamps are stored in PostgreSQL as `TIMESTAMP WITH TIME ZONE` (UTC).
 - All API responses return timestamps in ISO 8601 UTC format (e.g., `2026-03-22T14:30:00Z`).

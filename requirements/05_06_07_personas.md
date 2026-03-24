@@ -566,27 +566,52 @@ GET /api/admin/dashboard
 ### SA02 — Board Content Manager
 
 **Layout:**
-- Board tabs (NCERT / JNV / CBE / + Add board) across tree header.
-- Left tree: grade → subject → course hierarchy with live/draft dot per node.
-- Right detail: selected topic's sub-topics, each with: adoption count pill, live/draft badge, Edit and Publish buttons.
+- Board tabs (NCERT / JNV / CBE / + Add board) across tree header. Each tab shows: board icon, label, version badge (e.g. v2.4), live/draft status dot.
+- Left tree: arbitrary-depth node tree for the active board. Each node shows: expand/collapse toggle, type badge (with 🔒 for reserved types), live/draft status dot.
+- Right detail — two modes:
+  - **Non-leaf node selected:** Child node list + "+ Add child node" button.
+  - **Leaf node selected:** Topic cards (each showing title, status badge, content count, adoption pill "N institutions") + "+ Add topic" and "Publish" / "Publish update" buttons.
 
-**Adoption count:** How many institutions have adopted this topic. Shown as "N institutions" pill.
+**Node-type picker (Add node modal):**
+- Reserved types (`grade`, `subject`) shown as chips with 🔒 icon and help text: *"Reserved types have special system behaviour and cannot be repurposed."*
+- Default types (`course`, `chapter`, `module`, `section`, `unit`, `week`) as standard chips.
+- "Custom…" option reveals a free-text input.
+
+**Add board modal:**
+- Board name input.
+- Path type selector: **structured** (board-controlled curriculum — NCERT, Cambridge, IB) vs **flexible** (tutor-built open courses). Maps to `categories.path_type`.
+
+**Leaf-node rule:** Topics can only be added to leaf nodes. "+ Add topic" button is shown only for leaf nodes. `POST /api/admin/boards/{board_id}/topics` returns 400 if the target `course_path_node` has children.
+
+**Adoption count:** How many institutions have adopted this board. Shown as "N institutions" pill on topic cards and in the Publish modal.
 
 **Publish flow:**
-- Click "Publish update" → modal warns "X institutions using this. Publishing will update their adopted curriculum."
-- Confirm with version notes + notify preference → publishes.
+- Click "Publish" (new board) or "Publish update" (existing) → modal shows: adoption count warning ("Publishing will push this version to all N institutions…"), optional version notes textarea, "Notify institution admins of this update" checkbox.
+- Confirm → publishes and increments version.
 
 **Business rules:**
-- **BR-SA-004:** SuperAdmin is the only role that can modify `owner_type = 'platform'` topics.
+- **BR-SA-004:** SuperAdmin is the only role that can modify `owner_type = 'platform'` nodes and topics.
 - **BR-SA-005:** Publishing a board update propagates to all `board_adoptions` for this board. For each adopted topic: if the institution's version still matches the board original (i.e. `owner_type = 'institution'` but unmodified since adoption), it is updated to the new board version. If the institution has modified the topic since adoption, it is preserved as-is. Institution-created custom topics are never touched. See also BR-INST-006.
 - **BR-SA-006:** Version string increments automatically on publish (e.g. v2.4 → v2.5). SuperAdmin can override.
 - **BR-SA-007:** Adoption count = `board_adoptions` where `board_id` matches and `status = 'active'`.
+- **BR-SA-008:** Reserved node types (`grade`, `subject`) cannot be used as custom types by any non-admin role. Admin can create nodes of any type including reserved.
 
 **API calls:**
 ```
 GET /api/admin/boards/{board_id}/tree
 → Auth: admin
-→ Returns: [{id, title, level, parent_id, status, version, adoption_count, children}]
+→ Returns: [{id, name, node_type, parent_id, order, status, version, adoption_count, children: [...], topics: [{id, title, status, content_count, adoptions}]}]
+
+POST /api/admin/boards/{board_id}/nodes
+→ Auth: admin
+→ Body: {parent_id?: uuid, name: str, node_type: str}
+→ Returns: {node_id}
+
+POST /api/admin/boards/{board_id}/topics
+→ Auth: admin
+→ Body: {course_path_node_id: uuid, title: str, status: "draft"}
+→ Returns: {topic_id}
+→ Errors: 400 if course_path_node has children (leaf-node enforcement)
 
 POST /api/admin/boards/{board_id}/publish
 → Auth: admin
@@ -598,13 +623,13 @@ POST /api/admin/boards/{board_id}/publish
 
 PATCH /api/admin/topics/{topic_id}
 → Auth: admin
-→ Body: {title?, description?, status?, order_index?}
+→ Body: {title?, description?, status?, order?}
 → Returns: updated topic
 
-POST /api/admin/boards/{board_id}/topics
+POST /api/admin/boards
 → Auth: admin
-→ Body: {parent_id?, title, level, status: "draft"}
-→ Returns: {topic_id}
+→ Body: {name: str, path_type: "structured" | "flexible"}
+→ Returns: {board_id, category_id}
 ```
 
 ### SA03 — Institution Manager

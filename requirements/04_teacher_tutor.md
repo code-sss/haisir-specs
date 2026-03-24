@@ -241,24 +241,36 @@ POST /api/haitu/teacher-tools
 
 ### T04 — Curriculum Builder
 
-**Purpose:** Build and manage curriculum — topics, sub-topics, and content uploads.
+**Purpose:** Build and manage curriculum — course tree, topics, and content uploads.
 
 **Layout:**
-- Left tree: hierarchical topic tree (chapter → sub-topic level). Click to select. "+ Add chapter" button at bottom.
-- Right detail panel: selected topic's sub-topic pills. Below: content items list (type icon, title, upload date). Upload zone at bottom. "Students on this topic" list (tutor only).
+- Left tree: hierarchical node tree, arbitrary depth (tutor decides structure). Click node to select. Expand/collapse individual branches. "+ Add top-level node" button at bottom (tutor only).
+- Right detail panel — two modes:
+  - **Non-leaf node selected:** Shows list of child nodes + "+ Add child node" button (tutor only). Topics cannot be added here.
+  - **Leaf node selected:** Shows topic pills across the top. Below: per-topic content slots (PDF, Video, Text — one slot per type). Upload controls per slot. "Students on this topic" list (tutor only).
 
 **Instructor vs Tutor distinction:**
-- **Instructor:** Blue notice bar: "Core structure owned by institution admin. You can add supplemental content only." Tree is read-only (cannot add/rename chapters). Upload zone available. Cannot delete platform/institution-owned content items.
-- **Tutor:** Full control. Can add chapters, rename, reorder, delete. Can upload any content. Sees "Students on this topic" list.
+- **Instructor:** Blue notice bar: "Core structure owned by institution admin. You can add supplemental content only." Tree is read-only (cannot add/rename nodes). Content upload available on leaf nodes. Cannot delete platform/institution-owned content items.
+- **Tutor:** Full control. Can add/rename/reorder/delete nodes at any depth. Can upload any content. Sees "Students on this topic" list.
 
-**Content item types:** PDF (file upload), Video link (URL input), Text notes (rich text), Question bank (future).
+**Node-type picker:** When adding a node (tutor only), a modal shows:
+- Default types as selectable chips: `course`, `chapter`, `module`, `section`, `unit`, `week`
+- "Custom…" option — reveals a free-text input for any custom type string
+- Selected type is stored as `course_path_nodes.node_type`
+
+**Content item types:** PDF (file upload), Video (URL link), Text notes (rich text). Exactly **one item per type per topic** — the slot UI enforces this (slot shows Replace/Delete when filled, upload prompt when empty).
+
+**hAITU video-only warning:** When a leaf topic has video content but no PDF or text, the detail pane shows a yellow info banner:
+> *"No text content for this topic — hAITU will answer from general knowledge only. Upload a PDF or text note to enable retrieval-based answers."*
 
 **Quiz and exam authoring:** The `/add-exam` route is the unified authoring tool for both quizzes (`purpose = 'quiz'`) and exams (`purpose = 'exam'`), including `paragraph_questions` (reading passages with embedded question IDs). The curriculum builder does not duplicate this — it links to the existing authoring tool. "Add questions" actions in the curriculum builder open the `/add-exam` flow scoped to this topic.
 
 **Actions:**
-- Click tree node → loads content for that topic in right panel.
-- "+ Add chapter" (tutor only) → adds new chapter node.
-- "Upload content" → opens upload modal (file picker for PDF, URL for video, textarea for notes).
+- Click tree node → loads detail for that node in right panel.
+- Toggle node expand/collapse (for parent nodes).
+- "+ Add top-level node" / "+ Add child node" (tutor only) → opens node-type picker modal → adds new node.
+- "+ Add topic" (leaf nodes only, tutor only) → adds new topic pill on the selected leaf node.
+- Upload content (per slot) → file picker for PDF, URL input for video, textarea for text notes.
 - Click content item → preview (PDF viewer stub / video link).
 - Delete content item (tutor only) → confirms, removes.
 - "Publish" button (tutor only) → sets topic status to `live`.
@@ -266,6 +278,8 @@ POST /api/haitu/teacher-tools
 > **UI note:** Publish button triggers immediately — no confirmation modal. Archive triggers a confirmation modal: "Students will no longer see this topic. This cannot be undone."
 
 **Business rules:**
+- **BR-TCH-027:** Topics can only be added to **leaf nodes** (nodes with no children). `POST /api/topics` returns 400 if the target `course_path_node` has children. The "+ Add topic" button is only shown for leaf nodes.
+- **BR-TCH-028:** A node becomes a non-leaf when the first child node is added. Once a node has children, existing topics attached to it are preserved but the node is treated as non-leaf going forward. (In practice, tutors should structure their tree before adding topics.)
 - **BR-TCH-025:** Instructors can only add content items to topics they are assigned to via their class. They cannot add content to topics outside their class curriculum.
 - **BR-TCH-026:** Instructors can delete only content items they themselves uploaded (`owner_type = 'instructor'`, `owner_id = self`). They cannot delete platform-owned or institution-owned content items. Tutors follow BR-TCH-012 (own topics only).
 - **BR-TCH-012:** Tutors can only modify topics where `owner_type = 'tutor'` and `owner_id = self`.
@@ -277,17 +291,25 @@ POST /api/haitu/teacher-tools
 ```
 GET /api/curriculum/{context_id}/tree
 → Auth: instructor OR tutor
-→ Returns: [{id, title, level, parent_id, order_index, status, children: [...]}]
+→ Returns: [{id, name, node_type, parent_id, order, status, owner_type, children: [...], topics: [{id, title, status}]}]
+
+POST /api/course_path_nodes
+→ Auth: tutor (own curriculum only)
+→ Body: {parent_id?: uuid, name: str, node_type: str, category_id: uuid}
+→ Returns: {node_id}
+→ Errors: 400 if node_type is a reserved type ('grade', 'subject') — tutors cannot create reserved-type nodes
 
 POST /api/topics
 → Auth: tutor (own curriculum only)
-→ Body: {parent_id?: uuid, title: str, level: str, owner_id: uuid}
+→ Body: {course_path_node_id: uuid, title: str}
 → Returns: {topic_id}
+→ Errors: 400 if course_path_node has children (leaf-node enforcement, BR-TCH-027)
 
 POST /api/topics/{topic_id}/content
 → Auth: instructor OR tutor
 → Body: multipart/form-data {type, title, file? | url? | body?}
 → Returns: {content_item_id}
+→ Errors: 409 if a content item of this type already exists for this topic (1-per-type rule)
 
 DELETE /api/content/{content_item_id}
 → Auth: tutor (own content only per BR-TCH-012) OR instructor (own uploaded content only per BR-TCH-026)
