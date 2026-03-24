@@ -113,6 +113,37 @@ topic_contents row created/updated
                 embed (all-MiniLM-L6-v2) → upsert into topic_content_chunks
 ```
 
+### LlamaIndex Integration — Document-Driven Chunking
+
+Decision: Source-Document-Driven Chunking
+
+- The `topic_contents` table is the source of truth for all content items (PDFs, text, etc.), storing metadata and file references for each topic.
+- The RAG pipeline (for example, using LlamaIndex) reads from `topic_contents`, loads each document, and handles chunking, embedding, and storage of nodes ("chunks") in the vector database (`topic_content_chunks`).
+- `topic_content_chunks` are not managed directly by application code; they are generated and updated by the ingestion pipeline based on the current state of `topic_contents` (create/update/delete).
+- Only minimal linking metadata (e.g., `topic_content_id`, `topic_id`, `chunk_index`) is stored in `topic_content_chunks`. All rich metadata (source filename, content type, uploader, timestamps, any provenance) remains in normalized tables (`topic_contents`, `topics`, etc.) and is accessed via joins or materialized views as needed at query time.
+- This approach keeps the schema clean, leverages LlamaIndex's document loading and node management strengths, and ensures maintainability and scalability for both ingestion and retrieval.
+
+Notes / Implementation details:
+- Ingestion: the pipeline should detect document changes (checksum or content version) and re-run chunking + embedding for affected `topic_contents` rows; obsolete chunks are removed or soft-deleted to keep the vector store consistent.
+- Vector DB records must include `topic_id` and `topic_content_id` for efficient scoping during retrieval (e.g., `WHERE topic_id = ?`).
+- Metadata-driven joins: when presenting retrieved chunks to hAITU or UI flows, enrich returned chunks with metadata from `topic_contents` via a join on `topic_content_id` rather than duplicating metadata in the vector rows.
+- LlamaIndex can be used to centralize loaders, chunking logic (chunk size, overlap, sentence-aware splitting), and node-level metadata; keep the pipeline idempotent so re-ingestion is safe.
+
+- Embedding model: use `all-MiniLM-L6-v2` (or an agreed canonical embedding model) for both ingestion and retrieval to ensure vector compatibility.
+- Vector cleanup policy: ingestion must either hard-delete obsolete vectors for a `topic_content` or mark them with a tombstone/soft-delete flag and rely on a periodic reconciliation job to purge stale vectors. The ingestion job should be idempotent and detect content checksum/version changes to trigger re-chunking and cleanup.
+
+Example flow:
+```
+topic_contents row created/updated
+    → ingestion job (LlamaIndex loader)
+        ├── load document (PDF/text)
+        ├── chunk into nodes (600-char, 100-char overlap)
+        ├── for each node: create embedding, write vector with topic_id + topic_content_id + chunk_index
+        └── mark old vectors for this topic_content as removed if they no longer exist after re-chunking
+```
+
+This section supersedes the earlier ad-hoc chunk-management guidance: prefer document-driven ingestion (LlamaIndex) and keep `topic_content_chunks` as a generated table/representation, not a manually maintained content store.
+
 **hAITU query time**
 ```
 Student asks doubt on a topic
