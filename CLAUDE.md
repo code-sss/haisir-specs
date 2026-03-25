@@ -52,6 +52,6 @@ UI mapping files reference prototype screen IDs (e.g. `s-home` → `renderHome()
 
 ## Spec Update Convention
 
-Any PR in `haisir-frontend` or `haisir-backend` that adds/changes an API endpoint, screen/route, business rule, permission, database table/column, or role assignment **must** include a corresponding `haisir-specs` update (same PR or linked PR).
+Any PR in `haisir-frontend` or `haisir-backend` or `haisir-deploy` that adds/changes an API endpoint, screen/route, business rule, permission, database table/column, or role assignment **must** include a corresponding `haisir-specs` update (same PR or linked PR).
 
 Product owner + lead developer must approve changes to business rules or API contracts. UI mapping and prototype changes can be approved by any developer. Spec files live in `target/requirements/` — do not create files at the repo root.
