@@ -1,3 +1,8 @@
+---
+name: describe-current-state
+description: Snapshot current schema, API endpoints, and UI flows from sibling repos into current/ directory
+---
+
 Read `Implementation_planning/progress.md` for any existing `## Current State` context.
 
 Next, read the sibling repos to discover what is currently implemented:

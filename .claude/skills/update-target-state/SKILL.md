@@ -1,3 +1,8 @@
+---
+name: update-target-state
+description: Review and update target requirements specs in target/requirements/ via guided discussion
+---
+
 Read the following files to understand the full spec and the current target state:
 
 **Source-of-truth specs:**

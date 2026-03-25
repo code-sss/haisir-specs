@@ -1,3 +1,8 @@
+---
+name: plan-next-state
+description: Analyse gap between current and target state and recommend the next implementation step to agree on
+---
+
 Read the following files to understand the desired end state:
 - `target/requirements/00_overview.md`
 - `target/requirements/01_data_model.md`

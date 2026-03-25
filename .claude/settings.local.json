@@ -4,7 +4,17 @@
       "Bash(node:*)",
       "Bash(find C:/github/haisir/haisir-backend/src -name *.py -not -path */.venv/*)",
       "Bash(find /c/Users/L S Kalyan/.claude -type f -name *.md -o -name *.json -o -name *.yaml -o -name *.yml)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(rm /Users/kalyansri/Workspace/haisir-frontend/.claude/commands/implement.md)",
+      "Bash(rm /Users/kalyansri/Workspace/haisir-backend/.claude/commands/implement.md)",
+      "Bash(rm /Users/kalyansri/Workspace/haisir-deploy/.claude/commands/implement.md)",
+      "Bash(rm /Users/kalyansri/Workspace/haisir-specs/.claude/commands/describe-current-state.md)",
+      "Bash(rm /Users/kalyansri/Workspace/haisir-specs/.claude/commands/plan-next-state.md)",
+      "Bash(git -C /Users/kalyansri/Workspace/haisir-specs status)",
+      "Bash(git -C /Users/kalyansri/Workspace/haisir-frontend status)",
+      "Bash(git -C /Users/kalyansri/Workspace/haisir-backend status)",
+      "Bash(git -C /Users/kalyansri/Workspace/haisir-deploy status)",
+      "Bash(git:*)"
     ]
   }
 }
