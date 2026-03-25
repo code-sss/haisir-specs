@@ -202,6 +202,8 @@ ON01 (Welcome/Sign-up)
 
 ## Still Pending
 
+> All items in this section are resolved. Kept for traceability only.
+
 | Item | Status | Owner |
 |---|---|---|
 | Phase 1 persona review (Student, Teacher/Tutor, Parent, Institution Admin, Platform Admin screens) | 🔜 Not started | PM |

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(find C:/github/haisir/haisir-backend/src -name *.py -not -path */.venv/*)",
+      "Bash(find /c/Users/L S Kalyan/.claude -type f -name *.md -o -name *.json -o -name *.yaml -o -name *.yml)",
+      "Bash(git mv:*)"
+    ]
+  }
+}

@@ -24,10 +24,6 @@ input,select,textarea{font-family:inherit;}
 .h1{font-size:22px;font-weight:700;color:#0A1F5C;margin-bottom:4px;}
 .h2{font-size:18px;font-weight:700;color:#1a1a18;margin-bottom:4px;}
 .subtitle{font-size:13px;color:#888780;line-height:1.6;}
-.form-label{font-size:11px;font-weight:600;color:#5f5e5a;margin-bottom:5px;display:block;}
-.form-input{width:100%;font-size:13px;border:0.5px solid #d3d1c7;border-radius:8px;padding:10px 13px;background:#fafaf8;color:#1a1a18;outline:none;}
-.form-input:focus{border-color:#0A1F5C;}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .form-hint{font-size:11px;color:#b4b2a9;margin-top:4px;}
 /* 2-column role grid */
 .role-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
@@ -47,25 +43,6 @@ input,select,textarea{font-family:inherit;}
 .btn-secondary:hover{background:#f5f4f0;}
 .btn-row{display:flex;gap:10px;}
 .btn-row .btn-primary{flex:1;}
-.chip-wrap{display:flex;flex-wrap:wrap;gap:7px;}
-.chip{font-size:11px;padding:5px 12px;border-radius:20px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;cursor:pointer;}
-.chip:hover{border-color:#0A1F5C;color:#0A1F5C;}
-.chip.on{background:#0A1F5C;color:#fff;border-color:#0A1F5C;}
-.code-box{border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px;}
-.cbb{background:#E6F1FB;border:0.5px solid #B5D4F4;}
-.cba{background:#FAEEDA;border:0.5px solid #FAC775;}
-.code-lbl{font-size:11px;font-weight:600;}
-.cll-b{color:#185FA5;}
-.cll-a{color:#854F0B;}
-.code-input{font-size:15px;font-weight:700;border:1.5px solid #d3d1c7;border-radius:7px;padding:10px 14px;background:#fff;color:#0A1F5C;outline:none;letter-spacing:.08em;text-align:center;width:100%;}
-.code-input:focus{border-color:#0A1F5C;}
-.code-msg{font-size:12px;padding:6px 10px;border-radius:6px;}
-.code-ok{background:#E1F5EE;color:#085041;}
-.code-err{background:#FAECE7;color:#712B13;}
-.step-row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:0.5px solid #f0efe9;}
-.step-row:last-child{border-bottom:none;}
-.step-num{width:22px;height:22px;border-radius:50%;background:#0A1F5C;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
-.step-text{font-size:12px;color:#5f5e5a;line-height:1.5;}
 .sw-demo{background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;margin:0;}
 .sw-topbar{height:44px;display:flex;align-items:center;padding:0 16px;gap:10px;transition:background .3s;}
 .sw-brand{font-size:14px;font-weight:700;color:#fff;}
@@ -78,8 +55,9 @@ input,select,textarea{font-family:inherit;}
 .sw-icon{font-size:28px;}
 .sw-name{font-size:13px;font-weight:600;color:#1a1a18;margin-bottom:2px;}
 .sw-desc{font-size:11px;color:#888780;}
-.action-row{display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:10px;cursor:pointer;}
-.action-row:hover{opacity:.9;}
+.action-row{display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:10px;cursor:pointer;border:0.5px solid #e5e3dc;}
+.action-row:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.07);}
+.action-row{transition:transform .15s,box-shadow .15s;}
 .action-icon{font-size:22px;flex-shrink:0;}
 .action-title{font-size:13px;font-weight:600;}
 .action-sub{font-size:11px;color:#888780;margin-top:2px;}
@@ -90,32 +68,24 @@ input,select,textarea{font-family:inherit;}
 </head>
 <body>
 
-<!-- S1: WELCOME (ON01) -->
-<div class="screen active" id="s-welcome">
+<!-- S0: KEYCLOAK LOGIN PLACEHOLDER (ON01 — native, not a custom screen) -->
+<div class="screen active" id="s-keycloak">
   <div class="topbar"><span class="tb-brand">hAIsir</span></div>
-  <div class="progress-bar"><div class="progress-fill" style="width:8%"></div></div>
+  <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
   <div class="center-body">
     <div class="card card-sm" style="text-align:center;align-items:center;">
-      <div style="font-size:52px;margin-bottom:4px;">🦉</div>
-      <div><div class="h1">Welcome to hAIsir</div>
-        <div class="subtitle">AI-powered learning for students, teachers, and families.<br>Set up your account in under 2 minutes.</div></div>
-      <div style="width:100%;display:flex;flex-direction:column;gap:10px;">
-        <div><label class="form-label">Your name</label>
-          <input class="form-input" id="w-name" type="text" placeholder="Full name" /></div>
-        <div><label class="form-label">Email</label>
-          <input class="form-input" id="w-email" type="email" placeholder="you@example.com" /></div>
+      <div style="font-size:40px;">🔑</div>
+      <div><div class="h2">Sign in to hAIsir</div>
+        <div class="subtitle">In production, Keycloak serves this page.<br>Supports email/password and Google SSO.</div></div>
+      <div style="background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:8px;padding:11px 14px;font-size:12px;color:#0C447C;width:100%;text-align:left;">
+        <strong>Prototype note:</strong> This screen is rendered by Keycloak natively — no custom frontend code. Click below to simulate a successful login.
       </div>
-      <div style="width:100%;display:flex;flex-direction:column;gap:8px;">
-        <button class="btn-primary" onclick="goRoles()">Continue &rarr;</button>
-        <button class="btn-secondary" style="width:100%;" onclick="showToast('Opening Google sign-in...')">Continue with Google</button>
-      </div>
-      <div style="font-size:11px;color:#b4b2a9;">Already have an account?
-        <span style="color:#185FA5;cursor:pointer;" onclick="showToast('Logging in...')">Log in</span></div>
+      <button class="btn-primary" onclick="goRoles()">Simulate login &#8594;</button>
     </div>
   </div>
 </div>
 
-<!-- S2: ROLE SELECTION (ON02) — single-select: Student or Parent only -->
+<!-- S1: ROLE SELECTION (ON02) — single-select: Student or Parent only -->
 <div class="screen" id="s-roles">
   <div class="topbar"><span class="tb-brand">hAIsir</span><span class="tb-step">Step 1 of 3</span></div>
   <div class="progress-bar"><div class="progress-fill" style="width:30%"></div></div>
@@ -128,84 +98,56 @@ input,select,textarea{font-family:inherit;}
         <strong>Teacher or tutor?</strong> Instructors are invited by their institution admin. Independent tutors register via the "Become a tutor" flow after signing up.
       </div>
       <div class="btn-row">
-        <button class="btn-secondary" onclick="goScreen('s-welcome')">&larr; Back</button>
+        <button class="btn-secondary" onclick="goScreen('s-keycloak')">&larr; Back</button>
         <button class="btn-primary" id="roles-next" disabled onclick="goSetup()">Continue &rarr;</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- S3: STUDENT SETUP (ON03) -->
+<!-- S2: STUDENT READY (ON03) — "You're all set" + CTAs, no form -->
 <div class="screen" id="s-setup-student">
-  <div class="topbar"><span class="tb-brand">hAIsir</span><span class="tb-step" id="lbl-student">Step 2 of 3</span></div>
-  <div class="progress-bar"><div class="progress-fill" id="p-student" style="width:60%"></div></div>
+  <div class="topbar" style="background:#0A1F5C;">
+    <span class="tb-brand">hAIsir</span>
+    <span class="tb-step">You're in!</span>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" style="width:90%"></div></div>
   <div class="center-body">
-    <div class="card card-md">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="width:36px;height:36px;border-radius:8px;background:#E6F1FB;display:flex;align-items:center;justify-content:center;font-size:18px;">&#127891;</div>
-        <div><div class="h2" style="margin:0;">Student profile</div><div class="form-hint" style="margin:0;">Takes about 1 minute</div></div>
+    <div class="card card-sm" style="text-align:center;align-items:center;">
+      <div style="font-size:52px;">&#127881;</div>
+      <div>
+        <div class="h1">You're all set, there!</div>
+        <div class="subtitle">Your Student account is ready. Here's what to do first.</div>
       </div>
-      <div class="form-row">
-        <div><label class="form-label">First name <span style="color:#993C1D;">*</span></label>
-          <input class="form-input" id="s-fname" type="text" placeholder="e.g. Arjun" /></div>
-        <div><label class="form-label">Last name <span style="color:#993C1D;">*</span></label>
-          <input class="form-input" id="s-lname" type="text" placeholder="e.g. Patel" /></div>
-      </div>
-      <div><label class="form-label">Grade <span style="color:#993C1D;">*</span></label>
-        <select class="form-input" id="s-grade">
-          <option value="">Select grade</option>
-          <option>Grade 5</option><option>Grade 6</option><option>Grade 7</option>
-          <option>Grade 8</option><option>Grade 9</option><option>Grade 10</option>
-          <option>Grade 11</option><option>Grade 12</option><option>Undergraduate</option>
-        </select></div>
-      <div><label class="form-label">Subjects you study</label>
-        <div class="chip-wrap" id="stu-subjects"></div></div>
-      <div><label class="form-label">Are you enrolled in a school on hAIsir?</label>
-        <div class="code-box cbb">
-          <div class="code-lbl cll-b">Enter invite code (if your school gave you one)</div>
-          <input class="code-input" id="stu-code" type="text" placeholder="e.g. STMARY-2026-G6" oninput="chkCode('stu-code','stu-code-msg',stuCodes)" />
-          <div id="stu-code-msg"></div>
-        </div>
-        <div class="form-hint">No code? You can join a school after setup.</div></div>
-      <div class="btn-row">
-        <button class="btn-secondary" onclick="goRoles()">&larr; Back</button>
-        <button class="btn-primary" onclick="nextSetup()">Continue &rarr;</button>
-      </div>
+      <span style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px;background:#f0f4ff;color:#0A1F5C;">&#127891; Student</span>
+      <div style="width:100%;display:flex;flex-direction:column;gap:8px;" id="stu-ctas"></div>
+      <span style="font-size:11px;color:#b4b2a9;cursor:pointer;" onclick="nextSetup()">Skip &mdash; go to dashboard</span>
     </div>
   </div>
 </div>
 
-<!-- S4: PARENT SETUP (ON05) -->
+<!-- S3: PARENT READY (ON05) — "You're all set" + CTA, no form -->
 <div class="screen" id="s-setup-parent">
-  <div class="topbar"><span class="tb-brand">hAIsir</span><span class="tb-step" id="lbl-parent">Step 2 of 3</span></div>
-  <div class="progress-bar"><div class="progress-fill" id="p-parent" style="width:60%"></div></div>
+  <div class="topbar" style="background:#3D2000;">
+    <span class="tb-brand">hAIsir</span>
+    <span class="tb-step">You're in!</span>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" style="width:90%"></div></div>
   <div class="center-body">
-    <div class="card card-md">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="width:36px;height:36px;border-radius:8px;background:#FAEEDA;display:flex;align-items:center;justify-content:center;font-size:18px;">&#128106;</div>
-        <div><div class="h2" style="margin:0;">Link your child's account</div><div class="form-hint" style="margin:0;">Your child generates a link code from their profile</div></div>
+    <div class="card card-sm" style="text-align:center;align-items:center;">
+      <div style="font-size:52px;">&#127881;</div>
+      <div>
+        <div class="h1">You're all set, there!</div>
+        <div class="subtitle">Your Parent / Guardian account is ready. Here's what to do first.</div>
       </div>
-      <div class="code-box cba">
-        <div class="code-lbl cll-a">Enter your child's link code</div>
-        <input class="code-input" id="par-code" type="text" placeholder="e.g. ARJUN-2026" oninput="chkCode('par-code','par-code-msg',parCodes)" style="border-color:#FAC775;" />
-        <div id="par-code-msg"></div>
-      </div>
-      <div><div class="form-label" style="margin-bottom:8px;">How to get the link code</div>
-        <div class="step-row"><div class="step-num">1</div><div class="step-text">Your child opens hAIsir and goes to their Profile page.</div></div>
-        <div class="step-row"><div class="step-num">2</div><div class="step-text">They tap "Generate parent code" &mdash; a unique 7-day code is created.</div></div>
-        <div class="step-row"><div class="step-num">3</div><div class="step-text">They share the code with you (message, WhatsApp, etc.).</div></div>
-        <div class="step-row"><div class="step-num">4</div><div class="step-text">Enter the code above &mdash; you'll be linked instantly.</div></div>
-      </div>
-      <div class="btn-row">
-        <button class="btn-secondary" onclick="goRoles()">&larr; Back</button>
-        <button class="btn-primary" id="par-next" disabled onclick="nextSetup()">Continue &rarr;</button>
-      </div>
-      <div style="text-align:center;"><span style="font-size:11px;color:#b4b2a9;">No code yet? <span style="color:#185FA5;cursor:pointer;" onclick="nextSetup()">Skip &mdash; link later from dashboard</span></span></div>
+      <span style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px;background:#fdf8f2;color:#BA7517;">&#128106; Parent / Guardian</span>
+      <div style="width:100%;display:flex;flex-direction:column;gap:8px;" id="par-ctas"></div>
+      <span style="font-size:11px;color:#b4b2a9;cursor:pointer;" onclick="nextSetup()">Skip &mdash; link later from dashboard</span>
     </div>
   </div>
 </div>
 
-<!-- S5: ROLE SWITCHER EXPLAINER (ON07) -->
+<!-- S4: ROLE SWITCHER EXPLAINER (ON07) -->
 <div class="screen" id="s-switcher">
   <div class="topbar"><span class="tb-brand">hAIsir</span><span class="tb-step">Almost there!</span></div>
   <div class="progress-bar"><div class="progress-fill" style="width:88%"></div></div>
@@ -214,7 +156,7 @@ input,select,textarea{font-family:inherit;}
   </div>
 </div>
 
-<!-- S6: READY (ON08) -->
+<!-- S5: READY (ON08) -->
 <div class="screen" id="s-ready">
   <div class="topbar"><span class="tb-brand">hAIsir</span></div>
   <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
@@ -238,33 +180,26 @@ input,select,textarea{font-family:inherit;}
 // Tutor = separate "Become a tutor" flow (post sign-up).
 // Institution Admin / Platform Admin = created directly, no onboarding.
 const ROLES=[
-  {id:'student',label:'Student',     icon:'🎓',desc:"I want to learn, track progress, and get help from hAITU.",   tag:'Learner',tagBg:'#E6F1FB',tagC:'#185FA5',color:'#185FA5',bg:'#f4f8fd'},
-  {id:'parent', label:'Parent / Guardian',icon:'👨‍👩‍👧',desc:"I want to follow my child's progress and stay informed.",tag:'Family', tagBg:'#FAEEDA',tagC:'#854F0B',color:'#BA7517',bg:'#fdf8f2'},
+  {id:'student',label:'Student',          icon:'🎓',desc:"I want to learn, track progress, and get help from hAITU.",    tag:'Learner',tagBg:'#E6F1FB',tagC:'#185FA5',color:'#185FA5',bg:'#f4f8fd'},
+  {id:'parent', label:'Parent / Guardian',icon:'👨‍👩‍👧',desc:"I want to follow my child's progress and stay informed.", tag:'Family', tagBg:'#FAEEDA',tagC:'#854F0B',color:'#BA7517',bg:'#fdf8f2'},
 ];
 
 // Topbar colours per role (BR-ON-023)
 const TC={student:'#0A1F5C',parent:'#3D2000'};
 
-const SUBJ=['Maths','Science','English','Hindi','Social Studies','History','Physics','Chemistry','Biology','Computer Science'];
-
-const stuCodes={'STMARY-2026-G6':"St. Mary's School · Grade 6",'JNV-2026-G6':'JNV Hyderabad · Grade 6'};
-const parCodes={'ARJUN-2026':'Arjun Patel · Grade 6','PRIYA-2026':'Priya Patel · Grade 8'};
-
+// CTAs shown on the role-ready screens (ON03, ON05)
 const FIRST_STEPS={
   student:[
-    {icon:'🏫',l:'Join your school',   s:'Enter invite code or search by name',  bg:'#E6F1FB',c:'#185FA5'},
-    {icon:'📚',l:'Browse open courses', s:'Find topics and tutors',               bg:'#EEEDFE',c:'#534AB7'},
-    {icon:'🤖',l:'Ask hAITU a question',s:'Start learning right now',             bg:'#E1F5EE',c:'#0F6E56'},
+    {icon:'🏫',l:'Join your school',   s:'Enter invite code or search by name', bg:'#E6F1FB',c:'#185FA5'},
+    {icon:'📚',l:'Browse open courses', s:'Find topics and tutors',              bg:'#EEEDFE',c:'#534AB7'},
   ],
   parent:[
-    {icon:'🔗',l:'Link your child',  s:"Enter their hAIsir link code",       bg:'#FAEEDA',c:'#BA7517'},
-    {icon:'📊',l:'View progress',    s:"See how they're doing this week",     bg:'#FAEEDA',c:'#BA7517'},
+    {icon:'🔗',l:'Link your child',    s:'Enter their hAIsir link code',        bg:'#FAEEDA',c:'#BA7517'},
   ],
 };
 
-// BR-ON-005: single-select — clear any previous selection before adding
+// BR-ON-005: single-select
 let sel=new Set(), queue=[], idx=0;
-const cs={stuSub:new Set(['Maths','Science'])};
 
 function goScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0);}
 function goRoles(){buildGrid();goScreen('s-roles');}
@@ -276,8 +211,9 @@ function advance(){
   const lbl=document.getElementById('lbl-'+r),bar=document.getElementById('p-'+r);
   if(lbl)lbl.textContent=`Step ${step} of ${total}`;
   if(bar)bar.style.width=pct+'%';
-  if(r==='student')initStuChips();
-  // Bug fix: apply role topbar colour (BR-ON-023)
+  if(r==='student') buildStuCTAs();
+  if(r==='parent')  buildParCTAs();
+  // Apply role topbar colour (BR-ON-023)
   const screen=document.getElementById('s-setup-'+r);
   const tb=screen?.querySelector('.topbar');
   if(tb)tb.style.background=TC[r]||'#0A1F5C';
@@ -299,16 +235,30 @@ function buildGrid(){
 // Single-select: clicking a card selects it exclusively (BR-ON-005)
 function pickRole(id){sel.clear();sel.add(id);buildGrid();}
 
-function initStuChips(){
-  document.getElementById('stu-subjects').innerHTML=SUBJ.map(s=>`<button class="chip ${cs.stuSub.has(s)?'on':''}" onclick="tc('stuSub','${s}',this)">${s}</button>`).join('');
+function buildStuCTAs(){
+  document.getElementById('stu-ctas').innerHTML=
+    FIRST_STEPS['student'].map(a=>`
+      <div class="action-row" style="background:${a.bg};" onclick="nextSetup();showToast('Opening: ${a.l}')">
+        <span class="action-icon">${a.icon}</span>
+        <div style="text-align:left;"><div class="action-title" style="color:${a.c};">${a.l}</div><div class="action-sub">${a.s}</div></div>
+        <span style="font-size:16px;color:${a.c};margin-left:auto;">&rarr;</span>
+      </div>`).join('');
 }
-function tc(key,val,btn){cs[key].has(val)?cs[key].delete(val):cs[key].add(val);btn.classList.toggle('on',cs[key].has(val));}
+
+function buildParCTAs(){
+  document.getElementById('par-ctas').innerHTML=
+    FIRST_STEPS['parent'].map(a=>`
+      <div class="action-row" style="background:${a.bg};" onclick="nextSetup();showToast('Opening: ${a.l}')">
+        <span class="action-icon">${a.icon}</span>
+        <div style="text-align:left;"><div class="action-title" style="color:${a.c};">${a.l}</div><div class="action-sub">${a.s}</div></div>
+        <span style="font-size:16px;color:${a.c};margin-left:auto;">&rarr;</span>
+      </div>`).join('');
+}
 
 function buildSwitcher(){
   const role=[...sel][0];
   const r=ROLES.find(x=>x.id===role)||ROLES[0];
   const color=TC[role]||'#0A1F5C';
-  // Apply colour to switcher topbar too
   const stb=document.querySelector('#s-switcher .topbar');
   if(stb)stb.style.background=color;
   document.getElementById('switcher-body').innerHTML=`
@@ -336,32 +286,17 @@ function buildSwitcher(){
 function buildReady(){
   const rl=[...sel].map(id=>ROLES.find(r=>r.id===id)).filter(Boolean);
   const primary=rl[0];
-  const name=(document.getElementById('w-name')?.value||'').split(' ')[0]||'there';
   const steps=FIRST_STEPS[primary?.id||'student']||[];
-  document.getElementById('ready-title').textContent=`You're all set, ${name}!`;
+  document.getElementById('ready-title').textContent=`You're all set, there!`;
   document.getElementById('ready-sub').textContent=`Your ${primary?.label} account is ready. Here's what to do first.`;
   document.getElementById('ready-pills').innerHTML=rl.map(r=>`<span class="rpl" style="background:${r.bg};color:${r.color};">${r.icon} ${r.label}</span>`).join('');
   document.getElementById('ready-actions').innerHTML=steps.map(a=>`
     <div class="action-row" style="background:${a.bg};" onclick="showToast('Opening: ${a.l}')">
       <span class="action-icon">${a.icon}</span>
-      <div><div class="action-title" style="color:${a.c};">${a.l}</div><div class="action-sub">${a.s}</div></div>
+      <div style="text-align:left;"><div class="action-title" style="color:${a.c};">${a.l}</div><div class="action-sub">${a.s}</div></div>
       <span style="font-size:16px;color:${a.c};margin-left:auto;">&rarr;</span>
     </div>`).join('')+`<button class="btn-primary" onclick="showToast('Launching dashboard...')">Go to my dashboard &rarr;</button>`;
   goScreen('s-ready');
-}
-
-function chkCode(inp,msg,map){
-  const v=document.getElementById(inp)?.value?.toUpperCase().trim();
-  const m=document.getElementById(msg);
-  if(!m)return;
-  if(!v){
-    m.innerHTML='';
-    if(inp==='par-code'){const b=document.getElementById('par-next');if(b)b.disabled=true;}
-    return;
-  }
-  const f=map[v];
-  m.innerHTML=f?`<div class="code-msg code-ok">Found: ${f}</div>`:`<div class="code-msg code-err">Code not recognised. Double-check and try again.</div>`;
-  if(inp==='par-code'){const b=document.getElementById('par-next');if(b)b.disabled=!f;}
 }
 
 let tt;
@@ -372,7 +307,6 @@ function showToast(msg){
 }
 
 buildGrid();
-initStuChips();
 </script>
 </body>
 </html>

@@ -7,13 +7,15 @@
 
 ## 1. Overview
 
-Onboarding runs once — immediately after a new user verifies their email via Keycloak. It:
-1. Welcomes the user
-2. Lets them select one or more roles
-3. Runs a short role-specific setup sequence (1–2 steps per role)
+Onboarding runs once — immediately after a new user authenticates via Keycloak. It:
+1. Redirects the user to Keycloak's native login page (no custom sign-up screen)
+2. Lets them select one role (Student or Parent)
+3. Shows a role-specific "You're all set" screen with launch CTAs
 4. Lands them on the role switcher screen, then their primary dashboard
 
 Institution admins, instructors, and platform admins (`admin`) are never onboarded through this flow — they are invited or created directly. Tutors use a separate "Become a tutor" registration flow (not part of onboarding).
+
+Login and sign-up are handled entirely by Keycloak's native IDP page (email/password and Google SSO). APISIX intercepts unauthenticated requests and redirects to Keycloak. No custom ON01 screen is built.
 
 The following diagram shows the full onboarding sequence, including the branching between Student and Parent paths and the token refresh after role assignment:
 
@@ -21,42 +23,31 @@ The following diagram shows the full onboarding sequence, including the branchin
 sequenceDiagram
     participant U as User
     participant FE as Frontend
-    participant K as Keycloak
+    participant K as Keycloak (via APISIX)
     participant BE as Backend
 
-    U->>FE: Sign up (ON01)
-    FE->>K: Register via email or Google SSO
-    K-->>U: Email verification link
-    U->>K: Verify email
-    K-->>FE: Session cookie set by APISIX
+    Note over U,K: Login — Keycloak-native (no custom screen)
+    U->>K: Authenticate (email/password or Google SSO)
+    K-->>FE: APISIX sets session cookie
 
     FE->>BE: GET /api/users/me
     BE-->>FE: {onboarding_completed: false, roles: []}
-    FE->>FE: Redirect to /onboarding → ON02
+    FE->>FE: Redirect to /onboarding/role-select → ON02
 
     alt Student path
-        U->>FE: Select "Student" (ON02) → ON03
-        U->>FE: Submit profile (name, grade, subjects)
-        FE->>BE: POST /api/students/me/profile
-        opt Invite code entered
-            FE->>BE: GET /api/classes/by-invite-code/{code}
-            BE-->>FE: {class_name, org, grade}
-        end
+        U->>FE: Select "Student" (ON02)
         FE->>BE: POST /api/users/me/assign-role {role: "student"}
         BE->>K: Assign "student" realm role (Admin API)
         FE->>K: Silent re-auth (hidden iframe, prompt=none)
         K-->>FE: New JWT — realm_access.roles includes "student"
+        FE->>FE: ON03 — "You're all set, there!" + CTAs (no form)
     else Parent path
-        U->>FE: Select "Parent" (ON02) → ON05
-        opt Child link code entered
-            FE->>BE: GET /api/parent-link-codes/{code}
-            BE-->>FE: {student_name, grade}
-            FE->>BE: POST /api/parent-child-links {code}
-        end
+        U->>FE: Select "Parent" (ON02)
         FE->>BE: POST /api/users/me/assign-role {role: "parent"}
         BE->>K: Assign "parent" realm role (Admin API)
         FE->>K: Silent re-auth (hidden iframe, prompt=none)
         K-->>FE: New JWT — realm_access.roles includes "parent"
+        FE->>FE: ON05 — "You're all set, there!" + CTA (no form)
     end
 
     FE->>FE: ON07 — role switcher demo
@@ -72,11 +63,11 @@ sequenceDiagram
 
 | # | Screen ID | Name |
 |---|---|---|
-| ON01 | `welcome` | Welcome / sign-up |
+| ON01 | `auth` | Keycloak login (native) — not a custom screen |
 | ON02 | `role-select` | Role selection grid (Student / Parent only) |
-| ON03 | `setup-student` | Student setup |
+| ON03 | `setup-student` | Student ready — role badge + launch CTAs |
 | ON04 | ~~`setup-teacher`~~ | ~~Teacher / instructor setup~~ — **removed from onboarding** (instructor invited by institution_admin) |
-| ON05 | `setup-parent` | Parent setup — link child |
+| ON05 | `setup-parent` | Parent ready — role badge + link-child CTA |
 | ON06 | ~~`setup-tutor`~~ | ~~Tutor setup~~ — **removed from onboarding** (separate "Become a tutor" flow) |
 | ON07 | `role-switcher` | Role switcher demo / confirmation |
 | ON08 | `ready` | Success — launch dashboard |
@@ -85,19 +76,24 @@ sequenceDiagram
 
 ## 3. Screen Specifications
 
-### ON01 — Welcome / Sign-up
+### ON01 — Keycloak Login (native — not a custom screen)
 
-**Purpose:** Account creation entry point. Supports Google SSO and email+password.
+**Purpose:** Authentication entry point. Handled entirely by Keycloak's native IDP page.
 
-**States:**
-- **Sign-up:** Name, email, password fields. "Continue with Google" button. "Already have an account? Log in" link.
-- **Login:** Email, password. "Continue with Google". "Forgot password" link.
+**How it works:**
+- APISIX intercepts all unauthenticated requests and redirects the browser to Keycloak's login page.
+- Keycloak renders its own UI: email/password sign-up/login and "Continue with Google" (Google SSO configured as Keycloak identity provider).
+- On successful authentication, APISIX sets an `httpOnly` session cookie on the browser.
+- The frontend receives the callback and calls `GET /api/users/me` to determine onboarding state.
+- If `onboarding_completed: false` (and `roles` is empty), redirect to `/onboarding/role-select` (ON02).
+
+> **No custom frontend screen is built for ON01.** Password policy, email verification, and SSO configuration are all Keycloak realm settings.
 
 **Business rules:**
-- **BR-ON-001:** Password minimum 8 characters. Validated client-side before submission.
-- **BR-ON-002:** Google SSO delegates to Keycloak's Google identity provider — no custom OAuth code needed.
-- **BR-ON-003:** After successful sign-up, Keycloak sends email verification. User cannot proceed to ON02 until email is verified.
-- **BR-ON-004:** Existing users who log in and already have roles assigned skip ON02–ON06 and go directly to ON07.
+- ~~BR-ON-001~~ — Password policy is a Keycloak realm setting (minimum 8 chars configured there).
+- ~~BR-ON-002~~ — Google SSO is a Keycloak identity provider configuration — no custom OAuth code.
+- ~~BR-ON-003~~ — Email verification is a Keycloak flow setting — enforced by Keycloak before issuing a session.
+- **BR-ON-004:** After the Keycloak callback: if `GET /api/users/me` returns a user who already has roles and `onboarding_completed_at` is set, redirect directly to the role dashboard — skip ON02–ON06.
 
 **API calls:**
 ```
@@ -124,39 +120,32 @@ All subsequent onboarding calls require `X-CSRF-Token` and the session cookie se
 - **BR-ON-006:** Selection determines which setup screen runs next: Student → ON03, Parent → ON05. No branching or sequential setup.
 - **BR-ON-006a:** A user who onboards as a Student can later add the Parent role (and vice versa) from their profile/settings page via `POST /api/users/me/assign-role`. This triggers the corresponding setup flow inline (not a full re-onboarding).
 - **BR-ON-007:** ~~Removed.~~ Teacher and Tutor are no longer selectable during onboarding.
+- **Back button:** The `← Back` button on this screen navigates to Keycloak logout (`/auth/logout?redirect_uri=/auth/login`), returning the user to the Keycloak login page.
 
 ---
 
-### ON03 — Student Setup
+### ON03 — Student Ready
 
-**Purpose:** Collect grade and subjects to personalise the experience.
+**Route:** `/onboarding/student-ready`
 
-**Fields:**
-- First name, last name
-- Grade (dropdown: Grade 5 through Grade 12, Undergraduate)
-- Subjects (multi-select tag picker)
+**Purpose:** Confirm the student role has been assigned. Offer two paths to get started. No profile data collected here.
 
-**Step 2 — Start mode:**
-- Join institution (invite code input + search by name)
-- Explore open courses (browse-first)
-- Both
-- Skip — set up later
+**Layout:**
+- Party popper icon (top centre)
+- `h2`: "You're all set, there!"
+- Subtext: "Your Student account is ready. Here's what to do first."
+- Role badge chip: "🎓 Student"
+- CTA card 1: **"Join your school"** — "Enter invite code or search by name" → navigates to join-institution flow
+- CTA card 2: **"Browse open courses"** — "Find topics and tutors" → navigates to open-course browse
+- Skip link: "Skip — go to dashboard"
+- No form fields. No "Continue →" button.
 
 **Business rules:**
-- **BR-ON-008:** Name and grade are required. Subjects are optional but encouraged.
-- **BR-ON-009:** Invite code validation is live (debounced 500ms). Valid code shows institution name, board, grade. Normalise to uppercase before validation.
-- **BR-ON-010:** Skipping start mode creates the student profile but no enrollment. Student lands on empty home state.
+- **BR-ON-008:** Student profile data (name, grade, subjects) is NOT collected during onboarding. The `student_profiles` row is created at role-assignment time (`POST /api/users/me/assign-role`) using Keycloak `given_name`/`family_name` claims if present; otherwise row creation is deferred to the student's first profile save.
+- **BR-ON-009:** Invite code validation applies when the user navigates to the join-institution flow via the "Join your school" CTA (not inline on this screen).
+- **BR-ON-010:** Tapping neither CTA (using the skip link or going directly to dashboard) creates the student role assignment only. Student lands on the home dashboard in empty state.
 
-**API calls:**
-```
-POST /api/students/me/profile
-→ Auth: student (X-Current-Role: student)
-→ Body: {first_name, last_name, grade, subjects}
-→ Returns: {profile_id}
-
-GET /api/classes/by-invite-code/{code}
-→ Returns: {class_id, class_name, organization_name, board, grade} | 404
-```
+**API calls:** None on this screen.
 
 ---
 
@@ -185,32 +174,28 @@ POST /api/teachers/me/profile
 
 ---
 
-### ON05 — Parent Setup
+### ON05 — Parent Ready
 
-**Purpose:** Link the parent account to a child via invite code.
+**Route:** `/onboarding/parent-ready`
 
-**Fields:**
-- Child link code (single large input, uppercase, auto-formatted)
+**Purpose:** Confirm the parent role has been assigned. Offer the link-child path. No code entry during onboarding.
 
-**Validation:** Live on input. Match against `parent_child_links` table. Show child name, grade, school on match.
+**Layout:**
+- Party popper icon (top centre)
+- `h2`: "You're all set, there!"
+- Subtext: "Your Parent / Guardian account is ready. Here's what to do first."
+- Role badge chip: "👨‍👩‍👧 Parent / Guardian" (warm peach background)
+- CTA card: **"Link your child"** — "Enter their hAIsir link code" → navigates to the link-child flow (separate screen, post-onboarding)
+- Skip link: "Skip — link later from dashboard"
+- No inline code input on this screen.
 
 **Business rules:**
-- **BR-ON-015:** Code is optional — parent can skip and link later from their dashboard.
-- **BR-ON-016:** Valid code → create `parent_child_links` record with `status = 'linked'`.
-- **BR-ON-017:** Expired code (>7 days) shows: "This code has expired. Ask your child to generate a new one."
+- **BR-ON-015:** The parent-child link flow is accessed post-onboarding via the "Link your child" CTA or the parent dashboard. No invite code is entered during onboarding itself.
+- ~~BR-ON-016~~ — Moved to the post-onboarding link-child flow: valid code creates `parent_child_links` record.
+- ~~BR-ON-017~~ — Moved to the post-onboarding link-child flow: expired code shows appropriate error.
 - **BR-PARENT-001** (from data model): One active code per student. Multiple parents can use the same code before it expires.
 
-**API calls:**
-```
-GET /api/parent-link-codes/{code}
-→ Returns: {student_name, grade, school} | 404 | 410 (expired)
-
-POST /api/parent-child-links
-→ Auth: parent (X-Current-Role: parent)
-→ Body: {code}
-→ Returns: {link_id, student_idp_sub, student_name}
-→ Errors: 404, 410 expired, 409 already linked
-```
+**API calls:** None on this screen. (Link code validation and `POST /api/parent-child-links` happen in the separate post-onboarding link-child flow.)
 
 ---
 
@@ -299,9 +284,9 @@ After onboarding, the role switcher lives in the topbar on every screen for mult
 | Scenario | Behaviour |
 |---|---|
 | User closes browser mid-onboarding | Keycloak session persists. On return, resume from last completed step. |
-| Google SSO user — name already in Keycloak profile | Pre-fill first/last name from Keycloak `given_name` / `family_name` claims |
-| Invite code valid but class is full | Show: "This class is currently full. Contact your institution admin." |
-| Parent code used — child already linked to this parent | 409 → show: "You are already linked to this child." |
+| Google SSO user | Keycloak `given_name` / `family_name` claims are passed through to auto-populate `student_profiles.first_name`/`last_name` at role-assignment time (backend uses these claims when creating the profile row). |
+| Invite code valid but class is full | Handled in the post-onboarding join-school flow (not during onboarding). Show: "This class is currently full. Contact your institution admin." |
+| Parent code expired or already used | Handled in the post-onboarding link-child flow (not during onboarding). Expired: 410 response. Already linked: 409. |
 | Invited instructor hits `/onboarding` | The `instructor` role is already in their JWT. Skip ON02–ON06 and go to ON07 (role switcher demo), then redirect to `/teacher` for inline profile setup. |
 | Institution admin hits `/onboarding` | The `institution_admin` role is already assigned. `onboarding_completed_at` was set on first login — redirect immediately to `/institution`. |
 | Admin user hits `/onboarding` | Redirect immediately to `/admin` — skip all onboarding steps. |

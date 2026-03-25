@@ -116,31 +116,35 @@ input,textarea,select{font-family:inherit;}
 .ptab-badge{font-size:9px;padding:1px 5px;border-radius:20px;background:#FAECE7;color:#993C1D;margin-left:3px;}
 
 /* ─── BOARD CONTENT MANAGER ─────────────────────── */
-.board-layout{display:flex;gap:0;background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;min-height:540px;}
-.board-tree{width:240px;border-right:0.5px solid #e5e3dc;display:flex;flex-direction:column;flex-shrink:0;}
+.board-layout{display:flex;gap:0;background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;min-height:560px;}
+.board-tree{width:260px;border-right:0.5px solid #e5e3dc;display:flex;flex-direction:column;flex-shrink:0;}
 .bt-head{padding:12px 14px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:center;justify-content:space-between;}
-.bt-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;}
-.bt-add{width:22px;height:22px;border-radius:5px;background:#080F17;color:#fff;border:none;font-size:14px;display:flex;align-items:center;justify-content:center;}
-.tree-scroll{flex:1;overflow-y:auto;padding:8px;}
-.tnode{padding:6px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:background .1s;}
+.bt-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;}
+.bt-add{width:22px;height:22px;border-radius:5px;background:#080F17;color:#fff;border:none;font-size:15px;display:flex;align-items:center;justify-content:center;line-height:1;}
+.tree-scroll{flex:1;overflow-y:auto;padding:8px 6px;}
+.tnode{display:flex;align-items:center;border-radius:6px;cursor:pointer;transition:background .1s;user-select:none;}
 .tnode:hover{background:#f5f4f0;}
-.tnode.sel{background:#e8ebf0;color:#080F17;font-weight:600;}
-.tnode-icon{font-size:12px;flex-shrink:0;}
-.tnode-label{font-size:12px;color:#5f5e5a;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.tnode.sel .tnode-label{color:#080F17;}
-.tnode-right{display:flex;align-items:center;gap:4px;}
+.tnode.sel{background:#e8ebf0;}
+.tnode.sel .tnode-label{color:#080F17;font-weight:600;}
+.tnode-toggle{width:16px;height:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:#b4b2a9;}
+.tnode-icon{width:16px;font-size:11px;flex-shrink:0;text-align:center;}
+.tnode-label{flex:1;font-size:12px;color:#5f5e5a;padding:7px 3px 7px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tnode-right{display:flex;align-items:center;gap:3px;flex-shrink:0;padding-right:8px;}
+.type-badge{font-size:9px;padding:1px 4px;border-radius:3px;background:#f0efe9;color:#888780;white-space:nowrap;}
+.type-badge.reserved{background:#FFF3E0;color:#7C4D0F;}
 .tnode-count{font-size:10px;color:#b4b2a9;}
 .pub-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
 .pub-dot-live{background:#1D9E75;}
 .pub-dot-draft{background:#EF9F27;}
-.tnode-l2{padding-left:20px;}
-.tnode-l3{padding-left:34px;}
 .tree-add-btn{margin:6px 8px;font-size:11px;padding:5px 8px;border-radius:6px;border:1px dashed #d3d1c7;background:transparent;color:#888780;width:calc(100% - 16px);text-align:center;}
 .tree-add-btn:hover{border-color:#080F17;color:#080F17;}
 
-.board-tabs{display:flex;border-bottom:0.5px solid #e5e3dc;padding:0 14px;background:#fff;flex-shrink:0;}
-.btab{font-size:11px;padding:8px 12px;border-bottom:2px solid transparent;border-top:none;border-left:none;border-right:none;background:none;color:#888780;cursor:pointer;}
-.btab.on{color:#080F17;border-bottom-color:#080F17;font-weight:500;}
+.board-tabs{display:flex;gap:0;border-bottom:0.5px solid #e5e3dc;background:#f5f4f0;overflow-x:auto;}
+.btab{font-size:11px;padding:7px 11px;border-bottom:2px solid transparent;border-top:none;border-left:none;border-right:none;background:none;color:#888780;white-space:nowrap;display:flex;align-items:center;gap:4px;}
+.btab.on{color:#080F17;border-bottom-color:#080F17;font-weight:600;background:#fff;}
+.btab .bver{font-size:9px;padding:1px 4px;border-radius:3px;font-weight:600;}
+.bver-live{background:#E1F5EE;color:#085041;}
+.bver-draft{background:#FAEEDA;color:#633806;}
 
 .board-detail{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 .bd-head{padding:14px 18px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
@@ -149,18 +153,51 @@ input,textarea,select{font-family:inherit;}
 .bd-actions{display:flex;gap:7px;flex-shrink:0;}
 .bd-body{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px;}
 
+.child-node-item{display:flex;align-items:center;gap:8px;padding:9px 12px;border:0.5px solid #e5e3dc;border-radius:8px;cursor:pointer;background:#fff;}
+.child-node-item:hover{background:#f5f4f0;}
+
 .topic-card{border:0.5px solid #e5e3dc;border-radius:8px;overflow:hidden;}
 .tc-row{padding:11px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;}
 .tc-row:hover{background:#fafaf8;}
-.tc-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.tc-status-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.tc-live-icon{background:#E1F5EE;color:#085041;}
+.tc-draft-icon{background:#FAEEDA;color:#854F0B;}
 .tc-main{flex:1;min-width:0;}
 .tc-name{font-size:12px;font-weight:500;color:#1a1a18;}
 .tc-meta{font-size:11px;color:#888780;margin-top:1px;}
-.tc-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
-.adoption-pill{font-size:10px;padding:2px 8px;border-radius:20px;background:#E6F1FB;color:#185FA5;font-weight:500;}
-.version-pill{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:500;}
+.tc-right{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.adoption-pill{font-size:10px;padding:2px 8px;border-radius:10px;background:#EEF2FF;color:#3730A3;font-weight:500;}
+.version-pill{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;}
 .vp-live{background:#E1F5EE;color:#085041;}
-.vp-draft{background:#FAEEDA;color:#633806;}
+.vp-draft{background:#FAEEDA;color:#854F0B;}
+.row-btn{font-size:10px;padding:3px 9px;border-radius:5px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
+.row-btn:hover{border-color:#080F17;color:#080F17;}
+
+/* ─── MODAL (board content modals) ──────────────── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal-inner{background:#fff;border-radius:12px;padding:20px 24px;width:420px;box-shadow:0 8px 32px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:14px;}
+.modal-inner-title{font-size:14px;font-weight:600;color:#1a1a18;}
+.modal-inner-sub{font-size:11px;color:#888780;margin-top:-8px;}
+.modal-inner label{font-size:11px;font-weight:600;color:#5f5e5a;display:block;margin-bottom:4px;}
+.modal-inner input[type=text],.modal-inner textarea{width:100%;padding:8px 10px;border:0.5px solid #d3d1c7;border-radius:6px;font-size:12px;font-family:inherit;outline:none;}
+.modal-inner input[type=text]:focus,.modal-inner textarea:focus{border-color:#080F17;}
+.modal-inner-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px;}
+.modal-inner-warn{background:#FFFBEB;border:0.5px solid #F6D860;border-radius:8px;padding:10px 13px;font-size:11px;color:#854F0B;display:flex;gap:8px;}
+.type-grid{display:flex;flex-wrap:wrap;gap:6px;}
+.type-chip{padding:5px 12px;border-radius:6px;border:0.5px solid #d3d1c7;background:transparent;font-size:11px;color:#5f5e5a;display:flex;align-items:center;gap:4px;}
+.type-chip:hover{border-color:#080F17;color:#080F17;background:#f5f4f0;}
+.type-chip.sel{border-color:#080F17;background:#080F17;color:#fff;}
+.type-chip.reserved-chip{border-color:#F6D860;color:#7C4D0F;background:#FFFBEB;}
+.type-chip.reserved-chip:hover{background:#FEF3C0;}
+.type-chip.reserved-chip.sel{background:#7C4D0F;color:#fff;border-color:#7C4D0F;}
+.custom-row{display:flex;gap:6px;align-items:center;margin-top:2px;}
+.custom-row input{flex:1;}
+.pub-stat{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f5f4f0;border-radius:8px;}
+.pub-stat-val{font-size:20px;font-weight:700;color:#1a1a18;}
+.pub-stat-lbl{font-size:11px;color:#888780;}
+.checkbox-row{display:flex;align-items:center;gap:8px;font-size:12px;color:#5f5e5a;}
+.checkbox-row input[type=checkbox]{width:14px;height:14px;}
 
 /* ─── ACTIVITY FEED ─────────────────────────────── */
 .feed{background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;}
@@ -404,37 +441,176 @@ input,textarea,select{font-family:inherit;}
   </div>
 </div>
 
+<!-- ── BOARD BUILDER — ADD NODE MODAL ──────────────────── -->
+<div class="modal-overlay" id="modal-board-add-node" onclick="if(event.target===this)closeBoardModal('modal-board-add-node')">
+  <div class="modal-inner">
+    <div class="modal-inner-title">Add child node</div>
+    <div class="modal-inner-sub" id="board-add-node-parent-label">Under: —</div>
+    <div>
+      <label>Node label</label>
+      <input type="text" id="board-add-node-label" placeholder="e.g. Grade 8, Algebra, Chapter 3…">
+    </div>
+    <div>
+      <label>Node type</label>
+      <div class="type-grid" id="board-type-grid"></div>
+      <div class="custom-row" id="board-add-node-custom-row" style="display:none;">
+        <input type="text" id="board-add-node-custom-type" placeholder="Type name (e.g. strand, unit of inquiry…)" maxlength="50">
+      </div>
+      <div style="margin-top:6px;font-size:10px;color:#888780;">🔒 Reserved types have special system behaviour and cannot be repurposed.</div>
+    </div>
+    <div style="background:#f5f4f0;border-radius:6px;padding:9px 11px;font-size:10px;color:#888780;font-family:monospace;">
+      POST /api/admin/boards/{board_id}/nodes<br>
+      { parent_id, <strong>node_type</strong>, label, owner_type: "platform" }
+    </div>
+    <div class="modal-inner-actions">
+      <button class="modal-cancel" onclick="closeBoardModal('modal-board-add-node')">Cancel</button>
+      <button class="modal-confirm" onclick="confirmBoardAddNode()">Add node</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── BOARD BUILDER — ADD TOPIC MODAL ─────────────────── -->
+<div class="modal-overlay" id="modal-board-add-topic" onclick="if(event.target===this)closeBoardModal('modal-board-add-topic')">
+  <div class="modal-inner">
+    <div class="modal-inner-title">Add topic</div>
+    <div class="modal-inner-sub" id="board-add-topic-node-label">Under: —</div>
+    <div>
+      <label>Topic name</label>
+      <input type="text" id="board-add-topic-name" placeholder="e.g. Food Variety, Newton's First Law…">
+    </div>
+    <div style="background:#f5f4f0;border-radius:6px;padding:9px 11px;font-size:10px;color:#888780;font-family:monospace;">
+      POST /api/admin/boards/{board_id}/topics<br>
+      { course_path_node_id, name, status: "draft" }
+    </div>
+    <div class="modal-inner-actions">
+      <button class="modal-cancel" onclick="closeBoardModal('modal-board-add-topic')">Cancel</button>
+      <button class="modal-confirm" onclick="confirmBoardAddTopic()">Add topic</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── BOARD BUILDER — PUBLISH MODAL ───────────────────── -->
+<div class="modal-overlay" id="modal-board-publish" onclick="if(event.target===this)closeBoardModal('modal-board-publish')">
+  <div class="modal-inner">
+    <div class="modal-inner-title">Publish update</div>
+    <div class="modal-inner-warn">
+      <span>⚠️</span>
+      <span id="board-publish-warn-text">Publishing will push this version to all institutions that have adopted this board.</span>
+    </div>
+    <div class="pub-stat">
+      <div>
+        <div class="pub-stat-val" id="board-pub-adoption-count">38</div>
+        <div class="pub-stat-lbl">institutions using this board</div>
+      </div>
+    </div>
+    <div>
+      <label>Version notes (optional)</label>
+      <textarea rows="3" style="width:100%;padding:8px 10px;border:0.5px solid #d3d1c7;border-radius:6px;font-size:12px;font-family:inherit;outline:none;" placeholder="e.g. Added 3 new topics to Grade 7 Science."></textarea>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="board-notify-check" checked>
+      <label for="board-notify-check" style="font-weight:400;margin:0;cursor:pointer;">Notify institution admins of this update</label>
+    </div>
+    <div style="background:#f5f4f0;border-radius:6px;padding:9px 11px;font-size:10px;color:#888780;font-family:monospace;">
+      POST /api/admin/boards/{board_id}/publish<br>
+      { version_notes, notify_institutions: true }
+    </div>
+    <div class="modal-inner-actions">
+      <button class="modal-cancel" onclick="closeBoardModal('modal-board-publish')">Cancel</button>
+      <button class="modal-confirm modal-confirm-red" onclick="confirmBoardPublish()">Publish to all institutions</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── BOARD BUILDER — ADD BOARD MODAL ─────────────────── -->
+<div class="modal-overlay" id="modal-board-add-board" onclick="if(event.target===this)closeBoardModal('modal-board-add-board')">
+  <div class="modal-inner">
+    <div class="modal-inner-title">Add new board</div>
+    <div>
+      <label>Board name</label>
+      <input type="text" id="board-new-board-name" placeholder="e.g. IB MYP, State Board Maharashtra…">
+    </div>
+    <div>
+      <label>Path type</label>
+      <div class="type-grid">
+        <button class="type-chip sel" id="bpt-structured" onclick="selectBoardPathType('structured')">structured</button>
+        <button class="type-chip" id="bpt-flexible" onclick="selectBoardPathType('flexible')">flexible</button>
+      </div>
+      <div style="margin-top:6px;font-size:10px;color:#888780;"><strong>structured</strong> = board-controlled curriculum (NCERT, Cambridge, IB). <strong>flexible</strong> = tutor-built open courses.</div>
+    </div>
+    <div style="background:#f5f4f0;border-radius:6px;padding:9px 11px;font-size:10px;color:#888780;font-family:monospace;">
+      POST /api/admin/boards<br>
+      { label, path_type, owner_type: "platform" }
+    </div>
+    <div class="modal-inner-actions">
+      <button class="modal-cancel" onclick="closeBoardModal('modal-board-add-board')">Cancel</button>
+      <button class="modal-confirm" onclick="confirmBoardAddBoard()">Create board</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 /* ════════════════════════════════════════════════
    DATA
 ════════════════════════════════════════════════ */
+const BOARD_DEFAULT_NODE_TYPES = ['course','chapter','module','section','unit','week'];
+const BOARD_RESERVED_NODE_TYPES = ['grade','subject'];
+
 const boards = [
   { id:'ncert', label:'NCERT', icon:'📗', version:'v2.4', status:'live', institutions:38,
-    grades:[
-      { id:'n6', label:'Grade 6', children:[
-        { id:'n6m', label:'Maths', icon:'📐', children:[
-          {id:'n6m1',label:'Number System',    topics:4, status:'live', adoptions:38},
-          {id:'n6m2',label:'Fractions',        topics:5, status:'live', adoptions:38},
-          {id:'n6m3',label:'Basic Geometry',   topics:4, status:'live', adoptions:35},
-          {id:'n6m4',label:'Data Handling',    topics:3, status:'draft',adoptions:0},
-          {id:'n6m5',label:'Algebra Intro',    topics:3, status:'draft',adoptions:0},
+    tree:[
+      { id:'n-g6', type:'grade', label:'Grade 6', children:[
+        { id:'n-g6-sci', type:'subject', label:'Science', children:[
+          { id:'n-g6-sci-ch1', type:'chapter', label:'Food: Where Does It Come From?', children:[], topics:[
+            { id:'bt1', name:'Food Variety',       status:'live',  content:3, adoptions:38 },
+            { id:'bt2', name:'Plant Parts We Eat',  status:'live',  content:2, adoptions:38 },
+            { id:'bt3', name:'Animal Products',     status:'draft', content:0, adoptions:0  },
+          ]},
+          { id:'n-g6-sci-ch2', type:'chapter', label:'Components of Food', children:[], topics:[
+            { id:'bt4', name:'Nutrients',            status:'live',  content:4, adoptions:38 },
+            { id:'bt5', name:'Balanced Diet',        status:'live',  content:2, adoptions:35 },
+          ]},
+          { id:'n-g6-sci-ch3', type:'chapter', label:'Fibre to Fabric', children:[], topics:[] },
         ]},
-        { id:'n6s', label:'Science', icon:'🔬', children:[
-          {id:'n6s1',label:'World of Science', topics:3, status:'live', adoptions:38},
-          {id:'n6s2',label:'Motion & Forces',  topics:4, status:'live', adoptions:36},
-          {id:'n6s3',label:'Light & Shadows',  topics:3, status:'live', adoptions:38},
+        { id:'n-g6-mat', type:'subject', label:'Mathematics', children:[
+          { id:'n-g6-mat-ch1', type:'chapter', label:'Knowing Our Numbers', children:[], topics:[
+            { id:'bt6', name:'Large Numbers',    status:'live', content:3, adoptions:38 },
+            { id:'bt7', name:'Roman Numerals',   status:'live', content:2, adoptions:30 },
+          ]},
+          { id:'n-g6-mat-ch2', type:'chapter', label:'Whole Numbers', children:[], topics:[] },
+          { id:'n-g6-mat-ch3', type:'chapter', label:'Fractions',     children:[], topics:[
+            { id:'bt8', name:'Types of Fractions', status:'live', content:3, adoptions:38 },
+            { id:'bt9', name:'Operations',         status:'live', content:4, adoptions:38 },
+          ]},
         ]},
       ]},
-      { id:'n7', label:'Grade 7', children:[
-        { id:'n7m', label:'Maths', icon:'📐', children:[] },
-        { id:'n7s', label:'Science', icon:'🔬', children:[] },
+      { id:'n-g7', type:'grade', label:'Grade 7', children:[
+        { id:'n-g7-sci', type:'subject', label:'Science',     children:[] },
+        { id:'n-g7-mat', type:'subject', label:'Mathematics', children:[] },
       ]},
     ]
   },
-  { id:'jnv',  label:'JNV',  icon:'📘', version:'v1.8', status:'live', institutions:12, grades:[] },
-  { id:'cbe',  label:'CBE',  icon:'📙', version:'v1.2', status:'live', institutions:8,  grades:[] },
+  { id:'jnv', label:'JNV', icon:'📘', version:'v1.8', status:'live', institutions:12,
+    tree:[
+      { id:'j-g7', type:'grade', label:'Grade 7', children:[
+        { id:'j-g7-hin', type:'subject', label:'Hindi', children:[
+          { id:'j-g7-hin-ch1', type:'chapter', label:'वसंत — Chapter 1', children:[], topics:[
+            { id:'jt1', name:'पाठ परिचय', status:'live', content:2, adoptions:12 },
+            { id:'jt2', name:'शब्द-अर्थ', status:'draft', content:0, adoptions:0  },
+          ]},
+        ]},
+      ]},
+    ]
+  },
+  { id:'cbe', label:'CBE', icon:'📙', version:'v1.2', status:'live', institutions:8,
+    tree:[
+      { id:'cb-g8', type:'grade', label:'Grade 8', children:[
+        { id:'cb-g8-eng', type:'subject', label:'English', children:[] },
+      ]},
+    ]
+  },
 ];
 
 const institutions = [
@@ -469,9 +645,14 @@ const platformUsers = [
 
 const colors = ['#378ADD','#1D9E75','#D85A30','#534AB7','#BA7517','#0F6E56','#E24B4A','#7F77DD'];
 
-let activeScreen   = 'dashboard';
-let activeBoardId  = 'ncert';
-let activeBoardNode= 'n6m';
+let activeScreen        = 'dashboard';
+let activeBoardId       = 'ncert';
+let activeBoardNode     = null;
+let boardExpandedNodes  = new Set(['n-g6','n-g6-sci']);
+let boardSelectedType   = 'chapter';
+let boardSelectedPathType = 'structured';
+let boardAddNodeParentId  = null;
+let boardPublishNodeId    = null;
 let activeInstTab  = 'active';
 let activeTutorTab = 'pending';
 let boardDetailTab = 'topics';
@@ -684,100 +865,160 @@ function renderDashboard() {
 /* ════════════════════════════════════════════════
    SCREEN 2 — BOARD CONTENT
 ════════════════════════════════════════════════ */
+function boardActiveBoard() { return boards.find(b=>b.id===activeBoardId); }
+
+function boardFindNode(id, nodes) {
+  nodes = nodes || boardActiveBoard().tree;
+  for (const n of nodes) {
+    if (n.id===id) return n;
+    if (n.children) { const f=boardFindNode(id,n.children); if(f) return f; }
+  }
+  return null;
+}
+function boardIsLeaf(node) { return Array.isArray(node.children) && node.children.length===0; }
+function boardIsReserved(type) { return BOARD_RESERVED_NODE_TYPES.includes(type); }
+function flattenTree(nodes,r=[]){ nodes.forEach(n=>{r.push(n);if(n.children)flattenTree(n.children,r);});return r; }
+
 function renderBoards() {
   buildSidenav('boards');
 
-  const activeBoard  = boards.find(b=>b.id===activeBoardId);
-  const allNodes     = flattenTree(activeBoard?.grades||[]);
-  const activeNode   = allNodes.find(n=>n.id===activeBoardNode);
-  const isLeaf       = activeNode && Array.isArray(activeNode.children) && activeNode.children.length===0 && activeNode.topics;
+  const boardTabsHtml =
+    boards.map(b=>`
+      <button class="btab ${b.id===activeBoardId?'on':''}" onclick="setBoard('${b.id}')">
+        ${b.icon} ${b.label}
+        <span class="bver ${b.status==='live'?'bver-live':'bver-draft'}">${b.version}</span>
+      </button>`).join('') +
+    `<button class="btab" onclick="openBoardAddBoardModal()">+ Board</button>`;
 
-  function treeHtml(nodes, level=0) {
-    return nodes.map(n=>{
-      const indent = level===1?'tnode-l2':level===2?'tnode-l3':'';
-      const isSel  = n.id===activeBoardNode;
-      const icon   = level===0?'📁':level===1?(n.icon||'📁'):'📄';
-      const dot    = n.status ? `<span class="pub-dot ${n.status==='live'?'pub-dot-live':'pub-dot-draft'}"></span>` : '';
-      const cnt    = n.topics  ? `<span class="tnode-count">${n.topics}t</span>` :
-                     n.children? `<span class="tnode-count">${n.children.length}</span>` : '';
-      let html = `<div class="tnode ${indent} ${isSel?'sel':''}" onclick="setBoardNode('${n.id}')">
+  // Tree rendering
+  function renderBoardTreeNodes(nodes, depth) {
+    return nodes.map(n => {
+      const sel = n.id===activeBoardNode;
+      const exp = boardExpandedNodes.has(n.id);
+      const hasChildren = n.children && n.children.length > 0;
+      const leaf = boardIsLeaf(n);
+      const indent = depth * 14;
+      const reserved = boardIsReserved(n.type);
+
+      const toggleHtml = hasChildren
+        ? `<span class="tnode-toggle" onclick="event.stopPropagation();boardToggleExpand('${n.id}')">${exp?'▾':'▸'}</span>`
+        : `<span class="tnode-toggle" style="color:transparent;">·</span>`;
+
+      const icon = depth===0 ? '🗂' : (depth===1 ? (n.type==='subject'?'📐':'📁') : (leaf ? '📄' : '📁'));
+      const dotHtml = leaf && n.status
+        ? `<span class="pub-dot ${n.status==='live'?'pub-dot-live':'pub-dot-draft'}"></span>` : '';
+      const badgeHtml = `<span class="type-badge ${reserved?'reserved':''}">${n.type}${reserved?' 🔒':''}</span>`;
+
+      let html = `<div class="tnode ${sel?'sel':''}" style="padding-left:${indent}px;" onclick="setBoardNode('${n.id}')">
+        ${toggleHtml}
         <span class="tnode-icon">${icon}</span>
         <span class="tnode-label">${n.label}</span>
-        <div class="tnode-right">${cnt}${dot}</div>
+        <div class="tnode-right">${dotHtml}${badgeHtml}</div>
       </div>`;
-      if (n.children?.length && (isSel || n.children.some(c=>c.id===activeBoardNode)))
-        html += treeHtml(n.children, level+1);
+      if ((exp || sel) && hasChildren) html += renderBoardTreeNodes(n.children, depth+1);
       return html;
     }).join('');
   }
 
-  const boardTabsHtml = `
-    <div style="display:flex;gap:0;border-bottom:0.5px solid #e5e3dc;padding:0 14px;background:#f5f4f0;">
-      ${boards.map(b=>`
-        <button class="btab ${b.id===activeBoardId?'on':''}" onclick="setBoard('${b.id}')">
-          ${b.icon} ${b.label}
-          <span style="font-size:9px;padding:1px 5px;border-radius:20px;margin-left:4px;background:${b.status==='live'?'#E1F5EE':'#FAEEDA'};color:${b.status==='live'?'#085041':'#633806'};font-weight:600;">${b.version}</span>
-        </button>`).join('')}
-      <button class="btab" onclick="showToast('Add new board')">+ Board</button>
-    </div>`;
+  const board = boardActiveBoard();
+  const treeHtml = renderBoardTreeNodes(board.tree, 0) +
+    `<button class="tree-add-btn" onclick="openBoardAddNode(null)">+ Add grade</button>`;
 
-  const detailHtml = isLeaf ? `
-    <div class="bd-head">
-      <div>
-        <div class="bd-title">${activeNode.label}</div>
-        <div class="bd-meta">${activeNode.topics} topics · <span style="color:${activeNode.status==='live'?'#0F6E56':'#854F0B'}">${activeNode.status==='live'?'Live':'Draft'}</span> · ${activeNode.adoptions} institutions using this</div>
-      </div>
-      <div class="bd-actions">
-        <button class="sec-btn sec-btn-outline" onclick="showToast('Adding topic')">+ Topic</button>
-        ${activeNode.adoptions>0 ? `<button class="sec-btn" onclick="openModal('m-publish-board')">Publish update</button>` : `<button class="sec-btn tb-btn-blue" onclick="showToast('Published!')">Publish</button>`}
-      </div>
-    </div>
-    <div class="bd-body">
-      ${[
-        {name:'Introduction & overview', status:'live',  content:3, adoptions:activeNode.adoptions},
-        {name:'Core concepts',            status:'live',  content:4, adoptions:activeNode.adoptions},
-        {name:'Practice problems',        status:'live',  content:2, adoptions:activeNode.adoptions},
-        {name:'Assessment bank',          status:'draft', content:0, adoptions:0},
-      ].map(t=>`
-        <div class="topic-card">
-          <div class="tc-row">
-            <div class="tc-icon" style="background:${t.status==='live'?'#E1F5EE':'#FAEEDA'}">${t.status==='live'?'✓':'✎'}</div>
-            <div class="tc-main">
-              <div class="tc-name">${t.name}</div>
-              <div class="tc-meta">${t.content} content items · ${t.status==='live'?`Used by ${t.adoptions} institutions`:'Not yet published'}</div>
+  // Detail pane
+  let detailHtml;
+  if (!activeBoardNode) {
+    detailHtml = `
+      <div class="bd-head"><div class="bd-title">Select a node</div></div>
+      <div class="bd-body"><div style="color:#888780;font-size:12px;">Select a node from the tree to view and edit its content.</div></div>`;
+  } else {
+    const node = boardFindNode(activeBoardNode);
+    if (!node) {
+      detailHtml = `<div class="bd-head"><div class="bd-title">Node not found</div></div><div class="bd-body"></div>`;
+    } else {
+      const leaf = boardIsLeaf(node);
+      const reserved = boardIsReserved(node.type);
+      const topics = node.topics || [];
+      const totalAdoptions = topics.reduce((s,t)=>Math.max(s,t.adoptions||0),0);
+
+      const actionsHtml = leaf
+        ? `<button class="sec-btn sec-btn-outline" onclick="openBoardAddNode('${node.id}')">+ Child node</button>
+           <button class="sec-btn sec-btn-outline" onclick="openBoardAddTopic('${node.id}')">+ Topic</button>
+           ${totalAdoptions > 0
+             ? `<button class="sec-btn" onclick="openBoardPublishModal('${node.id}')">Publish update</button>`
+             : `<button class="sec-btn tb-btn-blue" onclick="showToast('Published! (no adoptions yet)')">Publish</button>`}`
+        : `<button class="sec-btn sec-btn-outline" onclick="openBoardAddNode('${node.id}')">+ Child node</button>`;
+
+      const bodyHtml = !leaf
+        ? `<div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;margin-bottom:8px;">Child nodes (${node.children.length})</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              ${node.children.map(ch=>`
+                <div class="child-node-item" onclick="setBoardNode('${ch.id}')">
+                  <span style="font-size:13px;">${boardIsLeaf(ch)?'📄':'📁'}</span>
+                  <span style="font-size:12px;color:#5f5e5a;flex:1;">${ch.label}</span>
+                  <span class="type-badge ${boardIsReserved(ch.type)?'reserved':''}">${ch.type}${boardIsReserved(ch.type)?' 🔒':''}</span>
+                  ${boardIsLeaf(ch)&&ch.status?`<span class="pub-dot ${ch.status==='live'?'pub-dot-live':'pub-dot-draft'}"></span>`:''}
+                  <span style="font-size:10px;color:#b4b2a9;">→</span>
+                </div>`).join('')}
+              ${node.children.length===0?'<div style="font-size:11px;color:#b4b2a9;font-style:italic;">No child nodes yet.</div>':''}
             </div>
-            <div class="tc-right">
-              <span class="adoption-pill">${t.adoptions} institutions</span>
-              <span class="version-pill ${t.status==='live'?'vp-live':'vp-draft'}">${t.status==='live'?'Live':'Draft'}</span>
-              <button class="row-btn" onclick="showToast('Editing ${t.name}')">Edit</button>
+            <div style="margin-top:10px;font-size:11px;color:#b4b2a9;">Topics can only be added to leaf nodes (nodes with no children).</div>
+           </div>`
+        : `<div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;">Topics (${topics.length})</span>
+              <span style="font-size:10px;color:#b4b2a9;">Adopting institutions: ${totalAdoptions}</span>
             </div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              ${topics.map(t=>`
+                <div class="topic-card">
+                  <div class="tc-row" onclick="showToast('Edit topic: ${t.name}')">
+                    <div class="tc-status-icon ${t.status==='live'?'tc-live-icon':'tc-draft-icon'}">${t.status==='live'?'✓':'✎'}</div>
+                    <div class="tc-main">
+                      <div class="tc-name">${t.name}</div>
+                      <div class="tc-meta">${t.content} content item${t.content===1?'':'s'} · ${t.status==='live'?`Used by ${t.adoptions} institution${t.adoptions===1?'':'s'}`:'Not yet published'}</div>
+                    </div>
+                    <div class="tc-right">
+                      <span class="adoption-pill">${t.adoptions} institutions</span>
+                      <span class="version-pill ${t.status==='live'?'vp-live':'vp-draft'}">${t.status==='live'?'Live':'Draft'}</span>
+                      <button class="row-btn" onclick="event.stopPropagation();showToast('Editing: ${t.name}')">Edit</button>
+                    </div>
+                  </div>
+                </div>`).join('')}
+              ${topics.length===0?'<div style="font-size:11px;color:#b4b2a9;font-style:italic;">No topics yet — add one using the button above.</div>':''}
+            </div>
+           </div>`;
+
+      detailHtml = `
+        <div class="bd-head">
+          <div>
+            <div class="bd-title">${node.label}</div>
+            <div class="bd-meta">${leaf
+              ? `Leaf node · ${node.type}${reserved?' 🔒':''} · ${topics.length} topic${topics.length===1?'':'s'}`
+              : `${node.type}${reserved?' 🔒':''} · ${node.children.length} child node${node.children.length===1?'':'s'}`}</div>
           </div>
-        </div>`).join('')}
-    </div>` : `
-    <div class="bd-head">
-      <div class="bd-title">${activeNode?activeNode.label:'Select a topic'}</div>
-    </div>
-    <div class="bd-body"><div style="color:#888780;font-size:12px;">Select a subject or topic from the tree to view and edit its content.</div></div>`;
+          <div class="bd-actions">${actionsHtml}</div>
+        </div>
+        <div class="bd-body">${bodyHtml}</div>`;
+    }
+  }
 
   document.getElementById('body-boards').innerHTML = `
     <div class="board-layout">
       <div class="board-tree">
         <div class="bt-head">
-          <span class="bt-title">${activeBoard?.label||'Board'} structure</span>
-          <button class="bt-add" onclick="showToast('Add grade')">+</button>
+          <span class="bt-title" id="bt-board-label">${board.label} structure</span>
+          <button class="bt-add" onclick="openBoardAddNode(null)" title="Add grade">+</button>
         </div>
-        ${boardTabsHtml}
-        <div class="tree-scroll">
-          ${treeHtml(activeBoard?.grades||[])}
-          <button class="tree-add-btn" onclick="showToast('Adding grade')">+ Add grade</button>
-        </div>
+        <div class="board-tabs">${boardTabsHtml}</div>
+        <div class="tree-scroll">${treeHtml}</div>
       </div>
       <div class="board-detail">${detailHtml}</div>
     </div>
 
     <div style="background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;padding:14px 18px;">
       <div style="font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:10px;">Board adoption summary</div>
-      <div class="stat-row" style="grid-template-columns:repeat(4,1fr);">
+      <div class="stat-row" style="grid-template-columns:repeat(${Math.min(boards.length+1,4)},1fr);">
         <div class="stat-card" style="padding:10px 12px;">
           <div class="stat-val" style="font-size:20px;">${boards.reduce((a,b)=>a+b.institutions,0)}</div>
           <div class="stat-lbl">Total adoptions</div>
@@ -785,15 +1026,146 @@ function renderBoards() {
         ${boards.map(b=>`
           <div class="stat-card" style="padding:10px 12px;">
             <div class="stat-val" style="font-size:20px;">${b.institutions}</div>
-            <div class="stat-lbl">${b.label} · ${b.version}</div>
+            <div class="stat-lbl">${b.icon} ${b.label} · ${b.version}</div>
           </div>`).join('')}
       </div>
     </div>`;
 }
 
-function setBoard(id)     { activeBoardId=id; renderBoards(); }
-function setBoardNode(id) { activeBoardNode=id; renderBoards(); }
-function flattenTree(nodes,r=[]){ nodes.forEach(n=>{r.push(n);if(n.children)flattenTree(n.children,r);});return r; }
+function setBoard(id) {
+  activeBoardId = id;
+  boardExpandedNodes = new Set();
+  activeBoardNode = null;
+  renderBoards();
+}
+
+function setBoardNode(id) {
+  activeBoardNode = id;
+  boardExpandedNodes.add(id);
+  renderBoards();
+}
+
+function boardToggleExpand(id) {
+  if (boardExpandedNodes.has(id)) boardExpandedNodes.delete(id);
+  else boardExpandedNodes.add(id);
+  renderBoards();
+}
+
+// ── ADD NODE ──────────────────────────────────────────────
+function openBoardAddNode(parentId) {
+  boardAddNodeParentId = parentId;
+  const parent = parentId ? boardFindNode(parentId) : null;
+  document.getElementById('board-add-node-parent-label').textContent =
+    parent ? `Under: ${parent.label} (${parent.type})` : `Top level — ${boardActiveBoard().label}`;
+  boardSelectedType = 'chapter';
+  renderBoardTypeGrid();
+  document.getElementById('board-add-node-label').value = '';
+  document.getElementById('board-add-node-custom-row').style.display = 'none';
+  document.getElementById('modal-board-add-node').classList.add('open');
+  setTimeout(()=>document.getElementById('board-add-node-label').focus(),50);
+}
+
+function renderBoardTypeGrid() {
+  const grid = document.getElementById('board-type-grid');
+  const reserved = BOARD_RESERVED_NODE_TYPES.map(t=>`
+    <button class="type-chip reserved-chip ${t===boardSelectedType?'sel':''}" onclick="selectBoardTypeChip('${t}')" title="Reserved type">
+      🔒 ${t}
+    </button>`).join('');
+  const defaults = BOARD_DEFAULT_NODE_TYPES.map(t=>`
+    <button class="type-chip ${t===boardSelectedType?'sel':''}" onclick="selectBoardTypeChip('${t}')">${t}</button>`).join('');
+  grid.innerHTML = reserved + defaults +
+    `<button class="type-chip ${boardSelectedType==='custom'?'sel':''}" onclick="selectBoardTypeChip('custom')">Custom…</button>`;
+}
+
+function selectBoardTypeChip(t) {
+  boardSelectedType = t;
+  renderBoardTypeGrid();
+  document.getElementById('board-add-node-custom-row').style.display = t==='custom' ? 'flex' : 'none';
+  if (t==='custom') document.getElementById('board-add-node-custom-type').focus();
+}
+
+function confirmBoardAddNode() {
+  const label = document.getElementById('board-add-node-label').value.trim();
+  if (!label) { showToast('Enter a node label'); return; }
+  const type = boardSelectedType==='custom'
+    ? (document.getElementById('board-add-node-custom-type').value.trim() || 'custom')
+    : boardSelectedType;
+  const parent = boardAddNodeParentId ? boardFindNode(boardAddNodeParentId) : null;
+  const newNode = { id:'bn'+Date.now(), type, label, children:[], topics:[], status:'draft' };
+  if (parent) parent.children.push(newNode);
+  else boardActiveBoard().tree.push(newNode);
+  closeBoardModal('modal-board-add-node');
+  boardExpandedNodes.add(boardAddNodeParentId || newNode.id);
+  activeBoardNode = newNode.id;
+  renderBoards();
+  showToast(`Added "${label}" (${type})`);
+}
+
+// ── ADD TOPIC ─────────────────────────────────────────────
+function openBoardAddTopic(nodeId) {
+  const node = boardFindNode(nodeId);
+  document.getElementById('board-add-topic-node-label').textContent = `Under leaf node: ${node.label}`;
+  document.getElementById('board-add-topic-name').value = '';
+  document.getElementById('modal-board-add-topic').classList.add('open');
+  setTimeout(()=>document.getElementById('board-add-topic-name').focus(),50);
+}
+
+function confirmBoardAddTopic() {
+  const name = document.getElementById('board-add-topic-name').value.trim();
+  if (!name) { showToast('Enter a topic name'); return; }
+  const node = boardFindNode(activeBoardNode);
+  node.topics.push({ id:'bt'+Date.now(), name, status:'draft', content:0, adoptions:0 });
+  closeBoardModal('modal-board-add-topic');
+  renderBoards();
+  showToast(`Topic "${name}" added as draft`);
+}
+
+// ── PUBLISH ───────────────────────────────────────────────
+function openBoardPublishModal(nodeId) {
+  boardPublishNodeId = nodeId || activeBoardNode;
+  const node = boardFindNode(boardPublishNodeId);
+  const adoptions = node ? Math.max(...(node.topics||[]).map(t=>t.adoptions||0), 0) : boardActiveBoard().institutions;
+  document.getElementById('board-pub-adoption-count').textContent = adoptions;
+  document.getElementById('board-publish-warn-text').textContent =
+    `Publishing will push changes to all ${adoptions} institution${adoptions===1?'':'s'} that have adopted this board. Institutions that customised their local copy will not be overwritten.`;
+  document.getElementById('modal-board-publish').classList.add('open');
+}
+
+function confirmBoardPublish() {
+  closeBoardModal('modal-board-publish');
+  showToast('Published! Propagated to ' + document.getElementById('board-pub-adoption-count').textContent + ' institutions');
+}
+
+// ── ADD BOARD ─────────────────────────────────────────────
+function openBoardAddBoardModal() {
+  document.getElementById('board-new-board-name').value = '';
+  boardSelectedPathType = 'structured';
+  document.getElementById('bpt-structured').classList.add('sel');
+  document.getElementById('bpt-flexible').classList.remove('sel');
+  document.getElementById('modal-board-add-board').classList.add('open');
+  setTimeout(()=>document.getElementById('board-new-board-name').focus(),50);
+}
+
+function selectBoardPathType(t) {
+  boardSelectedPathType = t;
+  document.getElementById('bpt-structured').classList.toggle('sel', t==='structured');
+  document.getElementById('bpt-flexible').classList.toggle('sel', t==='flexible');
+}
+
+function confirmBoardAddBoard() {
+  const label = document.getElementById('board-new-board-name').value.trim();
+  if (!label) { showToast('Enter a board name'); return; }
+  const newBoard = { id:'b'+Date.now(), label, icon:'📒', version:'v0.1', status:'draft', institutions:0, tree:[] };
+  boards.push(newBoard);
+  activeBoardId = newBoard.id;
+  activeBoardNode = null;
+  boardExpandedNodes = new Set();
+  closeBoardModal('modal-board-add-board');
+  renderBoards();
+  showToast(`Board "${label}" created (${boardSelectedPathType})`);
+}
+
+function closeBoardModal(id) { document.getElementById(id).classList.remove('open'); }
 
 /* ════════════════════════════════════════════════
    SCREEN 3 — INSTITUTIONS

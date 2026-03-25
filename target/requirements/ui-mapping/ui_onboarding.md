@@ -9,11 +9,11 @@
 
 | Spec ID | Prototype screen ID | Render / navigation |
 |---|---|---|
-| ON01 | `s-welcome` | Static HTML |
+| ON01 | `s-keycloak` | Keycloak-native — no custom screen. Prototype shows a placeholder. |
 | ON02 | `s-roles` | `buildGrid()` + `pickRole()` (single-select) |
-| ON03 | `s-setup-student` | Role queue `advance()` |
+| ON03 | `s-setup-student` | Role queue `advance()` → `buildStuCTAs()` |
 | ON04 | ~~`s-setup-teacher`~~ | **Removed from onboarding** — instructors are invited by institution_admin |
-| ON05 | `s-setup-parent` | Role queue `advance()` |
+| ON05 | `s-setup-parent` | Role queue `advance()` → `buildParCTAs()` |
 | ON06 | ~~`s-setup-tutor`~~ | **Removed from onboarding** — separate "Become a tutor" flow |
 | ON07 | `s-switcher` | `buildReady()` (single-role users go straight to ready) |
 | ON08 | `s-ready` | Static success screen |
@@ -53,18 +53,9 @@
 
 ---
 
-## ON01 — Welcome / Sign-up (`s-signup`)
+## ON01 — Keycloak Login (`s-keycloak`) — not a custom screen
 
-### Google SSO button
-- White bg, `#d3d1c7` border, "G" icon (18px), "Continue with Google" label
-- Full width
-
-### OR divider
-- Horizontal lines + "or with email" centre text (11px grey)
-
-### Validation
-- "Create account" button enabled only when: name non-empty + email non-empty + password ≥ 8 chars
-- `checkSignup()` fires on `oninput` of each field
+No custom frontend screen. APISIX redirects unauthenticated users to Keycloak's native login page. Keycloak renders its own UI (email/password + Google SSO). The prototype shows a placeholder screen with a "Simulate login →" button for navigation purposes only.
 
 ---
 
@@ -83,24 +74,28 @@
 
 ---
 
-## ON03 — Student Setup (`s-setup-student`)
+## ON03 — Student Ready (`s-setup-student`)
 
-### Subject tag picker
-- Pill buttons: 12px, 5px 12px padding, 20px border-radius
-- Inactive: `#d3d1c7` border, `#5f5e5a` text
-- Active: `#0A1F5C` bg, white text, `#0A1F5C` border
-- Hover (inactive): `#0A1F5C` border + text
+No form fields. Populated via `buildStuCTAs()`.
 
-### Start mode selection (step 2)
-- Two option cards (full-width, stacked):
-  - "Join institution": blue selection (`#0A1F5C` border, `#f4f7fd` bg)
-  - "Explore open courses": purple selection (`#534AB7` border, `#f7f6fe` bg)
-- Check circle colours match: blue for institution, purple for open
-- Invite code section (inside institution card, hidden until selected):
-  - Text input + "Apply" button — live validation on input
-  - Valid: `#0F6E56` green message below
-  - Invalid: `#993C1D` red message
-- "Get started →" button enabled only when at least one mode selected
+### Layout
+- Party popper emoji (🎉), 52px, top centre
+- `h1`: "You're all set, there!" — bold, `#0A1F5C`
+- Subtext: "Your Student account is ready. Here's what to do first." — 13px, `#888780`
+- Role badge: `font-size: 12px`, `font-weight: 600`, `padding: 5px 14px`, `border-radius: 20px`, `background: #f0f4ff`, `color: #0A1F5C`
+
+### CTA cards (action rows)
+- Full-width, stacked vertically, gap 8px
+- Each card: `border: 0.5px solid #e5e3dc`, `border-radius: 10px`, `padding: 13px 16px`, flex row
+- Left: 32px icon emoji
+- Centre: bold title (role colour) + grey subtitle (11px `#888780`)
+- Right: `→` arrow in role colour, `margin-left: auto`
+- Hover: `translateY(-2px)` + light box-shadow
+- Card 1 bg: `#E6F1FB`, title colour: `#185FA5`
+- Card 2 bg: `#EEEDFE`, title colour: `#534AB7`
+
+### Skip link
+- Below cards: "Skip — go to dashboard" — 11px, `#b4b2a9`, cursor pointer
 
 ---
 
@@ -110,15 +105,23 @@
 
 ---
 
-## ON05 — Parent Setup (`s-setup-parent`)
+## ON05 — Parent Ready (`s-setup-parent`)
 
-### Code input
-- 20px bold, `#0A1F5C` text, centre-aligned, letter-spacing 0.12em, UPPERCASE
-- Focus: `#0A1F5C` border (1.5px)
-- Validation message:
-  - Match (`ARJUN-2026`): `#E1F5EE` bg, `#085041` text
-  - No match: `#FAECE7` bg, `#712B13` text
-- "Link account →" enabled only on valid code
+No form fields. Populated via `buildParCTAs()`. Same layout pattern as ON03.
+
+### Layout
+- Party popper emoji (🎉), 52px, top centre
+- `h1`: "You're all set, there!" — bold, `#0A1F5C`
+- Subtext: "Your Parent / Guardian account is ready. Here's what to do first." — 13px, `#888780`
+- Role badge: `background: #fdf8f2`, `color: #BA7517`, same pill style as ON03
+
+### CTA card
+- Single card: bg `#FAEEDA`, title colour `#BA7517`
+- Icon: 🔗, Title: "Link your child", Subtitle: "Enter their hAIsir link code"
+- Hover: `translateY(-2px)` + light box-shadow
+
+### Skip link
+- "Skip — link later from dashboard" — 11px, `#b4b2a9`, cursor pointer
 
 ---
 

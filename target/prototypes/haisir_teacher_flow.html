@@ -157,45 +157,91 @@ input,textarea,select{font-family:inherit;}
 .ap-stat{display:flex;flex-direction:column;align-items:flex-end;gap:3px;}
 
 /* ─── CURRICULUM BUILDER ──────────────────────────── */
-.builder-layout{display:flex;flex:1;gap:0;min-height:480px;background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;}
-.builder-tree{width:240px;border-right:0.5px solid #e5e3dc;display:flex;flex-direction:column;}
-.bt-header{padding:12px 14px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:center;justify-content:space-between;}
-.bt-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;}
-.bt-add{font-size:18px;color:#0F6E56;background:none;border:none;line-height:1;}
-.tree-items{flex:1;overflow-y:auto;padding:8px;}
-.tree-item{padding:7px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:#5f5e5a;display:flex;align-items:center;gap:7px;transition:background .1s;}
-.tree-item:hover{background:#f5f4f0;}
-.tree-item.active{background:#E1F5EE;color:#0F6E56;font-weight:500;}
-.tree-item.active-p{background:#EEEDFE;color:#534AB7;font-weight:500;}
-.tree-item-icon{font-size:13px;flex-shrink:0;}
-.tree-child{padding-left:20px;}
-.tree-child .tree-item{font-size:11px;}
-.add-topic-btn{margin:8px;font-size:11px;padding:6px 10px;border-radius:6px;border:1px dashed #d3d1c7;background:transparent;color:#888780;width:calc(100% - 16px);text-align:center;}
-.add-topic-btn:hover{border-color:#0F6E56;color:#0F6E56;}
+.builder-layout{display:flex;flex:1;gap:0;min-height:520px;background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;}
 
-.builder-content{flex:1;display:flex;flex-direction:column;}
-.bc-header{padding:14px 18px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:center;justify-content:space-between;}
-.bc-title{font-size:14px;font-weight:600;color:#1a1a18;}
-.bc-actions{display:flex;gap:8px;}
-.bc-body{padding:18px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:14px;}
+/* Tree pane */
+.tree-pane{width:256px;border-right:0.5px solid #e5e3dc;display:flex;flex-direction:column;flex-shrink:0;}
+.tp-header{padding:12px 14px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:center;justify-content:space-between;}
+.tp-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;}
+.tp-scroll{flex:1;overflow-y:auto;padding:8px 6px;}
 
-.content-item{border:0.5px solid #e5e3dc;border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;}
-.ci-type{width:30px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
-.ci-type-pdf{background:#FAECE7;}
-.ci-type-vid{background:#E6F1FB;}
-.ci-type-txt{background:#E1F5EE;}
-.ci-type-q{background:#FAEEDA;}
-.ci-main{flex:1;min-width:0;}
-.ci-name{font-size:12px;font-weight:500;color:#1a1a18;margin-bottom:2px;}
-.ci-meta{font-size:11px;color:#888780;}
-.ci-actions{display:flex;gap:5px;}
+.tnode{display:flex;align-items:center;gap:0;border-radius:6px;cursor:pointer;transition:background .1s;user-select:none;}
+.tnode:hover{background:#f5f4f0;}
+.tnode.sel{background:#EEEDFE;}
+.tnode.sel .tnode-label{color:#3C1F6E;font-weight:500;}
+.tnode-toggle{width:18px;height:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:#b4b2a9;}
+.tnode-toggle.leaf{color:transparent;}
+.tnode-icon{width:18px;font-size:12px;flex-shrink:0;text-align:center;}
+.tnode-label{flex:1;font-size:12px;color:#5f5e5a;padding:7px 4px 7px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.type-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:#f0efe9;color:#888780;flex-shrink:0;margin-right:6px;white-space:nowrap;}
+.type-badge.reserved{background:#FEF3C0;color:#854F0B;}
+.pub-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;margin-right:8px;}
+.pub-dot-live{background:#1D9E75;}
+.pub-dot-draft{background:#EF9F27;}
+
+.tree-add-node{margin:6px 8px;font-size:11px;padding:6px 10px;border-radius:6px;border:1px dashed #d3d1c7;background:transparent;color:#888780;width:calc(100% - 16px);text-align:center;}
+.tree-add-node:hover{border-color:#534AB7;color:#534AB7;}
+
+/* Detail pane */
+.detail-pane{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.dp-header{padding:14px 18px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-shrink:0;}
+.dp-title{font-size:14px;font-weight:600;color:#1a1a18;}
+.dp-meta{font-size:11px;color:#888780;margin-top:2px;}
+.dp-actions{display:flex;gap:7px;flex-shrink:0;}
+.dp-body{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:18px;}
+.dp-empty{color:#888780;font-size:12px;padding:20px 0;}
+
+/* child node list in detail pane */
+.child-node-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border:0.5px solid #e5e3dc;border-radius:8px;cursor:pointer;background:#fff;margin-bottom:6px;}
+.child-node-item:hover{background:#f5f4f0;}
+
+/* Topics pills */
+.topics-area{display:flex;flex-wrap:wrap;gap:6px;}
+.topic-pill{font-size:11px;padding:4px 10px;border-radius:20px;background:#f0efe9;color:#5f5e5a;cursor:pointer;}
+.topic-pill.sel{background:#EEEDFE;color:#3C1F6E;}
+.topic-pill-add{font-size:11px;padding:4px 10px;border-radius:20px;border:1px dashed #d3d1c7;background:transparent;color:#888780;}
+.topic-pill-add:hover{border-color:#534AB7;color:#534AB7;}
+
+/* hAITU warning */
+.haitu-warn{background:#FFFBEB;border:0.5px solid #F6D860;border-radius:8px;padding:10px 13px;font-size:11px;color:#854F0B;display:flex;align-items:flex-start;gap:8px;}
+.haitu-warn .hw-icon{flex-shrink:0;font-size:13px;}
+
+/* Content slots */
+.content-slots{display:flex;flex-direction:column;gap:8px;}
+.content-slot{border:0.5px solid #e5e3dc;border-radius:8px;overflow:hidden;}
+.cs-type-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:5px 14px;background:#fafaf8;border-bottom:0.5px solid #e5e3dc;color:#b4b2a9;display:flex;align-items:center;justify-content:space-between;}
+.cs-filled{padding:11px 14px;display:flex;align-items:center;gap:10px;}
+.cs-filled:hover{background:#fafaf8;}
+.cs-type-icon{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.cs-type-pdf{background:#FAECE7;}
+.cs-type-vid{background:#E6F1FB;}
+.cs-type-txt{background:#E1F5EE;}
+.cs-info{flex:1;min-width:0;}
+.cs-name{font-size:12px;font-weight:500;color:#1a1a18;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cs-meta{font-size:11px;color:#888780;}
+.cs-acts{display:flex;gap:5px;flex-shrink:0;}
+.cs-btn{font-size:10px;padding:3px 8px;border-radius:5px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
+.cs-btn:hover{border-color:#534AB7;color:#534AB7;}
+.cs-btn-del{border-color:#F4C5BB;color:#C0422A;}
+.cs-btn-del:hover{border-color:#C0422A;background:#FAECE7;}
+.cs-empty{padding:13px 14px;display:flex;align-items:center;gap:10px;background:#fafaf8;cursor:pointer;}
+.cs-empty:hover{background:#f5f4f0;}
+.cs-empty-icon{width:32px;height:32px;border-radius:7px;border:1.5px dashed #d3d1c7;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;color:#b4b2a9;}
+.cs-empty-text{font-size:11px;color:#888780;}
+.cs-empty-label{font-size:12px;font-weight:500;color:#b4b2a9;margin-bottom:1px;}
+
+/* inst notice bar */
+.builder-notice{background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:8px;padding:10px 13px;font-size:11px;color:#185FA5;display:flex;align-items:flex-start;gap:8px;}
+
+/* builder modal: type picker chips */
+.type-chip{padding:5px 12px;border-radius:6px;border:0.5px solid #d3d1c7;background:transparent;font-size:11px;color:#5f5e5a;}
+.type-chip:hover{border-color:#534AB7;color:#534AB7;background:#EEEDFE;}
+.type-chip.sel{border-color:#534AB7;background:#534AB7;color:#fff;}
+.reserved-chip{border-color:#F6D860;color:#854F0B;}
+.reserved-chip:hover{background:#FFFBEB;border-color:#854F0B;}
+
+/* ci-btn legacy (used in other screens) */
 .ci-btn{font-size:10px;padding:3px 8px;border-radius:5px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
-
-.upload-zone{border:1.5px dashed #d3d1c7;border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color .15s;}
-.upload-zone:hover{border-color:#0F6E56;}
-.uz-icon{font-size:24px;margin-bottom:6px;}
-.uz-title{font-size:12px;font-weight:500;color:#5f5e5a;margin-bottom:3px;}
-.uz-sub{font-size:11px;color:#b4b2a9;}
 
 /* ─── STUDENT DETAIL (open tutor) ──────────────────── */
 .student-detail{display:flex;gap:16px;flex:1;}
@@ -439,6 +485,51 @@ input,textarea,select{font-family:inherit;}
   </div>
 </div>
 
+<!-- ══ BUILDER: ADD NODE MODAL ══════════════════════════════ -->
+<div class="modal-overlay" id="modal-builder-add-node" onclick="if(event.target===this)closeBuilderModal('modal-builder-add-node')">
+  <div class="modal">
+    <div class="modal-title">Add child node</div>
+    <div class="modal-sub" id="add-node-parent-label">Under: —</div>
+    <div>
+      <label class="form-label">Node label</label>
+      <input class="form-input" type="text" id="add-node-label" placeholder="e.g. Introduction to Functions">
+    </div>
+    <div>
+      <label class="form-label">Node type</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;" id="builder-type-grid"></div>
+      <div style="display:none;" id="builder-custom-row">
+        <input class="form-input" type="text" id="builder-custom-type-input" placeholder="Type name (e.g. strand, sprint…)" maxlength="50" style="margin-top:6px;">
+      </div>
+    </div>
+    <div style="background:#f5f4f0;border-radius:6px;padding:9px 11px;font-size:10px;color:#888780;font-family:monospace;">
+      POST /api/course_path_nodes<br>{ parent_id, <strong>node_type</strong>, label }
+    </div>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeBuilderModal('modal-builder-add-node')">Cancel</button>
+      <button class="modal-confirm" onclick="confirmBuilderAddNode()">Add node</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ BUILDER: ADD TOPIC MODAL ════════════════════════════ -->
+<div class="modal-overlay" id="modal-builder-add-topic" onclick="if(event.target===this)closeBuilderModal('modal-builder-add-topic')">
+  <div class="modal">
+    <div class="modal-title">Add topic</div>
+    <div class="modal-sub" id="add-topic-node-label">Under: —</div>
+    <div>
+      <label class="form-label">Topic name</label>
+      <input class="form-input" type="text" id="add-topic-name" placeholder="e.g. What is a variable?">
+    </div>
+    <div style="background:#f5f4f0;border-radius:6px;padding:9px 11px;font-size:10px;color:#888780;font-family:monospace;">
+      POST /api/topics<br>{ course_path_node_id, name }
+    </div>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeBuilderModal('modal-builder-add-topic')">Cancel</button>
+      <button class="modal-confirm" onclick="confirmBuilderAddTopic()">Add topic</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ ASSIGN MODAL ═════════════════════════════════════════ -->
 <div class="modal-overlay" id="assign-modal" onclick="if(event.target===this)closeModal()">
   <div class="modal">
@@ -545,11 +636,86 @@ const contexts = [
   },
 ];
 
+// Builder trees keyed by context id
+// inst contexts: read-only tree, supplemental only
+// open (tutor) context: full CRUD
+const builderTrees = {
+  c1: [ // St. Mary's — Maths (instructor mode)
+    { id:'b1m1', type:'chapter', label:'Fractions', children:[
+      { id:'b1m1s1', type:'section', label:'Types of Fractions', children:[], topics:[
+        {id:'bt1', name:'Proper & Improper fractions'},
+        {id:'bt2', name:'Mixed numbers'},
+      ]},
+      { id:'b1m1s2', type:'section', label:'Operations on Fractions', children:[], topics:[
+        {id:'bt3', name:'Adding fractions'},
+        {id:'bt4', name:'Subtracting fractions'},
+      ]},
+    ]},
+    { id:'b1m2', type:'chapter', label:'Decimals', children:[
+      { id:'b1m2s1', type:'section', label:'Decimal notation', children:[], topics:[
+        {id:'bt5', name:'Reading decimals'},
+        {id:'bt6', name:'Comparing decimals'},
+      ]},
+    ]},
+    { id:'b1m3', type:'chapter', label:'Basic Geometry', children:[], topics:[] },
+  ],
+  c2: [ // JNV Science (instructor mode)
+    { id:'b2m1', type:'chapter', label:'World of Science', children:[
+      { id:'b2m1s1', type:'section', label:'Scientific Method', children:[], topics:[
+        {id:'bt10', name:'Observation & Hypothesis'},
+        {id:'bt11', name:'Measurement & Units'},
+      ]},
+    ]},
+    { id:'b2m2', type:'chapter', label:'Motion & Forces', children:[
+      { id:'b2m2s1', type:'section', label:'Types of Motion', children:[], topics:[
+        {id:'bt12', name:'Uniform motion'},
+        {id:'bt13', name:'Non-uniform motion'},
+      ]},
+    ]},
+  ],
+  c3: [ // Open tutoring — Maths (tutor mode, full CRUD)
+    { id:'b3m1', type:'module', label:'Algebra Basics', children:[
+      { id:'b3m1s1', type:'section', label:'Introduction to Algebra', children:[], topics:[
+        {id:'bt20', name:'What is Algebra?'},
+        {id:'bt21', name:'Variables & Terms'},
+      ]},
+      { id:'b3m1s2', type:'section', label:'Expressions & Equations', children:[], topics:[
+        {id:'bt22', name:'Forming Expressions'},
+        {id:'bt23', name:'Solving Equations'},
+      ]},
+    ]},
+    { id:'b3m2', type:'module', label:'Quadratic Equations', children:[
+      { id:'b3m2s1', type:'section', label:'Standard Form', children:[], topics:[
+        {id:'bt24', name:'Quadratic formula'},
+        {id:'bt25', name:'Factorisation method'},
+      ]},
+    ]},
+    { id:'b3m3', type:'module', label:'Word Problems', children:[], topics:[] },
+  ],
+};
+
+// Content by topic id
+const builderContent = {
+  bt1:  { pdf: { name:'Fractions — Study notes', meta:'PDF · 3 pages · Uploaded 2 days ago' }, video: null, text: null },
+  bt2:  { pdf: null, video: { name:'Mixed numbers walkthrough', meta:'Video · 6 min · YouTube link' }, text: null },
+  bt3:  { pdf: null, video: null, text: { name:'Adding fractions — lecture notes', meta:'Text · 520 words' } },
+  bt4:  { pdf: null, video: null, text: null },
+  bt20: { pdf: { name:'Algebra intro notes', meta:'PDF · 2 pages · Uploaded today' }, video: null, text: null },
+  bt21: { pdf: null, video: { name:'Variables explained', meta:'Video · 5 min · YouTube link' }, text: null },
+  bt22: { pdf: null, video: null, text: null },
+  bt23: { pdf: null, video: { name:'Solving equations walkthrough', meta:'Video · 8 min' }, text: null },
+};
+
 let activeCtxId   = 'c1';
 let activeStudent = null;
-let builderCtxId  = null;
-let builderActive = 'ch1';
-let fromBuilder   = false;
+let builderCtxId       = null;
+let builderMode        = 'tutor';   // 'tutor' | 'instructor'
+let fromBuilder        = false;
+let builderExpandedNodes = new Set();
+let builderSelectedNodeId = null;
+let builderSelectedTopicId = null;
+let builderAddNodeParentId = null;
+let builderSelectedTypeChip = 'section';
 
 /* ════════════════════════════════════════════════════
    ROUTING
@@ -562,7 +728,17 @@ function goScreen(id) {
 function goHome()      { renderHome(); goScreen('s-home'); }
 function goClass(cid)  { activeCtxId=cid; renderClass(); goScreen('s-class'); }
 function goStudent(sid,cid){ activeCtxId=cid; activeStudent=sid; fromBuilder=false; renderStudent(); goScreen('s-student'); }
-function goBuilder(cid){ builderCtxId=cid; fromBuilder=false; renderBuilder(); goScreen('s-builder'); }
+function goBuilder(cid){
+  builderCtxId=cid;
+  fromBuilder=false;
+  const ctx = contexts.find(x=>x.id===cid);
+  builderMode = ctx && ctx.type==='inst' ? 'instructor' : 'tutor';
+  builderExpandedNodes = new Set();
+  builderSelectedNodeId = null;
+  builderSelectedTopicId = null;
+  renderBuilder();
+  goScreen('s-builder');
+}
 function goBuilderOrHome(){ fromBuilder ? goBuilder(builderCtxId) : goHome(); }
 function goDoubtsTeacher() { renderTeacherDoubts(); goScreen('s-teacher-doubts'); }
 function goTeacherReply(did){ renderTeacherReply(did); goScreen('s-teacher-reply'); }
@@ -890,132 +1066,370 @@ function renderStudent() {
 /* ════════════════════════════════════════════════════
    SCREEN 4 — CURRICULUM BUILDER
 ════════════════════════════════════════════════════ */
+
+// ── builder helpers ───────────────────────────────
+function builderFindNode(id, nodes) {
+  for (const n of nodes) {
+    if (n.id===id) return n;
+    if (n.children) { const f=builderFindNode(id,n.children); if(f) return f; }
+  }
+  return null;
+}
+function builderIsLeaf(node) { return Array.isArray(node.children) && node.children.length===0; }
+function builderGetContent(topicId) { return builderContent[topicId] || {pdf:null,video:null,text:null}; }
+function builderIsVideoOnly(topicId) {
+  const c = builderGetContent(topicId);
+  return c.video && !c.pdf && !c.text;
+}
+
+// ── tree rendering ────────────────────────────────
+function builderRenderTreeNodes(nodes, depth) {
+  return nodes.map(n=>{
+    const sel = n.id===builderSelectedNodeId;
+    const exp = builderExpandedNodes.has(n.id);
+    const hasChildren = n.children && n.children.length > 0;
+    const leaf = builderIsLeaf(n);
+    const indent = depth * 14;
+    const icon = depth===0 ? '📚' : (leaf ? '📄' : '📁');
+    const leafDot = leaf ? `<span class="pub-dot pub-dot-live"></span>` : '';
+    let html = `<div class="tnode ${sel?'sel':''}" style="padding-left:${indent}px;" onclick="builderSelectNode('${n.id}')">
+      ${hasChildren
+        ? `<span class="tnode-toggle" onclick="event.stopPropagation();builderToggleExpand('${n.id}')">${exp?'▾':'▸'}</span>`
+        : `<span class="tnode-toggle leaf"></span>`}
+      <span class="tnode-icon">${icon}</span>
+      <span class="tnode-label">${n.label}</span>
+      ${leafDot}
+      <span class="type-badge">${n.type}</span>
+    </div>`;
+    if ((exp || sel) && hasChildren) html += builderRenderTreeNodes(n.children, depth+1);
+    return html;
+  }).join('');
+}
+
+function builderToggleExpand(id) {
+  if (builderExpandedNodes.has(id)) builderExpandedNodes.delete(id);
+  else builderExpandedNodes.add(id);
+  builderRefreshTree();
+}
+
+function builderRefreshTree() {
+  const tree = builderTrees[builderCtxId] || [];
+  const scrollEl = document.getElementById('builder-tree-scroll');
+  if (!scrollEl) return;
+  let html = builderRenderTreeNodes(tree, 0);
+  if (builderMode==='tutor') {
+    html += `<button class="tree-add-node" onclick="openBuilderAddNode(null)">+ Add top-level node</button>`;
+  }
+  scrollEl.innerHTML = html;
+}
+
+function builderSelectNode(id) {
+  builderSelectedNodeId = id;
+  const tree = builderTrees[builderCtxId] || [];
+  const node = builderFindNode(id, tree);
+  if (node && builderIsLeaf(node) && node.topics && node.topics.length>0) {
+    builderSelectedTopicId = node.topics[0].id;
+  } else {
+    builderSelectedTopicId = null;
+  }
+  builderExpandedNodes.add(id);
+  builderRefreshTree();
+  builderRenderDetail();
+}
+
+// ── detail rendering ──────────────────────────────
+function builderRenderDetail() {
+  const tree = builderTrees[builderCtxId] || [];
+  const titleEl  = document.getElementById('builder-dp-title');
+  const metaEl   = document.getElementById('builder-dp-meta');
+  const actionsEl = document.getElementById('builder-dp-actions');
+  const bodyEl   = document.getElementById('builder-dp-body');
+  if (!titleEl) return;
+
+  if (!builderSelectedNodeId) {
+    titleEl.textContent = 'Select a node';
+    metaEl.textContent = '';
+    actionsEl.innerHTML = '';
+    bodyEl.innerHTML = '<div class="dp-empty">Select a node from the tree to view its content.</div>';
+    return;
+  }
+
+  const node = builderFindNode(builderSelectedNodeId, tree);
+  if (!node) return;
+  const leaf = builderIsLeaf(node);
+  const c = contexts.find(x=>x.id===builderCtxId);
+
+  titleEl.textContent = node.label;
+  metaEl.textContent = leaf
+    ? `Leaf node · ${node.type} · ${(node.topics||[]).length} topic${(node.topics||[]).length===1?'':'s'}`
+    : `${node.type} · ${node.children.length} child node${node.children.length===1?'':'s'}`;
+
+  // actions
+  if (leaf) {
+    actionsEl.innerHTML = `
+      ${builderMode==='tutor' ? `<button class="btn-secondary" onclick="openBuilderAddNode('${node.id}')">+ Add child node</button>` : ''}
+      <button class="btn-primary" style="width:auto;padding:6px 14px;" onclick="openBuilderAddTopic('${node.id}')">+ Add topic</button>`;
+  } else {
+    actionsEl.innerHTML = builderMode==='tutor'
+      ? `<button class="btn-secondary" onclick="openBuilderAddNode('${node.id}')">+ Add child node</button>`
+      : '';
+  }
+
+  if (!leaf) {
+    bodyEl.innerHTML = `
+      <div>
+        <div style="font-size:12px;color:#5f5e5a;font-weight:500;margin-bottom:10px;">Child nodes (${node.children.length})</div>
+        ${node.children.map(ch=>`
+          <div class="child-node-item" onclick="builderSelectNode('${ch.id}')">
+            <span style="font-size:13px;">${builderIsLeaf(ch)?'📄':'📁'}</span>
+            <span style="font-size:12px;color:#5f5e5a;flex:1;">${ch.label}</span>
+            <span class="type-badge">${ch.type}</span>
+            ${builderIsLeaf(ch)?'<span class="pub-dot pub-dot-live"></span>':''}
+            <span style="font-size:10px;color:#b4b2a9;">→</span>
+          </div>`).join('')}
+        ${node.children.length===0 ? '<div style="font-size:11px;color:#b4b2a9;font-style:italic;margin-top:4px;">No child nodes yet.</div>' : ''}
+        ${builderMode==='tutor' ? `<button style="margin-top:8px;font-size:12px;padding:7px 14px;border-radius:7px;border:1px dashed #d3d1c7;background:transparent;color:#534AB7;border-color:#C0B8F4;" onclick="openBuilderAddNode('${node.id}')">+ Add child node</button>` : ''}
+        <div style="font-size:11px;color:#b4b2a9;margin-top:8px;">Topics can only be added to leaf nodes (nodes with no children).</div>
+      </div>`;
+    return;
+  }
+
+  // Leaf: topics + content slots
+  const topics = node.topics || [];
+  const topicPills = topics.map(t=>`
+    <span class="topic-pill ${t.id===builderSelectedTopicId?'sel':''}" onclick="builderSelectTopic('${t.id}')">${t.name}</span>
+  `).join('');
+
+  let contentHtml = '';
+  if (topics.length===0) {
+    contentHtml = `<div style="font-size:11px;color:#b4b2a9;font-style:italic;">Add topics first, then upload content for each topic.</div>`;
+  } else if (builderSelectedTopicId) {
+    const ct = builderGetContent(builderSelectedTopicId);
+    const videoOnly = builderIsVideoOnly(builderSelectedTopicId);
+    const warnHtml = videoOnly ? `
+      <div class="haitu-warn">
+        <span class="hw-icon">⚠️</span>
+        <span><strong>No text content for this topic</strong> — hAITU will answer from general knowledge only. Upload a PDF or text note to enable retrieval-based answers.</span>
+      </div>` : '';
+    contentHtml = `
+      ${warnHtml}
+      <div class="content-slots">
+        ${builderContentSlot('pdf','📄','cs-type-pdf','PDF',ct.pdf)}
+        ${builderContentSlot('video','▶','cs-type-vid','Video',ct.video)}
+        ${builderContentSlot('text','✏','cs-type-txt','Text notes',ct.text)}
+      </div>`;
+  }
+
+  const selectedTopic = topics.find(t=>t.id===builderSelectedTopicId);
+
+  // Students (tutor mode only)
+  let studentsHtml = '';
+  if (builderMode==='tutor' && c) {
+    studentsHtml = `
+      <div>
+        <div class="sec-hd"><span class="sec-title">Students on this topic</span></div>
+        ${c.students.map(s=>`
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe9;cursor:pointer;" onclick="goStudent('${s.id}','${c.id}')">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="student-av" style="background:${s.color};width:22px;height:22px;font-size:9px;">${s.initials}</div>
+              <span style="font-size:12px;color:#5f5e5a;">${s.name}</span>
+            </div>
+            <span class="mbadge ${s.status==='danger'?'mb-danger':s.status==='warn'?'mb-warn':'mb-ok'}">${s.progress}%</span>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  // Instructor supplemental-only notice
+  const instSupNote = builderMode==='instructor' ? `
+    <div style="background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:8px;padding:10px 13px;font-size:11px;color:#185FA5;display:flex;align-items:flex-start;gap:8px;">
+      <span>ℹ</span><span>You can only add supplemental topics to institution nodes. The core topic structure is managed by your institution admin.</span>
+    </div>` : '';
+
+  bodyEl.innerHTML = `
+    <div>
+      <div class="sec-hd">
+        <span class="sec-title">Topics (${topics.length})</span>
+        <button class="topic-pill-add" onclick="openBuilderAddTopic('${node.id}')">+ Add topic</button>
+      </div>
+      <div class="topics-area">
+        ${topicPills}
+        ${topics.length===0 ? '<span style="font-size:11px;color:#b4b2a9;font-style:italic;">No topics yet — add one above.</span>' : ''}
+      </div>
+    </div>
+    ${selectedTopic ? `
+    <div>
+      <div class="sec-hd">
+        <span class="sec-title">Content — ${selectedTopic.name}</span>
+        <span style="font-size:10px;color:#b4b2a9;">1 item per type</span>
+      </div>
+      ${instSupNote}
+      ${contentHtml}
+    </div>` : ''}
+    ${studentsHtml}`;
+}
+
+function builderContentSlot(type, iconChar, iconCls, label, item) {
+  if (item) {
+    return `
+      <div class="content-slot">
+        <div class="cs-type-label">${label} <span style="color:#1D9E75;font-size:9px;">✓ Uploaded</span></div>
+        <div class="cs-filled">
+          <div class="cs-type-icon ${iconCls}">${iconChar}</div>
+          <div class="cs-info">
+            <div class="cs-name">${item.name}</div>
+            <div class="cs-meta">${item.meta}</div>
+          </div>
+          <div class="cs-acts">
+            <button class="cs-btn" onclick="showToast('Replace ${label}…')">Replace</button>
+            <button class="cs-btn cs-btn-del" onclick="showToast('Removed ${label}')">✕</button>
+          </div>
+        </div>
+      </div>`;
+  } else {
+    return `
+      <div class="content-slot">
+        <div class="cs-type-label">${label}</div>
+        <div class="cs-empty" onclick="showToast('Upload ${label}…')">
+          <div class="cs-empty-icon">＋</div>
+          <div class="cs-empty-text">
+            <div class="cs-empty-label">No ${label.toLowerCase()} yet</div>
+            <div style="font-size:10px;color:#b4b2a9;">${type==='video'?'Paste a YouTube or video URL':'Click to upload or paste content'}</div>
+          </div>
+        </div>
+      </div>`;
+  }
+}
+
+function builderSelectTopic(id) {
+  builderSelectedTopicId = id;
+  builderRenderDetail();
+}
+
 function renderBuilder() {
   const c = contexts.find(x=>x.id===builderCtxId);
-  const isInst = c.type === 'inst';
+  if (!c) return;
 
-  document.getElementById('builder-role-tag').textContent = isInst ? 'Instructor' : 'Tutor';
+  document.getElementById('builder-role-tag').textContent = builderMode==='instructor' ? 'Instructor' : 'Tutor';
   document.getElementById('builder-bc').innerHTML = `
     <span class="bc-link" onclick="goHome()">Home</span>
     <span class="bc-sep">›</span>
-    ${isInst ? `<span class="bc-link" onclick="goClass('${c.id}')">${c.label}</span><span class="bc-sep">›</span>` : ''}
-    <span class="bc-cur">${isInst ? 'Add content' : 'Curriculum builder'}</span>`;
+    ${builderMode==='instructor' ? `<span class="bc-link" onclick="goClass('${c.id}')">${c.label}</span><span class="bc-sep">›</span>` : ''}
+    <span class="bc-cur">${builderMode==='instructor' ? 'Add content' : 'Curriculum builder'}</span>`;
 
-  const curriculum = isInst
-    ? [
-        {id:'ch1', name:'Fractions',          topics:['What are fractions?','Equivalent fractions','Simplifying','Mixed numbers']},
-        {id:'ch2', name:'Decimals',            topics:['Decimal notation','Adding decimals','Comparing decimals']},
-        {id:'ch3', name:'Basic Geometry',      topics:['Lines & angles','Triangles','Area & perimeter']},
-      ]
-    : c.curriculum;
-
-  const activeChapter = curriculum.find(ch=>ch.id===builderActive) || curriculum[0];
-
-  const contentItems = activeChapter ? [
-    {type:'pdf', icon:'📄', iconCls:'ci-type-pdf', name:`${activeChapter.name} — Study notes`, meta:'PDF · 4 pages · Uploaded 3 days ago'},
-    {type:'vid', icon:'▶', iconCls:'ci-type-vid',  name:`Intro to ${activeChapter.name}`,       meta:'Video · 8 min · YouTube link'},
-    {type:'q',   icon:'✏', iconCls:'ci-type-q',    name:`Practice questions (${activeChapter.topics.length * 3} questions)`, meta:`Linked to ${activeChapter.topics.length} sub-topics`},
-  ] : [];
-
-  const notice = isInst ? `
-    <div style="background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:8px;padding:10px 13px;font-size:11px;color:#185FA5;margin-bottom:2px;">
-      ℹ You are adding supplemental content to the institution curriculum. The core topic structure is managed by your institution admin.
+  const noticeHtml = builderMode==='instructor' ? `
+    <div class="builder-notice" style="margin-bottom:4px;">
+      <span>ℹ</span>
+      <span>You are adding supplemental content to the institution curriculum. The core topic structure is managed by your institution admin — tree is read-only.</span>
     </div>` : '';
 
   document.getElementById('builder-body').innerHTML = `
-    ${notice}
-    <div style="flex:1;display:flex;gap:0;min-height:480px;background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;">
-
-      <!-- Tree -->
-      <div class="builder-tree">
-        <div class="bt-header">
-          <span class="bt-title">${isInst ? 'Topics' : 'Curriculum'}</span>
-          ${!isInst ? '<button class="bt-add" onclick="addChapter()">+</button>' : ''}
+    ${noticeHtml}
+    <div class="builder-layout">
+      <div class="tree-pane">
+        <div class="tp-header">
+          <span class="tp-title">Curriculum</span>
         </div>
-        <div class="tree-items">
-          ${curriculum.map(ch=>`
-            <div class="tree-item ${ch.id===builderActive?(isInst?'active':'active-p'):''}" onclick="setBuilderActive('${ch.id}')">
-              <span class="tree-item-icon">📂</span>${ch.name}
-            </div>
-            ${ch.id===builderActive ? ch.topics.map(t=>`
-              <div class="tree-child">
-                <div class="tree-item" onclick="showToast('Opening: ${t}')">
-                  <span class="tree-item-icon">📄</span>${t}
-                </div>
-              </div>`).join('') : ''}
-          `).join('')}
-          ${!isInst ? `<button class="add-topic-btn" onclick="addChapter()">+ Add chapter</button>` : ''}
-        </div>
+        <div class="tp-scroll" id="builder-tree-scroll"></div>
       </div>
-
-      <!-- Content panel -->
-      <div class="builder-content">
-        <div class="bc-header">
-          <div class="bc-title">${activeChapter ? activeChapter.name : 'Select a topic'}</div>
-          <div class="bc-actions">
-            <button class="btn-secondary" onclick="showToast('Creating assessment…')">+ Assessment</button>
-            <button class="btn-primary" style="width:auto;padding:6px 14px;" onclick="showToast('Upload panel open')">+ Upload content</button>
+      <div class="detail-pane">
+        <div class="dp-header">
+          <div>
+            <div class="dp-title" id="builder-dp-title">Select a node</div>
+            <div class="dp-meta" id="builder-dp-meta"></div>
           </div>
+          <div class="dp-actions" id="builder-dp-actions"></div>
         </div>
-        <div class="bc-body">
-          ${activeChapter ? `
-            <div>
-              <div class="sec-hd" style="margin-bottom:6px;"><span class="sec-title">Sub-topics</span></div>
-              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;">
-                ${activeChapter.topics.map(t=>`<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:#f0efe9;color:#5f5e5a;">${t}</span>`).join('')}
-                <button style="font-size:11px;padding:4px 10px;border-radius:20px;border:1px dashed #d3d1c7;background:transparent;color:#888780;" onclick="showToast('Add sub-topic')">+ Add</button>
-              </div>
-            </div>
-            <div>
-              <div class="sec-hd" style="margin-bottom:6px;"><span class="sec-title">Content</span></div>
-              ${contentItems.map(ci=>`
-                <div class="content-item" style="margin-bottom:6px;">
-                  <div class="ci-type ${ci.iconCls}">${ci.icon}</div>
-                  <div class="ci-main">
-                    <div class="ci-name">${ci.name}</div>
-                    <div class="ci-meta">${ci.meta}</div>
-                  </div>
-                  <div class="ci-actions">
-                    <button class="ci-btn" onclick="showToast('Editing…')">Edit</button>
-                    <button class="ci-btn" onclick="showToast('Removed')">✕</button>
-                  </div>
-                </div>`).join('')}
-              <div class="upload-zone" onclick="showToast('File picker open')">
-                <div class="uz-icon">📎</div>
-                <div class="uz-title">Upload PDF, video link, or text notes</div>
-                <div class="uz-sub">Drag & drop or click to browse</div>
-              </div>
-            </div>
-            ${!isInst ? `
-              <div>
-                <div class="sec-hd" style="margin-bottom:6px;"><span class="sec-title">Students on this topic</span></div>
-                ${c.students.map(s=>`
-                  <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe9;font-size:12px;" onclick="goStudent('${s.id}','${c.id}')">
-                    <div style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                      <div class="student-av" style="background:${s.color};width:22px;height:22px;font-size:9px;">${s.initials}</div>
-                      <span>${s.name}</span>
-                    </div>
-                    <span class="mbadge ${s.status==='danger'?'mb-danger':s.status==='warn'?'mb-warn':'mb-ok'}">${s.progress}%</span>
-                  </div>`).join('')}
-              </div>` : ''}
-          ` : '<div style="color:#888780;font-size:12px;">Select a topic from the tree to manage its content.</div>'}
+        <div class="dp-body" id="builder-dp-body">
+          <div class="dp-empty">Select a node from the tree to view its content.</div>
         </div>
       </div>
     </div>`;
+
+  builderRefreshTree();
+  if (builderSelectedNodeId) builderRenderDetail();
 }
 
-function setBuilderActive(id) {
-  builderActive = id;
-  renderBuilder();
+// ── builder modals ────────────────────────────────
+const BUILDER_NODE_TYPES = ['course','chapter','module','section','unit','week'];
+
+function openBuilderAddNode(parentId) {
+  if (builderMode==='instructor') { showToast('Tree is read-only for instructors'); return; }
+  builderAddNodeParentId = parentId;
+  const tree = builderTrees[builderCtxId] || [];
+  const parent = parentId ? builderFindNode(parentId, tree) : null;
+  document.getElementById('add-node-parent-label').textContent =
+    parent ? `Under: ${parent.label} (${parent.type})` : 'Top level';
+  builderSelectedTypeChip = 'section';
+  builderRenderTypeGrid();
+  document.getElementById('add-node-label').value = '';
+  document.getElementById('builder-custom-row').style.display = 'none';
+  document.getElementById('modal-builder-add-node').classList.add('open');
+  setTimeout(()=>document.getElementById('add-node-label').focus(), 50);
 }
 
-function addChapter() {
-  const c = contexts.find(x=>x.id===builderCtxId);
-  const name = prompt('Chapter name:');
-  if (!name) return;
-  c.curriculum.push({id:'ch_'+Date.now(), name, topics:[]});
-  showToast('Chapter added!');
-  renderBuilder();
+function builderRenderTypeGrid() {
+  const grid = document.getElementById('builder-type-grid');
+  if (!grid) return;
+  const chips = BUILDER_NODE_TYPES.map(t=>`
+    <button class="type-chip ${t===builderSelectedTypeChip?'sel':''}" onclick="builderSelectTypeChip('${t}')">${t}</button>
+  `).join('');
+  grid.innerHTML = chips + `<button class="type-chip ${builderSelectedTypeChip==='custom'?'sel':''}" onclick="builderSelectTypeChip('custom')">Custom…</button>`;
+}
+
+function builderSelectTypeChip(t) {
+  builderSelectedTypeChip = t;
+  builderRenderTypeGrid();
+  const customRow = document.getElementById('builder-custom-row');
+  customRow.style.display = t==='custom' ? 'block' : 'none';
+  if (t==='custom') document.getElementById('builder-custom-type-input').focus();
+}
+
+function confirmBuilderAddNode() {
+  const label = document.getElementById('add-node-label').value.trim();
+  if (!label) { showToast('Enter a node label'); return; }
+  const type = builderSelectedTypeChip==='custom'
+    ? (document.getElementById('builder-custom-type-input').value.trim() || 'custom')
+    : builderSelectedTypeChip;
+  const tree = builderTrees[builderCtxId];
+  if (!tree) return;
+  const parent = builderAddNodeParentId ? builderFindNode(builderAddNodeParentId, tree) : null;
+  const newNode = { id:'bn'+Date.now(), type, label, children:[], topics:[] };
+  if (parent) parent.children.push(newNode);
+  else tree.push(newNode);
+  closeBuilderModal('modal-builder-add-node');
+  builderExpandedNodes.add(builderAddNodeParentId || newNode.id);
+  builderSelectedNodeId = newNode.id;
+  builderSelectedTopicId = null;
+  builderRefreshTree();
+  builderRenderDetail();
+  showToast(`Added "${label}" (${type})`);
+}
+
+function openBuilderAddTopic(nodeId) {
+  const tree = builderTrees[builderCtxId] || [];
+  const node = builderFindNode(nodeId, tree);
+  document.getElementById('add-topic-node-label').textContent = `Under: ${node ? node.label : nodeId}`;
+  document.getElementById('add-topic-name').value = '';
+  document.getElementById('modal-builder-add-topic').classList.add('open');
+  setTimeout(()=>document.getElementById('add-topic-name').focus(), 50);
+}
+
+function confirmBuilderAddTopic() {
+  const name = document.getElementById('add-topic-name').value.trim();
+  if (!name) { showToast('Enter a topic name'); return; }
+  const tree = builderTrees[builderCtxId] || [];
+  const node = builderFindNode(builderSelectedNodeId, tree);
+  if (!node) return;
+  const newTopic = { id:'bt'+Date.now(), name };
+  node.topics.push(newTopic);
+  builderSelectedTopicId = newTopic.id;
+  closeBuilderModal('modal-builder-add-topic');
+  builderRenderDetail();
+  showToast(`Topic "${name}" added`);
+}
+
+function closeBuilderModal(id) {
+  document.getElementById(id).classList.remove('open');
 }
 
 /* ════════════════════════════════════════════════════

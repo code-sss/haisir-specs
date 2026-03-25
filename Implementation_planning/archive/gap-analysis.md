@@ -107,6 +107,8 @@
 
 ## Decisions Needed Before Implementation
 
+> All 9 decisions below are resolved — nothing is open. Kept for traceability.
+
 1. ~~**Tutor marketplace gate**: Immediate visibility or admin approval required?~~ **Resolved:** Immediate on toggle, admin can suspend post-hoc. See `02_auth_and_roles.md` section 2.3.
 2. ~~**Pagination strategy**: Cursor-based or offset-based? Max page size?~~ **Resolved:** Cursor-based for append-heavy feeds (notifications, activity timeline, doubt threads, chat history); offset-based for management/admin tables (page default 1, page_size default 20, max 100). See `00_overview.md` pagination convention.
 3. ~~**File storage**: S3/cloud or local disk for PDFs/images?~~ **Resolved:** Local disk in v1 via `StorageBackend` abstract interface in `infrastructure/storage/`. `STORAGE_BACKEND` env var selects backend (default: `local`). S3/GCS/Azure can be swapped in later. See `00_overview.md` file storage convention.
