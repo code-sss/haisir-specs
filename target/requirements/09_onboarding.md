@@ -31,30 +31,28 @@ sequenceDiagram
     K-->>FE: APISIX sets session cookie
 
     FE->>BE: GET /api/users/me
-    BE-->>FE: {onboarding_completed: false, roles: []}
+    BE-->>FE: {onboarding_completed_at: null, roles: []}
     FE->>FE: Redirect to /onboarding/role-select → ON02
 
     alt Student path
         U->>FE: Select "Student" (ON02)
         FE->>BE: POST /api/users/me/assign-role {role: "student"}
         BE->>K: Assign "student" realm role (Admin API)
-        FE->>K: Silent re-auth (hidden iframe, prompt=none)
-        K-->>FE: New JWT — realm_access.roles includes "student"
+        FE->>FE: Persist "student" to localStorage (optimistic role)
         FE->>FE: ON03 — "You're all set, there!" + CTAs (no form)
     else Parent path
         U->>FE: Select "Parent" (ON02)
         FE->>BE: POST /api/users/me/assign-role {role: "parent"}
         BE->>K: Assign "parent" realm role (Admin API)
-        FE->>K: Silent re-auth (hidden iframe, prompt=none)
-        K-->>FE: New JWT — realm_access.roles includes "parent"
+        FE->>FE: Persist "parent" to localStorage (optimistic role)
         FE->>FE: ON05 — "You're all set, there!" + CTA (no form)
     end
 
-    FE->>FE: ON07 — role switcher demo
-    U->>FE: Click "Launch Dashboard" (ON08)
+    U->>FE: Click any CTA or "Skip — go to dashboard"
     FE->>BE: PATCH /api/users/me/onboarding-complete
     BE-->>FE: {completed_at}
-    FE->>FE: Redirect to role dashboard
+    FE->>FE: router.push → destination (or /home for skip)
+    Note over FE,K: JWT role appears after APISIX auto-refresh (~300 s)
 ```
 
 ---
@@ -94,6 +92,8 @@ sequenceDiagram
 - ~~BR-ON-002~~ — Google SSO is a Keycloak identity provider configuration — no custom OAuth code.
 - ~~BR-ON-003~~ — Email verification is a Keycloak flow setting — enforced by Keycloak before issuing a session.
 - **BR-ON-004:** After the Keycloak callback: if `GET /api/users/me` returns a user who already has roles and `onboarding_completed_at` is set, redirect directly to the role dashboard — skip ON02–ON06.
+- **BR-ON-004a:** On every root page load (`/`), the frontend calls `GET /api/users/me`. If `onboarding_completed_at` is `null` (or `onboarding_completed` is `false` / absent), the user is redirected to `/onboarding/role-select`. The `haisir_onboarding_done` cookie approach is deprecated. The frontend handles both `onboarding_completed` (boolean, per BR-META-001) and `onboarding_completed_at` (raw timestamp) defensively — whichever the backend returns.
+- **BR-ON-004b:** Any authenticated route not under `/onboarding/` must redirect to `/onboarding/role-select` if onboarding is incomplete (`onboarding_completed !== true`). The `/home` dashboard is the primary enforced route.
 
 **API calls:**
 ```
@@ -145,7 +145,13 @@ All subsequent onboarding calls require `X-CSRF-Token` and the session cookie se
 - **BR-ON-009:** Invite code validation applies when the user navigates to the join-institution flow via the "Join your school" CTA (not inline on this screen).
 - **BR-ON-010:** Tapping neither CTA (using the skip link or going directly to dashboard) creates the student role assignment only. Student lands on the home dashboard in empty state.
 
-**API calls:** None on this screen.
+**API calls:**
+```
+PATCH /api/users/me/onboarding-complete
+→ Called on any CTA click or "Skip — go to dashboard" BEFORE navigation.
+→ Sets user_metadata.onboarding_completed_at = now()
+→ Returns: {completed_at: datetime}
+```
 
 ---
 
@@ -195,7 +201,14 @@ POST /api/teachers/me/profile
 - ~~BR-ON-017~~ — Moved to the post-onboarding link-child flow: expired code shows appropriate error.
 - **BR-PARENT-001** (from data model): One active code per student. Multiple parents can use the same code before it expires.
 
-**API calls:** None on this screen. (Link code validation and `POST /api/parent-child-links` happen in the separate post-onboarding link-child flow.)
+**API calls:**
+```
+PATCH /api/users/me/onboarding-complete
+→ Called on "Link your child" CTA or "Skip — link later" BEFORE navigation.
+→ Sets user_metadata.onboarding_completed_at = now()
+→ Returns: {completed_at: datetime}
+```
+Link code validation and `POST /api/parent-child-links` happen in the separate post-onboarding link-child flow.
 
 ---
 

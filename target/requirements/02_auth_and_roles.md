@@ -252,28 +252,29 @@ APISIX's OIDC plugin is configured with `renew_access_token_on_expiry: true` and
 - When the access token expires (300s lifespan), APISIX automatically uses the stored refresh token to obtain a new access token from Keycloak
 - The session cookie is updated transparently — no client action required for normal token expiry
 
-**After role assignment during onboarding**, the new role won't appear in the current JWT until it expires and APISIX auto-refreshes. To force an immediate refresh, use Keycloak's silent re-authentication:
+**After role assignment during onboarding**, the new role won't appear in the current JWT until it expires and APISIX auto-refreshes (~300 s). Neither hidden-iframe (`prompt=none`) nor full-page redirect approaches reliably force a refresh — third-party cookie policies (Safari ITP, Firefox ETP) block the iframe, and a full-page redirect causes redirect loops when `onboarding_completed_at` is still `null`.
+
+**Optimistic role pattern (implemented):**
+
+Instead of forcing a JWT refresh, the frontend persists the newly assigned role to `localStorage` immediately after `POST /api/users/me/assign-role` succeeds. The `useAuth` hook falls back to this localStorage role when `GET /api/users/me` returns `roles: []` (because the JWT hasn't refreshed yet):
 
 ```typescript
-// After POST /api/users/me/assign-role, force token refresh:
-// Option 1: Hidden iframe with prompt=none (preferred)
-const iframe = document.createElement('iframe');
-iframe.style.display = 'none';
-iframe.src = '/auth/login?prompt=none';
-document.body.appendChild(iframe);
-iframe.onload = () => {
-  document.body.removeChild(iframe);
-  // Session cookie now contains JWT with updated realm_access.roles
-  await refreshUser(); // re-fetch /api/users/me
-};
+// After assign-role succeeds in ON02:
+setCurrentRole(selectedRole); // persist to localStorage
 
-// Option 2: Full-page redirect (fallback if iframe blocked by third-party cookie policies)
-window.location.href = '/auth/login?prompt=none&redirect_uri=' + encodeURIComponent(window.location.href);
+// In useAuth hook — optimistic fallback:
+const backendRoles = userData.roles.filter(r => r in ROLE_METADATA);
+const storedRole = getCurrentRole(); // from localStorage
+const availableRoles = backendRoles.length > 0
+  ? backendRoles
+  : storedRole ? [storedRole] : [];
 ```
 
-> **Browser compatibility note:** Safari (ITP) and Firefox (ETP in strict mode) block third-party cookies, which causes the hidden iframe silent refresh to fail silently — the Keycloak session cookie is treated as third-party in the iframe context. The frontend must detect iframe refresh failure (e.g., iframe `onerror` or timeout after 3 seconds) and fall back to Option 2 (full-page redirect with `prompt=none`). This is transparent to the user — Keycloak re-authenticates using the existing session and redirects back immediately.
+Once APISIX auto-refreshes the access token (~300 s), subsequent `GET /api/users/me` calls return the real roles and the localStorage fallback is no longer needed.
 
-**BR-AUTH-001:** The frontend must trigger a token refresh after every successful `POST /api/users/me/assign-role` during onboarding before proceeding to the next screen. This ensures `realm_access.roles` in the JWT reflects the newly assigned role before `X-Current-Role` is set for that role.
+> **Known limitation:** Until the JWT refreshes, `X-Current-Role` is set from the localStorage value but the backend cannot verify it against `realm_access.roles` in the JWT. Role-gated API calls made during this window may fail with 403. The onboarding screens (ON03, ON05) only call `PATCH /api/users/me/onboarding-complete`, which does not require `X-Current-Role` (explicit exception per BR-SEC-006), so this is not a problem during onboarding itself.
+
+**BR-AUTH-001:** After every successful `POST /api/users/me/assign-role`, the frontend must persist the assigned role to `localStorage` via `setCurrentRole()` and proceed to the next screen immediately. No explicit JWT refresh is attempted — the role propagates to the JWT when APISIX auto-refreshes the access token on expiry.
 
 ---
 
