@@ -5,19 +5,19 @@ description: Snapshot current schema, API endpoints, and UI flows from sibling r
 
 Read `Implementation_planning/progress.md` for any existing `## Current State` context.
 
-Next, read the sibling repos to discover what is currently implemented:
+Next, launch **three Explore sub-agents in parallel** to read the sibling repos simultaneously:
 
-**Schema (from backend models):**
-- `../haisir-backend` — find SQLAlchemy imperative mappings and domain models. Look for `domain/models/`, `infrastructure/persistence/` or equivalent. List every table and column that exists.
+**Agent 1 — Schema & API (backend):**
+- Find SQLAlchemy imperative mappings and domain models in `../haisir-backend` (`domain/models/`, `infrastructure/persistence/` or equivalent). List every table and column.
+- Find route files (`routers/`, `api/`). List every endpoint: method, path, auth role, request/response shape.
 
-**API endpoints (from backend routes):**
-- `../haisir-backend` — find route files (e.g. `routers/`, `api/`). List every endpoint: method, path, auth role, request/response shape.
+**Agent 2 — UI flows (frontend):**
+- Find page files in `../haisir-frontend` (`app/`, `pages/`). List every implemented screen and its purpose.
 
-**UI flows (from frontend pages/components):**
-- `../haisir-frontend` — find page files (e.g. `app/`, `pages/`). List every implemented screen and its purpose.
+**Agent 3 — Infrastructure:**
+- Read `../haisir-deploy/common` and `../haisir-deploy/dev` Docker Compose files and gateway config. Note which services are running, gateway routes, and DB migration tooling. Staging/prod overrides are out of scope.
 
-**Infrastructure context:**
-- `../haisir-deploy/common` and `../haisir-deploy/dev` — Docker Compose files and gateway config. Note which services are running, what the gateway routes are, and any DB migration tooling. Staging/prod overrides are out of scope.
+Collect results from all three agents before proceeding.
 
 ---
 
@@ -50,7 +50,13 @@ Only include screens/flows that are actually implemented.
 
 ---
 
-**Present all three drafted summaries to the user before writing any files.** Ask if anything looks wrong, missing, or needs adjustment.
+**Before presenting to the user, run a Challenger agent** with this prompt:
+
+> "You are reviewing a current-state snapshot of a fullstack app. Given the drafted schema, API, and UI summaries, identify: (1) any tables or endpoints that are likely missing from the snapshot based on what the UI implies should exist, (2) any UI screens that reference data not covered by the listed endpoints, (3) any obvious inconsistencies between the three summaries. Be concise."
+
+Incorporate or note the challenger's findings in your presentation.
+
+**Present all three drafted summaries plus any challenger flags to the user before writing any files.** Ask if anything looks wrong, missing, or needs adjustment.
 
 Do NOT write any files during this review.
 

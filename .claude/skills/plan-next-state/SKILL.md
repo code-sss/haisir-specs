@@ -3,23 +3,25 @@ name: plan-next-state
 description: Analyse gap between current and target state and recommend the next implementation step to agree on
 ---
 
-Read the following files to understand the desired end state:
+Launch **two Explore sub-agents in parallel** to read the relevant files simultaneously:
+
+**Agent 1 — Target state:**
 - `target/requirements/00_overview.md`
 - `target/requirements/01_data_model.md`
 - `target/requirements/02_auth_and_roles.md`
 - Any other `target/requirements/*.md` files relevant to the domain being discussed
-- `target/prototypes/*.html` — if the discussion involves UI flows
+- `target/prototypes/*.html` — only if the discussion involves UI flows
 
-Then read the current state snapshot if it exists (created by `/describe-current-state`):
-- `current/schema.md`
-- `current/api_contracts.md`
-- `current/ui_flows.md`
+**Agent 2 — Current state & planning:**
+- `current/schema.md`, `current/api_contracts.md`, `current/ui_flows.md` (if they exist)
+- `Implementation_planning/progress.md`
+- `Implementation_planning/phases.md`
 
-Then read these two planning files:
-- `Implementation_planning/progress.md` — agreed current state summary and what has already been agreed as the next phase
-- `Implementation_planning/phases.md` — rough phase guide for context on ordering and dependencies
+Collect results from both agents before proceeding.
 
 If `current/` files do not exist, or if the user's message mentions a specific domain (schema / API / UI / a specific feature), also read the relevant code in the sibling repos (`../haisir-backend`, `../haisir-frontend`, or `../haisir-deploy`) to get precise detail on what is and isn't implemented.
+
+---
 
 Based on the gap between current state and target state, produce a ranked list of **2–4 possible next implementation steps** in this format:
 
@@ -41,8 +43,18 @@ Rules:
 - Rank by: fewest blockers first, then by how many downstream steps each one unblocks.
 - Mark the top pick with ✅ Recommended.
 - Be explicit about any prerequisites that are not yet met.
-- Do NOT update any files yet. Wait for the user to confirm a next step.
-- Once the user agrees on a step, update ONLY the `## Next Phase` section of `Implementation_planning/progress.md` with the agreed step and a one-line rationale.
+
+---
+
+**Before presenting to the user, run a Challenger agent** with this prompt:
+
+> "You are stress-testing an implementation plan for a fullstack edtech app. Given the following ranked options: [paste the ranked list]. For each option, identify: (1) hidden dependencies or blockers not mentioned, (2) what could go wrong if chosen, (3) what it makes harder or more expensive to do later. For the recommended option specifically, identify the strongest argument against choosing it now. Be concise and direct."
+
+Present the ranked list **and** the challenger's critique together. The challenger's points should appear as a `### Challenger` section beneath the ranked list, so the user sees both before deciding.
+
+Do NOT update any files yet. Wait for the user to confirm a next step.
+
+Once the user agrees on a step, update ONLY the `## Next Phase` section of `Implementation_planning/progress.md` with the agreed step and a one-line rationale.
 
 After updating `progress.md`, perform the following maintenance checks without waiting for user confirmation:
 
