@@ -13,7 +13,7 @@
 | 01 · Role migration | Keycloak realm: add `institution_admin`, `tutor`, `parent`. Backend: `UserRole` enum + permission factories. Frontend: `useAuth` role switcher. |
 | 02 · Schema extensions | ALTER 4 tables + backfill: `course_path_nodes` (owner_type, owner_id), `topics` (status, owner_type, owner_id), `exam_templates` (owner_type, organization_id, purpose), `exam_template_questions` (paragraph_question_id). |
 | 03 · User metadata + onboarding endpoints | `user_metadata` table, 3 profile tables (student/teacher/parent), 7 endpoints incl. assign-role, become-tutor, onboarding-complete. |
-| 04 · Onboarding frontend | 4 screens (ON04/ON06/ON07/ON08 removed): ON01 → ON02 (student or parent) → ON03/ON05 (two views each: View A Relogin button → View B CTAs). `PATCH onboarding-complete` on View B exit. |
+| 04 · Onboarding frontend | 4 screens (ON04/ON06/ON07/ON08 removed): ON01 auto-redirects (no "Get started" click) → ON02 (student or parent) → ON03/ON05 (two views each: View A explicit logout Relogin button → View B CTAs). ON01 also handles post-Relogin re-entry (roles present + onboarding incomplete → View B). `PATCH onboarding-complete` on View B exit. |
 
 ---
 
