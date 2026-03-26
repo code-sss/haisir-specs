@@ -252,29 +252,21 @@ APISIX's OIDC plugin is configured with `renew_access_token_on_expiry: true` and
 - When the access token expires (300s lifespan), APISIX automatically uses the stored refresh token to obtain a new access token from Keycloak
 - The session cookie is updated transparently — no client action required for normal token expiry
 
-**After role assignment during onboarding**, the new role won't appear in the current JWT until it expires and APISIX auto-refreshes (~300 s). Neither hidden-iframe (`prompt=none`) nor full-page redirect approaches reliably force a refresh — third-party cookie policies (Safari ITP, Firefox ETP) block the iframe, and a full-page redirect causes redirect loops when `onboarding_completed_at` is still `null`.
+**After role assignment during onboarding**, the new role won't appear in the current JWT until a new OIDC Authorization Code Flow is completed through APISIX. The frontend does not manage this refresh — it is handled entirely by navigating the browser through APISIX's OIDC plugin:
 
-**Optimistic role pattern (implemented):**
-
-Instead of forcing a JWT refresh, the frontend persists the newly assigned role to `localStorage` immediately after `POST /api/users/me/assign-role` succeeds. The `useAuth` hook falls back to this localStorage role when `GET /api/users/me` returns `roles: []` (because the JWT hasn't refreshed yet):
-
-```typescript
-// After assign-role succeeds in ON02:
-setCurrentRole(selectedRole); // persist to localStorage
-
-// In useAuth hook — optimistic fallback:
-const backendRoles = userData.roles.filter(r => r in ROLE_METADATA);
-const storedRole = getCurrentRole(); // from localStorage
-const availableRoles = backendRoles.length > 0
-  ? backendRoles
-  : storedRole ? [storedRole] : [];
+```
+[User clicks "Relogin" button on View A]
+  → window.location.href = '/auth/login?prompt=none&redirect_uri=' + encodeURIComponent(viewBUrl)
+  → APISIX OIDC plugin initiates Authorization Code Flow (prompt=none)
+  → Keycloak validates existing session → issues new JWT with updated realm_access.roles
+  → APISIX updates the session cookie on the browser
+  → APISIX redirects browser to viewBUrl
+  → Page loads — session cookie already contains the new JWT. No client-side refresh needed.
 ```
 
-Once APISIX auto-refreshes the access token (~300 s), subsequent `GET /api/users/me` calls return the real roles and the localStorage fallback is no longer needed.
+`prompt=none` means Keycloak re-authenticates using the existing session without showing a login page. This works reliably in all browsers because it is a full-page first-party redirect, not an iframe — no third-party cookie restrictions apply.
 
-> **Known limitation:** Until the JWT refreshes, `X-Current-Role` is set from the localStorage value but the backend cannot verify it against `realm_access.roles` in the JWT. Role-gated API calls made during this window may fail with 403. The onboarding screens (ON03, ON05) only call `PATCH /api/users/me/onboarding-complete`, which does not require `X-Current-Role` (explicit exception per BR-SEC-006), so this is not a problem during onboarding itself.
-
-**BR-AUTH-001:** After every successful `POST /api/users/me/assign-role`, the frontend must persist the assigned role to `localStorage` via `setCurrentRole()` and proceed to the next screen immediately. No explicit JWT refresh is attempted — the role propagates to the JWT when APISIX auto-refreshes the access token on expiry.
+**BR-AUTH-001:** After a successful `POST /api/users/me/assign-role` during onboarding, the frontend MUST navigate to View A of the role-ready screen (ON03 for student, ON05 for parent). The screen shows a **"Relogin"** button. When clicked, the button triggers a full-page redirect to `/auth/login?prompt=none&redirect_uri=<view-b-url>`. APISIX completes the OIDC flow and updates the session cookie before landing the user on View B. No client-side token refresh, no iframe, and no `refreshUser()` call is needed — the session cookie is authoritative.
 
 ---
 

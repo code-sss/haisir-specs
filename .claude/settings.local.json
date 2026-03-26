@@ -14,7 +14,12 @@
       "Bash(git -C /Users/kalyansri/Workspace/haisir-frontend status)",
       "Bash(git -C /Users/kalyansri/Workspace/haisir-backend status)",
       "Bash(git -C /Users/kalyansri/Workspace/haisir-deploy status)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(find /Users/kalyansri/Workspace/haisir-frontend/src/hooks -type f -name *.ts)",
+      "Bash(grep -r useAuth /Users/kalyansri/Workspace/haisir-frontend/src/hooks --include=*.ts --include=*.tsx -l)",
+      "Bash(grep -r \"prompt=none\\\\|assign-role\\\\|iframe\\\\|silent\" /Users/kalyansri/Workspace/haisir-frontend/src --include=*.ts --include=*.tsx -B 2 -A 2)",
+      "Bash(find /Users/kalyansri/Workspace/haisir-specs/target/prototypes -type f -name *.html)",
+      "Bash(grep -r \"refreshUser\\\\|assignRole\\\\|token\" /Users/kalyansri/Workspace/haisir-frontend/src/features/onboarding --include=*.ts --include=*.tsx -A 3)"
     ]
   }
 }

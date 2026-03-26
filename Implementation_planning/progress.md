@@ -32,4 +32,18 @@ The core content-delivery and assessment loop is fully implemented. The backend 
 ## Next Phase
 <!-- The agreed next concrete step. Updated after each /plan-next-state discussion. -->
 
-TBD — awaiting team discussion on JWT refresh strategy before planning Phase 1.
+**Phase 0 — Add Relogin button to ON03/ON05 (fix JWT refresh after role assignment)**
+
+Rationale: Backend (`assign_role()` via Keycloak Admin API), deploy (realm roles), and screen rebuilds (ON03/ON05 CTA-only) are complete. The remaining known issue is that `GET /api/users/me` returns `roles: []` immediately after `assign_role` because APISIX hasn't refreshed the JWT. The current optimistic localStorage fallback is fragile for role-gated API calls. Solution: split ON03/ON05 into View A (Relogin button) + View B (CTAs), where the Relogin button triggers a full-page `prompt=none` redirect through APISIX so the session cookie is updated with the new JWT before View B loads.
+
+Scope (frontend only — backend and deploy are done):
+- **haisir-frontend:**
+  - Split `on03-student-ready.tsx` into View A + View B (keyed on `?next=go` query param):
+    - View A: "You're all set!" + role badge + Relogin button (no CTAs)
+    - View B: existing CTAs ("Join your school", "Browse open courses") + skip link
+  - Split `on05-parent-ready.tsx` into View A + View B:
+    - View A: "You're all set!" + role badge + Relogin button (no CTAs)
+    - View B: existing "Link your child" CTA + skip link
+  - Relogin button: `window.location.href = '/auth/login?prompt=none&redirect_uri=' + encodeURIComponent(viewBUrl)`
+  - Remove optimistic localStorage fallback from `useAuth` (no longer needed once Relogin is in place)
+  - `PATCH /api/users/me/onboarding-complete` remains on View B exit (already wired — no change)

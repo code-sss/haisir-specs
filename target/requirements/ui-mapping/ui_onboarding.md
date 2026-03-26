@@ -11,12 +11,14 @@
 |---|---|---|
 | ON01 | `s-keycloak` | Keycloak-native — no custom screen. Prototype shows a placeholder. |
 | ON02 | `s-roles` | `buildGrid()` + `pickRole()` (single-select) |
-| ON03 | `s-setup-student` | Role queue `advance()` → `buildStuCTAs()` |
+| ON03 View A | `s-setup-student` | After assign-role succeeds → `buildStuReady()` — "You're all set!" + Relogin button |
+| ON03 View B | `s-setup-student-go` | After Relogin (`?next=go`) → `buildStuCTAs()` — CTAs + skip link |
 | ON04 | ~~`s-setup-teacher`~~ | **Removed from onboarding** — instructors are invited by institution_admin |
-| ON05 | `s-setup-parent` | Role queue `advance()` → `buildParCTAs()` |
+| ON05 View A | `s-setup-parent` | After assign-role succeeds → `buildParReady()` — "You're all set!" + Relogin button |
+| ON05 View B | `s-setup-parent-go` | After Relogin (`?next=go`) → `buildParCTAs()` — CTA + skip link |
 | ON06 | ~~`s-setup-tutor`~~ | **Removed from onboarding** — separate "Become a tutor" flow |
-| ON07 | `s-switcher` | `buildReady()` (single-role users go straight to ready) |
-| ON08 | `s-ready` | Static success screen |
+| ON07 | ~~`s-switcher`~~ | **Removed from onboarding** — post-onboarding persistent topbar only |
+| ON08 | ~~`s-ready`~~ | **Removed** — onboarding-complete now called on leaving ON03/ON05 View B |
 
 ---
 
@@ -74,17 +76,31 @@ No custom frontend screen. APISIX redirects unauthenticated users to Keycloak's 
 
 ---
 
-## ON03 — Student Ready (`s-setup-student`)
+## ON03 — Student Ready
 
-No form fields. Populated via `buildStuCTAs()`.
+### View A (`s-setup-student`) — `/onboarding/student-ready`
 
-### Layout
+Rendered immediately after `assign-role` succeeds. Populated via `buildStuReady()`. No form fields.
+
+#### Layout
 - Party popper emoji (🎉), 52px, top centre
 - `h1`: "You're all set, there!" — bold, `#0A1F5C`
 - Subtext: "Your Student account is ready. Here's what to do first." — 13px, `#888780`
 - Role badge: `font-size: 12px`, `font-weight: 600`, `padding: 5px 14px`, `border-radius: 20px`, `background: #f0f4ff`, `color: #0A1F5C`
+- **"Relogin" button** — primary button style (full width, `#0A1F5C` bg, white text)
+  - On click: `window.location.href = '/auth/login?prompt=none&redirect_uri=' + encodeURIComponent('/onboarding/student-ready?next=go')`
+- No CTAs, no skip link.
 
-### CTA cards (action rows)
+---
+
+### View B (`s-setup-student-go`) — `/onboarding/student-ready?next=go`
+
+Rendered when `?next=go` is present. Populated via `buildStuCTAs()`. No form fields.
+
+#### Layout
+- Role badge: "🎓 Student" — pill, top centre (same style as View A)
+
+#### CTA cards (action rows)
 - Full-width, stacked vertically, gap 8px
 - Each card: `border: 0.5px solid #e5e3dc`, `border-radius: 10px`, `padding: 13px 16px`, flex row
 - Left: 32px icon emoji
@@ -94,8 +110,9 @@ No form fields. Populated via `buildStuCTAs()`.
 - Card 1 bg: `#E6F1FB`, title colour: `#185FA5`
 - Card 2 bg: `#EEEDFE`, title colour: `#534AB7`
 
-### Skip link
+#### Skip link
 - Below cards: "Skip — go to dashboard" — 11px, `#b4b2a9`, cursor pointer
+- All exits (CTA click or skip) call `PATCH /api/users/me/onboarding-complete` before navigating.
 
 ---
 
@@ -105,27 +122,46 @@ No form fields. Populated via `buildStuCTAs()`.
 
 ---
 
-## ON05 — Parent Ready (`s-setup-parent`)
+## ON05 — Parent Ready
 
-No form fields. Populated via `buildParCTAs()`. Same layout pattern as ON03.
+### View A (`s-setup-parent`) — `/onboarding/parent-ready`
 
-### Layout
+Rendered immediately after `assign-role` succeeds. Populated via `buildParReady()`. No form fields.
+
+#### Layout
 - Party popper emoji (🎉), 52px, top centre
 - `h1`: "You're all set, there!" — bold, `#0A1F5C`
 - Subtext: "Your Parent / Guardian account is ready. Here's what to do first." — 13px, `#888780`
 - Role badge: `background: #fdf8f2`, `color: #BA7517`, same pill style as ON03
+- **"Relogin" button** — primary button style (full width, `#0A1F5C` bg, white text)
+  - On click: `window.location.href = '/auth/login?prompt=none&redirect_uri=' + encodeURIComponent('/onboarding/parent-ready?next=go')`
+- No CTAs, no skip link.
 
-### CTA card
+---
+
+### View B (`s-setup-parent-go`) — `/onboarding/parent-ready?next=go`
+
+Rendered when `?next=go` is present. Populated via `buildParCTAs()`. No form fields.
+
+#### Layout
+- Role badge: "👨‍👩‍👧 Parent / Guardian" — pill, top centre (`background: #fdf8f2`, `color: #BA7517`)
+
+#### CTA card
 - Single card: bg `#FAEEDA`, title colour `#BA7517`
 - Icon: 🔗, Title: "Link your child", Subtitle: "Enter their hAIsir link code"
 - Hover: `translateY(-2px)` + light box-shadow
 
-### Skip link
+#### Skip link
 - "Skip — link later from dashboard" — 11px, `#b4b2a9`, cursor pointer
+- All exits (CTA click or skip) call `PATCH /api/users/me/onboarding-complete` before navigating.
 
 ---
 
-## ON07 — Role Switcher (`s-switcher`)
+## ON07 — Role Switcher — ~~REMOVED FROM ONBOARDING~~ (post-onboarding persistent topbar only)
+
+> This screen no longer appears during onboarding. Users complete onboarding with a single role. The role switcher is only visible post-onboarding for users who later hold multiple roles (e.g. student + parent). See §Persistent Role Switcher below.
+
+### Colours reference (retained for post-onboarding topbar)
 
 ### Topbar colour changes on switch
 - Student: `#0A1F5C`
