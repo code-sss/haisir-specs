@@ -1,19 +1,19 @@
 ---
 name: update-target-state
-description: Review and update target requirements specs in target/requirements/ via guided discussion
+description: Review and update target requirements specs in target/requirements/ (simplified near-term target) via guided discussion
 ---
 
 Launch **two Explore sub-agents in parallel** to read the relevant files simultaneously:
 
 **Agent 1 — Core specs:**
-- `target/requirements/00_overview.md` — architecture, personas, design decisions
+- `target/requirements/00_overview.md` — architecture, personas, design decisions (if stub, fall back to `vision/requirements/00_overview.md`)
 - `target/requirements/01_data_model.md` — existing schema (extend, never drop/rename)
 - `target/requirements/02_auth_and_roles.md` — auth patterns, roles, permission matrix
 
 **Agent 2 — Domain-specific specs and UI:**
-- Any other `target/requirements/*.md` files relevant to the domain being discussed
+- Any other `target/requirements/*.md` files relevant to the domain being discussed (if stub, read the corresponding `vision/requirements/` file for context)
 - `target/requirements/ui-mapping/` — UI mapping files for frontend screen details
-- `target/prototypes/*.html` — visual reference for UI flows and screen IDs (read only if UI flows are being discussed)
+- `vision/prototypes/*.html` — visual reference for UI flows and screen IDs (read only if UI flows are being discussed)
 
 Collect results from both agents before proceeding.
 

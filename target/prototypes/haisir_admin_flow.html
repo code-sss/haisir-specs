@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hAIsir – Platform Admin (Target)</title>
+<style>
+/* ─── RESET ─────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#0D1117;min-height:100vh;}
+button{cursor:pointer;font-family:inherit;}
+input,textarea,select{font-family:inherit;}
+
+/* ─── SCREEN SYSTEM ─────────────────────────────── */
+.screen{display:none;flex-direction:column;min-height:100vh;}
+.screen.active{display:flex;}
+
+/* ─── SHELL ─────────────────────────────────────── */
+.shell{max-width:1140px;margin:0 auto;width:100%;flex:1;display:flex;flex-direction:column;}
+
+/* ─── TOPBAR — near black ────────────────────────── */
+.topbar{background:#080F17;padding:0 20px;display:flex;align-items:center;height:48px;gap:14px;flex-shrink:0;border-bottom:0.5px solid rgba(255,255,255,.06);}
+.tb-brand{color:#fff;font-size:15px;font-weight:700;letter-spacing:-.4px;}
+.tb-platform{font-size:11px;color:rgba(255,255,255,.35);border-left:0.5px solid rgba(255,255,255,.1);padding-left:14px;}
+.tb-role{font-size:10px;padding:3px 9px;border-radius:20px;background:rgba(210,40,40,.25);color:#F09595;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border:0.5px solid rgba(210,40,40,.3);}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.tb-avatar{width:28px;height:28px;border-radius:50%;background:#E24B4A;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;}
+.tb-btn{font-size:11px;padding:5px 12px;border-radius:6px;background:rgba(255,255,255,.08);color:#fff;border:none;font-weight:500;}
+.tb-btn:hover{background:rgba(255,255,255,.14);}
+.tb-btn-blue{background:#185FA5;border:none;}
+.tb-btn-blue:hover{background:#0C447C;}
+
+/* ─── APP LAYOUT ─────────────────────────────────── */
+.app-layout{display:flex;flex:1;overflow:hidden;}
+
+/* ─── SIDEBAR NAV ────────────────────────────────── */
+.sidenav{width:190px;min-width:190px;background:#080F17;border-right:0.5px solid rgba(255,255,255,.06);display:flex;flex-direction:column;padding:12px 8px;gap:2px;flex-shrink:0;}
+.snav-section{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.2);padding:10px 8px 4px;}
+.snav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;cursor:pointer;transition:background .12s;border:none;background:transparent;width:100%;text-align:left;}
+.snav-item:hover{background:rgba(255,255,255,.06);}
+.snav-item.active{background:rgba(255,255,255,.1);}
+.snav-icon{font-size:15px;flex-shrink:0;width:18px;text-align:center;}
+.snav-label{font-size:12px;color:rgba(255,255,255,.6);font-weight:500;}
+.snav-item.active .snav-label{color:#fff;}
+
+/* ─── MAIN AREA ──────────────────────────────────── */
+.main-area{flex:1;background:#F0EFE9;display:flex;flex-direction:column;overflow-y:auto;}
+.page-body{padding:16px 20px;display:flex;flex-direction:column;gap:16px;flex:1;}
+
+/* ─── BREADCRUMB ─────────────────────────────────── */
+.bc{background:#fff;border-bottom:0.5px solid #e5e3dc;padding:7px 20px;font-size:11px;color:#888780;display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.bc-link{color:#E24B4A;cursor:pointer;}
+.bc-link:hover{text-decoration:underline;}
+.bc-sep{color:#d3d1c7;}
+.bc-cur{color:#1a1a18;font-weight:500;}
+
+/* ─── SECTION HEADER ─────────────────────────────── */
+.sec-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.sec-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;}
+.sec-btn{font-size:11px;padding:5px 12px;border-radius:6px;background:#080F17;color:#fff;border:none;font-weight:500;}
+.sec-btn:hover{background:#1a2535;}
+
+/* ─── STAT CARDS ─────────────────────────────────── */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.stat-card{background:#fff;border:0.5px solid #e5e3dc;border-radius:10px;padding:14px 16px;}
+.stat-val{font-size:26px;font-weight:700;color:#080F17;margin-bottom:2px;line-height:1;}
+.stat-lbl{font-size:11px;color:#888780;margin-top:3px;}
+.stat-card.grn-left{border-left:3px solid #1D9E75;}
+.stat-card.amb-left{border-left:3px solid #EF9F27;}
+.stat-card.blu-left{border-left:3px solid #185FA5;}
+
+/* ─── BOARD CONTENT MANAGER ──────────────────────── */
+.board-layout{display:flex;gap:0;background:#fff;border:0.5px solid #e5e3dc;border-radius:12px;overflow:hidden;min-height:600px;}
+
+/* board selector strip */
+.board-strip{width:60px;min-width:60px;background:#080F17;border-right:0.5px solid rgba(255,255,255,.06);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:4px;}
+.bstrip-btn{width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.5);font-size:18px;display:flex;align-items:center;justify-content:center;transition:background .12s;}
+.bstrip-btn:hover{background:rgba(255,255,255,.12);}
+.bstrip-btn.active{background:rgba(255,255,255,.15);color:#fff;border:0.5px solid rgba(255,255,255,.2);}
+.bstrip-label{font-size:9px;color:rgba(255,255,255,.35);text-align:center;width:100%;margin-bottom:4px;}
+.bstrip-add{width:40px;height:40px;border-radius:8px;background:transparent;border:1px dashed rgba(255,255,255,.15);color:rgba(255,255,255,.3);font-size:20px;display:flex;align-items:center;justify-content:center;margin-top:6px;}
+.bstrip-add:hover{border-color:rgba(255,255,255,.4);color:rgba(255,255,255,.7);}
+
+/* tree */
+.board-tree{width:240px;border-right:0.5px solid #e5e3dc;display:flex;flex-direction:column;flex-shrink:0;}
+.bt-head{padding:12px 14px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:center;justify-content:space-between;}
+.bt-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b4b2a9;}
+.bt-add{width:22px;height:22px;border-radius:5px;background:#080F17;color:#fff;border:none;font-size:16px;display:flex;align-items:center;justify-content:center;line-height:1;}
+.bt-add:hover{background:#1a2535;}
+.tree-scroll{flex:1;overflow-y:auto;padding:8px 6px;}
+.tnode{display:flex;align-items:center;border-radius:6px;cursor:pointer;transition:background .1s;user-select:none;}
+.tnode:hover{background:#f5f4f0;}
+.tnode.sel{background:#e8ebf0;}
+.tnode.sel .tnode-label{color:#080F17;font-weight:600;}
+.tnode-toggle{width:16px;height:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:#b4b2a9;}
+.tnode-icon{width:16px;font-size:11px;flex-shrink:0;text-align:center;}
+.tnode-label{flex:1;font-size:12px;color:#5f5e5a;padding:7px 3px 7px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tnode-right{display:flex;align-items:center;gap:3px;flex-shrink:0;padding-right:8px;}
+.type-badge{font-size:9px;padding:1px 4px;border-radius:3px;background:#f0efe9;color:#888780;white-space:nowrap;}
+.type-badge.reserved{background:#FFF3E0;color:#7C4D0F;}
+.pub-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.pub-dot-live{background:#1D9E75;}
+.pub-dot-draft{background:#EF9F27;}
+.tree-add-btn{margin:6px 8px;font-size:11px;padding:5px 8px;border-radius:6px;border:1px dashed #d3d1c7;background:transparent;color:#888780;width:calc(100% - 16px);text-align:center;}
+.tree-add-btn:hover{border-color:#080F17;color:#080F17;}
+
+/* detail panel */
+.board-detail{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.bd-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 20px;text-align:center;background:#fafaf8;}
+.bd-empty-icon{font-size:40px;}
+.bd-empty-title{font-size:15px;font-weight:600;color:#1a1a18;}
+.bd-empty-sub{font-size:12px;color:#888780;max-width:280px;line-height:1.6;}
+.bd-head{padding:14px 18px;border-bottom:0.5px solid #e5e3dc;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-shrink:0;}
+.bd-title{font-size:14px;font-weight:600;color:#1a1a18;}
+.bd-meta{font-size:11px;color:#888780;margin-top:2px;}
+.bd-actions{display:flex;gap:7px;flex-shrink:0;}
+.bd-body{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;}
+.topic-card{border:0.5px solid #e5e3dc;border-radius:8px;overflow:hidden;background:#fff;}
+.tc-row{padding:11px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;}
+.tc-row:hover{background:#fafaf8;}
+.tc-status-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.tc-live-icon{background:#E1F5EE;}
+.tc-draft-icon{background:#FAEEDA;}
+.tc-main{flex:1;min-width:0;}
+.tc-name{font-size:12px;font-weight:500;color:#1a1a18;}
+.tc-meta{font-size:11px;color:#888780;margin-top:1px;}
+.tc-right{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.version-pill{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;}
+.vp-live{background:#E1F5EE;color:#085041;}
+.vp-draft{background:#FAEEDA;color:#854F0B;}
+.row-btn{font-size:10px;padding:3px 9px;border-radius:5px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
+.row-btn:hover{border-color:#080F17;color:#080F17;}
+.row-btn-blue{background:#185FA5;color:#fff;border-color:#185FA5;}
+.row-btn-blue:hover{background:#0C447C;}
+.child-node-item{display:flex;align-items:center;gap:8px;padding:9px 12px;border:0.5px solid #e5e3dc;border-radius:8px;cursor:pointer;background:#fff;}
+.child-node-item:hover{background:#f5f4f0;}
+.cni-icon{width:26px;height:26px;border-radius:5px;background:#f0efe9;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
+.cni-label{flex:1;font-size:12px;color:#1a1a18;font-weight:500;}
+.cni-count{font-size:11px;color:#888780;}
+
+/* ─── MODALS ─────────────────────────────────────── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal-inner{background:#fff;border-radius:12px;padding:20px 24px;width:400px;max-width:calc(100vw - 40px);box-shadow:0 8px 32px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:14px;}
+.modal-inner-title{font-size:14px;font-weight:600;color:#1a1a18;}
+.modal-inner-sub{font-size:11px;color:#888780;margin-top:-8px;}
+.modal-inner label{font-size:11px;font-weight:600;color:#5f5e5a;display:block;margin-bottom:4px;}
+.modal-inner input[type=text],.modal-inner select,.modal-inner textarea{width:100%;padding:8px 10px;border:0.5px solid #d3d1c7;border-radius:6px;font-size:12px;font-family:inherit;outline:none;}
+.modal-inner input[type=text]:focus,.modal-inner select:focus,.modal-inner textarea:focus{border-color:#080F17;}
+.modal-inner-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px;}
+.modal-inner-warn{background:#FFFBEB;border:0.5px solid #F6D860;border-radius:8px;padding:10px 13px;font-size:11px;color:#854F0B;display:flex;gap:8px;}
+.type-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;}
+.type-chip{padding:5px 12px;border-radius:6px;border:0.5px solid #d3d1c7;background:transparent;font-size:11px;color:#5f5e5a;display:flex;align-items:center;gap:4px;}
+.type-chip:hover{border-color:#080F17;color:#080F17;background:#f5f4f0;}
+.type-chip.sel{border-color:#080F17;background:#080F17;color:#fff;}
+.type-chip.reserved-chip{border-color:#F6D860;color:#7C4D0F;background:#FFFBEB;}
+.type-chip.reserved-chip.sel{background:#7C4D0F;color:#fff;border-color:#7C4D0F;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s;}
+.overlay.open{opacity:1;pointer-events:all;}
+.modal{background:#fff;border-radius:14px;padding:24px;width:440px;max-width:calc(100vw - 40px);display:flex;flex-direction:column;gap:14px;max-height:90vh;overflow-y:auto;}
+.modal-title{font-size:15px;font-weight:700;color:#080F17;}
+.modal-sub{font-size:12px;color:#888780;}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;}
+.modal-cancel{font-size:12px;padding:8px 16px;border-radius:7px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
+.modal-confirm{font-size:12px;padding:8px 18px;border-radius:7px;background:#080F17;color:#fff;border:none;font-weight:700;}
+.form-label{font-size:11px;font-weight:600;color:#5f5e5a;margin-bottom:5px;display:block;}
+.form-input{width:100%;font-size:12px;border:0.5px solid #d3d1c7;border-radius:6px;padding:8px 10px;background:#fafaf8;color:#1a1a18;outline:none;margin-bottom:2px;}
+.form-input:focus{border-color:#080F17;}
+.checkbox-row{display:flex;align-items:center;gap:8px;font-size:12px;color:#5f5e5a;}
+.checkbox-row input[type=checkbox]{width:14px;height:14px;}
+
+/* ─── TOAST ──────────────────────────────────────── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#080F17;color:#fff;font-size:12px;padding:10px 18px;border-radius:8px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;white-space:nowrap;border:0.5px solid rgba(255,255,255,.1);}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<!-- ══ SCREEN: DASHBOARD ══════════════════════════════════ -->
+<div class="screen active" id="s-dashboard">
+  <div class="shell">
+    <div class="topbar">
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-platform">Platform console</span>
+      <span class="tb-role">Platform Admin</span>
+      <div class="tb-right">
+        <button class="tb-btn" onclick="showToast('All systems operational')">System status</button>
+        <div class="tb-avatar">SA</div>
+      </div>
+    </div>
+    <div class="app-layout">
+      <div class="sidenav" id="sidenav-dash"></div>
+      <div class="main-area">
+        <div class="bc"><span class="bc-cur">Dashboard</span></div>
+        <div class="page-body" id="body-dashboard"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: BOARD CONTENT ══════════════════════════════ -->
+<div class="screen" id="s-boards">
+  <div class="shell">
+    <div class="topbar">
+      <span class="tb-brand">hAIsir</span>
+      <span class="tb-platform">Board content</span>
+      <span class="tb-role">Platform Admin</span>
+      <div class="tb-right">
+        <button class="tb-btn" onclick="showToast('Draft saved')">Save draft</button>
+        <button class="tb-btn tb-btn-blue" onclick="openPublishModal()">Publish version</button>
+        <div class="tb-avatar">SA</div>
+      </div>
+    </div>
+    <div class="app-layout">
+      <div class="sidenav" id="sidenav-boards"></div>
+      <div class="main-area">
+        <div class="bc">
+          <span class="bc-link" onclick="nav('dashboard')">Dashboard</span>
+          <span class="bc-sep">›</span>
+          <span class="bc-cur">Board content manager</span>
+        </div>
+        <div class="page-body" id="body-boards" style="padding:14px;flex:1;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODALS ══════════════════════════════════════════════ -->
+
+<!-- Add board modal -->
+<div class="overlay" id="m-add-board" onclick="if(event.target===this)closeModal('m-add-board')">
+  <div class="modal">
+    <div><div class="modal-title">Add new board</div><div class="modal-sub">Platform boards can be adopted by parents as a starting structure for Home Study.</div></div>
+    <div><label class="form-label">Board name</label><input class="form-input" id="new-board-name" placeholder="e.g. ICSE, State Board Telangana…"/></div>
+    <div><label class="form-label">Board code</label><input class="form-input" placeholder="e.g. ICSE, SBTS…"/></div>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeModal('m-add-board')">Cancel</button>
+      <button class="modal-confirm" onclick="confirmAddBoard()">Create board</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add node modal -->
+<div class="modal-overlay" id="modal-board-add-node" onclick="if(event.target===this)closeBoardModal('modal-board-add-node')">
+  <div class="modal-inner">
+    <div class="modal-inner-title">Add child node</div>
+    <div class="modal-inner-sub" id="board-add-node-parent-label">Under: —</div>
+    <div>
+      <label>Node label</label>
+      <input type="text" id="board-add-node-label" placeholder="e.g. Grade 8, Algebra, Chapter 3…">
+    </div>
+    <div>
+      <label>Node type</label>
+      <div class="type-grid" id="board-type-grid"></div>
+    </div>
+    <div class="modal-inner-actions">
+      <button class="modal-cancel" onclick="closeBoardModal('modal-board-add-node')">Cancel</button>
+      <button class="modal-confirm" onclick="confirmBoardAddNode()">Add node</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add topic modal -->
+<div class="modal-overlay" id="modal-board-add-topic" onclick="if(event.target===this)closeBoardModal('modal-board-add-topic')">
+  <div class="modal-inner">
+    <div class="modal-inner-title">Add topic</div>
+    <div class="modal-inner-sub" id="board-add-topic-node-label">Under: —</div>
+    <div>
+      <label>Topic name</label>
+      <input type="text" id="board-add-topic-name" placeholder="e.g. Food Variety, Newton's First Law…">
+    </div>
+    <div class="modal-inner-actions">
+      <button class="modal-cancel" onclick="closeBoardModal('modal-board-add-topic')">Cancel</button>
+      <button class="modal-confirm" onclick="confirmBoardAddTopic()">Add topic</button>
+    </div>
+  </div>
+</div>
+
+<!-- Publish modal -->
+<div class="modal-overlay" id="modal-board-publish" onclick="if(event.target===this)closeBoardModal('modal-board-publish')">
+  <div class="modal-inner">
+    <div class="modal-inner-title">Publish board update</div>
+    <div class="modal-inner-warn">⚠️ Publishing makes this content available to parents for adoption. Parents who have already adopted this board will see a notification that new content is available.</div>
+    <div>
+      <label>Version notes (optional)</label>
+      <textarea rows="3" style="width:100%;padding:8px 10px;border:0.5px solid #d3d1c7;border-radius:6px;font-size:12px;font-family:inherit;outline:none;" placeholder="e.g. Added 3 new topics to Grade 6 Maths."></textarea>
+    </div>
+    <div class="modal-inner-actions">
+      <button class="modal-cancel" onclick="closeBoardModal('modal-board-publish')">Cancel</button>
+      <button class="modal-confirm" onclick="confirmBoardPublish()">Publish</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ════════════════════════════════════════════════
+   DATA
+════════════════════════════════════════════════ */
+const NODE_TYPES     = ['course','chapter','module','section','unit','week'];
+const RESERVED_TYPES = ['grade','subject'];
+
+const boards = [
+  { id:'ncert', label:'NCERT', icon:'📗', version:'v2.4', status:'live',
+    tree:[
+      { id:'n-g6', type:'grade', label:'Grade 6', expanded:true, children:[
+        { id:'n-g6-mat', type:'subject', label:'Mathematics', expanded:true, children:[
+          { id:'n-g6-mat-ch1', type:'chapter', label:'Knowing Our Numbers', children:[], topics:[
+            { id:'bt1', name:'Large Numbers',      status:'live',  content:3 },
+            { id:'bt2', name:'Roman Numerals',     status:'live',  content:2 },
+            { id:'bt3', name:'Estimation',          status:'draft', content:0 },
+          ]},
+          { id:'n-g6-mat-ch2', type:'chapter', label:'Fractions', children:[], topics:[
+            { id:'bt4', name:'Types of Fractions', status:'live',  content:4 },
+            { id:'bt5', name:'Operations',          status:'live',  content:3 },
+          ]},
+          { id:'n-g6-mat-ch3', type:'chapter', label:'Algebra',   children:[], topics:[] },
+        ]},
+        { id:'n-g6-sci', type:'subject', label:'Science', expanded:false, children:[
+          { id:'n-g6-sci-ch1', type:'chapter', label:'Food: Where Does It Come From?', children:[], topics:[
+            { id:'bt6', name:'Food Variety',       status:'live',  content:3 },
+            { id:'bt7', name:'Plant Parts We Eat', status:'live',  content:2 },
+            { id:'bt8', name:'Animal Products',    status:'draft', content:0 },
+          ]},
+        ]},
+      ]},
+      { id:'n-g7', type:'grade', label:'Grade 7', expanded:false, children:[
+        { id:'n-g7-mat', type:'subject', label:'Mathematics', children:[] },
+        { id:'n-g7-sci', type:'subject', label:'Science',     children:[] },
+      ]},
+    ]
+  },
+  { id:'jnv', label:'JNV', icon:'📘', version:'v1.8', status:'live',
+    tree:[
+      { id:'j-g7', type:'grade', label:'Grade 7', expanded:false, children:[
+        { id:'j-g7-hin', type:'subject', label:'Hindi', children:[
+          { id:'j-g7-hin-ch1', type:'chapter', label:'Vasant — Chapter 1', children:[], topics:[
+            { id:'jt1', name:'Paath Parichay', status:'live',  content:2 },
+            { id:'jt2', name:'Shabd-Arth',     status:'draft', content:0 },
+          ]},
+        ]},
+      ]},
+    ]
+  },
+  { id:'cbe', label:'CBE', icon:'📙', version:'v1.2', status:'live',
+    tree:[
+      { id:'cb-g8', type:'grade', label:'Grade 8', expanded:false, children:[
+        { id:'cb-g8-eng', type:'subject', label:'English', children:[] },
+      ]},
+    ]
+  },
+];
+
+/* ════════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════════ */
+let activeScreen = 'dashboard';
+let activeBoardId = 'ncert';
+let selectedNodeId = null;
+let addNodeParentId = null;
+let addNodeSelectedType = 'chapter';
+
+/* ════════════════════════════════════════════════
+   NAVIGATION
+════════════════════════════════════════════════ */
+const NAV_ITEMS = [
+  { id:'dashboard', icon:'🏠', label:'Dashboard' },
+  { id:'boards',    icon:'📚', label:'Board content' },
+];
+
+function nav(screen) {
+  activeScreen = screen;
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('s-' + screen).classList.add('active');
+  window.scrollTo(0, 0);
+  renderSidenav();
+  if (screen === 'dashboard') renderDashboard();
+  if (screen === 'boards')    renderBoardsPage();
+}
+
+function renderSidenav() {
+  ['sidenav-dash','sidenav-boards'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = NAV_ITEMS.map(item => `
+      <button class="snav-item ${activeScreen === item.id ? 'active' : ''}" onclick="nav('${item.id}')">
+        <span class="snav-icon">${item.icon}</span>
+        <span class="snav-label">${item.label}</span>
+      </button>`).join('');
+  });
+}
+
+/* ════════════════════════════════════════════════
+   DASHBOARD
+════════════════════════════════════════════════ */
+function renderDashboard() {
+  const totalTopics = boards.reduce((acc, b) => acc + countTopics(b.tree), 0);
+  const liveTopics  = boards.reduce((acc, b) => acc + countTopicsLive(b.tree), 0);
+
+  document.getElementById('body-dashboard').innerHTML = `
+    <div class="sec-hd"><span class="sec-title">Platform overview</span></div>
+    <div class="stat-row">
+      <div class="stat-card blu-left">
+        <div class="stat-val">${boards.length}</div><div class="stat-lbl">Platform boards</div>
+      </div>
+      <div class="stat-card grn-left">
+        <div class="stat-val">${liveTopics}</div><div class="stat-lbl">Live topics</div>
+      </div>
+      <div class="stat-card amb-left">
+        <div class="stat-val">${totalTopics - liveTopics}</div><div class="stat-lbl">Draft topics</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val">${totalTopics}</div><div class="stat-lbl">Total topics</div>
+      </div>
+    </div>
+    <div class="sec-hd"><span class="sec-title">Boards</span>
+      <button class="sec-btn" onclick="openModal('m-add-board')">+ Add board</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${boards.map(b => {
+        const topics = countTopics(b.tree);
+        const live = countTopicsLive(b.tree);
+        return `
+          <div style="background:#fff;border:0.5px solid #e5e3dc;border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:14px;cursor:pointer;" onclick="nav('boards')">
+            <span style="font-size:24px;">${b.icon}</span>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:600;color:#1a1a18;margin-bottom:2px;">${b.label}</div>
+              <div style="font-size:11px;color:#888780;">${live} live topics · ${topics - live} drafts · version ${b.version}</div>
+            </div>
+            <span style="font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;background:#E1F5EE;color:#085041;">Live</span>
+            <button class="row-btn row-btn-blue" onclick="event.stopPropagation();nav('boards')">Manage</button>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function countTopics(tree) {
+  let n = 0;
+  tree.forEach(node => { n += (node.topics||[]).length + countTopics(node.children||[]); });
+  return n;
+}
+function countTopicsLive(tree) {
+  let n = 0;
+  tree.forEach(node => {
+    n += (node.topics||[]).filter(t => t.status === 'live').length + countTopicsLive(node.children||[]);
+  });
+  return n;
+}
+
+/* ════════════════════════════════════════════════
+   BOARD CONTENT PAGE
+════════════════════════════════════════════════ */
+function renderBoardsPage() {
+  const board = boards.find(b => b.id === activeBoardId);
+  document.getElementById('body-boards').innerHTML = `
+    <div class="board-layout">
+      <div class="board-strip" id="board-strip"></div>
+      <div class="board-tree">
+        <div class="bt-head">
+          <span class="bt-title" id="bt-title">${board.label} ${board.version}</span>
+          <button class="bt-add" onclick="openBoardAddNodeModal(null)">+</button>
+        </div>
+        <div class="tree-scroll" id="board-tree-scroll"></div>
+      </div>
+      <div class="board-detail" id="board-detail">
+        <div class="bd-empty">
+          <div class="bd-empty-icon">📋</div>
+          <div class="bd-empty-title">Select a node</div>
+          <div class="bd-empty-sub">Click any node in the tree to view and manage its topics and content.</div>
+        </div>
+      </div>
+    </div>`;
+
+  renderBoardStrip();
+  renderBoardTree();
+}
+
+function renderBoardStrip() {
+  const el = document.getElementById('board-strip');
+  if (!el) return;
+  el.innerHTML = boards.map(b => `
+    <button class="bstrip-btn ${b.id === activeBoardId ? 'active' : ''}" onclick="selectBoard('${b.id}')" title="${b.label}">${b.icon}</button>`).join('') +
+    `<button class="bstrip-add" onclick="openModal('m-add-board')" title="Add board">+</button>`;
+}
+
+function selectBoard(id) {
+  activeBoardId = id;
+  selectedNodeId = null;
+  const board = boards.find(b => b.id === id);
+  document.getElementById('bt-title').textContent = `${board.label} ${board.version}`;
+  renderBoardStrip();
+  renderBoardTree();
+  document.getElementById('board-detail').innerHTML = `<div class="bd-empty"><div class="bd-empty-icon">📋</div><div class="bd-empty-title">Select a node</div><div class="bd-empty-sub">Click any node in the tree to view its topics.</div></div>`;
+}
+
+/* ─── Tree rendering ─────────────────────────── */
+function renderBoardTree() {
+  const board = boards.find(b => b.id === activeBoardId);
+  let html = renderTreeNodes(board.tree, 0);
+  html += `<button class="tree-add-btn" onclick="openBoardAddNodeModal(null)">+ Add top-level node</button>`;
+  document.getElementById('board-tree-scroll').innerHTML = html;
+}
+
+function renderTreeNodes(nodes, depth) {
+  return nodes.map(node => {
+    const hasChildren = node.children && node.children.length > 0;
+    const hasTopics   = node.topics   && node.topics.length > 0;
+    const isSel       = node.id === selectedNodeId;
+    const indent      = depth * 14;
+    const isReserved  = RESERVED_TYPES.includes(node.type);
+
+    let html = `
+      <div class="tnode ${isSel ? 'sel' : ''}" style="padding-left:${indent}px;" onclick="selectBoardNode('${node.id}')">
+        <div class="tnode-toggle">${hasChildren || hasTopics ? (node.expanded ? '▾' : '▸') : ''}</div>
+        <div class="tnode-icon">${isReserved ? '🔒' : (hasChildren ? '📁' : '📄')}</div>
+        <div class="tnode-label">${node.label}</div>
+        <div class="tnode-right">
+          <span class="type-badge ${isReserved ? 'reserved' : ''}">${node.type}</span>
+        </div>
+      </div>`;
+
+    if (node.expanded) {
+      if (hasChildren) html += renderTreeNodes(node.children, depth + 1);
+      if (hasTopics) {
+        html += node.topics.map(t => `
+          <div class="tnode" style="padding-left:${(depth + 1) * 14}px;opacity:.8;" onclick="selectBoardNode('${node.id}')">
+            <div class="tnode-toggle"></div>
+            <div class="tnode-icon">📝</div>
+            <div class="tnode-label" style="font-size:11px;">${t.name}</div>
+            <div class="tnode-right"><div class="pub-dot ${t.status === 'live' ? 'pub-dot-live' : 'pub-dot-draft'}"></div></div>
+          </div>`).join('');
+      }
+    }
+    return html;
+  }).join('');
+}
+
+function selectBoardNode(nodeId) {
+  const board = boards.find(b => b.id === activeBoardId);
+  const node = findNode(board.tree, nodeId);
+  if (!node) return;
+
+  // Toggle expand
+  if (selectedNodeId === nodeId) node.expanded = !node.expanded;
+  else node.expanded = true;
+  selectedNodeId = nodeId;
+
+  renderBoardTree();
+  renderBoardDetail(node);
+}
+
+function findNode(tree, id) {
+  for (const n of tree) {
+    if (n.id === id) return n;
+    const found = findNode(n.children || [], id);
+    if (found) return found;
+  }
+  return null;
+}
+
+/* ─── Detail panel ───────────────────────────── */
+function renderBoardDetail(node) {
+  const isLeaf = !node.children || node.children.length === 0;
+  const hasTopics = node.topics && node.topics.length > 0;
+  const isReserved = RESERVED_TYPES.includes(node.type);
+
+  let bodyHtml = '';
+
+  if (!isLeaf) {
+    bodyHtml = `
+      <div class="sec-hd" style="padding:0;"><span class="sec-title">Child nodes</span></div>
+      ${(node.children || []).map(ch => `
+        <div class="child-node-item" onclick="selectBoardNode('${ch.id}')">
+          <div class="cni-icon">${RESERVED_TYPES.includes(ch.type) ? '🔒' : '📁'}</div>
+          <div class="cni-label">${ch.label}</div>
+          <div class="cni-count">${(ch.topics || []).length} topic(s)</div>
+          <div style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f0efe9;color:#888780;">${ch.type}</div>
+        </div>`).join('')}
+      ${isReserved ? '' : `<button class="tree-add-btn" style="width:100%;margin:4px 0;" onclick="openBoardAddNodeModal('${node.id}')">+ Add child node</button>`}`;
+  }
+
+  if (isLeaf || hasTopics) {
+    const topicRows = (node.topics || []).map(t => `
+      <div class="topic-card">
+        <div class="tc-row">
+          <div class="tc-status-icon ${t.status === 'live' ? 'tc-live-icon' : 'tc-draft-icon'}">${t.status === 'live' ? '✓' : '✏'}</div>
+          <div class="tc-main">
+            <div class="tc-name">${t.name}</div>
+            <div class="tc-meta">${t.content} content item(s)</div>
+          </div>
+          <div class="tc-right">
+            <span class="version-pill ${t.status === 'live' ? 'vp-live' : 'vp-draft'}">${t.status}</span>
+            <button class="row-btn" onclick="showToast('Upload content for ${t.name}')">Upload content</button>
+            <button class="row-btn" onclick="t_status='${t.status}';showToast('Status toggled');">${t.status === 'live' ? 'Set draft' : 'Set live'}</button>
+          </div>
+        </div>
+      </div>`).join('');
+
+    bodyHtml += `
+      <div class="sec-hd" style="padding:0;"><span class="sec-title">Topics</span></div>
+      ${topicRows || '<div style="color:#888780;font-size:12px;padding:10px 0;">No topics yet.</div>'}
+      <button class="tree-add-btn" style="width:100%;" onclick="openBoardAddTopicModal('${node.id}','${node.label}')">+ Add topic</button>`;
+  }
+
+  document.getElementById('board-detail').innerHTML = `
+    <div class="bd-head">
+      <div>
+        <div class="bd-title">${isReserved ? '🔒 ' : ''}${node.label}</div>
+        <div class="bd-meta">Type: ${node.type}${isReserved ? ' — reserved' : ''} · owner_type: platform</div>
+      </div>
+      <div class="bd-actions">
+        ${!isReserved ? `<button class="row-btn" onclick="showToast('Node renamed')">Rename</button>` : ''}
+        <button class="row-btn row-btn-blue" onclick="openPublishModal()">Publish</button>
+      </div>
+    </div>
+    <div class="bd-body">${bodyHtml}</div>`;
+}
+
+/* ════════════════════════════════════════════════
+   ADD NODE MODAL
+════════════════════════════════════════════════ */
+function openBoardAddNodeModal(parentId) {
+  addNodeParentId = parentId;
+  const parentNode = parentId ? findNode(boards.find(b => b.id === activeBoardId).tree, parentId) : null;
+  document.getElementById('board-add-node-parent-label').textContent = parentNode ? `Under: ${parentNode.label}` : 'Top-level node';
+  document.getElementById('board-add-node-label').value = '';
+  addNodeSelectedType = 'chapter';
+  renderNodeTypeGrid();
+  document.getElementById('modal-board-add-node').classList.add('open');
+}
+function closeBoardModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function renderNodeTypeGrid() {
+  const all = [...NODE_TYPES, ...RESERVED_TYPES];
+  document.getElementById('board-type-grid').innerHTML = all.map(t => {
+    const isRes = RESERVED_TYPES.includes(t);
+    const isSel = t === addNodeSelectedType;
+    return `<button class="type-chip ${isRes ? 'reserved-chip' : ''} ${isSel ? 'sel' : ''}" onclick="selectNodeType('${t}')">${isRes ? '🔒 ' : ''}${t}</button>`;
+  }).join('');
+}
+function selectNodeType(t) { addNodeSelectedType = t; renderNodeTypeGrid(); }
+
+function confirmBoardAddNode() {
+  const label = document.getElementById('board-add-node-label').value.trim();
+  if (!label) { showToast('Enter a node label'); return; }
+  const board = boards.find(b => b.id === activeBoardId);
+  const newNode = { id: 'n-' + Date.now(), type: addNodeSelectedType, label, children: [], topics: [], expanded: false };
+  if (addNodeParentId) {
+    const parent = findNode(board.tree, addNodeParentId);
+    if (parent) { parent.children = parent.children || []; parent.children.push(newNode); }
+  } else {
+    board.tree.push(newNode);
+  }
+  closeBoardModal('modal-board-add-node');
+  showToast('Node added');
+  renderBoardTree();
+}
+
+/* ════════════════════════════════════════════════
+   ADD TOPIC MODAL
+════════════════════════════════════════════════ */
+let addTopicNodeId = null;
+function openBoardAddTopicModal(nodeId, nodeLabel) {
+  addTopicNodeId = nodeId;
+  document.getElementById('board-add-topic-node-label').textContent = `Under: ${nodeLabel}`;
+  document.getElementById('board-add-topic-name').value = '';
+  document.getElementById('modal-board-add-topic').classList.add('open');
+}
+function confirmBoardAddTopic() {
+  const name = document.getElementById('board-add-topic-name').value.trim();
+  if (!name) { showToast('Enter a topic name'); return; }
+  const board = boards.find(b => b.id === activeBoardId);
+  const node = findNode(board.tree, addTopicNodeId);
+  if (node) { node.topics = node.topics || []; node.topics.push({ id: 'bt-' + Date.now(), name, status: 'draft', content: 0 }); }
+  closeBoardModal('modal-board-add-topic');
+  showToast('Topic added');
+  renderBoardTree();
+  if (node) renderBoardDetail(node);
+}
+
+/* ════════════════════════════════════════════════
+   PUBLISH MODAL
+════════════════════════════════════════════════ */
+function openPublishModal() { document.getElementById('modal-board-publish').classList.add('open'); }
+function confirmBoardPublish() {
+  const board = boards.find(b => b.id === activeBoardId);
+  const parts = board.version.replace('v','').split('.');
+  parts[1] = parseInt(parts[1]) + 1;
+  board.version = 'v' + parts.join('.');
+  closeBoardModal('modal-board-publish');
+  showToast(`${board.label} published as ${board.version} — parents can now adopt this content`);
+  renderBoardsPage();
+}
+
+/* ════════════════════════════════════════════════
+   GENERIC MODALS
+════════════════════════════════════════════════ */
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function confirmAddBoard() {
+  const name = document.getElementById('new-board-name').value.trim();
+  if (!name) { showToast('Enter a board name'); return; }
+  boards.push({ id: name.toLowerCase().replace(/\s+/g,'_'), label: name, icon: '📒', version: 'v1.0', status: 'draft', tree: [] });
+  closeModal('m-add-board');
+  showToast('Board created');
+  renderDashboard();
+}
+
+/* ════════════════════════════════════════════════
+   TOAST
+════════════════════════════════════════════════ */
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+/* ════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════ */
+renderSidenav();
+renderDashboard();
+</script>
+</body>
+</html>

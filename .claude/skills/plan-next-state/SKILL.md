@@ -6,11 +6,11 @@ description: Analyse gap between current and target state and recommend the next
 Launch **two Explore sub-agents in parallel** to read the relevant files simultaneously:
 
 **Agent 1 — Target state:**
-- `target/requirements/00_overview.md`
+- `target/requirements/00_overview.md` (if stub, fall back to `vision/requirements/00_overview.md`)
 - `target/requirements/01_data_model.md`
 - `target/requirements/02_auth_and_roles.md`
-- Any other `target/requirements/*.md` files relevant to the domain being discussed
-- `target/prototypes/*.html` — only if the discussion involves UI flows
+- Any other `target/requirements/*.md` files relevant to the domain being discussed (if stub, fall back to corresponding `vision/requirements/` file)
+- `vision/prototypes/*.html` — only if the discussion involves UI flows
 
 **Agent 2 — Current state & planning:**
 - `current/schema.md`, `current/api_contracts.md`, `current/ui_flows.md` (if they exist)

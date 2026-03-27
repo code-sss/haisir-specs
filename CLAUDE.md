@@ -17,7 +17,7 @@ The `Implementation_planning/` directory contains the planning docs and a decisi
 | File | Purpose |
 |---|---|
 | `progress.md` | **Read this first** — current state, next phase (updated each plan-next-state cycle) |
-| `phases.md` | Rough phase guide — P0–P3 items and dependency graph (updated only when phase scope changes) |
+| `phases.md` | Rough phase guide — completed phases + next phase stub (long-term vision phasing is in `vision/phases.md`) |
 | `decisions.md` | Running decisions log — one dated entry per plan-next-state cycle, newest first |
 | `archive/` | Historical decision records — read for "why" behind past choices |
 
@@ -27,14 +27,16 @@ The `Implementation_planning/` directory contains the planning docs and a decisi
 
 Always read specs in this order before generating code in any sibling repo:
 
-1. `target/requirements/00_overview.md` — architecture, tech stack, all 6 personas, content ownership model, design decisions
+1. `target/requirements/00_overview.md` — architecture, tech stack, design decisions (stub; see `vision/requirements/00_overview.md` for full detail until the stub is filled)
 2. `target/requirements/01_data_model.md` — existing schema (extend, never drop/rename)
 3. `target/requirements/02_auth_and_roles.md` — APISIX JWT injection, CSRF pattern, `X-Current-Role` header, permission matrix
-4. `target/requirements/11_role_migration.md` — **required before any auth/role work**
+4. `vision/requirements/11_role_migration.md` — **required before any auth/role work**
 5. Target persona spec — `target/requirements/03_student.md` / `target/requirements/04_teacher_tutor.md` / `target/requirements/05_06_07_personas.md`
-6. `target/requirements/ui-mapping/` files — frontend only, for colours, component states, screen IDs
+6. `target/requirements/ui-mapping/` files — frontend only, for colours, component states, screen IDs (stub; fall back to `vision/requirements/ui-mapping/` until filled)
 
-UI mapping files reference prototype screen IDs (e.g. `s-home` → `renderHome()`) in `target/prototypes/*.html` — open in a browser for the visual reference.
+UI mapping files reference prototype screen IDs (e.g. `s-home` → `renderHome()`) in `vision/prototypes/*.html` — open in a browser for the visual reference.
+
+> **Note:** `target/requirements/` stubs are filled incrementally via `/update-target-state`. Until a stub is filled, fall back to the corresponding `vision/requirements/` file for context.
 
 ## Critical Rules (must not be violated)
 
@@ -46,12 +48,12 @@ UI mapping files reference prototype screen IDs (e.g. `s-home` → `renderHome()
 - **`owner_type`** is the content ownership key — `platform` / `institution` / `tutor` — added to `course_path_nodes`.
 - **No Redux, no Axios** — raw `fetch` with `credentials: 'include'`, custom hooks with `useState`/`useEffect` only.
 - **SQLAlchemy imperative mapping** — domain models are plain dataclasses. No `Base` subclassing in `domain/models/`.
-- **Keycloak roles** — `student`, `instructor`, `admin` are active in the current Keycloak realm. `institution_admin`, `tutor`, `parent` are implemented in the backend (`UserRole` enum + `permission.py`) but not yet added to the Keycloak realm — follow `target/requirements/11_role_migration.md` steps before enabling them.
+- **Keycloak roles** — `student`, `instructor`, `admin` are active in the current Keycloak realm. `institution_admin`, `tutor`, `parent` are implemented in the backend (`UserRole` enum + `permission.py`) but not yet added to the Keycloak realm — follow `vision/requirements/11_role_migration.md` steps before enabling them.
 - **`admin` = SuperAdmin** — maps to the Platform Admin persona. No new `superadmin` role.
-- **DDD folder structure** — no business logic in route files. See `target/requirements/00_overview.md` section 6.
+- **DDD folder structure** — no business logic in route files. See `vision/requirements/00_overview.md` section 6.
 
 ## Spec Update Convention
 
 Any PR in `haisir-frontend` or `haisir-backend` or `haisir-deploy` that adds/changes an API endpoint, screen/route, business rule, permission, database table/column, or role assignment **must** include a corresponding `haisir-specs` update (same PR or linked PR).
 
-Product owner + lead developer must approve changes to business rules or API contracts. UI mapping and prototype changes can be approved by any developer. Spec files live in `target/requirements/` — do not create files at the repo root.
+Product owner + lead developer must approve changes to business rules or API contracts. UI mapping and prototype changes can be approved by any developer. New target spec files live in `target/requirements/`; vision specs live in `vision/requirements/` — do not create files at the repo root.

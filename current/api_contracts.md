@@ -1,298 +1,316 @@
+## GET /api/auth/csrf
+- Purpose: Fetch CSRF token for mutations
+- Auth: none
+- Response: { csrfToken: string }
+
 ## GET /api/health/status
 - Purpose: Health check
 - Auth: none
-- Response: `{"status": "OK"}`
-
-## GET /api/auth/csrf
-- Purpose: Issue a CSRF token (set as cookie and returned in body)
-- Auth: none
-- Response: `{csrf_token: string}`
-
----
+- Response: { status: "OK" }
 
 ## GET /api/users/me
-- Purpose: Return authenticated user info and onboarding state
+- Purpose: Get current user identity, roles, and onboarding state
 - Auth: any authenticated user
-- Response: `{id, sub, name, email, email_verified, roles, current_role, onboarding_completed_at}`
+- Response: { id, sub, name, email, email_verified, roles[], current_role, onboarding_completed_at }
 
 ## POST /api/users/me/assign-role
-- Purpose: Self-service role assignment (student or parent); Keycloak Admin API wire-up is a TODO — endpoint defined but not fully operational
+- Purpose: Assign initial Keycloak role to new user (onboarding)
 - Auth: any authenticated user
-- Request: `{role: "student" | "parent"}`
-- Response: `{message: string}`
+- Request: { role: "student" | "parent" }
+- Response: { message: string }
 
 ## PATCH /api/users/me/onboarding-complete
-- Purpose: Set `onboarding_completed_at = now()` for the current user
+- Purpose: Mark onboarding complete
 - Auth: any authenticated user
-- Response: `{onboarding_completed_at: ISO timestamp}`
+- Response: { onboarding_completed_at: datetime }
 
----
+## POST /api/students/me/profile
+- Purpose: Create student profile
+- Auth: student
+- Request: { first_name, last_name, phone?, avatar_url?, grade?, subjects? }
+- Response: StudentProfile
+
+## POST /api/parents/me/profile
+- Purpose: Create parent profile
+- Auth: parent
+- Request: { first_name, last_name, phone? }
+- Response: ParentProfile
+
+## POST /api/parent-child-links
+- Purpose: Link parent to child via invite code
+- Auth: parent
+- Request: { invite_code: string }
+- Response: ParentChildLink
+
+## GET /api/parent-link-codes/{code}
+- Purpose: Look up a parent link code
+- Auth: parent
+- Response: ParentLinkCode
+
+## GET /api/classes/by-invite-code/{code}
+- Purpose: Look up a class by invite code
+- Auth: student
+- Response: ClassInviteCode
+
+## GET /api/courses/enrolled
+- Purpose: List enrolled courses (placeholder — not yet implemented)
+- Auth: student
+- Response: none (stub)
 
 ## GET /api/categories
 - Purpose: List all categories
-- Auth: any authenticated user
-- Response: `[{id, name, path_type, description}]`
+- Auth: student, instructor
+- Response: [Category]
 
 ## GET /api/categories/{category_id}
-- Purpose: Get a single category by ID
-- Auth: any authenticated user
-- Response: `{id, name, path_type, description}`
+- Purpose: Get a single category
+- Auth: student, instructor
+- Response: Category | null
 
 ## POST /api/categories/
 - Purpose: Create a new category
 - Auth: admin
-- Request: `{name, path_type, description?}`
-- Response: `{id, name, path_type, description}`
+- Request: { name, path_type, description? }
+- Response: Category
 
 ## PATCH /api/categories/{category_id}
 - Purpose: Update category description
 - Auth: admin
-- Request: `{description}`
-- Response: `{id, name, path_type, description}`
-
----
+- Request: { description }
+- Response: Category | null
 
 ## GET /api/course-path-nodes/category/{category_id}
-- Purpose: Get nodes by category; optional `parent_id` query param to filter by parent
+- Purpose: List root-level nodes for a category
 - Auth: student, instructor
-- Response: `[{id, name, node_type, category_id, parent_id, order, owner_type, owner_id}]`
+- Response: [CoursePathNode]
 
-## GET /api/course-path-nodes/
-- Purpose: Get nodes by `category_id` + `node_type` query params
+## GET /api/course-path-nodes/?category_id&node_type
+- Purpose: List nodes filtered by category and type
 - Auth: student, instructor
-- Response: `[{id, name, node_type, ...}]`
+- Response: [CoursePathNode]
 
 ## GET /api/course-path-nodes/parent/{parent_id}
-- Purpose: Get child nodes by parent_id; `node_type` query param required
+- Purpose: List children of a node
 - Auth: student, instructor
-- Response: `[{id, name, node_type, ...}]`
+- Response: [CoursePathNode]
 
 ## GET /api/course-path-nodes/{node_id}
-- Purpose: Get a single node by ID
+- Purpose: Get a single node
 - Auth: student, instructor
-- Response: `{id, name, node_type, category_id, parent_id, order, owner_type, owner_id}`
+- Response: CoursePathNode | null
+
+## GET /api/course-path-nodes/path-to-root/{node_id}
+- Purpose: Get breadcrumb path from node to root
+- Auth: student, instructor
+- Response: [CoursePathNode]
 
 ## POST /api/course-path-nodes/
 - Purpose: Create a new course path node
 - Auth: admin
-- Request: `{name, node_type, category_id, parent_id?, order?}`
-- Response: `{id, name, node_type, ...}`
-
-## GET /api/course-path-nodes/path-to-root/{node_id}
-- Purpose: Walk ancestors from a node up to the root
-- Auth: student, instructor
-- Response: `[{id, name, node_type, ...}]` — ordered from node to root
-
----
+- Request: { name, node_type, category_id, parent_id?, order? }
+- Response: CoursePathNode
 
 ## GET /api/topics/{course_path_node_id}
-- Purpose: List topics attached to a node
+- Purpose: List topics for a node
 - Auth: student, instructor
-- Response: `[{id, title, course_path_node_id, order, status, owner_type, owner_id}]`
+- Response: [Topic]
 
 ## POST /api/topics/
-- Purpose: Create a new topic on a node
-- Auth: instructor
-- Request: `{title, course_path_node_id, order?}`
-- Response: `{id, title, ...}`
+- Purpose: Create a topic
+- Auth: admin
+- Request: { title, course_path_node_id, order? }
+- Response: Topic
 
----
-
-## GET /api/topic-contents/{topic_id}
+## GET /api/topics-contents/{topic_id}
 - Purpose: List all content items for a topic
-- Auth: student (any role via require_any_role)
-- Response: `[{id, topic_id, content_type, title, url, text, order, description}]`
-
-## GET /api/topic-contents/{content_type}/{topic_id}
-- Purpose: Serve the actual file (PDF) for a content_type on a topic
 - Auth: student
-- Response: FileResponse (`application/pdf`)
+- Response: [TopicContent]
 
-## POST /api/topic-contents/
-- Purpose: Create a new content item for a topic
+## GET /api/topics-contents/{content_type}/{topic_id}
+- Purpose: Serve a topic's file content (PDF)
+- Auth: student
+- Response: FileResponse
+
+## POST /api/topics-contents/
+- Purpose: Add content to a topic
 - Auth: instructor
-- Request: `{topic_id, content_type, title, url?, text?, order, description?}`
-- Response: `{id, topic_id, content_type, title, url, text, order, description}`
+- Request: { topic_id, content_type, title, url?, text?, order, description? }
+- Response: TopicContent
 
----
-
-## GET /api/questions/
-- Purpose: Get questions filtered by `tags` query param
+## GET /api/questions/?tags
+- Purpose: List questions filtered by tags
 - Auth: student, instructor
-- Response: `[{id, question_text, question_type, options, correct_answers, difficulty, tags, image_url}]`
+- Response: [Question]
 
 ## GET /api/questions/assessment/{assessment_id}
-- Purpose: Get questions for a given assessment
+- Purpose: Get questions for an assessment (deprecated flow)
 - Auth: student
-- Response: `[{...question fields...}]`
+- Response: { questions: [], paragraph_questions: [] }
 
 ## POST /api/questions/
-- Purpose: Create a new question
+- Purpose: Create a question
 - Auth: instructor
-- Request: `{question_text, question_type, options, correct_answers, difficulty, tags?, explanation?, image_url?}`
-- Response: `{id, ...}`
+- Request: { question_text, question_type, options_obj, correct_answers, explanation?, difficulty, tags? }
+- Response: Question
 
----
-
-## GET /api/assessments/topic/{topic_id}
-- Purpose: Get assessments for a topic
-- Auth: student
-- Response: `[{id, topic_id, question_ids, paragraph_question_ids, title}]`
-
-## POST /api/assessments/
-- Purpose: Create an assessment for a topic
+## POST /api/paragraph-questions/
+- Purpose: Create a paragraph question group
 - Auth: instructor
-- Request: `{topic_id, question_ids, paragraph_question_ids?, title}`
-- Response: `{id, ...}`
+- Request: { content, title, questions[], paragraph_type, tags?, difficulty? }
+- Response: ParagraphQuestion
 
-## POST /api/assessments/start
-- Purpose: Start an assessment attempt
+## GET /api/paragraph-questions/{id}/questions
+- Purpose: Get paragraph with all embedded questions
 - Auth: student
-- Request: `{assessment_id}`
-- Response: `{id, assessment_id, started_at, status}`
+- Response: { id, content, title, ..., questions: [] }
 
-## POST /api/assessments/submit/{attempt_id}
-- Purpose: Submit a single answer within an ongoing attempt
+## GET /api/paragraph-questions/{id}
+- Purpose: Get a paragraph question
 - Auth: student
-- Request: `{question_id, selected_options?, text_answer?}`
-- Response: `{is_correct, ...}`
+- Response: ParagraphQuestion | null
 
-## POST /api/assessments/submit-all/{attempt_id}
-- Purpose: Submit all answers at once and finalise the attempt
+## GET /api/answers/{id}
+- Purpose: Get a single answer record (legacy)
 - Auth: student
-- Request: `[{question_id, selected_options?, text_answer?}]`
-- Response: `{score, status, ...}`
+- Response: Answer | null
 
-## GET /api/assessments/{attempt_id}
-- Purpose: Get current attempt state
+## POST /api/answers/
+- Purpose: Submit an answer (legacy — used by old assessment flow)
 - Auth: student
-- Response: `{id, assessment_id, started_at, status, score?}`
+- Request: { session_id, question_id, selected_options?, text_answer? }
+- Response: Answer
 
-## GET /api/assessments/{assessment_id}/attempts
-- Purpose: Get past attempts for an assessment
-- Auth: student
-- Response: `[{id, started_at, finished_at, score, status}]`
-
-## GET /api/assessments/result/{attempt_id}
-- Purpose: Get graded results with per-question breakdown
-- Auth: student
-- Response: `{score, answers: [{question_id, is_correct, selected_options, text_answer, ...}]}`
-
-## GET /api/assessments/unfinished-attempt/{assessment_id}
-- Purpose: Get the current user's unfinished attempt for an assessment, if one exists
-- Auth: student
-- Response: `{id, assessment_id, started_at, status}` or null
-
----
-
-## GET /api/exams/template
-- Purpose: Get instructor's own exam templates; `node_id` query param required
+## GET /api/exams/template?node_id
+- Purpose: List exam templates for a course node (instructor view)
 - Auth: instructor
-- Response: `[{id, title, description, mode, duration_minutes, passing_score, is_active}]`
+- Response: [ExamTemplate]
 
 ## POST /api/exams/template
 - Purpose: Create an exam template
 - Auth: instructor
-- Request: `{course_path_node_id, title, description?, mode, ruleset?, duration_minutes?, passing_score?}`
-- Response: `{id, ...}`
+- Request: { course_path_node_id, title, description?, mode, ruleset?, duration_minutes?, passing_score? }
+- Response: ExamTemplate
 
 ## PATCH /api/exams/template/{template_id}
-- Purpose: Update exam template metadata
+- Purpose: Update an exam template
 - Auth: instructor
-- Request: partial `{title?, description?, duration_minutes?, passing_score?}`
-- Response: `{id, ...}`
+- Request: same as POST
+- Response: ExamTemplate | null
 
 ## DELETE /api/exams/template/{template_id}
-- Purpose: Soft-delete an exam template (sets `is_active = false`)
+- Purpose: Delete an exam template
 - Auth: instructor
-- Response: 204
+- Response: { message: string }
 
 ## GET /api/exams/course/{node_id}
-- Purpose: Get active exam templates for a course node (student view)
+- Purpose: List available exam templates for a node (student view)
 - Auth: student
-- Response: `[{id, title, description, mode, duration_minutes, passing_score}]`
+- Response: [ExamTemplate]
 
 ## POST /api/exams/template-question
-- Purpose: Link a single question to an exam template
+- Purpose: Add a question to an exam template
 - Auth: instructor
-- Request: `{exam_template_id, question_id, order, points, paragraph_question_id?}`
-- Response: `{id, ...}`
+- Request: { exam_template_id, question_id, order, points }
+- Response: ExamTemplateQuestion
 
 ## GET /api/exams/template/{template_id}/questions-with-details
-- Purpose: Get full template with question details; images returned as base64
-- Auth: instructor, student
-- Response: `{template: {...}, questions: [{...question with base64 image_url...}]}`
+- Purpose: Get all questions for a template with full details
+- Auth: student, instructor
+- Response: ExamTemplateQuestionsResponse
 
 ## POST /api/exams/{node_id}/static
-- Purpose: Create a complete static exam in one shot (template + all questions)
+- Purpose: Create a full static exam with questions in one shot
 - Auth: instructor
-- Request: `{title, description?, duration_minutes?, passing_score?, questions: [{...}]}`
-- Response: `{id, ...}`
+- Request: StaticExamV2Body
+- Response: ExamTemplate
 
 ## PATCH /api/exams/{node_id}/static
-- Purpose: Upsert questions on an existing static exam; `template_id` query param required
+- Purpose: Update questions on a static exam template
 - Auth: instructor
-- Request: `{questions: [{...}]}`
-- Response: `{id, ...}`
+- Request: [StaticQuestionPatchItem]
+- Response: StaticExamPatchResponse
 
----
-
-## POST /api/exam-sessions/session/create
-- Purpose: Create a new exam session; `exam_template_id` query param required
+## POST /api/exam-sessions/session/create?exam_template_id
+- Purpose: Create a new exam session
 - Auth: student
-- Response: `{id, exam_template_id, status, created_at}`
+- Response: ExamSession
 
 ## GET /api/exam-sessions/session/unfinished/{exam_template_id}
-- Purpose: Get an unfinished session for a template, if one exists
+- Purpose: Get any unfinished session for this template
 - Auth: student
-- Response: session object or null
+- Response: ExamSession | {}
 
 ## GET /api/exam-sessions/session/{session_id}/questions
-- Purpose: Get ordered questions for an exam session
+- Purpose: Get questions for an active session
 - Auth: student
-- Response: `[{question fields..., order, points}]`
-
-## POST /api/exam-sessions/session/{session_id}/start
-- Purpose: Mark session as started (sets `started_at`)
-- Auth: student
-- Response: `{id, started_at, status}`
+- Response: ExamSessionQuestionDisplayResponse
 
 ## POST /api/exam-sessions/session/{session_id}/submit
-- Purpose: Submit all answers, grade, and finalise the session
+- Purpose: Submit all answers and score the session
 - Auth: student
-- Request: `{answers: [{question_id, user_answer}]}`
-- Response: `{score, status, passed}`
+- Request: [{ question_id, text_answer?, selected_options? }]
+- Response: ExamSession
 
 ## GET /api/exam-sessions/session/all/{exam_template_id}
-- Purpose: Get all sessions for a template (scores as percentages)
+- Purpose: Get all completed sessions for a template (student's history)
 - Auth: student
-- Response: `[{id, score, status, started_at, finished_at}]`
+- Response: [ExamSessionRead]
 
 ## GET /api/exam-sessions/session/{session_id}/answers
-- Purpose: Get detailed results with weighted scoring and pass/fail
+- Purpose: Get answers and scoring for a completed session
 - Auth: student
-- Response: `{score, passed, answers: [{question_id, is_correct, earned_points, user_answer, ...}]}`
+- Response: ExamSessionAnswerResponse
 
----
-
-## POST /api/students/me/profile
-- Purpose: Create or update the authenticated student's profile
+## POST /api/exam-sessions/session/{session_id}/start
+- Purpose: Start (activate) an exam session
 - Auth: student
-- Request: `{first_name, last_name, phone?, avatar_url?, grade?, subjects?}`
-- Response: `{id, idp_sub, first_name, last_name, phone, avatar_url, grade, subjects}`
+- Response: ExamSession
 
-## POST /api/parent-child-links
-- Purpose: Link a parent to a child using an invite code
-- Auth: parent
-- Request: `{code}`
-- Response: `{id, parent_sub, child_sub, created_at}`
-
-## GET /api/parent-link-codes/{code}
-- Purpose: Validate a parent invite code and retrieve child info
-- Auth: any authenticated user
-- Response: `{child_sub, expires_at, is_used}`
-
-## GET /api/courses/enrolled
-- Purpose: Get courses the student is enrolled in — **stub, always returns []**
+## GET /api/assessments/topic/{topic_id}
+- Purpose: List assessments for a topic (deprecated flow)
 - Auth: student
-- Response: `[]`
+- Response: [Assessment]
+
+## POST /api/assessments/
+- Purpose: Create an assessment (deprecated flow)
+- Auth: instructor
+- Request: { topic_id, question_ids[], paragraph_question_ids[]?, title }
+- Response: Assessment
+
+## POST /api/assessments/start
+- Purpose: Start an assessment attempt (deprecated flow)
+- Auth: student
+- Request: { assessment_id }
+- Response: AssessmentAttempt
+
+## POST /api/assessments/submit/{attempt_id}
+- Purpose: Submit a single answer in an attempt (deprecated flow)
+- Auth: student
+- Request: { question_id, selected_options?, text_answer? }
+- Response: AssessmentAnswer
+
+## POST /api/assessments/submit-all/{attempt_id}
+- Purpose: Submit all answers at once (deprecated flow)
+- Auth: student
+- Request: [{ question_id, selected_options?, text_answer? }]
+- Response: [AssessmentAnswer]
+
+## GET /api/assessments/{attempt_id}
+- Purpose: Get attempt status (deprecated flow)
+- Auth: student
+- Response: AssessmentAttempt | null
+
+## GET /api/assessments/{assessment_id}/attempts
+- Purpose: List all attempts for an assessment (deprecated flow)
+- Auth: student
+- Response: [AssessmentAttempt]
+
+## GET /api/assessments/result/{attempt_id}
+- Purpose: Get scored review for a completed attempt (deprecated flow)
+- Auth: student
+- Response: AssessmentReviewResponse
+
+## GET /api/assessments/unfinished-attempt/{assessment_id}
+- Purpose: Get any in-progress attempt (deprecated flow)
+- Auth: student
+- Response: AssessmentAttempt | {}
