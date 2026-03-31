@@ -1,9 +1,14 @@
 ---
 name: plan-next-state
-description: Analyse gap between current and target state and recommend the next implementation step to agree on
+description: >
+  Use this skill whenever the user wants to decide what to build next, asks "what should we work
+  on?", "what's the next step?", "what should I implement?", or wants to prioritise work. It reads
+  current vs. target state, produces a ranked 2–4 step list with a challenger critique, and —
+  after the user confirms one step — updates Implementation_planning/progress.md and runs
+  automated housekeeping. Use it even if the user just says "let's plan".
 ---
 
-Launch **two Explore sub-agents in parallel** to read the relevant files simultaneously:
+Launch **two parallel Agent tool calls** to read the relevant files simultaneously:
 
 **Agent 1 — Target state:**
 - `target/requirements/00_overview.md` (if stub, fall back to `vision/requirements/00_overview.md`)
@@ -17,9 +22,15 @@ Launch **two Explore sub-agents in parallel** to read the relevant files simulta
 - `Implementation_planning/progress.md`
 - `Implementation_planning/phases.md`
 
-Collect results from both agents before proceeding.
+If `current/` files do not exist, or if the user's message mentions a specific domain (schema / API /
+UI / a specific feature), launch a **third parallel Agent tool call** alongside the first two:
 
-If `current/` files do not exist, or if the user's message mentions a specific domain (schema / API / UI / a specific feature), also read the relevant code in the sibling repos (`../haisir-backend`, `../haisir-frontend`, or `../haisir-deploy`) to get precise detail on what is and isn't implemented.
+**Agent 3 — Live code (conditional):**
+- Read the relevant sibling repo code (`../haisir-backend`, `../haisir-frontend`, or `../haisir-deploy`
+  per `CLAUDE.md` → Repository Purpose) to get precise detail on what is and isn't implemented for the
+  domain in question.
+
+Collect results from all agents before proceeding.
 
 ---
 
@@ -46,9 +57,14 @@ Rules:
 
 ---
 
-**Before presenting to the user, run a Challenger agent** with this prompt:
+**Before presenting to the user, run a Challenger Agent tool call** with this prompt:
 
-> "You are stress-testing an implementation plan for a fullstack edtech app. Given the following ranked options: [paste the ranked list]. For each option, identify: (1) hidden dependencies or blockers not mentioned, (2) what could go wrong if chosen, (3) what it makes harder or more expensive to do later. For the recommended option specifically, identify the strongest argument against choosing it now. Be concise and direct."
+> "You are stress-testing an implementation plan for a fullstack edtech app. Read `CLAUDE.md` →
+> Critical Rules for the project's architectural constraints. Given the ranked options produced in
+> the previous step, for each option identify: (1) hidden dependencies or blockers not mentioned,
+> (2) what could go wrong if chosen, (3) what it makes harder or more expensive to do later. For
+> the recommended option specifically, identify the strongest argument against choosing it now.
+> Be concise and direct."
 
 Present the ranked list **and** the challenger's critique together. The challenger's points should appear as a `### Challenger` section beneath the ranked list, so the user sees both before deciding.
 
