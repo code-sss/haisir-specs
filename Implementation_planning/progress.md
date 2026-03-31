@@ -38,17 +38,32 @@ Onboarding for Student and Parent is fully implemented end-to-end. The backend h
 ## Next Phase
 <!-- The agreed next concrete step. Updated after each /plan-next-state discussion. -->
 
-**Phase 0 — Fix onboarding flow: skip ON01 welcome, explicit logout for Relogin, ON01 role-aware redirect**
+**Phase 1a (micro-phase) — Owner_type Visibility Enforcement (BR-DATA-003)**
 
-Rationale: Three frontend-only fixes to the onboarding flow. ON01's "Get started" button is unnecessary friction for new users. The Relogin approach is switching from `prompt=none` (silent re-auth) to explicit logout + fresh Keycloak login, which gives a clean JWT with the new role. APISIX's existing `/auth/logout` route and post-logout OIDC re-auth handle the session cycle automatically — no deploy changes needed.
+Rationale: `owner_type`/`owner_id` columns exist on `course_path_nodes`, `topics`, and `exam_templates` but the visibility filter is not applied in any endpoint. Enforcing it before building the admin UI ensures the backend is provably secure before the new admin routes are added. Backend-only — no schema migrations, no frontend changes.
 
-Scope (frontend only):
+Scope (backend only):
+- **haisir-backend:**
+  - All student-facing GET endpoints for `course_path_nodes`, `topics`, `topic_contents`: apply BR-DATA-003 WHERE clause — `(owner_type = 'platform') OR (owner_type = 'parent' AND owner_id IN (SELECT parent_idp_sub FROM parent_child_links WHERE child_idp_sub = :idp_sub AND revoked_at IS NULL))`
+  - All student-facing GET endpoints for `exam_templates`: same filter
+  - All admin-facing GET endpoints for `course_path_nodes`, `topics`, `exam_templates`: apply `owner_type = 'platform'` filter (admin must not read parent-owned content — BR-SEC-005)
+  - Add index on `parent_child_links(child_idp_sub, revoked_at)` if not already present (subquery performance)
+
+---
+
+**Phase 1b (next after 1a) — Admin Board Content Manager: Tree UI + Node CRUD**
+
+Rationale: Directly maps to `target/prototypes/haisir_admin_flow.html` Board content manager screen. The backend has full read/create for `course_path_nodes`; missing PATCH/DELETE and the entire admin frontend. Topics panel (right side of prototype) and content upload are separate follow-on phases.
+
+Scope:
+- **haisir-backend:**
+  - `PATCH /api/course-path-nodes/{id}` — rename/reorder a node (admin only, `owner_type='platform'` guard)
+  - `DELETE /api/course-path-nodes/{id}` — delete node (admin only; reject if any descendant topic has an active `exam_session`; hard delete for now, `archived_at` soft-delete deferred)
+  - Full-subtree CTE fetch endpoint: `GET /api/course-path-nodes/tree/{category_id}` — returns entire tree for a category in one query (avoid N+1 on tree render)
 - **haisir-frontend:**
-  - `on01-welcome.tsx`: replace "Get started" button with auto-redirect logic:
-    - No roles + onboarding incomplete → auto-redirect to `/onboarding/role` (skip welcome screen)
-    - Has roles + onboarding incomplete → auto-redirect to View B of appropriate ready screen (`/onboarding/student-ready?next=go` or `/onboarding/parent-ready?next=go`)
-    - Has roles + onboarding complete → redirect to `/onboarding/role-switcher` (existing behaviour, unchanged)
-  - `on03-student-ready.tsx` View A: change Relogin `href` from `/auth/login?prompt=none&...` to `/auth/logout`; drop `prompt=none` entirely
-  - `on05-parent-ready.tsx` View A: same change as ON03
-  - Flow after Relogin: `/auth/logout` → Keycloak login → `/` → `/home` → onboarding guard → `/onboarding` → ON01 role-aware redirect → View B
-  - `PATCH /api/users/me/onboarding-complete` remains on View B exit (already wired — no change)
+  - New page `/admin/board-content`: board selector sidebar (categories list with icon switcher), hierarchical tree (grade → subject → chapter) with expand/collapse
+  - Add node: inline "+ Add" button per level, modal/inline form with name + node_type
+  - Edit node: inline rename on click
+  - Delete node: confirm dialog, disabled if node has active exam sessions
+  - "+ Add top-level node" button (adds grade-level node under selected category)
+  - Right panel: empty state "Select a node" (topics panel is Phase 1c)

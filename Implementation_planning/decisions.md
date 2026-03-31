@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-03-31 — Phase 1 Board Content Management: split into micro-phases
+
+- **BR-DATA-003 enforcement is a separate micro-phase (1a) before the admin UI (1b).** The `owner_type`/`owner_id` columns are live but no endpoint applies the visibility filter. Building the admin UI on an unfiltered backend would ship a known data isolation gap. Phase 1a closes it first (backend-only, ~1 day).
+- **Phase 1b scope locked to tree UI + node CRUD only.** Topics panel (right side of prototype) and topic content upload are separate follow-on phases (1c, 1d) to keep each deployable unit small.
+- **Hard delete for course_path_nodes in Phase 1b (soft-delete deferred).** Nodes with active exam sessions cannot be deleted (rejected at API layer). Soft-delete via `archived_at` column deferred — parent adoption introduces orphan risk that requires a migration strategy before soft-delete is safe.
+- **Full-subtree CTE fetch endpoint added in Phase 1b.** `GET /api/course-path-nodes/tree/{category_id}` returns the entire tree for a category in one query to avoid N+1 on the admin tree render.
+- **Admin read filter: `owner_type = 'platform'` only.** BR-SEC-005 states admin cannot read parent-owned content. This filter is applied on all admin GET endpoints for nodes/topics/exams as part of Phase 1a enforcement.
+
+---
+
 ## 2026-03-27 — Target state reset: Student + Parent + Platform Admin increment
 
 - **Target state scoped to three personas only:** Student, Parent, Platform Admin. Institutions, instructors, tutors, classes, doubts, hAITU, and notifications explicitly deferred to a future increment.

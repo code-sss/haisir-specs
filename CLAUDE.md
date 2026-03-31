@@ -27,14 +27,14 @@ The `Implementation_planning/` directory contains the planning docs and a decisi
 
 Always read specs in this order before generating code in any sibling repo:
 
-1. `target/requirements/00_overview.md` — architecture, tech stack, design decisions (stub; see `vision/requirements/00_overview.md` for full detail until the stub is filled)
+1. `target/requirements/00_overview.md` — architecture, tech stack, design decisions
 2. `target/requirements/01_data_model.md` — existing schema (extend, never drop/rename)
 3. `target/requirements/02_auth_and_roles.md` — APISIX JWT injection, CSRF pattern, `X-Current-Role` header, permission matrix
 4. `vision/requirements/11_role_migration.md` — **required before any auth/role work**
 5. Target persona spec — `target/requirements/03_student.md` / `target/requirements/04_teacher_tutor.md` / `target/requirements/05_06_07_personas.md`
 6. `target/requirements/ui-mapping/` files — frontend only, for colours, component states, screen IDs (stub; fall back to `vision/requirements/ui-mapping/` until filled)
 
-UI mapping files reference prototype screen IDs (e.g. `s-home` → `renderHome()`) in `vision/prototypes/*.html` — open in a browser for the visual reference.
+UI mapping files reference prototype screen IDs (e.g. `s-home` → `renderHome()`) in `vision/prototypes/*.html` — open in a browser for the visual reference. For Platform Admin screens, use `target/prototypes/haisir_admin_flow.html`.
 
 > **Note:** `target/requirements/` stubs are filled incrementally via `/update-target-state`. Until a stub is filled, fall back to the corresponding `vision/requirements/` file for context.
 
@@ -45,7 +45,7 @@ UI mapping files reference prototype screen IDs (e.g. `s-home` → `renderHome()
 - **CSRF on every mutation** — `POST`, `PUT`, `PATCH`, `DELETE` require `X-CSRF-Token`. Frontend uses `fetchWithCSRFRetry()`.
 - **No local users table** — identity is Keycloak `sub` as a raw UUID string. No FK constraints on user columns.
 - **Existing schema is sacred** — `course_path_nodes`, `topics`, `exam_templates`, `exam_sessions` etc. already exist. Extend, never drop or rename. Note: `assessments`, `assessment_attempts`, and `assessment_answers` are deprecated (Phase 0 decision) — the unified model is `exam_templates` with `purpose = 'quiz' | 'exam'`.
-- **`owner_type`** is the content ownership key — `platform` / `institution` / `tutor` — added to `course_path_nodes`.
+- **`owner_type`** is the content ownership key — `platform` (platform admin content) or `parent` (parent-created private content) — added to `course_path_nodes`, `topics`, and `exam_templates`.
 - **No Redux, no Axios** — raw `fetch` with `credentials: 'include'`, custom hooks with `useState`/`useEffect` only.
 - **SQLAlchemy imperative mapping** — domain models are plain dataclasses. No `Base` subclassing in `domain/models/`.
 - **Keycloak roles** — `student`, `instructor`, `admin` are active in the current Keycloak realm. `institution_admin`, `tutor`, `parent` are implemented in the backend (`UserRole` enum + `permission.py`) but not yet added to the Keycloak realm — follow `vision/requirements/11_role_migration.md` steps before enabling them.
