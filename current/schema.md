@@ -3,11 +3,20 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | f5ef54f2f4ccdeb2c295a8546462e57ba0ba17c7 |
+| haisir-backend | aa5ddf7 (Phase 1a — owner_type visibility enforcement) |
 | haisir-frontend | a8f710580075ed2c1552f970d607860a1c844abb |
 | haisir-deploy | 94bfd1ccee72d8562aaa3ef2d02cdd10176a2026 |
 
-> Next session: run `git diff f5ef54f2..HEAD` in haisir-backend to see only what changed since this snapshot.
+> Next session: run `git diff aa5ddf7..HEAD` in haisir-backend to see only what changed since this snapshot.
+
+---
+
+## Applied Migrations (as of snapshot)
+
+| Migration | What it does |
+|---|---|
+| V23_visibility_enforcement | Alters `course_path_nodes.owner_id` and `topics.owner_id` from Integer → String; adds `exam_templates.owner_id` (String, nullable); adds `parent_child_links.revoked_at` (DateTime TZ, nullable) |
+| V24_add_visibility_indexes | Adds covering index `ix_parent_child_links_child_sub_revoked` on `(child_sub, revoked_at) INCLUDE (parent_sub)` for BR-DATA-003 subquery performance |
 
 ---
 
@@ -54,9 +63,10 @@
 - `parent_sub` (String) — parent's idp_sub
 - `child_sub` (String) — child's idp_sub
 - `created_at` (DateTime TZ)
+- `revoked_at` (DateTime TZ, nullable) — NULL = active link; set to revoke (future endpoint — Phase 1c+)
 - UNIQUE constraint on (parent_sub, child_sub)
 
-> Note: no `revoked_at` column yet; link revocation not implemented.
+> **Column name note:** Physical columns are `parent_sub` / `child_sub`. The data-model spec (target/requirements/01_data_model.md) uses the logical aliases `parent_idp_sub` / `child_idp_sub`. Schema is sacred — the physical names will not change; the spec alias is documenting intent only.
 
 ## class_invite_codes
 > Outside current target increment (class/institution flow deferred). Retained as-is.
@@ -80,10 +90,10 @@
 - `category_id` (UUID, FK → categories)
 - `parent_id` (UUID, FK → course_path_nodes, nullable) — self-referential tree
 - `order` (Integer, nullable)
-- `owner_type` (String, default "platform") — discriminator: "platform" or owner identifier
-- `owner_id` (Integer, nullable) — org/parent owner ID
+- `owner_type` (String, default "platform") — discriminator: "platform" or "parent"; enforced via `OwnerType(StrEnum)` in domain layer
+- `owner_id` (String, nullable) — parent's `idp_sub` for parent-owned nodes, NULL for platform nodes
 
-> Note: owner_type/owner_id columns exist but content visibility filtering (platform always visible, parent-owned only if active parent_child_links) is not yet enforced in any API endpoint.
+> **Visibility enforced (as of V23 / commit aa5ddf7):** BR-DATA-003 and BR-SEC-005 are fully enforced on all GET endpoints. Students see platform nodes + parent-owned nodes where an active (non-revoked) `parent_child_links` record exists. Admins see platform-only nodes.
 
 ## topics
 - `id` (UUID, PK)
@@ -92,9 +102,9 @@
 - `order` (Integer, nullable)
 - `status` (String, default "live")
 - `owner_type` (String, default "platform")
-- `owner_id` (Integer, nullable)
+- `owner_id` (String, nullable) — parent's `idp_sub` for parent-owned topics, NULL for platform topics
 
-> Note: same owner_type visibility gap as course_path_nodes.
+> **Visibility enforced (as of V23 / commit aa5ddf7):** same as course_path_nodes — BR-DATA-003 / BR-SEC-005 enforced on all GET endpoints.
 
 ## topic_contents
 - `id` (UUID, PK)
@@ -180,10 +190,11 @@
 - `created_by` (UUID) — creator's UUID
 - `is_active` (Boolean, default true)
 - `owner_type` (String, default "platform")
+- `owner_id` (String, nullable) — added via V23 migration; parent's `idp_sub` for parent-owned templates, NULL for platform
 - `organization_id` (Integer, nullable)
 - `purpose` (String, default "exam") — "exam" or "quiz"
 
-> Note: owner_type/owner_id visibility gap same as course_path_nodes. No status (draft/live) column yet.
+> **Visibility enforced (as of V23 / commit aa5ddf7):** BR-DATA-003 / BR-SEC-005 enforced on all GET endpoints. Students see platform + linked-parent exam templates; admins see platform-only; instructors see all.
 
 ## exam_template_questions
 - `id` (UUID, PK)

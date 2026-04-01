@@ -8,10 +8,10 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 
 ## Current State
 
-> Snapshot baseline: haisir-backend `f5ef54f2`, haisir-frontend `a8f71058`, haisir-deploy `94bfd1cc` (2026-03-29).
-> Next session: `git diff <commit>..HEAD` in each repo instead of re-reading the full codebase.
+> Snapshot baseline: haisir-backend `aa5ddf7` (Phase 1a complete), haisir-frontend `a8f71058`, haisir-deploy `94bfd1cc` (2026-03-31).
+> Next session: `git diff aa5ddf7..HEAD` in haisir-backend instead of re-reading the full codebase.
 
-Onboarding for Student and Parent is fully implemented end-to-end. The backend has 21 mapped tables: `user_metadata`, `student_profiles`, `teacher_profiles` (retained, instructor persona deferred), `parent_profiles`, `parent_link_codes`, `parent_child_links`, `class_invite_codes` (retained, class flow deferred), `categories`, a self-referential `course_path_nodes` tree (node_type is a fixed enum — grade/subject/course — not yet a free string), `topics`, `topic_contents`, `questions`, `paragraph_questions`, an orphaned `answers` table, deprecated `assessments`/`assessment_attempts`/`assessment_answers`, and the unified exam layer: `exam_templates`, `exam_template_questions`, `exam_sessions`, `exam_session_questions`. `owner_type`/`owner_id` columns exist on `course_path_nodes`, `topics`, and `exam_templates` but visibility filtering (platform always visible, parent-owned only if active `parent_child_links`) is not yet enforced in any endpoint. All route modules are wired with CSRF validation and role-based guards; `assign-role` calls the Keycloak Admin API and accepts only `student` or `parent`. The frontend (Next.js) covers: the full onboarding flow (ON01 guard → ON02 role select → ON03/ON05 ready screens, Relogin via `/auth/logout`, View B CTAs, `PATCH /onboarding-complete` on all exits), a course dashboard with hierarchical node navigation and inline PDF viewer, student exam-taking with timer and session resume, plus retained-but-deferred screens for exam template authoring (`/add-exam`), AI MCQ upload (`/add-assessment`), and admin category management (`/manage-categories`). The two-section student dashboard (Platform Board / Home Study split) is not yet built — the dashboard currently shows a single unified content tree. Routes not yet built: `/join-school`, `/link-child`, `/courses`, `/parent`. No endpoint exists to generate parent link codes from the student side. Infrastructure: PostgreSQL 16, Keycloak 26.4, APISIX with Coraza WAF (OWASP CRS v4 PL2), CrowdSec, rate limiting. **Not yet built:** owner_type visibility filter on all student queries, two-section dashboard, parent dashboard and curriculum builder, link-code generation endpoint, pgvector/RAG pipeline.
+Onboarding for Student and Parent is fully implemented end-to-end. The backend has 21 mapped tables: `user_metadata`, `student_profiles`, `teacher_profiles` (retained, instructor persona deferred), `parent_profiles`, `parent_link_codes`, `parent_child_links`, `class_invite_codes` (retained, class flow deferred), `categories`, a self-referential `course_path_nodes` tree, `topics`, `topic_contents`, `questions`, `paragraph_questions`, an orphaned `answers` table, deprecated `assessments`/`assessment_attempts`/`assessment_answers`, and the unified exam layer: `exam_templates`, `exam_template_questions`, `exam_sessions`, `exam_session_questions`. `owner_type`/`owner_id` columns exist on `course_path_nodes`, `topics`, and `exam_templates`; visibility filtering (BR-DATA-003, BR-SEC-005) is **fully enforced** on all GET endpoints as of Phase 1a. All route modules are wired with CSRF validation and role-based guards; `assign-role` calls the Keycloak Admin API and accepts only `student` or `parent`. The frontend (Next.js) covers: the full onboarding flow, a course dashboard with hierarchical node navigation and inline PDF viewer, student exam-taking with timer and session resume, plus retained-but-deferred screens. The two-section student dashboard (Platform Board / Home Study split) is not yet built. **Not yet built:** two-section dashboard, parent dashboard and curriculum builder, link-code generation endpoint, pgvector/RAG pipeline.
 
 ## Completed Phases
 
@@ -35,25 +35,38 @@ Onboarding for Student and Parent is fully implemented end-to-end. The backend h
 
 ---
 
-## Next Phase
-<!-- The agreed next concrete step. Updated after each /plan-next-state discussion. -->
+### Phase 1a — owner_type visibility enforcement (BR-DATA-003, BR-SEC-005) ✓
 
-**Phase 1a (micro-phase) — Owner_type Visibility Enforcement (BR-DATA-003)**
+**Completed:** 2026-03-31  
+**Commit:** haisir-backend `aa5ddf7`
 
-Rationale: `owner_type`/`owner_id` columns exist on `course_path_nodes`, `topics`, and `exam_templates` but the visibility filter is not applied in any endpoint. Enforcing it before building the admin UI ensures the backend is provably secure before the new admin routes are added. Backend-only — no schema migrations, no frontend changes.
+**What was done:**
+- Added `OwnerType(StrEnum)` domain type (`platform` / `parent`) to replace raw strings; used across all domain models, schemas, and visibility logic
+- Created `src/infrastructure/visibility.py` with `student_visibility_clause(table, viewer_sub)` (BR-DATA-003) and `admin_visibility_clause(table)` (BR-SEC-005) SQL clause builders
+- Added visibility-dispatched `*_for_viewer(user: CurrentUser)` methods to `CoursePathNodeService`, `TopicService`, `ExamService`, `TopicContentService` (role dispatch: student → visible, admin → platform_only, instructor → unfiltered / default → platform_only for exams)
+- Added matching `*_visible(viewer_sub)` and `*_platform_only()` abstract + concrete repository methods for all four aggregates
+- Updated all student/admin-facing GET routes to use the new `*_for_viewer` service methods with `require_any_platform_role()` (student | instructor | admin) guards
+- Fixed `exam_session.py` create/get-answers to call `get_by_id_for_viewer` instead of `get_by_id` — closed the session-creation bypass
+- Changed `POST /api/topic-contents` from instructor to admin guard
+- Fixed TopicContent URL construction to `topics/{content_type}/{filename}`
+- Added V23 migration: `owner_id` Integer→String on nodes/topics; `owner_id` added to `exam_templates`; `revoked_at` added to `parent_child_links`
+- Added V24 migration: covering index `(child_sub, revoked_at) INCLUDE (parent_sub)` on `parent_child_links`
+- Added named permission helper methods (`require_admin`, `require_any_platform_role`, etc.) to `src/auth/permission.py`
+- 1708 tests, 100% coverage maintained
 
-Scope (backend only):
-- **haisir-backend:**
-  - All student-facing GET endpoints for `course_path_nodes`, `topics`, `topic_contents`: apply BR-DATA-003 WHERE clause — `(owner_type = 'platform') OR (owner_type = 'parent' AND owner_id IN (SELECT parent_idp_sub FROM parent_child_links WHERE child_idp_sub = :idp_sub AND revoked_at IS NULL))`
-  - All student-facing GET endpoints for `exam_templates`: same filter
-  - All admin-facing GET endpoints for `course_path_nodes`, `topics`, `exam_templates`: apply `owner_type = 'platform'` filter (admin must not read parent-owned content — BR-SEC-005)
-  - Add index on `parent_child_links(child_idp_sub, revoked_at)` if not already present (subquery performance)
+**Deviations from original spec:**
+- Physical `parent_child_links` columns are `parent_sub`/`child_sub` (not `parent_idp_sub`/`child_idp_sub`); schema is sacred
+- Instructor gets `platform_only` (not unfiltered) for exam template listing — data isolation by default; explicit override required if full access is ever needed
+- `case _:` default in all service dispatch methods ensures any future role safely defaults to platform-only
 
 ---
 
-**Phase 1b (next after 1a) — Admin Board Content Manager: Tree UI + Node CRUD**
+## Next Phase
+<!-- The agreed next concrete step. Updated after each /plan-next-state discussion. -->
 
-Rationale: Directly maps to `target/prototypes/haisir_admin_flow.html` Board content manager screen. The backend has full read/create for `course_path_nodes`; missing PATCH/DELETE and the entire admin frontend. Topics panel (right side of prototype) and content upload are separate follow-on phases.
+**Phase 1b — Admin Board Content Manager: Tree UI + Node CRUD**
+
+Rationale: Phase 1a enforced visibility. Now build the admin UI so Platform Admins can manage the board content tree. Directly maps to `target/prototypes/haisir_admin_flow.html` Board content manager screen.
 
 Scope:
 - **haisir-backend:**

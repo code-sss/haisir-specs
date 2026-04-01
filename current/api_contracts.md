@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | f5ef54f2f4ccdeb2c295a8546462e57ba0ba17c7 |
+| haisir-backend | aa5ddf7 (Phase 1a — owner_type visibility enforcement) |
 | haisir-frontend | a8f710580075ed2c1552f970d607860a1c844abb |
 | haisir-deploy | 94bfd1ccee72d8562aaa3ef2d02cdd10176a2026 |
 
-> Next session: run `git diff f5ef54f2..HEAD` in haisir-backend to see only what changed since this snapshot.
+> Next session: run `git diff aa5ddf7..HEAD` in haisir-backend to see only what changed since this snapshot.
 
 ---
 
@@ -105,26 +105,27 @@
 
 ### GET /api/course-path-nodes/category/{category_id}
 - Purpose: Get nodes for a category; optionally filter by parent_id
-- Auth: student, instructor (instructor outside current increment)
+- Auth: student, instructor, admin
 - Query: parent_id (optional)
 - Response: array of node objects
+- Note: BR-DATA-003 enforced — student sees platform + linked-parent nodes; admin sees platform-only; instructor sees all.
 
 ### GET /api/course-path-nodes
 - Purpose: Get nodes filtered by category_id and node_type
-- Auth: student, instructor (instructor outside current increment)
+- Auth: student, instructor, admin
 - Query: category_id, node_type
 - Response: array of node objects
 
 ### GET /api/course-path-nodes/parent/{parent_id}
 - Purpose: Get child nodes of a given node
-- Auth: student, instructor (instructor outside current increment)
+- Auth: student, instructor, admin
 - Query: node_type (optional)
 - Response: array of node objects
 
 ### GET /api/course-path-nodes/{node_id}
 - Purpose: Get a single node
-- Auth: student, instructor (instructor outside current increment)
-- Response: id, name, node_type, category_id, parent_id, order, owner_type, owner_id
+- Auth: student, instructor, admin
+- Response: id, name, node_type, category_id, parent_id, order, owner_type
 
 ### POST /api/course-path-nodes
 - Purpose: Create a node
@@ -134,10 +135,9 @@
 
 ### GET /api/course-path-nodes/path-to-root/{node_id}
 - Purpose: Get ancestor path from a node to the root
-- Auth: student, instructor (instructor outside current increment)
+- Auth: student, instructor, admin
 - Response: array of node objects (root → leaf order)
-
-> Note: no owner_type filtering enforced on any node endpoint yet. All nodes returned regardless of owner_type.
+- Note: student sees only platform nodes + parent-owned nodes with active link (BR-DATA-003); admin sees platform-only (BR-SEC-005); instructor sees all. Returns 404 if the starting node is invisible to the caller.
 
 ---
 
@@ -145,8 +145,9 @@
 
 ### GET /api/topics/{course_path_node_id}
 - Purpose: List topics for a node
-- Auth: student, instructor (instructor outside current increment)
-- Response: array of `{ id, title, course_path_node_id, order, status, owner_type, owner_id }`
+- Auth: student, instructor, admin
+- Response: array of `{ id, title, course_path_node_id, order, status, owner_type }`
+- Note: student sees platform + linked-parent topics; admin sees platform-only; instructor sees all (BR-DATA-003 / BR-SEC-005 enforced).
 
 ### POST /api/topics
 - Purpose: Create a topic
@@ -154,25 +155,25 @@
 - Request: title, course_path_node_id, order?
 - Response: topic object
 
-> Note: no owner_type filtering enforced. All topics returned regardless of owner_type.
-
 ---
 
 ## Topic Contents
 
 ### GET /api/topic-contents/{topic_id}
 - Purpose: List content items for a topic
-- Auth: student
+- Auth: student | instructor | admin (any platform role)
 - Response: array of `{ id, topic_id, content_type, title, url, text, order, description }`
+- Note: visibility scoped by the parent topic's owner_type — student sees only items whose parent topic is visible to them.
 
 ### GET /api/topic-contents/{content_type}/{topic_id}
-- Purpose: Serve PDF file for a topic
-- Auth: student
-- Response: FileResponse (PDF binary)
+- Purpose: Serve a media file for a topic (PDF, video, etc.)
+- Auth: student | instructor | admin (any platform role)
+- Response: FileResponse (binary)
+- Note: stored files follow the path `topics/{content_type}/{filename}` on disk (e.g. `topics/pdf/filename.pdf`).
 
 ### POST /api/topic-contents
 - Purpose: Create a content item
-- Auth: instructor (outside current target increment)
+- Auth: admin
 - Request: topic_id, content_type, title, url?, text?, order, description?
 - Response: content object
 

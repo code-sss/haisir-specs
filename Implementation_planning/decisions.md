@@ -40,6 +40,28 @@
 
 ---
 
+## 2026-03-31 — Phase 1a: owner_type visibility enforcement
+
+### Physical column names in parent_child_links
+The `parent_child_links` table was created with physical column names `parent_sub` / `child_sub`, diverging from the spec's logical aliases `parent_idp_sub` / `child_idp_sub`. The schema is sacred — the physical names will not be renamed. All code uses the physical names. The spec retains the logical aliases with a note documenting the divergence.
+
+### OwnerType StrEnum in domain layer
+`owner_type` raw strings (`"platform"`, `"parent"`) were replaced with `OwnerType(StrEnum)` defined in `src/domain/models/owner_type.py`. Python dataclasses do not enforce type annotations at runtime, but mypy strict mode catches invalid assignments at compile time. `StrEnum` values compare equal to their string equivalents so SQLAlchemy compiled SQL is unaffected.
+
+### Instructor gets platform_only for exam templates (not unfiltered)
+The `exam_service.get_by_course_path_node_for_viewer` and `get_by_id_for_viewer` methods use `case _:` defaulting to `platform_only` rather than an explicit `case UserRole.instructor:` branch. Rationale: instructors should not see parent-private exam templates (data isolation); any future role also safely defaults to platform-only (defence in depth). The instructor persona is deferred — if it ever needs unfiltered access, the intent must be explicit.
+
+### topic_content GET endpoints opened to any platform role
+Previously student-only. Changed to `require_any_platform_role()` (student | instructor | admin). The `POST /api/topic-contents` creator role changed from instructor to admin — instructors have no content-management mandate in the current increment.
+
+### TopicContent file URL path includes content_type subdirectory
+Stored files are placed under `topics/{content_type}/{filename}` (e.g. `topics/pdf/file.pdf`). Previously files were flat under `topics/`. This is a breaking change for files on disk, but no production data exists yet.
+
+### role dispatch in services uses match/case _ default
+All four `*_for_viewer` service methods dispatch: `student` → `*_visible(viewer_sub)`, then `case _:` → `*_platform_only()`. No explicit admin branch needed — admin is absorbed by the default. Any future role added to the platform also defaults to platform-only unless explicitly handled.
+
+---
+
 ## 2026-03-26 — Phase 0 onboarding flow — JWT refresh approach
 
 - Replaced iframe `prompt=none` silent refresh with an explicit **Relogin button** on ON03/ON05 View A. Safari ITP and Firefox ETP block third-party cookies in iframes, making the silent refresh fail silently. Full-page `prompt=none` redirect is first-party and works in all browsers; APISIX updates the session cookie during the OIDC flow so no client-side refresh logic is needed.

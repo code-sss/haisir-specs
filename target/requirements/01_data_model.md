@@ -101,6 +101,9 @@ ALTER TABLE exam_templates
 `owner_type = 'parent'`, `owner_id = parent.idp_sub`. Created by `parent` role. Visible only to students who have an active, non-revoked `parent_child_links` record where `parent_idp_sub = owner_id`.
 
 **BR-DATA-003 — Visibility filter (applied on all student queries for nodes/topics/exams):**
+
+> **Physical column name note:** The `parent_child_links` table uses physical columns `parent_sub` and `child_sub` (not `parent_idp_sub` / `child_idp_sub` as shown in the logical spec below). The physical schema is sacred and will not be renamed. All SQL in the codebase uses the physical names; the spec uses the logical aliases for readability only.
+
 ```sql
 WHERE (owner_type = 'platform')
    OR (owner_type = 'parent' AND owner_id IN (
@@ -132,8 +135,8 @@ If a parent has already adopted the same subtree, a second adopt request returns
 ## Parent-Child Access
 
 `parent_child_links` (already live) is the access gate. Key columns:
-- `parent_idp_sub` (UUID string) — the parent's `idp_sub`
-- `child_idp_sub` (UUID string) — the student's `idp_sub`
+- `parent_sub` (`parent_idp_sub` in logical spec) (UUID string) — the parent's `idp_sub`
+- `child_sub` (`child_idp_sub` in logical spec) (UUID string) — the student's `idp_sub`
 - `revoked_at` (nullable timestamp) — NULL means active
 
 Access is granted automatically when the link is created. Revoking (`revoked_at` set) removes access immediately — no cache.
