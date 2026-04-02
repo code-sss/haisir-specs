@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-04-01 — Phase 1b-fix: Admin Layout Alignment + Routing
+
+- **Admin shell layout deviates from the HTML prototype — fix before Phase 1c.** Phase 1b shipped the tree UI + node CRUD but with a horizontal board selector (prototype shows vertical icon strip, 60px) and no left sidenav (prototype shows 190px dark sidebar with Dashboard + Board content nav items). Fixing the layout after Phase 1c would require refactoring the shell around already-built topic components. Fix first, build topics on correct layout.
+- **Role-aware redirect from `/` added.** Root page currently sends all authenticated users to `/home`. Admin users must type `/admin` manually. Added a role→route map: `admin` → `/admin`, `parent` → `/parent`, `student`/default → `/home`. Uses `useAuth.currentRole` which falls back to `localStorage` optimistic role during JWT refresh window.
+- **Admin route guard added to `admin/layout.tsx`.** Backend already rejects non-admin API calls (403). Client-side guard is defence in depth — prevents users from landing on admin UI at all. Uses existing `ROUTE_ROLE_REQUIREMENTS` config in `use-auth.ts`.
+- **Resizable panels (sidenav + tree) added as UX fix.** Prototype uses fixed widths (190px sidenav, 240px tree), but tree node names truncate at fixed width ("Ma...", "Arit..."). Added drag-to-resize on both panels. No external library — `mousedown`/`mousemove`/`mouseup` pattern. Not in prototype but improves usability.
+- **`parent` → `/parent` redirect is forward-compatible stub.** Will 404 until parent UI is built. Acceptable — no real users have `parent` Keycloak role yet (role migration not executed).
+- **Visual authority rule formalised.** Added note to `ui_parent_institution_admin.md`: HTML prototypes are the authoritative visual reference. If prototype and text spec conflict, the prototype wins. This was the root cause of the horizontal-vs-vertical board strip mismatch.
+- **`current_role` column in `user_metadata` rejected.** Proposed storing last-used role in DB to avoid sending `X-Current-Role` header on every request. Rejected because: (1) adds a DB lookup on every request, (2) multi-tab race condition (changing role in one tab affects all tabs), (3) breaks stateless request model. The header approach is correct; the problem was endpoints silently defaulting when header is missing.
+- **`X-Current-Role` enforcement audit scheduled after Phase 1b-fix.** Backend audit to make `X-Current-Role` required on all role-gated endpoints (return `400` if missing). Onboarding endpoints remain exempt. Replaces the silent default from `BR-SEC-006` with an explicit failure, forcing the frontend to always send the header.
+
+---
+
 ## 2026-03-31 — Phase 1 Board Content Management: split into micro-phases
 
 - **BR-DATA-003 enforcement is a separate micro-phase (1a) before the admin UI (1b).** The `owner_type`/`owner_id` columns are live but no endpoint applies the visibility filter. Building the admin UI on an unfiltered backend would ship a known data isolation gap. Phase 1a closes it first (backend-only, ~1 day).

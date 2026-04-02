@@ -3,6 +3,8 @@
 > Maps prototype screen IDs to routes, components, and colour/state details.
 > Target prototypes: `target/prototypes/haisir_parent_flow.html` and `target/prototypes/haisir_admin_flow.html`.
 > Institution Admin is out of scope for this increment.
+>
+> **Visual authority rule:** The HTML prototypes (`target/prototypes/*.html`) are the authoritative visual reference for layout, colours, and component placement. The text descriptions below are secondary — if the prototype and the text description conflict, the prototype wins. Always open the HTML file in a browser before implementing a screen.
 
 ---
 
@@ -153,15 +155,38 @@
 
 ---
 
+## Admin Shell Layout (all `/admin*` routes)
+
+> Prototype: `.shell` → `.topbar` + `.app-layout` (flex row) → `.sidenav` | `.main-area`
+
+| Element | Detail |
+|---|---|
+| Topbar | `#080F17`, 48px, logo left ("hAIsir"), "Platform console" label, role badge (red), admin avatar right |
+| Sidenav | 190px, dark `#080F17`, left side. 2 nav items: 🏠 Dashboard (`/admin`), 📚 Board content (`/admin/boards`). Active item = white text + `rgba(255,255,255,.1)` background. Item style: 12px label, icon + text, 8px vertical padding, 7px border-radius. |
+| Main area | `flex: 1`, scrollable, contains page-specific content |
+
+**Resizable panels:**
+- Sidenav: drag handle on right edge. Default 190px, min 140px, max 300px.
+
+**Routing:**
+- `/admin` is the default landing page for `admin` role (role-aware redirect from `/`).
+- Admin layout requires `admin` role — non-admin users redirected to `/home`.
+- Role redirect map: `admin` → `/admin`, `parent` → `/parent`, `student` / default → `/home`.
+- Redirect uses `useAuth.currentRole` (falls back to `localStorage` optimistic role during JWT refresh).
+- Must check `isLoading` before redirecting — prevent premature redirect while auth resolves.
+
+---
+
 ## SA-dashboard — Admin Dashboard (`/admin`)
 
 **Prototype function:** `renderAdminDashboard()`
 
 | Element | Detail |
 |---|---|
-| Topbar | `#080F17`, logo left, admin name right |
-| Stats row | 4 metric cards: Total Nodes, Total Topics, Live Topics, Published Exams |
-| Board list | Table of top-level platform nodes: name, node count, topic count, "Manage" link |
+| Shell | Admin shell layout (topbar + sidenav + main area) |
+| Breadcrumb | "Dashboard" |
+| Stats row | 4 metric cards: Platform boards, Live topics, Draft topics, Total topics |
+| Board list | Each board = card with icon, name, node/topic counts, "Manage" button → `/admin/boards?board={id}` |
 | "Add Board" button | Blue fill, top-right of board list |
 
 ---
@@ -170,10 +195,12 @@
 
 **Prototype functions:** `renderBoardTree()`, `selectBoardNode()`, `renderBoardDetail()`, `confirmBoardPublish()`
 
+> Inside `main-area`, the boards page uses a three-column `.board-layout` (flex row): `.board-strip` | `.board-tree` | `.board-detail`.
+
 | Element | Detail |
 |---|---|
-| Board selector strip | Horizontal tab strip of top-level platform nodes; active = blue underline |
-| Left panel | Scrollable node tree for selected board, ~280px |
+| Board selector strip | **Vertical** icon strip, 60px wide, dark `#080F17`. Each board = 40×40px icon button (emoji or first letter). Active board = highlighted. "+" add-board button at bottom. |
+| Tree panel | Scrollable node tree for selected board, default 240px. Resizable via drag handle on right edge (min 160px, max 500px). Node labels ≥ 13px; tooltip on text overflow. |
 | Node row | Indented by depth, type chip; reserved types (grade, subject) show 🔒 badge |
 | "Add Child Node" | Appears on hover; adds a child to selected node |
 | "Rename" / "Delete" | Contextual; Delete blocked if node has live topics |

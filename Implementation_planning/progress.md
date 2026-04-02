@@ -133,4 +133,32 @@ Onboarding for Student and Parent is fully implemented end-to-end. The backend h
 ## Next Phase
 <!-- The agreed next concrete step. Updated after each /plan-next-state discussion. -->
 
-Phase 1b is fully complete (backend + frontend). Run `/plan-next-state` to determine Phase 1c.
+### Phase 1b-fix — Admin Layout Alignment + Routing (frontend only)
+
+**Goal:** Align the admin shell layout to `target/prototypes/haisir_admin_flow.html` before adding topics (Phase 1c). No backend changes.
+
+| # | Task | Detail |
+|---|---|---|
+| 1 | Role-aware redirect after login | In `src/app/page.tsx`: `admin` → `/admin`, `parent` → `/parent`, `student`/default → `/home`. Use `useAuth.currentRole` (localStorage fallback). Check `isLoading` before redirecting. |
+| 2 | Admin route guard | In `src/app/admin/layout.tsx`: if not `admin` role → redirect `/home`. Use existing `ROUTE_ROLE_REQUIREMENTS` config in `use-auth.ts`. Backend already rejects non-admin API calls — this is defence in depth. |
+| 3 | Add left sidenav | 190px dark sidebar (`#080F17`), 2 nav items: 🏠 Dashboard (`/admin`), 📚 Board content (`/admin/boards`). Present on both admin routes. Matches `.sidenav` in the HTML prototype. |
+| 4 | Board selector → vertical icon strip | Replace horizontal tab strip with 60px vertical dark strip (`#080F17`). Each board = 40×40 icon button (emoji or first letter). "+" add button at bottom. Matches `.board-strip` in the HTML prototype. |
+| 5 | Resizable tree panel | Drag handle on right edge, default 240px, min 160px, max 500px. Fixes truncated node names. `mousedown`/`mousemove`/`mouseup` — no external lib. |
+| 6 | Resizable sidenav | Drag handle on right edge, default 190px, min 140px, max 300px. Same pattern as tree panel. |
+| 7 | Text size audit | Tree node labels ≥ 13px. Tooltip on text overflow. |
+
+**Visual authority rule:** Always open `target/prototypes/haisir_admin_flow.html` in a browser before implementing any admin screen — it is the authoritative visual reference, not the text spec. If the prototype and text description conflict, the prototype wins.
+
+**Implementation notes:**
+- Shell layout: `topbar` → `app-layout` (flex row) → `sidenav` | `main-area`. Inside boards: `board-layout` (flex row) → `board-strip` | `board-tree` | `board-detail`.
+- Route guard must handle `isLoading` state — do not redirect while auth is resolving.
+- `parent` → `/parent` will 404 until parent UI is built — acceptable as forward-compatible stub.
+- `canAccessRoute()` exists in `use-auth.ts` but is unused — wire it or use a simple role→route map.
+
+### After Phase 1b-fix — X-Current-Role enforcement audit (backend only)
+
+**Goal:** Audit all backend endpoints to ensure `X-Current-Role` header is required on all role-gated routes. Currently `BR-SEC-006` silently defaults to first JWT role if header is missing — change to `400 Bad Request` ("X-Current-Role header required") for role-gated endpoints. Onboarding endpoints (`/api/users/me`, `/api/users/me/onboarding-complete`, `/api/users/me/assign-role`) remain exempt.
+
+### Then: Phase 1c — Admin Topics Management
+
+Topics panel (right side of board content manager): topic CRUD, content upload, status toggle (Draft ↔ Live), publish flow. As originally scoped.
