@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | aa5ddf7 (Phase 1a — owner_type visibility enforcement) |
+| haisir-backend | a293bf8 (Phase 1b — admin board content manager backend) |
 | haisir-frontend | a8f710580075ed2c1552f970d607860a1c844abb |
 | haisir-deploy | 94bfd1ccee72d8562aaa3ef2d02cdd10176a2026 |
 
-> Next session: run `git diff aa5ddf7..HEAD` in haisir-backend to see only what changed since this snapshot.
+> Next session: run `git diff a293bf8..HEAD` in haisir-backend to see only what changed since this snapshot.
 
 ---
 

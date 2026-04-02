@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | aa5ddf7 (Phase 1a — owner_type visibility enforcement) |
+| haisir-backend | a293bf8 (Phase 1b — admin board content manager backend) |
 | haisir-frontend | a8f710580075ed2c1552f970d607860a1c844abb |
 | haisir-deploy | 94bfd1ccee72d8562aaa3ef2d02cdd10176a2026 |
 
-> Next session: run `git diff aa5ddf7..HEAD` in haisir-backend to see only what changed since this snapshot.
+> Next session: run `git diff a293bf8..HEAD` in haisir-backend to see only what changed since this snapshot.
 
 ---
 
@@ -79,12 +79,13 @@
 
 ### GET /api/categories
 - Purpose: List all categories
-- Auth: student, instructor (instructor outside current increment)
+- Auth: student, instructor, admin (any platform role)
 - Response: array of `{ id, name, path_type, description }`
+- Note: auth guard changed from `require_instructor_or_student` to `require_any_platform_role` so admin can reach the board selector sidebar.
 
 ### GET /api/categories/{category_id}
 - Purpose: Get single category
-- Auth: student, instructor (instructor outside current increment)
+- Auth: student, instructor, admin (any platform role)
 - Response: id, name, path_type, description
 
 ### POST /api/categories
@@ -138,6 +139,26 @@
 - Auth: student, instructor, admin
 - Response: array of node objects (root → leaf order)
 - Note: student sees only platform nodes + parent-owned nodes with active link (BR-DATA-003); admin sees platform-only (BR-SEC-005); instructor sees all. Returns 404 if the starting node is invisible to the caller.
+
+### GET /api/course-path-nodes/tree/{category_id}
+- Purpose: Return full nested tree for a category in a single query (no N+1)
+- Auth: student, instructor, admin (any platform role)
+- Response: array of root `CoursePathNodeRead` objects with `children` populated recursively
+- Note: assembles flat DB result into nested tree in Python; role-dispatches visibility per Phase 1a rules (admin → platform_only, student → visible, instructor → get_by_category).
+
+### PATCH /api/course-path-nodes/{node_id}
+- Purpose: Rename and/or reorder a platform-owned node
+- Auth: admin only
+- Request: `{ name?: string (1–255 chars), order?: int }`
+- Response: updated `CoursePathNodeRead`
+- Errors: 404 if node not found or `owner_type != 'platform'` (indistinguishable — oracle protection); 422 if name is empty string; no-op if both fields are null.
+
+### DELETE /api/course-path-nodes/{node_id}
+- Purpose: Hard-delete a platform-owned node and its entire subtree
+- Auth: admin only
+- Response: 204 No Content
+- Errors: 404 if not found or not platform-owned; 409 if any subtree node has a `pending` or `ongoing` exam session
+- Note: 12-step cascade in a single transaction: `exam_session_questions` → `exam_sessions` → `exam_template_questions` → `exam_templates` → `assessment_answers` → `assessment_attempts` → `assessments` → `topic_contents` → `topics` → `course_path_nodes`.
 
 ---
 
