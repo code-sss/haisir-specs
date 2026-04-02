@@ -8,10 +8,10 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 
 ## Current State
 
-> Snapshot baseline: haisir-backend `a293bf8` (Phase 1b complete), haisir-frontend `a8f71058`, haisir-deploy `94bfd1cc` (2026-04-01).
-> Next session: `git diff a293bf8..HEAD` in haisir-backend instead of re-reading the full codebase.
+> Snapshot baseline: haisir-backend `a293bf8` (Phase 1b complete), haisir-frontend `1923050` (Phase 1b complete), haisir-deploy `94bfd1cc` (2026-04-01).
+> Next session: `git diff a293bf8..HEAD` in haisir-backend and `git diff 1923050..HEAD` in haisir-frontend instead of re-reading the full codebases.
 
-Onboarding for Student and Parent is fully implemented end-to-end. The backend has 21 mapped tables: `user_metadata`, `student_profiles`, `teacher_profiles` (retained, instructor persona deferred), `parent_profiles`, `parent_link_codes`, `parent_child_links`, `class_invite_codes` (retained, class flow deferred), `categories`, a self-referential `course_path_nodes` tree, `topics`, `topic_contents`, `questions`, `paragraph_questions`, an orphaned `answers` table, deprecated `assessments`/`assessment_attempts`/`assessment_answers`, and the unified exam layer: `exam_templates`, `exam_template_questions`, `exam_sessions`, `exam_session_questions`. `owner_type`/`owner_id` columns exist on `course_path_nodes`, `topics`, and `exam_templates`; visibility filtering (BR-DATA-003, BR-SEC-005) is **fully enforced** on all GET endpoints. All error messages are sanitised (generic 403/500 detail strings; role context logged server-side only). Path traversal is hardened in file-serving routes. All route modules are wired with CSRF validation and role-based guards; `assign-role` calls the Keycloak Admin API and accepts only `student` or `parent`. The admin board content manager backend is complete: `PATCH`/`DELETE`/`GET tree` endpoints for `course_path_nodes` are live (admin-only mutations, all-platform-roles tree fetch). The frontend (Next.js) covers: the full onboarding flow, a course dashboard with hierarchical node navigation and inline PDF viewer, student exam-taking with timer and session resume, plus retained-but-deferred screens. The two-section student dashboard (Platform Board / Home Study split) is not yet built. **Not yet built:** admin board content manager UI, two-section dashboard, parent dashboard and curriculum builder, link-code generation endpoint, pgvector/RAG pipeline.
+Onboarding for Student and Parent is fully implemented end-to-end. The backend has 21 mapped tables: `user_metadata`, `student_profiles`, `teacher_profiles` (retained, instructor persona deferred), `parent_profiles`, `parent_link_codes`, `parent_child_links`, `class_invite_codes` (retained, class flow deferred), `categories`, a self-referential `course_path_nodes` tree, `topics`, `topic_contents`, `questions`, `paragraph_questions`, an orphaned `answers` table, deprecated `assessments`/`assessment_attempts`/`assessment_answers`, and the unified exam layer: `exam_templates`, `exam_template_questions`, `exam_sessions`, `exam_session_questions`. `owner_type`/`owner_id` columns exist on `course_path_nodes`, `topics`, and `exam_templates`; visibility filtering (BR-DATA-003, BR-SEC-005) is **fully enforced** on all GET endpoints. All error messages are sanitised (generic 403/500 detail strings; role context logged server-side only). Path traversal is hardened in file-serving routes. All route modules are wired with CSRF validation and role-based guards; `assign-role` calls the Keycloak Admin API and accepts only `student` or `parent`. The admin board content manager is fully built end-to-end: backend PATCH/DELETE/tree endpoints plus the admin UI (`/admin`, `/admin/boards`) with board selector, hierarchical node tree, inline rename, add-node modal, and delete confirmation. The frontend (Next.js) also covers: full onboarding flow, course dashboard with hierarchical node navigation and inline PDF viewer, student exam-taking with timer and session resume, plus retained-but-deferred screens. The `/admin` route is guarded to `admin` role in `useAuth`. The two-section student dashboard (Platform Board / Home Study split) is not yet built. **Not yet built:** two-section dashboard, parent dashboard and curriculum builder, link-code generation endpoint, pgvector/RAG pipeline, admin topics/content management.
 
 ## Completed Phases
 
@@ -104,18 +104,33 @@ Onboarding for Student and Parent is fully implemented end-to-end. The backend h
 
 ---
 
+### Phase 1b — Admin Board Content Manager: Tree UI + Node CRUD (frontend) ✓
+
+**Completed:** 2026-04-02
+**Commit:** haisir-frontend `1923050`
+
+**What was done:**
+- New `src/features/admin/` bounded context: API layer, types, hooks, components, domain logic — all isolated
+- New routes: `/admin` (AdminDashboard — board list + link to boards manager) and `/admin/boards` (AdminBoardsPage — full board content manager)
+- `AdminDashboard`: fetches and lists all boards via `GET /api/categories`; links directly to `/admin/boards?board={id}`
+- `AdminBoardsPage`: board selector strip (fetches categories, highlights selected), hierarchical node tree (fetches via `GET /api/course-path-nodes/tree/{categoryId}`), node detail panel (empty state "Select a node" — topics panel is Phase 1c)
+- `NodeTree` + `NodeTreeRow`: expand/collapse tree, inline rename on click (`PATCH`), add-child-node modal, delete confirmation dialog (blocks with message on 409)
+- `AddBoardModal`: `POST /api/categories` to create a new board
+- `AddNodeModal`: `POST /api/course-path-nodes` with `owner_type: "platform"` hardcoded
+- `RenameNodeInline`: inline edit with save/cancel, sends `PATCH /api/course-path-nodes/{id}` with `{ name }`
+- `DeleteNodeDialog`: sends `DELETE /api/course-path-nodes/{id}`; catches `AdminDeleteBlockedError` (409) and shows reason to admin
+- `useFocusTrap` hook: traps keyboard focus inside open modals (accessibility)
+- Route guard: `/admin` prefix added to `useAuth` route gates requiring `admin` role
+- `?board=` URL param validated against `/^[\w-]+$/` before use (XSS guard)
+- 58 files, full test coverage maintained
+
+**Deviations from original spec:**
+- Route is `/admin` + `/admin/boards` (not `/admin/board-content` as originally scoped)
+- `CreateNodeInput.position` field name differs from backend's `order` field — backend accepts and ignores extra fields; no functional impact but worth aligning in a follow-up
+
+---
+
 ## Next Phase
 <!-- The agreed next concrete step. Updated after each /plan-next-state discussion. -->
 
-**Phase 1b — Admin Board Content Manager: Tree UI + Node CRUD (frontend)**
-
-Rationale: Backend is complete. Build the admin UI so Platform Admins can manage the board content tree. Directly maps to `target/prototypes/haisir_admin_flow.html` Board content manager screen.
-
-Scope:
-- **haisir-frontend:**
-  - New page `/admin/board-content`: board selector sidebar (categories list with icon switcher), hierarchical tree (grade → subject → chapter) with expand/collapse
-  - Add node: inline "+ Add" button per level, modal/inline form with name + node_type
-  - Edit node: inline rename on click
-  - Delete node: confirm dialog, disabled if node has active exam sessions
-  - "+ Add top-level node" button (adds grade-level node under selected category)
-  - Right panel: empty state "Select a node" (topics panel is Phase 1c)
+Phase 1b is fully complete (backend + frontend). Run `/plan-next-state` to determine Phase 1c.

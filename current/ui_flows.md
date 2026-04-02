@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | f5ef54f2f4ccdeb2c295a8546462e57ba0ba17c7 |
-| haisir-frontend | a8f710580075ed2c1552f970d607860a1c844abb |
+| haisir-backend | a293bf8 (Phase 1b — admin board content manager backend) |
+| haisir-frontend | 1923050 (Phase 1b — admin board content manager frontend) |
 | haisir-deploy | 94bfd1ccee72d8562aaa3ef2d02cdd10176a2026 |
 
-> Next session: run `git diff a8f71058..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff 1923050..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
@@ -103,7 +103,34 @@
 
 - Screen: `/manage-categories` — Create categories (name, path_type, description) and edit descriptions inline. Admin-role guard redirects non-admins to `/home`.
   - API: `GET/POST /api/categories`, `PATCH /api/categories/{id}`
-  - Note: Platform Admin persona is in current target scope but the full admin flow is not yet built. This is the only admin UI present.
+  - Note: Pre-Phase-1b category management screen. Superseded by the new Admin Board Content Manager below for board/node management; this screen is still functional in the codebase.
+
+---
+
+## Admin: Board Content Manager (Phase 1b)
+
+Route guard: `useAuth` blocks access to any `/admin*` path for non-`admin` roles (redirects to `/home`).
+
+- Screen: `/admin` — AdminDashboard. Lists all boards via `GET /api/categories`. Each board renders as a card with a "Manage Boards →" link to `/admin/boards?board={id}`. Shows an error alert on fetch failure (`isError` state). No empty state message defined yet.
+  - API: `GET /api/categories`
+
+- Screen: `/admin/boards` — AdminBoardsPage. Three-panel layout:
+  1. **BoardSelectorStrip** — horizontal strip of category buttons; active board highlighted. Board change resets the selected node. `?board=` query param is validated against `/^[\w-]+$/`; invalid values are silently ignored.
+  2. **NodeTree** — hierarchical tree of nodes for the active board, fetched via `GET /api/course-path-nodes/tree/{categoryId}`. Each row (NodeTreeRow) shows a NodeTypeChip (grade / subject / course), an inline rename field (RenameNodeInline), and an expand/collapse toggle for children. Selected node is highlighted; click sets the active node in component state.
+  3. **NodeDetailPanel** — shown when a node is selected. Currently displays a "Select a node to view its topics" empty state (topics/content panel is Phase 1c). Contains the "Add Node" button to open AddNodeModal.
+  - API: `GET /api/course-path-nodes/tree/{categoryId}`, `POST /api/course-path-nodes`, `PATCH /api/course-path-nodes/{id}`, `DELETE /api/course-path-nodes/{id}`, `POST /api/categories`
+  - Layout wrapper: `AdminProviders` (in `src/app/admin/layout.tsx`) wraps all `/admin` routes; `src/app/admin/error.tsx` is the error boundary.
+
+- Modal: **AddNodeModal** — triggered from NodeDetailPanel. Fields: `name` (required), `node_type` (grade/subject/course, required), `parent_id` (auto-sets to selected node's id). `owner_type` is hardcoded to `"platform"` (not user-editable). Submits `POST /api/course-path-nodes`.
+  - Known deviation: frontend type sends `position?: number` but backend field is named `order`. Backend ignores unknown fields; functionally harmless but must be aligned.
+
+- Modal: **AddBoardModal** — triggered from BoardSelectorStrip. Fields: `name` (required), `path_type` (required), `description` (optional). Submits `POST /api/categories`.
+
+- Inline: **RenameNodeInline** — double-click on a node name activates an inline text input. On blur or Enter: submits `PATCH /api/course-path-nodes/{id}` with `{name}` only. Escape cancels without saving.
+
+- Dialog: **DeleteNodeDialog** — triggered from NodeTreeRow action menu. Shows node name and a confirm button. On 409 response from backend: displays a human-readable blocked reason (node has children or topics). On success: removes node from tree and clears node selection if the deleted node was selected.
+
+- Accessibility: `useFocusTrap` hook traps keyboard focus inside any open modal (AddNodeModal, AddBoardModal, DeleteNodeDialog).
 
 ---
 
