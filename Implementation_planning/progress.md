@@ -8,10 +8,10 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 
 ## Current State
 
-> Snapshot baseline: haisir-backend `a293bf8` (Phase 1b complete), haisir-frontend `cc9d69a` (Phase 1b-fix complete), haisir-deploy `8bf1b5d` (2026-04-02).
-> Next session: `git diff a293bf8..HEAD` in haisir-backend and `git diff cc9d69a..HEAD` in haisir-frontend instead of re-reading the full codebases.
+> Snapshot baseline: haisir-backend `899127e` (Phase 1c-pre complete), haisir-frontend `b4b9495` (Phase 1c-pre complete), haisir-deploy `8bf1b5d` (2026-04-02).
+> Next session: `git diff 899127e..HEAD` in haisir-backend and `git diff b4b9495..HEAD` in haisir-frontend instead of re-reading the full codebases.
 
-Onboarding for Student and Parent is fully implemented end-to-end. The backend has 21 mapped tables: `user_metadata`, `student_profiles`, `teacher_profiles` (retained, instructor persona deferred), `parent_profiles`, `parent_link_codes`, `parent_child_links`, `class_invite_codes` (retained, class flow deferred), `categories`, a self-referential `course_path_nodes` tree, `topics`, `topic_contents`, `questions`, `paragraph_questions`, an orphaned `answers` table, deprecated `assessments`/`assessment_attempts`/`assessment_answers`, and the unified exam layer: `exam_templates`, `exam_template_questions`, `exam_sessions`, `exam_session_questions`. `owner_type`/`owner_id` columns exist on `course_path_nodes`, `topics`, and `exam_templates`; visibility filtering (BR-DATA-003, BR-SEC-005) is **fully enforced** on all GET endpoints. All error messages are sanitised (generic 403/500 detail strings; role context logged server-side only). Path traversal is hardened in file-serving routes. All route modules are wired with CSRF validation and role-based guards; `assign-role` calls the Keycloak Admin API and accepts only `student` or `parent`. The admin board content manager is fully built end-to-end: backend PATCH/DELETE/tree endpoints plus the admin UI (`/admin`, `/admin/boards`) with board selector, hierarchical node tree, inline rename, add-node modal, and delete confirmation. The admin shell layout is aligned to the prototype: a resizable 190px dark left sidenav (`AdminSidenav`), role-aware root redirect (`/` → `/admin` for admin, `/parent` for parent, `/home` for student/default), `AdminRouteGuard` blocking non-admin access with redirect to `/home`, a resizable 240px node-tree panel, a 60px vertical `BoardSelectorStrip` with emoji icons and "+" add button, and tree node labels at 14px with overflow tooltip — shared `useResize` drag-handle hook used for both panels (no external lib). The frontend (Next.js) also covers: full onboarding flow, course dashboard with hierarchical node navigation and inline PDF viewer, student exam-taking with timer and session resume, plus retained-but-deferred screens. The two-section student dashboard (Platform Board / Home Study split) is not yet built. **Not yet built:** two-section dashboard, parent dashboard and curriculum builder, link-code generation endpoint, pgvector/RAG pipeline, admin topics/content management.
+Onboarding for Student and Parent is fully implemented end-to-end. The backend has 21 mapped tables: `user_metadata`, `student_profiles`, `teacher_profiles` (retained, instructor persona deferred), `parent_profiles`, `parent_link_codes`, `parent_child_links`, `class_invite_codes` (retained, class flow deferred), `categories`, a self-referential `course_path_nodes` tree, `topics`, `topic_contents`, `questions`, `paragraph_questions`, an orphaned `answers` table, deprecated `assessments`/`assessment_attempts`/`assessment_answers`, and the unified exam layer: `exam_templates`, `exam_template_questions`, `exam_sessions`, `exam_session_questions`. `owner_type`/`owner_id` columns exist on `course_path_nodes`, `topics`, and `exam_templates`; visibility filtering (BR-DATA-003, BR-SEC-005) is **fully enforced** on all GET endpoints. All error messages are sanitised (generic 403/500 detail strings; role context logged server-side only). Path traversal is hardened in file-serving routes. All route modules are wired with CSRF validation and role-based guards; `assign-role` calls the Keycloak Admin API and accepts only `student` or `parent`. **`X-Current-Role` is now strictly enforced** (BR-SEC-006): all role-gated endpoints return `400 "X-Current-Role header required"` when the header is absent; three onboarding endpoints (`GET /users/me`, `POST /users/me/assign-role`, `PATCH /users/me/onboarding-complete`) remain on the lenient dependency. The admin board content manager is fully built end-to-end: backend PATCH/DELETE/tree endpoints plus the admin UI (`/admin`, `/admin/boards`) with board selector, hierarchical node tree, inline rename, add-node modal, and delete confirmation. The admin shell layout is aligned to the prototype: a resizable 190px dark left sidenav (`AdminSidenav`), role-aware root redirect (`/` → `/admin` for admin, `/parent` for parent, `/home` for student/default), `AdminRouteGuard` blocking non-admin access with redirect to `/home`, a resizable 240px node-tree panel, a 60px vertical `BoardSelectorStrip` with emoji icons and "+" add button, and tree node labels at 14px with overflow tooltip — shared `useResize` drag-handle hook used for both panels (no external lib). The frontend (Next.js) also covers: full onboarding flow, course dashboard with hierarchical node navigation and inline PDF viewer, student exam-taking with timer and session resume, plus retained-but-deferred screens. The two-section student dashboard (Platform Board / Home Study split) is not yet built. `CreateNodeInput.order` field name is now correctly aligned with the backend (`position` → `order` fix shipped). **Not yet built:** two-section dashboard, parent dashboard and curriculum builder, link-code generation endpoint, admin topics/content management, pgvector/RAG pipeline.
 
 ## Completed Phases
 
@@ -149,69 +149,24 @@ Onboarding for Student and Parent is fully implemented end-to-end. The backend h
 
 ---
 
+### Phase 1c-pre — X-Current-Role Enforcement (backend + frontend) ✓
+
+**Completed:** 2026-04-03
+**Commit:** haisir-backend `899127e`, haisir-frontend `b4b9495`
+
+**What was done:**
+- Split `src/auth/user.py` into `current_active_user` (strict — `400` when `X-Current-Role` absent) and `current_active_user_lenient` (old behaviour — defaults to `roles[0]`). All `require_*()` helpers depend on strict variant and inherit enforcement automatically.
+- Switched three exempt onboarding endpoints (`GET /me`, `POST /me/assign-role`, `PATCH /me/onboarding-complete`) to `current_active_user_lenient`; `PATCH /me/onboarding-complete` adds inline student/parent check (`403` for other roles)
+- Removed `require_student_or_parent()` helper from `permission.py` (no longer needed)
+- Updated auth tests: `test_valid_payload_default_role` → asserts `400`; added `TestCurrentActiveUserLenient` class; updated route test apps to override both `current_active_user` and `current_active_user_lenient`
+- Frontend: `buildApiHeaders()` was already correct (always sends header); added JSDoc documenting BR-SEC-006 contract and three exempt endpoints
+- Fixed Phase 1b deviation: `CreateNodeInput.position` → `order` (backend field name); added two tests confirming `order` serialised correctly
+
+---
+
 ## Next Phase
 <!-- The agreed next concrete step. Updated after each /plan-next-state discussion. -->
 
-### Phase 1c-pre — X-Current-Role Enforcement (backend + frontend)
-
-**Goal:** Make `X-Current-Role` required on all role-gated endpoints. Currently `BR-SEC-006` silently defaults to the first JWT role if the header is missing — change to `400 Bad Request` (`"X-Current-Role header required"`) in the backend, and confirm the frontend sends it on every call. Three onboarding endpoints remain explicitly exempt.
-
-**Exempt endpoints (keep `current_active_user_lenient`):**
-- `GET /api/users/me`
-- `POST /api/users/me/assign-role`
-- `PATCH /api/users/me/onboarding-complete`
-
-All others automatically inherit strict enforcement via the `require_*()` dependency chain — no per-route changes needed.
-
----
-
-#### Backend changes (`haisir-backend`)
-
-**`src/auth/user.py`** — split into two functions:
-- `current_active_user_lenient` — preserves old behaviour (defaults to `roles[0]` when header absent). Used only by the three exempt endpoints above.
-- `current_active_user` (strict) — when `x_current_role is None`, raise `HTTPException(400, "X-Current-Role header required")`. All `require_*()` helpers continue depending on this; they inherit strict enforcement automatically.
-
-**`src/api/routes/user.py`** — three exempt endpoints switch dependency:
-- `GET /me`: `Depends(current_active_user)` → `Depends(current_active_user_lenient)`
-- `POST /me/assign-role`: same swap
-- `PATCH /me/onboarding-complete`: swap from `Depends(require_student_or_parent())` to `Depends(current_active_user_lenient)` + inline role check:
-  ```python
-  if user.current_role not in (UserRole.student, UserRole.parent):
-      raise HTTPException(403, "Forbidden: insufficient permissions")
-  ```
-
-**`tests/unit/auth/test_user.py`**:
-- `test_valid_payload_default_role`: update to expect `HTTPException(400, "X-Current-Role header required")` when `x_current_role=None` is passed to strict `current_active_user`
-- Add new `TestCurrentActiveUserLenient` class — tests `current_active_user_lenient` with `x_current_role=None`, verifies `current_role = roles[0]` (old behaviour preserved)
-
-**`tests/unit/routes/test_user.py`**:
-- Both `app` and `_app_instructor` test apps: add `dependency_overrides[current_active_user_lenient] = lambda: test_user / _instructor_user` alongside the existing `current_active_user` override
-- Import `current_active_user_lenient` at the top of the file
-
----
-
-#### Frontend changes (`haisir-frontend`)
-
-**`src/lib/utils.ts`** — no functional change. Add comment on `buildApiHeaders()` documenting the BR-SEC-006 contract and the three exempt endpoints.
-
-**`src/features/admin/types/admin.types.ts`** + **`src/features/admin/api/admin-api.ts`** — fix deferred Phase 1b deviation: `CreateNodeInput.position?: number` → `order?: number` (backend field name; backend was silently ignoring `position`).
-
-Frontend is already structurally correct: `buildApiHeaders()` reads `getCurrentRole()` from `localStorage` and includes `X-Current-Role` on all calls. The `isLoading` gate in `useAuth` ensures the role is persisted before any role-gated call fires. `fetchWithCSRFRetry` correctly does NOT retry on `400 "X-Current-Role header required"` (detail doesn't contain "csrf"). No other fetch calls bypass `buildApiHeaders()`.
-
----
-
-#### Verification
-
-1. `pytest tests/ --tb=short` — 1810+ tests, 100% coverage must be maintained
-2. Manual: role-gated endpoint without header → `400 "X-Current-Role header required"`
-3. Manual: same endpoint with `X-Current-Role: admin` → normal response
-4. Manual: `GET /api/users/me` without header → `200` (lenient, exempt)
-5. Manual: `PATCH /api/users/me/onboarding-complete` without header → normal role-based response (lenient)
-6. Browser DevTools: `/admin/boards` — every network request shows `X-Current-Role: admin`
-7. `npm run test` — must stay green
-
----
-
-### Then: Phase 1c — Admin Topics Management
+### Phase 1c — Admin Topics Management
 
 Topics panel (right side of board content manager): topic CRUD, content upload, status toggle (Draft ↔ Live), publish flow. As originally scoped.

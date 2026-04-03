@@ -3,15 +3,17 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | a293bf8 (Phase 1b — admin board content manager backend) |
-| haisir-frontend | cc9d69a (Phase 1b-fix — admin layout alignment) |
+| haisir-backend | 899127e (Phase 1c-pre — X-Current-Role enforcement) |
+| haisir-frontend | b4b9495 (Phase 1c-pre — BR-SEC-006 contract + field-name fix) |
 | haisir-deploy | 8bf1b5d (2026-04-02) |
 
-> Next session: run `git diff a293bf8..HEAD` in haisir-backend and `git diff cc9d69a..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff 899127e..HEAD` in haisir-backend and `git diff b4b9495..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
 ## Auth & User
+
+> **BR-SEC-006 (enforced as of Phase 1c-pre):** `X-Current-Role` is required on all role-gated endpoints. Missing header returns `400 "X-Current-Role header required"`. The three onboarding endpoints below are explicitly exempt (use lenient dependency that defaults to `roles[0]`).
 
 ### GET /api/auth/csrf
 - Purpose: Return a CSRF token
@@ -20,18 +22,18 @@
 
 ### GET /api/users/me
 - Purpose: Return current user profile from JWT
-- Auth: Any authenticated user
+- Auth: Any authenticated user — **exempt from `X-Current-Role` requirement** (lenient dependency)
 - Response: id, sub, name, email, email_verified, roles[], current_role, onboarding_completed_at
 
 ### POST /api/users/me/assign-role
 - Purpose: Assign a role to the current user via Keycloak Admin API
-- Auth: Any authenticated user
+- Auth: Any authenticated user — **exempt from `X-Current-Role` requirement** (lenient dependency)
 - Request: `{ role: "student" | "parent" }`
 - Response: `{ message: string }`
 
 ### PATCH /api/users/me/onboarding-complete
 - Purpose: Mark onboarding as complete; sets onboarding_completed_at timestamp
-- Auth: student or parent only
+- Auth: student or parent only — **exempt from `X-Current-Role` requirement** (lenient dependency); enforces student/parent via inline role check (`403` if other role)
 - Request: `{}`
 - Response: `{ onboarding_completed_at: datetime }`
 
@@ -131,7 +133,7 @@
 ### POST /api/course-path-nodes
 - Purpose: Create a node
 - Auth: admin (admin outside current increment)
-- Request: name, node_type, category_id, parent_id?, order?
+- Request: name, node_type, category_id, parent_id?, **order**? (field name is `order`, not `position`)
 - Response: node object
 
 ### GET /api/course-path-nodes/path-to-root/{node_id}
