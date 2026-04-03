@@ -4,10 +4,10 @@
 | Repo | Commit |
 |---|---|
 | haisir-backend | a293bf8 (Phase 1b — admin board content manager backend) |
-| haisir-frontend | 1923050 (Phase 1b — admin board content manager frontend) |
-| haisir-deploy | 94bfd1ccee72d8562aaa3ef2d02cdd10176a2026 |
+| haisir-frontend | cc9d69a (Phase 1b-fix — admin layout alignment) |
+| haisir-deploy | 8bf1b5d (2026-04-02) |
 
-> Next session: run `git diff a293bf8..HEAD` in haisir-backend and `git diff 1923050..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff a293bf8..HEAD` in haisir-backend and `git diff cc9d69a..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
@@ -31,17 +31,17 @@
 
 ### PATCH /api/users/me/onboarding-complete
 - Purpose: Mark onboarding as complete; sets onboarding_completed_at timestamp
-- Auth: Any authenticated user
+- Auth: student or parent only
 - Request: `{}`
 - Response: `{ onboarding_completed_at: datetime }`
 
-### POST /api/users/me/profile [student]
+### POST /api/students/me/profile
 - Purpose: Create student profile
 - Auth: student
 - Request: first_name, last_name, phone?, avatar_url?, grade?, subjects?
 - Response: id, idp_sub, first_name, last_name, phone, avatar_url, grade, subjects
 
-### POST /api/users/me/profile [parent]
+### POST /api/parents/me/profile
 - Purpose: Create parent profile
 - Auth: parent
 - Request: first_name, last_name, phone?
@@ -325,46 +325,49 @@
 
 ### GET /api/exams/course/{node_id}
 - Purpose: List active exam templates for a node
-- Auth: student
+- Auth: student, instructor, admin (any platform role); visibility enforced per BR-DATA-003
 - Response: array of `{ id, course_path_node_id, title }`
 
-### POST /api/exams/session/create
+### POST /api/exam-sessions/session/create
 - Purpose: Create an exam session for the current student
 - Auth: student
-- Request: `{ exam_template_id: UUID }`
+- Query: `exam_template_id` (UUID, required)
+- Request: (no body)
 - Response: session object (id, user_id, exam_template_id, course_path_node_id, mode, status, created_at)
+- Errors: 404 if template not found or not visible; 400 if static template has no questions
 
-### POST /api/exams/session/{session_id}/start
-- Purpose: Mark a session as started; records started_at
-- Auth: student
-- Response: updated session object
-
-### GET /api/exams/session/{session_id}/questions
+### GET /api/exam-sessions/session/{session_id}/questions
 - Purpose: Get questions for an exam session
-- Auth: student
-- Response: `{ questions[], paragraph_questions[] }` with point allocations
+- Auth: student (session owner)
+- Response: `{ questions[], paragraph_questions[] }` with point allocations; images base64-encoded
 
-### POST /api/exams/session/{session_id}/submit
-- Purpose: Submit all answers for a session; triggers grading
-- Auth: student
-- Request: `{ answers: [{ question_id, selected_options?, text_answer? }] }`
-- Response: session object with finished_at, status
+### POST /api/exam-sessions/session/{session_id}/answer
+- Purpose: Record or update a single answer during an active session
+- Auth: student (session owner)
+- Request: `{ question_id: UUID, user_answer: string }`
+- Response: `{ message: "Answer recorded" }`
 
-### GET /api/exams/session/unfinished/{exam_template_id}
+### POST /api/exam-sessions/session/{session_id}/submit
+- Purpose: Submit session; triggers auto-grading; sets status = 'completed'
+- Auth: student (session owner)
+- Request: (no body)
+- Response: session with score, finished_at, and per-question results (correct answers + explanations)
+
+### GET /api/exam-sessions/session/{session_id}/review
+- Purpose: Get graded results for a completed session
+- Auth: student (session owner)
+- Response: same shape as submit response
+
+### GET /api/exam-sessions/session/unfinished/{exam_template_id}
 - Purpose: Check for an existing unfinished session (resume support)
 - Auth: student
 - Response: session object or empty
 
-### GET /api/exams/session/all/{exam_template_id}
+### GET /api/exam-sessions/session/all/{exam_template_id}
 - Purpose: List all sessions for the current student for a template
 - Auth: student
 - Query: limit (default 5)
 - Response: array of session objects with score as percentage
-
-### GET /api/exams/session/{session_id}/answers
-- Purpose: Get graded results for a session
-- Auth: student
-- Response: results[], score, total, total_marks, total_questions, pending_review_count, passed
 
 ---
 

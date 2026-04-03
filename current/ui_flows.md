@@ -4,16 +4,16 @@
 | Repo | Commit |
 |---|---|
 | haisir-backend | a293bf8 (Phase 1b — admin board content manager backend) |
-| haisir-frontend | 1923050 (Phase 1b — admin board content manager frontend) |
-| haisir-deploy | 94bfd1ccee72d8562aaa3ef2d02cdd10176a2026 |
+| haisir-frontend | cc9d69a (Phase 1b-fix — admin layout alignment) |
+| haisir-deploy | 8bf1b5d (2026-04-02) |
 
-> Next session: run `git diff 1923050..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff cc9d69a..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
 ## Auth & Root
 
-- Screen: `/` — Landing page for unauthenticated users. Authenticated users are redirected: onboarding incomplete → `/onboarding`; onboarding complete → `/home`.
+- Screen: `/` — Landing page for unauthenticated users. Authenticated users are redirected: `admin` role → `/admin`; onboarding incomplete → `/onboarding`; `parent` role → `/parent`; else → `/home`. Waits for `isLoading === false` before redirecting (no premature navigation on cold load).
 
 ---
 
@@ -109,14 +109,16 @@
 
 ## Admin: Board Content Manager (Phase 1b)
 
-Route guard: `useAuth` blocks access to any `/admin*` path for non-`admin` roles (redirects to `/home`).
+Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner while auth resolves then redirects non-admin to `/home`. Backend also rejects non-admin API calls (defence-in-depth).
+
+**Shell layout** — All `/admin` routes render inside `AdminShell`: topbar + flex-row(`AdminSidenav` | `main`). `AdminSidenav` is a resizable dark sidebar (190px default, 140–300px range) with 2 nav items (🏠 Dashboard → `/admin`, 📚 Board content → `/admin/boards`) and a drag handle on its right edge. Active item highlighted via `usePathname()`.
 
 - Screen: `/admin` — AdminDashboard. Lists all boards via `GET /api/categories`. Each board renders as a card with a "Manage Boards →" link to `/admin/boards?board={id}`. Shows an error alert on fetch failure (`isError` state). No empty state message defined yet.
   - API: `GET /api/categories`
 
 - Screen: `/admin/boards` — AdminBoardsPage. Three-panel layout:
-  1. **BoardSelectorStrip** — horizontal strip of category buttons; active board highlighted. Board change resets the selected node. `?board=` query param is validated against `/^[\w-]+$/`; invalid values are silently ignored.
-  2. **NodeTree** — hierarchical tree of nodes for the active board, fetched via `GET /api/course-path-nodes/tree/{categoryId}`. Each row (NodeTreeRow) shows a NodeTypeChip (grade / subject / course), an inline rename field (RenameNodeInline), and an expand/collapse toggle for children. Selected node is highlighted; click sets the active node in component state.
+  1. **BoardSelectorStrip** — 60px vertical dark strip (`#080F17`), each board = 40×40px emoji icon button cycling 📗📘📙, active board highlighted; "+" add button pinned at bottom. Board change resets the selected node. `?board=` query param is validated against `/^[\w-]+$/`; invalid values are silently ignored.
+  2. **NodeTree** — hierarchical tree of nodes for the active board, fetched via `GET /api/course-path-nodes/tree/{categoryId}`. Each row (NodeTreeRow) shows a NodeTypeChip (grade / subject / course), an inline rename field (RenameNodeInline), and an expand/collapse toggle for children. Selected node is highlighted; click sets the active node in component state. Panel is resizable (240px default, 160–500px) via a drag handle on its right edge; node labels render at 14px with `title={node.name}` tooltip on overflow.
   3. **NodeDetailPanel** — shown when a node is selected. Currently displays a "Select a node to view its topics" empty state (topics/content panel is Phase 1c). Contains the "Add Node" button to open AddNodeModal.
   - API: `GET /api/course-path-nodes/tree/{categoryId}`, `POST /api/course-path-nodes`, `PATCH /api/course-path-nodes/{id}`, `DELETE /api/course-path-nodes/{id}`, `POST /api/categories`
   - Layout wrapper: `AdminProviders` (in `src/app/admin/layout.tsx`) wraps all `/admin` routes; `src/app/admin/error.tsx` is the error boundary.

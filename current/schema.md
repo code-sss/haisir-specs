@@ -4,10 +4,10 @@
 | Repo | Commit |
 |---|---|
 | haisir-backend | a293bf8 (Phase 1b — admin board content manager backend) |
-| haisir-frontend | 1923050 (Phase 1b — admin board content manager frontend) |
-| haisir-deploy | 94bfd1ccee72d8562aaa3ef2d02cdd10176a2026 |
+| haisir-frontend | cc9d69a (Phase 1b-fix — admin layout alignment) |
+| haisir-deploy | 8bf1b5d (2026-04-02) |
 
-> Next session: run `git diff a293bf8..HEAD` in haisir-backend to see only what changed since this snapshot.
+> Next session: run `git diff a293bf8..HEAD` in haisir-backend and `git diff cc9d69a..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
