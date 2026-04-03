@@ -8,10 +8,10 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 
 ## Current State
 
-> Snapshot baseline: haisir-backend `a293bf8` (Phase 1b complete), haisir-frontend `1923050` (Phase 1b complete), haisir-deploy `94bfd1cc` (2026-04-01).
-> Next session: `git diff a293bf8..HEAD` in haisir-backend and `git diff 1923050..HEAD` in haisir-frontend instead of re-reading the full codebases.
+> Snapshot baseline: haisir-backend `a293bf8` (Phase 1b complete), haisir-frontend `cc9d69a` (Phase 1b-fix complete), haisir-deploy `94bfd1cc` (2026-04-01).
+> Next session: `git diff a293bf8..HEAD` in haisir-backend and `git diff cc9d69a..HEAD` in haisir-frontend instead of re-reading the full codebases.
 
-Onboarding for Student and Parent is fully implemented end-to-end. The backend has 21 mapped tables: `user_metadata`, `student_profiles`, `teacher_profiles` (retained, instructor persona deferred), `parent_profiles`, `parent_link_codes`, `parent_child_links`, `class_invite_codes` (retained, class flow deferred), `categories`, a self-referential `course_path_nodes` tree, `topics`, `topic_contents`, `questions`, `paragraph_questions`, an orphaned `answers` table, deprecated `assessments`/`assessment_attempts`/`assessment_answers`, and the unified exam layer: `exam_templates`, `exam_template_questions`, `exam_sessions`, `exam_session_questions`. `owner_type`/`owner_id` columns exist on `course_path_nodes`, `topics`, and `exam_templates`; visibility filtering (BR-DATA-003, BR-SEC-005) is **fully enforced** on all GET endpoints. All error messages are sanitised (generic 403/500 detail strings; role context logged server-side only). Path traversal is hardened in file-serving routes. All route modules are wired with CSRF validation and role-based guards; `assign-role` calls the Keycloak Admin API and accepts only `student` or `parent`. The admin board content manager is fully built end-to-end: backend PATCH/DELETE/tree endpoints plus the admin UI (`/admin`, `/admin/boards`) with board selector, hierarchical node tree, inline rename, add-node modal, and delete confirmation. The frontend (Next.js) also covers: full onboarding flow, course dashboard with hierarchical node navigation and inline PDF viewer, student exam-taking with timer and session resume, plus retained-but-deferred screens. The `/admin` route is guarded to `admin` role in `useAuth`. The two-section student dashboard (Platform Board / Home Study split) is not yet built. **Not yet built:** two-section dashboard, parent dashboard and curriculum builder, link-code generation endpoint, pgvector/RAG pipeline, admin topics/content management.
+Onboarding for Student and Parent is fully implemented end-to-end. The backend has 21 mapped tables: `user_metadata`, `student_profiles`, `teacher_profiles` (retained, instructor persona deferred), `parent_profiles`, `parent_link_codes`, `parent_child_links`, `class_invite_codes` (retained, class flow deferred), `categories`, a self-referential `course_path_nodes` tree, `topics`, `topic_contents`, `questions`, `paragraph_questions`, an orphaned `answers` table, deprecated `assessments`/`assessment_attempts`/`assessment_answers`, and the unified exam layer: `exam_templates`, `exam_template_questions`, `exam_sessions`, `exam_session_questions`. `owner_type`/`owner_id` columns exist on `course_path_nodes`, `topics`, and `exam_templates`; visibility filtering (BR-DATA-003, BR-SEC-005) is **fully enforced** on all GET endpoints. All error messages are sanitised (generic 403/500 detail strings; role context logged server-side only). Path traversal is hardened in file-serving routes. All route modules are wired with CSRF validation and role-based guards; `assign-role` calls the Keycloak Admin API and accepts only `student` or `parent`. The admin board content manager is fully built end-to-end: backend PATCH/DELETE/tree endpoints plus the admin UI (`/admin`, `/admin/boards`) with board selector, hierarchical node tree, inline rename, add-node modal, and delete confirmation. The admin shell layout is aligned to the prototype: a resizable 190px dark left sidenav (`AdminSidenav`), role-aware root redirect (`/` → `/admin` for admin, `/parent` for parent, `/home` for student/default), `AdminRouteGuard` blocking non-admin access with redirect to `/home`, a resizable 240px node-tree panel, a 60px vertical `BoardSelectorStrip` with emoji icons and "+" add button, and tree node labels at 14px with overflow tooltip — shared `useResize` drag-handle hook used for both panels (no external lib). The frontend (Next.js) also covers: full onboarding flow, course dashboard with hierarchical node navigation and inline PDF viewer, student exam-taking with timer and session resume, plus retained-but-deferred screens. The two-section student dashboard (Platform Board / Home Study split) is not yet built. **Not yet built:** two-section dashboard, parent dashboard and curriculum builder, link-code generation endpoint, pgvector/RAG pipeline, admin topics/content management.
 
 ## Completed Phases
 
@@ -130,32 +130,29 @@ Onboarding for Student and Parent is fully implemented end-to-end. The backend h
 
 ---
 
+### Phase 1b-fix — Admin Layout Alignment + Routing (frontend) ✓
+
+**Completed:** 2026-04-02
+**Commit:** haisir-frontend `cc9d69a`
+
+**What was done:**
+- `src/app/page.tsx` — role-aware redirect: `admin` → `/admin`, `parent` → `/parent`, default → `/home`; waits for `isLoading === false` before redirecting
+- `src/app/admin/layout.tsx` + `AdminRouteGuard` — blocks non-admin role, redirects to `/home`; shows spinner while auth resolves
+- `AdminSidenav` — dark sidebar, 190px default, 140–300px resizable range, 2 nav items (🏠 Dashboard, 📚 Board content); active item highlighted via `usePathname()`
+- `BoardSelectorStrip` — 60px vertical dark strip (`#080F17`), 40×40px emoji icon buttons cycling 📗📘📙, "+" add button pinned at bottom
+- `useResize` hook — vanilla `mousedown`/`mousemove`/`mouseup` drag-handle; 240px default / 160–500px for tree panel
+- Sidenav resize — same `useResize` hook reused; 190px default / 140–300px
+- Node label text-size audit — 14px (0.875rem, ≥ 13px spec), `title={node.name}` browser tooltip, `text-overflow: ellipsis`
+
+**Deviations from original spec:**
+- Sidenav background uses `#1e293b` (dark slate) instead of spec's `#080F17`; all other dimensions and layout match the prototype exactly
+
+---
+
 ## Next Phase
 <!-- The agreed next concrete step. Updated after each /plan-next-state discussion. -->
 
-### Phase 1b-fix — Admin Layout Alignment + Routing (frontend only)
-
-**Goal:** Align the admin shell layout to `target/prototypes/haisir_admin_flow.html` before adding topics (Phase 1c). No backend changes.
-
-| # | Task | Detail |
-|---|---|---|
-| 1 | Role-aware redirect after login | In `src/app/page.tsx`: `admin` → `/admin`, `parent` → `/parent`, `student`/default → `/home`. Use `useAuth.currentRole` (localStorage fallback). Check `isLoading` before redirecting. |
-| 2 | Admin route guard | In `src/app/admin/layout.tsx`: if not `admin` role → redirect `/home`. Use existing `ROUTE_ROLE_REQUIREMENTS` config in `use-auth.ts`. Backend already rejects non-admin API calls — this is defence in depth. |
-| 3 | Add left sidenav | 190px dark sidebar (`#080F17`), 2 nav items: 🏠 Dashboard (`/admin`), 📚 Board content (`/admin/boards`). Present on both admin routes. Matches `.sidenav` in the HTML prototype. |
-| 4 | Board selector → vertical icon strip | Replace horizontal tab strip with 60px vertical dark strip (`#080F17`). Each board = 40×40 icon button (emoji or first letter). "+" add button at bottom. Matches `.board-strip` in the HTML prototype. |
-| 5 | Resizable tree panel | Drag handle on right edge, default 240px, min 160px, max 500px. Fixes truncated node names. `mousedown`/`mousemove`/`mouseup` — no external lib. |
-| 6 | Resizable sidenav | Drag handle on right edge, default 190px, min 140px, max 300px. Same pattern as tree panel. |
-| 7 | Text size audit | Tree node labels ≥ 13px. Tooltip on text overflow. |
-
-**Visual authority rule:** Always open `target/prototypes/haisir_admin_flow.html` in a browser before implementing any admin screen — it is the authoritative visual reference, not the text spec. If the prototype and text description conflict, the prototype wins.
-
-**Implementation notes:**
-- Shell layout: `topbar` → `app-layout` (flex row) → `sidenav` | `main-area`. Inside boards: `board-layout` (flex row) → `board-strip` | `board-tree` | `board-detail`.
-- Route guard must handle `isLoading` state — do not redirect while auth is resolving.
-- `parent` → `/parent` will 404 until parent UI is built — acceptable as forward-compatible stub.
-- `canAccessRoute()` exists in `use-auth.ts` but is unused — wire it or use a simple role→route map.
-
-### After Phase 1b-fix — X-Current-Role enforcement audit (backend only)
+### Phase 1c-pre — X-Current-Role Enforcement Audit (backend only)
 
 **Goal:** Audit all backend endpoints to ensure `X-Current-Role` header is required on all role-gated routes. Currently `BR-SEC-006` silently defaults to first JWT role if header is missing — change to `400 Bad Request` ("X-Current-Role header required") for role-gated endpoints. Onboarding endpoints (`/api/users/me`, `/api/users/me/onboarding-complete`, `/api/users/me/assign-role`) remain exempt.
 
