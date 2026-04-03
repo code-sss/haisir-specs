@@ -152,9 +152,65 @@ Onboarding for Student and Parent is fully implemented end-to-end. The backend h
 ## Next Phase
 <!-- The agreed next concrete step. Updated after each /plan-next-state discussion. -->
 
-### Phase 1c-pre — X-Current-Role Enforcement Audit (backend only)
+### Phase 1c-pre — X-Current-Role Enforcement (backend + frontend)
 
-**Goal:** Audit all backend endpoints to ensure `X-Current-Role` header is required on all role-gated routes. Currently `BR-SEC-006` silently defaults to first JWT role if header is missing — change to `400 Bad Request` ("X-Current-Role header required") for role-gated endpoints. Onboarding endpoints (`/api/users/me`, `/api/users/me/onboarding-complete`, `/api/users/me/assign-role`) remain exempt.
+**Goal:** Make `X-Current-Role` required on all role-gated endpoints. Currently `BR-SEC-006` silently defaults to the first JWT role if the header is missing — change to `400 Bad Request` (`"X-Current-Role header required"`) in the backend, and confirm the frontend sends it on every call. Three onboarding endpoints remain explicitly exempt.
+
+**Exempt endpoints (keep `current_active_user_lenient`):**
+- `GET /api/users/me`
+- `POST /api/users/me/assign-role`
+- `PATCH /api/users/me/onboarding-complete`
+
+All others automatically inherit strict enforcement via the `require_*()` dependency chain — no per-route changes needed.
+
+---
+
+#### Backend changes (`haisir-backend`)
+
+**`src/auth/user.py`** — split into two functions:
+- `current_active_user_lenient` — preserves old behaviour (defaults to `roles[0]` when header absent). Used only by the three exempt endpoints above.
+- `current_active_user` (strict) — when `x_current_role is None`, raise `HTTPException(400, "X-Current-Role header required")`. All `require_*()` helpers continue depending on this; they inherit strict enforcement automatically.
+
+**`src/api/routes/user.py`** — three exempt endpoints switch dependency:
+- `GET /me`: `Depends(current_active_user)` → `Depends(current_active_user_lenient)`
+- `POST /me/assign-role`: same swap
+- `PATCH /me/onboarding-complete`: swap from `Depends(require_student_or_parent())` to `Depends(current_active_user_lenient)` + inline role check:
+  ```python
+  if user.current_role not in (UserRole.student, UserRole.parent):
+      raise HTTPException(403, "Forbidden: insufficient permissions")
+  ```
+
+**`tests/unit/auth/test_user.py`**:
+- `test_valid_payload_default_role`: update to expect `HTTPException(400, "X-Current-Role header required")` when `x_current_role=None` is passed to strict `current_active_user`
+- Add new `TestCurrentActiveUserLenient` class — tests `current_active_user_lenient` with `x_current_role=None`, verifies `current_role = roles[0]` (old behaviour preserved)
+
+**`tests/unit/routes/test_user.py`**:
+- Both `app` and `_app_instructor` test apps: add `dependency_overrides[current_active_user_lenient] = lambda: test_user / _instructor_user` alongside the existing `current_active_user` override
+- Import `current_active_user_lenient` at the top of the file
+
+---
+
+#### Frontend changes (`haisir-frontend`)
+
+**`src/lib/utils.ts`** — no functional change. Add comment on `buildApiHeaders()` documenting the BR-SEC-006 contract and the three exempt endpoints.
+
+**`src/features/admin/types/admin.types.ts`** + **`src/features/admin/api/admin-api.ts`** — fix deferred Phase 1b deviation: `CreateNodeInput.position?: number` → `order?: number` (backend field name; backend was silently ignoring `position`).
+
+Frontend is already structurally correct: `buildApiHeaders()` reads `getCurrentRole()` from `localStorage` and includes `X-Current-Role` on all calls. The `isLoading` gate in `useAuth` ensures the role is persisted before any role-gated call fires. `fetchWithCSRFRetry` correctly does NOT retry on `400 "X-Current-Role header required"` (detail doesn't contain "csrf"). No other fetch calls bypass `buildApiHeaders()`.
+
+---
+
+#### Verification
+
+1. `pytest tests/ --tb=short` — 1810+ tests, 100% coverage must be maintained
+2. Manual: role-gated endpoint without header → `400 "X-Current-Role header required"`
+3. Manual: same endpoint with `X-Current-Role: admin` → normal response
+4. Manual: `GET /api/users/me` without header → `200` (lenient, exempt)
+5. Manual: `PATCH /api/users/me/onboarding-complete` without header → normal role-based response (lenient)
+6. Browser DevTools: `/admin/boards` — every network request shows `X-Current-Role: admin`
+7. `npm run test` — must stay green
+
+---
 
 ### Then: Phase 1c — Admin Topics Management
 

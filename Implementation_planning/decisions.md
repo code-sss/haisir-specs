@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-04-02 — Phase 1c-pre: X-Current-Role Enforcement (backend + frontend)
+
+- **Scope expanded from backend-only to both repos.** Originally planned as a backend-only audit. After scanning the frontend, `buildApiHeaders()` already sends `X-Current-Role` on all calls via `localStorage`. Both repos change together in the same dev cycle to avoid the deployment sequencing risk (backend strict before frontend sends header = instant breakage).
+- **`current_active_user` split into strict + lenient.** The single `current_active_user` function in `src/auth/user.py` is split: `current_active_user` (strict — `400` when header absent) and `current_active_user_lenient` (old behaviour — defaults to `roles[0]`). Lenient is used only for the three exempt onboarding endpoints. All `require_*()` helpers automatically inherit strict enforcement via the dependency chain — no per-route changes needed.
+- **Three endpoints remain exempt.** `GET /api/users/me`, `POST /api/users/me/assign-role`, and `PATCH /api/users/me/onboarding-complete` use `current_active_user_lenient`. Rationale: users may not have a role yet (or their JWT may not reflect the newly assigned role) at the point these endpoints are called during onboarding.
+- **`PATCH /me/onboarding-complete` gets inline role check instead of `require_student_or_parent()`.** It needs the lenient dep for the header but still enforces the student/parent role restriction. Inline check preserves the security guarantee without the strict dep.
+- **No route tests change except `test_user.py`.** All other route tests override `current_active_user` via `dependency_overrides` and inherit the strict dep change automatically. Only `tests/unit/auth/test_user.py` and `tests/unit/routes/test_user.py` need updating.
+- **Frontend functional changes are none.** `buildApiHeaders()` already sends the header correctly. `fetchWithCSRFRetry` correctly does not retry `400 "X-Current-Role header required"` (detail doesn't contain "csrf"). Only a code comment + `position`→`order` field-name fix in admin-api.ts.
+- **`CreateNodeInput.position` → `order` fixed.** Phase 1b shipped `CreateNodeInput.position?: number` on the frontend but the backend field is `order`. Backend was silently ignoring `position`. Fixed as part of 1c-pre cleanup.
+- **BR-SEC-006 updated from "defaults" to "400".** The rule now reads: `X-Current-Role` is required on all role-gated endpoints; missing header returns `400 "X-Current-Role header required"`. Three onboarding endpoints are the explicit exception.
+
+---
+
 ## 2026-04-01 — Phase 1b-fix: Admin Layout Alignment + Routing
 
 - **Admin shell layout deviates from the HTML prototype — fix before Phase 1c.** Phase 1b shipped the tree UI + node CRUD but with a horizontal board selector (prototype shows vertical icon strip, 60px) and no left sidenav (prototype shows 190px dark sidebar with Dashboard + Board content nav items). Fixing the layout after Phase 1c would require refactoring the shell around already-built topic components. Fix first, build topics on correct layout.

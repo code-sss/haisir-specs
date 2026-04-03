@@ -110,7 +110,7 @@ CurrentUser: idp_sub, email, name, email_verified, roles: list[str], current_rol
 - **BR-SEC-003:** Parent access to child data requires an active (`revoked_at IS NULL`) `parent_child_links` record; revocation removes access immediately.
 - **BR-SEC-004:** Parent content (`owner_type='parent'`) is never visible to students without a valid `parent_child_links` linking `owner_id` to the requesting student.
 - **BR-SEC-005:** Platform Admin cannot read or modify parent-owned content.
-- **BR-SEC-006:** `X-Current-Role` defaults to first role in JWT if missing (onboarding endpoints excepted).
+- **BR-SEC-006:** `X-Current-Role` is required on all role-gated endpoints. Missing header returns `400 "X-Current-Role header required"`. Explicit exceptions (use lenient path — no header required): `GET /api/users/me`, `POST /api/users/me/assign-role`, `PATCH /api/users/me/onboarding-complete`.
 - **BR-SEC-007:** Never log JWT, CSRF tokens, or session cookies; use structlog with redaction.
 - **BR-SEC-008:** `POST /api/users/me/assign-role` accepts only `student` or `parent` → 422 otherwise.
 
