@@ -20,7 +20,7 @@ All 21 tables live in production. See `current/schema.md` for the authoritative 
 - `categories` → `course_path_nodes` (self-referential tree, arbitrary depth)
 - `course_path_nodes` → `topics` (leaf nodes only)
 - `topics` → `topic_contents` (one per type: pdf, video, text)
-- `topic_contents` → `topic_content_chunks` (pgvector, for hAITU RAG — future)
+- `topic_contents` → ~~`topic_content_chunks`~~ **superseded** — the RAG service's `rag_chunks` table covers this and more (multi-source, BM25, metadata JSONB, ownership). `topic_content_chunks` will not be created.
 
 **Questions & Exams:**
 - `questions`, `paragraph_questions`

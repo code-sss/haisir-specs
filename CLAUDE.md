@@ -16,10 +16,12 @@ The `Implementation_planning/` directory contains the planning docs and a decisi
 
 | File | Purpose |
 |---|---|
-| `progress.md` | **Read this first** — current state, next phase (updated each plan-next-state cycle) |
+| `progress.md` | **Read this first** — current state, completed phases (high-level status document) |
+| `PLAN.md` | Structured goal tree for the current phase — tasks with repo tags and dependencies (written by `/plan`) |
+| `TASKS.md` | Task checkboxes + "Ready now" queue — updated by `/implement` in each code repo |
 | `phases.md` | Rough phase guide — completed phases + next phase stub (long-term vision phasing is in `vision/phases.md`) |
-| `decisions.md` | Running decisions log — one dated entry per plan-next-state cycle, newest first |
-| `archive/` | Historical decision records — read for "why" behind past choices |
+| `decisions.md` | Running decisions log — one dated entry per `/plan` cycle, newest first |
+| `archive/` | Historical decision records and archived plans — read for "why" behind past choices |
 
 > The "why" behind spec choices is in `decisions.md` (recent) and `archive/phase0-review-decisions.md` / `archive/phase1-review-decisions.md` (historical).
 
