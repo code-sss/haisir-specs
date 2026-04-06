@@ -169,4 +169,4 @@ Onboarding for Student and Parent is fully implemented end-to-end. The backend h
 
 ### Phase 1c — Admin Topics Management
 
-Topics panel (right side of board content manager): topic CRUD, content upload, status toggle (Draft ↔ Live), publish flow. As originally scoped.
+Topics panel (right side of board content manager): topic list, inline rename, add/delete, and Draft ↔ Live status toggle. Also fixes BR-STU-003 (student topic query now filters `status = 'live'`) and adds the node-delete live-topic guard (`"Cannot delete: this node has live topics."`). Content upload is Phase 1d. Full task breakdown in `PLAN.md` and `TASKS.md`.

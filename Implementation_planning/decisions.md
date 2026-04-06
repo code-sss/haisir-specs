@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-04-06 — Phase 1c: Admin Topics Management
+
+- **`status` missing from `TopicRead` identified as a blocking gap.** The `topics.status` column and `Topic.status` domain field existed since Phase 1a but were never added to `TopicRead` (Pydantic schema). The admin PATCH endpoint cannot function without exposing this field. Added `status: str = "live"` to `TopicRead` as step A1.
+- **BR-STU-003 gap: students can currently see draft topics.** `get_by_course_path_node_visible` in `TopicRepository` applies the owner-type visibility clause but not the `status = 'live'` filter required by BR-STU-003. Gap became observable in Phase 1c because status toggling makes draft topics possible. Fixed in step A6.
+- **Node-delete live-topic guard was missing.** The spec (`target/requirements/ui-mapping/ui_parent_institution_admin.md`) says node delete is blocked when the subtree contains live topics, but `DELETE /api/course-path-nodes/{id}` only checked for active exam sessions. Fixed in A7 — live-topic check runs before the existing session check.
+- **Topic delete cascades `topic_contents` only.** Topics do not FK-reference `exam_templates` or `exam_sessions` directly (those link to `course_path_node_id`). The cascade for topic delete is: `topic_contents` rows → `topics` row. Simpler than the node subtree cascade.
+- **Phase B (frontend) runs in parallel with Phase A.** B1–B3 (types, API functions, hook) have no backend runtime dependency — they can be written and unit-tested with mocks before backend endpoints are deployed. B4–B9 build on B1–B3.
+- **`status` field stays as `str` in domain model; validation lives at schema boundary.** Existing `Topic` dataclass uses `status: str = "live"`. `TopicUpdate` uses `Literal["draft", "live"]` for Pydantic validation. Avoids a breaking domain-layer change while still enforcing valid values at the API boundary.
+- **"Upload Content" stub deferred to Phase 1d.** `TopicRow` will render a disabled "Upload Content" button pointing to Phase 1d. Topic content upload is out of scope for Phase 1c.
+
+---
+
 ## 2026-04-02 — Phase 1c-pre: X-Current-Role Enforcement (backend + frontend)
 
 - **Scope expanded from backend-only to both repos.** Originally planned as a backend-only audit. After scanning the frontend, `buildApiHeaders()` already sends `X-Current-Role` on all calls via `localStorage`. Both repos change together in the same dev cycle to avoid the deployment sequencing risk (backend strict before frontend sends header = instant breakage).
