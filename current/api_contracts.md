@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 899127e (Phase 1c-pre — X-Current-Role enforcement) |
-| haisir-frontend | b4b9495 (Phase 1c-pre — BR-SEC-006 contract + field-name fix) |
-| haisir-deploy | 8bf1b5d (2026-04-02) |
+| haisir-backend | d8713ad (Phase 1c-pre + skill updates, 2026-04-06) |
+| haisir-frontend | c7084e5 (dep upgrades + minor test/config fixes, 2026-04-06) |
+| haisir-deploy | b814471 (skill updates, 2026-04-06) |
 
-> Next session: run `git diff 899127e..HEAD` in haisir-backend and `git diff b4b9495..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff d8713ad..HEAD` in haisir-backend and `git diff c7084e5..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 

@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | a293bf8 (Phase 1b — admin board content manager backend) |
-| haisir-frontend | cc9d69a (Phase 1b-fix — admin layout alignment) |
-| haisir-deploy | 8bf1b5d (2026-04-02) |
+| haisir-backend | d8713ad (Phase 1c-pre + skill updates, 2026-04-06) |
+| haisir-frontend | c7084e5 (dep upgrades + minor test/config fixes, 2026-04-06) |
+| haisir-deploy | b814471 (skill updates, 2026-04-06) |
 
-> Next session: run `git diff cc9d69a..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff c7084e5..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
@@ -123,8 +123,7 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
   - API: `GET /api/course-path-nodes/tree/{categoryId}`, `POST /api/course-path-nodes`, `PATCH /api/course-path-nodes/{id}`, `DELETE /api/course-path-nodes/{id}`, `POST /api/categories`
   - Layout wrapper: `AdminProviders` (in `src/app/admin/layout.tsx`) wraps all `/admin` routes; `src/app/admin/error.tsx` is the error boundary.
 
-- Modal: **AddNodeModal** — triggered from NodeDetailPanel. Fields: `name` (required), `node_type` (grade/subject/course, required), `parent_id` (auto-sets to selected node's id). `owner_type` is hardcoded to `"platform"` (not user-editable). Submits `POST /api/course-path-nodes`.
-  - Known deviation: frontend type sends `position?: number` but backend field is named `order`. Backend ignores unknown fields; functionally harmless but must be aligned.
+- Modal: **AddNodeModal** — triggered from NodeDetailPanel. Fields: `name` (required), `node_type` (grade/subject/course, required), `parent_id` (auto-sets to selected node's id). `owner_type` is hardcoded to `"platform"` (not user-editable). Submits `POST /api/course-path-nodes` with `order` field (aligned in Phase 1c-pre).
 
 - Modal: **AddBoardModal** — triggered from BoardSelectorStrip. Fields: `name` (required), `path_type` (required), `description` (optional). Submits `POST /api/categories`.
 
