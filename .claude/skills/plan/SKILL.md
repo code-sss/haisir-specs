@@ -348,7 +348,19 @@ When `/plan` is invoked again in a future session:
 
 1. **Phase 0** detects the existing plan and reconciles against code changes using the SHA watermark.
 2. The user chooses to refine, extend, or archive.
-3. **When all tasks in TASKS.md are checked:** Automatically archive both `PLAN.md` and `TASKS.md` to `Implementation_planning/archive/`, update `progress.md ## Completed Phases` if it exists, and start a fresh gap analysis from Phase 1.
+3. **When all tasks in TASKS.md are checked:** Automatically archive both `PLAN.md` and `TASKS.md` to `Implementation_planning/archive/`, update `progress.md ## Completed Phases` if it exists. Then tell the user:
+
+   ```
+   ✅ All tasks complete. Plan archived.
+
+   Next steps:
+   1. Run `/release-manifest <version>` in haisir-deploy to generate the deployment manifest.
+   2. Review the manifest and deploy to staging with:
+      bash common/scripts/deploy.sh --manifest releases/v<version>/manifest.yaml --env staging --dry-run
+   3. Run /plan again to start the next phase gap analysis.
+   ```
+
+   Do NOT automatically start a fresh gap analysis — wait for the user to explicitly invoke /plan again.
 
 ---
 

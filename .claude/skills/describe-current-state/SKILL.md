@@ -98,3 +98,20 @@ Once the user confirms (e.g. "looks good", "write it", "update it", "done"), do 
 3. Update the `## Current State` section in `Implementation_planning/progress.md` to a single clear paragraph summarising what the system can do today.
 
 After writing, briefly summarise what was captured and whether each repo was a full read or incremental update.
+
+## SHA divergence check
+
+After writing `current/snapshot_shas.md`, check whether `Implementation_planning/PLAN.md` exists. If it does, extract the `<!-- plan-baseline: backend:<sha> frontend:<sha> deploy:<sha> -->` watermark from the bottom of that file. Compare those SHAs against the ones just written to `snapshot_shas.md`.
+
+If any SHA differs, warn the user:
+
+```
+⚠ SHA drift detected: the current state snapshot is ahead of the plan baseline.
+  Plan baseline:    backend:<plan-sha>  frontend:<plan-sha>  deploy:<plan-sha>
+  Current snapshot: backend:<snap-sha>  frontend:<snap-sha>  deploy:<snap-sha>
+
+This means code has changed since the plan was written. Consider running /plan
+to reconcile the plan against the new code before starting implementation.
+```
+
+If the SHAs match (or PLAN.md does not exist), no warning is needed.
