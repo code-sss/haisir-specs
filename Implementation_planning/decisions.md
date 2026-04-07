@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-04-06 — Phase 1c-post: Admin UX Alignment
+
+- **Six UX gaps identified between prototype and built screens.** After hands-on testing of Phase 1c, six issues found: (1) Add Board modal sends incomplete payload (`name` only; backend requires `path_type` → 422), (2) category description editing buried on legacy `/manage-categories` page, (3) board version display deferred (no schema), (4) Add Node modal uses free-text for node type instead of chip selector, (5) no sibling-type filtering on reserved types, (6) dashboard shows bare board list instead of prototype's rich cards with stats.
+- **No custom node types — fixed enum of 9 values.** Node types are: `grade`, `subject`, `course`, `chapter`, `module`, `section`, `unit`, `week`, `skill`. Kept as PG enum with Alembic migration adding 6 new values to the existing 3. No VARCHAR change. No frontend "Custom" escape hatch.
+- **Reserved types remain `grade` and `subject` only.** These show 🔒 in the chip selector and are disabled if already used at the same tree level. All other types can repeat.
+- **Board stats: new admin-only endpoint.** `GET /api/admin/board-stats` returns per-board `live_topics`, `draft_topics`, `total_topics` + platform-wide overview. Single JOIN query; comment added noting materialized view as future optimisation path if needed.
+- **Board version/publish DEFERRED.** No `version` column in schema. Prototype shows version numbers and a publish modal, but this requires a schema migration + full publish workflow. Tracked for Phase 2+.
+- **`path_type` hardcoded to "structured".** Add Board modal does not expose `path_type` to the user; it is always `"structured"`. The field exists for future "flexible" paths but is not yet needed.
+- **`/manage-categories` effectively deprecated.** Not removed, but not linked from admin sidenav. Its "edit description" capability moves to inline editing on the dashboard board cards.
+
+---
+
 ## 2026-04-06 — Phase 1c: Admin Topics Management
 
 - **`status` missing from `TopicRead` identified as a blocking gap.** The `topics.status` column and `Topic.status` domain field existed since Phase 1a but were never added to `TopicRead` (Pydantic schema). The admin PATCH endpoint cannot function without exposing this field. Added `status: str = "live"` to `TopicRead` as step A1.

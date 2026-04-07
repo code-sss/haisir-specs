@@ -1,4 +1,4 @@
-# TASKS — Phase 1c: Admin Topics Management
+# TASKS — Phase 1c-post: Admin UX Alignment
 
 > Generated from PLAN.md on 2026-04-06.
 > Implementers: check off tasks as done. Add blockers to the Blocked section.
@@ -8,37 +8,26 @@
 
 ## Ready now — Backend (`haisir-backend`)
 
-> All Phase A tasks are unblocked. Work them in order A1 → A8.
+> A1 and A2 are independent — work in parallel. A3 depends on A1 + A2.
 
-- [ ] **A1** — `src/schemas/topic.py`: add `status: str = "live"` to `TopicRead`; add `TopicUpdate` schema with `title?`, `order?`, `status?: Literal["draft", "live"]`
-- [ ] **A2** — `src/domain/repositories/topic_repository.py`: add abstract signatures for `update_platform_topic` + `delete_platform_topic`
-- [ ] **A3** — `src/infrastructure/repositories/topic_repository.py`: implement `update_platform_topic` (oracle-protected SELECT → partial UPDATE) + `delete_platform_topic` (cascade `topic_contents` → `topics`)
-- [ ] **A4** — `src/domain/services/topic_service.py`: add `update_platform_topic` + `delete_platform_topic` service methods with no-op guard and empty-title validation
-- [ ] **A5** — `src/api/routes/topic.py`: add `PATCH /{topic_id}` (admin + CSRF, 200/404/422) + `DELETE /{topic_id}` (admin + CSRF, 204/404)
-- [ ] **A6** — `src/infrastructure/repositories/topic_repository.py`: fix BR-STU-003 — add `self.table.c.status == "live"` to `get_by_course_path_node_visible` WHERE clause
-- [ ] **A7a** — `src/infrastructure/repositories/course_path_node_repository.py`: add `has_live_topics_in_subtree(node_id: UUID) -> bool` (recursive CTE)
-- [ ] **A7b** — `src/api/routes/course_path_node.py`: call `has_live_topics_in_subtree` before `has_active_exam_sessions_in_subtree` in DELETE handler; return 409 `"Cannot delete: this node has live topics."` if true
-- [ ] **A8** — Tests: PATCH/DELETE topic routes + BR-STU-003 regression + node-delete live-topic 409; maintain 100% coverage
+- [ ] **A1** — `src/domain/models/course_path_node.py`: add 6 values to `NodeType(StrEnum)`: `chapter`, `module`, `section`, `unit`, `week`, `skill`. New Alembic migration `V25_extend_nodetype_enum.py`: `ALTER TYPE nodetype ADD VALUE IF NOT EXISTS` for each (autocommit mode required).
+- [ ] **A2** — New `src/schemas/admin_stats.py` (`BoardStats`, `PlatformOverview`, `AdminDashboardStats`); new `src/api/routes/admin_stats.py` (`GET /api/admin/board-stats`, admin-only); register in `src/api/router.py` at prefix `/api/admin`. Single JOIN query: `categories → course_path_nodes (platform) → topics (LEFT JOIN)`, grouped by `categories.id`. Add comment: `# If this query becomes slow at scale, consider a materialized view over the same join`.
+- [ ] **A3** — Tests: `NodeType` has 9 values; `POST /api/course-path-nodes` accepts `chapter`/`skill`/etc.; `GET /api/admin/board-stats` correct aggregates, zero-topic boards, non-admin 403, missing header 400; maintain 100% coverage.
 
 ---
 
 ## Ready now — Frontend (`haisir-frontend`)
 
-> B1, B2, B3 are independent — start in parallel.
-> B4 depends on B1 + B2 + B3.
-> B5–B9 depend on B4.
-> B10 can run alongside B5–B9.
+> B1 and B2 are independent — start in parallel.
+> B3 depends on A2 (needs stats endpoint).
+> B4 depends on B3.
+> B5 depends on B1–B4.
 
-- [ ] **B1** — `src/features/admin/types/admin.types.ts`: add `Topic`, `CreateTopicInput`, `UpdateTopicInput`, `AddTopicFormSchema`, `AddTopicFormValues`
-- [ ] **B2** — `src/features/admin/api/admin-api.ts`: add `getTopicsForNode`, `createTopic`, `updateTopic`, `deleteTopic`
-- [ ] **B3** — NEW `src/features/admin/hooks/use-topics.ts`: `useTopics(nodeId: string | null)` hook (pattern: mirror `use-node-tree.ts`)
-- [ ] **B4** — `src/features/admin/components/node-detail-panel.tsx`: replace "coming in Phase 1c" stub with `<TopicPanel />`; add `csrfToken` + `refreshCSRF` props to `NodeDetailPanelProps`; thread from `AdminBoardsPage`
-- [ ] **B5** — NEW `src/features/admin/components/topic-panel.tsx` + `topic-panel.module.css`: loading / error / empty / list states; "Add Topic" button
-- [ ] **B6** — NEW `src/features/admin/components/topic-row.tsx` + `topic-row.module.css`: inline rename + status badge + toggle button + delete icon
-- [ ] **B7** — NEW `src/features/admin/components/rename-topic-inline.tsx` + `.module.css`: click-to-edit inline rename (pattern: copy `rename-node-inline.tsx`)
-- [ ] **B8** — NEW `src/features/admin/components/add-topic-modal.tsx`: `useFocusTrap`, `title` field, submit → `createTopic` (pattern: mirror `AddNodeModal`)
-- [ ] **B9** — NEW `src/features/admin/components/delete-topic-dialog.tsx`: confirm + 409 reason display (pattern: mirror `DeleteNodeDialog`)
-- [ ] **B10** — Tests for B2 (API), B3 (hook), B5–B9 (components); maintain 100% coverage
+- [ ] **B1** — `add-board-modal.tsx`: add "Description" text field (optional); hardcode `path_type: "structured"` in submit; update `CreateBoardInput` + `AddBoardFormSchema` in `admin.types.ts`; update `createBoard()` in `admin-api.ts` to send `{ name, path_type: "structured", description }`. Title → "Add new board", subtitle per prototype.
+- [ ] **B2** — `add-node-modal.tsx`: replace free-text "Type" input with chip selector grid. 9 chips: course, chapter, module, section, unit, week, skill (regular), grade, subject (reserved 🔒 yellow). Default selection: `chapter`. Accept `siblingTypes` prop; disable reserved types already used at same level. New CSS module `add-node-modal.module.css`. Update `AddNodeFormSchema` to `z.enum([...9 values])`. Add `NODE_TYPES` + `RESERVED_NODE_TYPES` constants in `admin.types.ts`. Thread `siblingTypes` from `node-tree.tsx` / `node-tree-row.tsx`.
+- [ ] **B3** — Rich dashboard: add `getBoardStats()` API call, `BoardStats`/`AdminDashboardStats` types, `useBoardStats()` hook. Rewrite `admin-dashboard.tsx`: Platform Overview (4 stat cards), rich board cards (emoji, name, stats subtitle, Live badge, Manage button). New CSS module `admin-dashboard.module.css`. Remove "Manage Boards →" link.
+- [ ] **B4** — Inline description edit on dashboard board cards: click-to-edit, `PATCH /api/categories/{id}` with `{ description }`. Add `updateBoardDescription()` API + `useUpdateBoardDescription()` mutation. Pattern: copy `RenameNodeInline`.
+- [ ] **B5** — Tests for B1 (modal payload fix), B2 (chip grid, reserved types, sibling filtering), B3 (stats rendering), B4 (inline edit); maintain 100% coverage.
 
 ---
 
@@ -48,20 +37,22 @@ Run these before marking the phase complete.
 
 ### Backend
 - [ ] `pytest` exits 0 with 100% coverage
-- [ ] `PATCH /api/topics/{id}` returns 404 for non-platform-owned topic (oracle protection)
-- [ ] `PATCH /api/topics/{id}` returns 422 for empty `title`
-- [ ] `DELETE /api/topics/{id}` cascades `topic_contents` correctly and returns 204
-- [ ] Student `GET /api/topics/{node_id}` does NOT return `status = 'draft'` topics (BR-STU-003)
-- [ ] `DELETE /api/course-path-nodes/{id}` returns 409 with `"Cannot delete: this node has live topics."` when applicable
+- [ ] `NodeType` enum has 9 values (grade, subject, course, chapter, module, section, unit, week, skill)
+- [ ] `POST /api/course-path-nodes` with `node_type: "chapter"` → 201
+- [ ] `POST /api/course-path-nodes` with `node_type: "skill"` → 201
+- [ ] `GET /api/admin/board-stats` returns correct aggregates
+- [ ] `GET /api/admin/board-stats` as non-admin → 403
+- [ ] V25 migration adds enum values without errors
 
 ### Frontend
 - [ ] `pnpm test` exits 0 with 100% coverage
-- [ ] Selecting a node in `/admin/boards` renders the topic list (or empty state)
-- [ ] "Add Topic" modal creates a topic; it appears in the list immediately
-- [ ] Inline rename updates the topic title; empty input does not submit
-- [ ] Status toggle changes the badge colour and calls `PATCH /api/topics/{id}`
-- [ ] Delete removes the topic; 409 response shows reason message
-- [ ] Node-delete shows "Cannot delete: this node has live topics." when backend returns 409 with that detail
+- [ ] "+ Add board" creates a board successfully (no 422)
+- [ ] Board appears on dashboard with stats (or "0 live topics · 0 drafts")
+- [ ] Platform Overview shows correct aggregate numbers
+- [ ] Add Node modal shows chip grid; grade/subject have 🔒 icon
+- [ ] Already-used reserved types at same level are disabled
+- [ ] Dashboard description inline edit saves via PATCH
+- [ ] "Manage" button navigates to `/admin/boards?board={id}`
 
 ---
 
@@ -76,6 +67,6 @@ Run these before marking the phase complete.
 - Full step-by-step detail: `Implementation_planning/PLAN.md`
 - Critical rules (CSRF, role header, oracle protection, imperative mapping): `CLAUDE.md`
 - Visual spec: open `target/prototypes/haisir_admin_flow.html` in a browser — it is the authoritative layout reference
-- UI colour tokens: `--draft-grey: #6B7280`, `--home-study-green: #1D9E75` (from `target/requirements/ui-mapping/ui_parent_institution_admin.md`)
-- Backend pattern files: `src/api/routes/course_path_node.py` (PATCH/DELETE handlers)
-- Frontend pattern files: `rename-node-inline.tsx`, `delete-node-dialog.tsx`, `add-node-modal.tsx`, `use-node-tree.ts`
+- Backend pattern files: `src/api/routes/category.py` (category CRUD), `src/api/routes/course_path_node.py` (node CRUD + guards)
+- Frontend pattern files: `src/features/admin/components/rename-node-inline.tsx` (inline edit pattern), `src/features/admin/components/node-type-chip.tsx` (reserved type logic)
+- Alembic note: `ALTER TYPE ... ADD VALUE` cannot run inside a transaction. Use `autocommit` or `connection.execution_options(isolation_level="AUTOCOMMIT")`.

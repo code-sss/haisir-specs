@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | d8713ad (Phase 1c-pre + skill updates, 2026-04-06) |
-| haisir-frontend | c7084e5 (dep upgrades + minor test/config fixes, 2026-04-06) |
+| haisir-backend | 78a5490 (feat: admin topic PATCH/DELETE + live-topic guard on node delete, 2026-04-06) |
+| haisir-frontend | 8b349e5 (feat: admin topic management UI, 2026-04-06) |
 | haisir-deploy | b814471 (skill updates, 2026-04-06) |
 
-> Next session: run `git diff d8713ad..HEAD` in haisir-backend and `git diff c7084e5..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff 78a5490..HEAD` in haisir-backend and `git diff 8b349e5..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
@@ -100,7 +100,7 @@
 - `title` (String)
 - `course_path_node_id` (UUID, FK → course_path_nodes)
 - `order` (Integer, nullable)
-- `status` (String, default "live")
+- `status` (String, default "live") — **now exposed in `TopicRead` responses** (column pre-existed; previously omitted from response schema; exposed as of commit 78a5490)
 - `owner_type` (String, default "platform")
 - `owner_id` (String, nullable) — parent's `idp_sub` for parent-owned topics, NULL for platform topics
 

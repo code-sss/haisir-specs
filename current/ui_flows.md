@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | d8713ad (Phase 1c-pre + skill updates, 2026-04-06) |
-| haisir-frontend | c7084e5 (dep upgrades + minor test/config fixes, 2026-04-06) |
+| haisir-backend | 78a5490 (feat: admin topic PATCH/DELETE + live-topic guard on node delete, 2026-04-06) |
+| haisir-frontend | 8b349e5 (feat: admin topic management UI, 2026-04-06) |
 | haisir-deploy | b814471 (skill updates, 2026-04-06) |
 
-> Next session: run `git diff c7084e5..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff 8b349e5..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
@@ -119,9 +119,19 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 - Screen: `/admin/boards` — AdminBoardsPage. Three-panel layout:
   1. **BoardSelectorStrip** — 60px vertical dark strip (`#080F17`), each board = 40×40px emoji icon button cycling 📗📘📙, active board highlighted; "+" add button pinned at bottom. Board change resets the selected node. `?board=` query param is validated against `/^[\w-]+$/`; invalid values are silently ignored.
   2. **NodeTree** — hierarchical tree of nodes for the active board, fetched via `GET /api/course-path-nodes/tree/{categoryId}`. Each row (NodeTreeRow) shows a NodeTypeChip (grade / subject / course), an inline rename field (RenameNodeInline), and an expand/collapse toggle for children. Selected node is highlighted; click sets the active node in component state. Panel is resizable (240px default, 160–500px) via a drag handle on its right edge; node labels render at 14px with `title={node.name}` tooltip on overflow.
-  3. **NodeDetailPanel** — shown when a node is selected. Currently displays a "Select a node to view its topics" empty state (topics/content panel is Phase 1c). Contains the "Add Node" button to open AddNodeModal.
-  - API: `GET /api/course-path-nodes/tree/{categoryId}`, `POST /api/course-path-nodes`, `PATCH /api/course-path-nodes/{id}`, `DELETE /api/course-path-nodes/{id}`, `POST /api/categories`
+  3. **NodeDetailPanel** — shown when a node is selected. Renders a live **TopicPanel** for the selected node. The panel header shows `node_type` and `owner_type` beneath the node name chip.
+  - API: `GET /api/course-path-nodes/tree/{categoryId}`, `POST /api/course-path-nodes`, `PATCH /api/course-path-nodes/{id}`, `DELETE /api/course-path-nodes/{id}`, `POST /api/categories`, `GET /api/topics/{nodeId}`, `POST /api/topics/`, `PATCH /api/topics/{id}`, `DELETE /api/topics/{id}`
   - Layout wrapper: `AdminProviders` (in `src/app/admin/layout.tsx`) wraps all `/admin` routes; `src/app/admin/error.tsx` is the error boundary.
+
+- Panel: **TopicPanel** — fetches topics for the selected node via `GET /api/topics/{nodeId}`; shows loading spinner, error state, topic list (one TopicRow per topic), and an "+ Add topic" button.
+
+- Row: **TopicRow** — individual topic card with: inline rename (click title → RenameTopicInline), draft/live status toggle ("Set live" / "Set draft" button calling `PATCH /api/topics/{id}`), and a delete (×) button opening DeleteTopicDialog.
+
+- Inline: **RenameTopicInline** — controlled text input; Enter or blur saves (calls `PATCH /api/topics/{id}` with `{title}`), Escape cancels.
+
+- Modal: **AddTopicModal** — triggered by "+ Add topic". Fields: `title` (required, React Hook Form + Zod). Submits `POST /api/topics/` with `{title, course_path_node_id}`.
+
+- Dialog: **DeleteTopicDialog** — confirmation modal for topic deletion. Calls `DELETE /api/topics/{id}`; handles 409 (`AdminDeleteBlockedError`) by showing a dismissal state with the backend `detail` message directly.
 
 - Modal: **AddNodeModal** — triggered from NodeDetailPanel. Fields: `name` (required), `node_type` (grade/subject/course, required), `parent_id` (auto-sets to selected node's id). `owner_type` is hardcoded to `"platform"` (not user-editable). Submits `POST /api/course-path-nodes` with `order` field (aligned in Phase 1c-pre).
 

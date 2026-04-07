@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | d8713ad (Phase 1c-pre + skill updates, 2026-04-06) |
-| haisir-frontend | c7084e5 (dep upgrades + minor test/config fixes, 2026-04-06) |
+| haisir-backend | 78a5490 (feat: admin topic PATCH/DELETE + live-topic guard on node delete, 2026-04-06) |
+| haisir-frontend | 8b349e5 (feat: admin topic management UI, 2026-04-06) |
 | haisir-deploy | b814471 (skill updates, 2026-04-06) |
 
-> Next session: run `git diff d8713ad..HEAD` in haisir-backend and `git diff c7084e5..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff 78a5490..HEAD` in haisir-backend and `git diff 8b349e5..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
@@ -159,7 +159,7 @@
 - Purpose: Hard-delete a platform-owned node and its entire subtree
 - Auth: admin only
 - Response: 204 No Content
-- Errors: 404 if not found or not platform-owned; 409 if any subtree node has a `pending` or `ongoing` exam session
+- Errors: 404 if not found or not platform-owned; **409 if any topic in the subtree has `status = 'live'` (checked first, via recursive CTE)**; 409 if any subtree node has a `pending` or `ongoing` exam session
 - Note: 12-step cascade in a single transaction: `exam_session_questions` → `exam_sessions` → `exam_template_questions` → `exam_templates` → `assessment_answers` → `assessment_attempts` → `assessments` → `topic_contents` → `topics` → `course_path_nodes`.
 
 ---
@@ -177,6 +177,19 @@
 - Auth: admin (admin outside current increment)
 - Request: title, course_path_node_id, order?
 - Response: topic object
+
+### PATCH /api/topics/{topic_id}
+- Purpose: Partial-update a platform-owned topic's title, order, and/or status
+- Auth: admin only (CSRF required)
+- Request: `{ title?: string (min 1), order?: int, status?: "draft" | "live" }`
+- Response: updated `TopicRead` (id, title, course_path_node_id, order, status, owner_type)
+- Errors: 404 if not found or `owner_type != 'platform'` (indistinguishable — oracle protection); 400 if title is empty string; no-op early return if all fields are null
+
+### DELETE /api/topics/{topic_id}
+- Purpose: Hard-delete a platform-owned topic and all FK-dependent rows
+- Auth: admin only (CSRF required)
+- Response: 204 No Content
+- Errors: 404 if not found or not platform-owned; cascade order: `assessment_answers` → `assessment_attempts` → `assessments` → `topic_contents` → `topics`
 
 ---
 
