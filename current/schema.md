@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 78a5490 (feat: admin topic PATCH/DELETE + live-topic guard on node delete, 2026-04-06) |
-| haisir-frontend | 8b349e5 (feat: admin topic management UI, 2026-04-06) |
+| haisir-backend | 819893c (fix(auth,api): resolve SonarQube code quality issues, 2026-04-09) |
+| haisir-frontend | dec3ab8 (fix(admin): resolve 3 remaining SonarQube issues, 2026-04-09) |
 | haisir-deploy | b814471 (skill updates, 2026-04-06) |
 
-> Next session: run `git diff 78a5490..HEAD` in haisir-backend and `git diff 8b349e5..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff 819893c..HEAD` in haisir-backend and `git diff dec3ab8..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
@@ -17,6 +17,7 @@
 |---|---|
 | V23_visibility_enforcement | Alters `course_path_nodes.owner_id` and `topics.owner_id` from Integer → String; adds `exam_templates.owner_id` (String, nullable); adds `parent_child_links.revoked_at` (DateTime TZ, nullable) |
 | V24_add_visibility_indexes | Adds covering index `ix_parent_child_links_child_sub_revoked` on `(child_sub, revoked_at) INCLUDE (parent_sub)` for BR-DATA-003 subquery performance |
+| V25_expand_nodetype_enum | Adds 6 new values to the `nodetype` PostgreSQL enum: `chapter`, `module`, `section`, `unit`, `week`, `skill`. Uses `ALTER TYPE nodetype ADD VALUE IF NOT EXISTS` (run outside transaction). No downgrade path — PostgreSQL does not support removing enum values. |
 
 ---
 
@@ -80,13 +81,13 @@
 ## categories
 - `id` (UUID, PK)
 - `name` (String)
-- `path_type` (Enum: structured | flexible)
+- `path_type` (Enum: structured | flexible) — defaults to `structured` on create
 - `description` (String, nullable)
 
 ## course_path_nodes
 - `id` (UUID, PK)
 - `name` (String)
-- `node_type` (Enum: grade | subject | course) — fixed enum, not a free string yet
+- `node_type` (Enum: grade | subject | course | chapter | module | section | unit | week | skill) — 9 values as of V25. `grade` and `subject` are reserved types (🔒); `course`, `chapter`, `module`, `section`, `unit`, `week`, `skill` are regular. Creation enforces: (A) ancestor-type exclusion — new node type must not appear in any ancestor; (B) sibling-type consistency — all platform-owned siblings share the same type. Both violations return 409.
 - `category_id` (UUID, FK → categories)
 - `parent_id` (UUID, FK → course_path_nodes, nullable) — self-referential tree
 - `order` (Integer, nullable)
@@ -100,7 +101,7 @@
 - `title` (String)
 - `course_path_node_id` (UUID, FK → course_path_nodes)
 - `order` (Integer, nullable)
-- `status` (String, default "live") — **now exposed in `TopicRead` responses** (column pre-existed; previously omitted from response schema; exposed as of commit 78a5490)
+- `status` (String, default "live") — **exposed in `TopicRead` responses** (column pre-existed; exposed as of commit 78a5490); required in `TopicCreate` (no default at API boundary — caller must pass `"draft"` or `"live"`).
 - `owner_type` (String, default "platform")
 - `owner_id` (String, nullable) — parent's `idp_sub` for parent-owned topics, NULL for platform topics
 
@@ -224,3 +225,18 @@
 - `user_answer` (String, nullable)
 - `is_correct` (Boolean, nullable)
 - `earned_points` (Float, nullable)
+
+---
+
+## Read-only projections (not DB tables)
+
+### BoardStatRow
+> In-memory projection returned by `GET /api/admin/board-stats`. Not a table.
+
+- `id` (UUID) — category id
+- `name` (String) — category name
+- `live_topics` (int) — count of platform-owned topics with `status = 'live'`
+- `draft_topics` (int) — count of platform-owned topics with `status = 'draft'`
+- `total_topics` (int) — `live_topics + draft_topics`
+
+Query: single LEFT JOIN `categories → course_path_nodes (owner_type='platform') → topics (owner_type='platform')`, grouped by `categories.id`. Categories with zero nodes/topics return zero counts.

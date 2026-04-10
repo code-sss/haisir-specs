@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 78a5490 (feat: admin topic PATCH/DELETE + live-topic guard on node delete, 2026-04-06) |
-| haisir-frontend | 8b349e5 (feat: admin topic management UI, 2026-04-06) |
+| haisir-backend | 819893c (fix(auth,api): resolve SonarQube code quality issues, 2026-04-09) |
+| haisir-frontend | dec3ab8 (fix(admin): resolve 3 remaining SonarQube issues, 2026-04-09) |
 | haisir-deploy | b814471 (skill updates, 2026-04-06) |
 
-> Next session: run `git diff 8b349e5..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff dec3ab8..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
@@ -113,13 +113,13 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 
 **Shell layout** — All `/admin` routes render inside `AdminShell`: topbar + flex-row(`AdminSidenav` | `main`). `AdminSidenav` is a resizable dark sidebar (190px default, 140–300px range) with 2 nav items (🏠 Dashboard → `/admin`, 📚 Board content → `/admin/boards`) and a drag handle on its right edge. Active item highlighted via `usePathname()`.
 
-- Screen: `/admin` — AdminDashboard. Lists all boards via `GET /api/categories`. Each board renders as a card with a "Manage Boards →" link to `/admin/boards?board={id}`. Shows an error alert on fetch failure (`isError` state). No empty state message defined yet.
-  - API: `GET /api/categories`
+- Screen: `/admin` — AdminDashboard. **Platform Overview** — 4 stat cards (Platform boards / Live topics / Draft topics / Total topics) fetched from `GET /api/admin/board-stats`. Stat cards use colour-coded left borders (blue / green / amber / gray). If the stats endpoint is unavailable, an alert is shown and cards display “—”. **Boards section** — header with "+ Add board" button (opens AddBoardModal directly from dashboard). Each board renders as a rich card: emoji icon (cycling 📗📘📙…), board name, "{live} live topics · {draft} drafts" subtitle, unconditional "Live" green badge, "Manage" link to `/admin/boards?board={id}`. Click-to-edit board description: click shows inline textarea, Enter/blur calls `PATCH /api/categories/{id}` with `{ description }`, Escape cancels. Empty state: "No boards yet." with the "+ Add board" button still visible.
+  - API: `GET /api/categories`, `GET /api/admin/board-stats`, `POST /api/categories`, `PATCH /api/categories/{id}`
 
 - Screen: `/admin/boards` — AdminBoardsPage. Three-panel layout:
-  1. **BoardSelectorStrip** — 60px vertical dark strip (`#080F17`), each board = 40×40px emoji icon button cycling 📗📘📙, active board highlighted; "+" add button pinned at bottom. Board change resets the selected node. `?board=` query param is validated against `/^[\w-]+$/`; invalid values are silently ignored.
-  2. **NodeTree** — hierarchical tree of nodes for the active board, fetched via `GET /api/course-path-nodes/tree/{categoryId}`. Each row (NodeTreeRow) shows a NodeTypeChip (grade / subject / course), an inline rename field (RenameNodeInline), and an expand/collapse toggle for children. Selected node is highlighted; click sets the active node in component state. Panel is resizable (240px default, 160–500px) via a drag handle on its right edge; node labels render at 14px with `title={node.name}` tooltip on overflow.
-  3. **NodeDetailPanel** — shown when a node is selected. Renders a live **TopicPanel** for the selected node. The panel header shows `node_type` and `owner_type` beneath the node name chip.
+  1. **BoardSelectorStrip** — 60px vertical dark strip (`#080F17`), rendered as semantic `<ul>/<li>`. Each board = 40×40px emoji icon `<button>` cycling 📗📘📙, active board highlighted; "+ Add board" `<li>` pinned at bottom. Board change resets the selected node. `?board=` query param validated against `/^[\w-]+$/`; invalid values silently ignored.
+  2. **NodeTree** — hierarchical tree of nodes for the active board, fetched via `GET /api/course-path-nodes/tree/{categoryId}`. Tree rebuilt client-side via `buildNestedTree()` (handles both flat and nested API shapes). Each row (`NodeTreeRow`) shows: expand/collapse toggle (disabled for leaf nodes), node name + `NodeTypeChip`, inline actions (+ add child, ✎ rename, × delete) hidden when node has topics. Topics displayed inline as `TopicTreeRows` below their node (live/draft coloured dot + title) — always visible for leaf nodes, visible when expanded for branch nodes. Panel resizable (240px default, 160–500px). `ancestorTypes` passed down the tree for hierarchy enforcement.
+  3. **NodeDetailPanel** — shown when a node is selected. **Conditionally renders** based on node type: reserved types (`grade`, `subject`) → `ChildNodesPanel`; non-reserved types → `TopicPanel`. Header shows breadcrumb path, node name chip, and "Type: X · Owner: platform" meta line.
   - API: `GET /api/course-path-nodes/tree/{categoryId}`, `POST /api/course-path-nodes`, `PATCH /api/course-path-nodes/{id}`, `DELETE /api/course-path-nodes/{id}`, `POST /api/categories`, `GET /api/topics/{nodeId}`, `POST /api/topics/`, `PATCH /api/topics/{id}`, `DELETE /api/topics/{id}`
   - Layout wrapper: `AdminProviders` (in `src/app/admin/layout.tsx`) wraps all `/admin` routes; `src/app/admin/error.tsx` is the error boundary.
 
@@ -133,9 +133,15 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 
 - Dialog: **DeleteTopicDialog** — confirmation modal for topic deletion. Calls `DELETE /api/topics/{id}`; handles 409 (`AdminDeleteBlockedError`) by showing a dismissal state with the backend `detail` message directly.
 
-- Modal: **AddNodeModal** — triggered from NodeDetailPanel. Fields: `name` (required), `node_type` (grade/subject/course, required), `parent_id` (auto-sets to selected node's id). `owner_type` is hardcoded to `"platform"` (not user-editable). Submits `POST /api/course-path-nodes` with `order` field (aligned in Phase 1c-pre).
+- Modal: **AddNodeModal** — triggered from NodeDetailPanel or NodeTreeRow. Fields: `name` (required, label "Node label", placeholder "e.g. Grade 8, Algebra, Chapter 3…"), `node_type` (chip selector grid, required). **9 chips**: course, chapter, module, section, unit, week, skill (regular — neutral chips), grade, subject (reserved — 🔒 amber chips). Hierarchy enforcement via `isTypeDisabled(type, ancestorTypes)`: root-level → only `grade` enabled; under a single `grade` → only `subject` enabled; deeper → any type not in ancestor chain. Default selection = first enabled type. Modal title: "Add top-level node" or "Add child node" ("Under: {parentNodeName}" subtitle). `owner_type` hardcoded to `"platform"` (not user-editable). Submits `POST /api/course-path-nodes`.
 
-- Modal: **AddBoardModal** — triggered from BoardSelectorStrip. Fields: `name` (required), `path_type` (required), `description` (optional). Submits `POST /api/categories`.
+- Modal: **AddBoardModal** — triggered from BoardSelectorStrip and Admin Dashboard header. Fields: `name` (required), `description` (optional textarea, placeholder "e.g. Calgary Board of Education"). `path_type` hardcoded to `"structured"` (not shown to user). Submits `POST /api/categories`.
+
+- Panel: **ChildNodesPanel** — shown in NodeDetailPanel when a reserved-type node (`grade` or `subject`) is selected. Lists direct child nodes as cards showing: 🔒 lock icon (if child is also reserved), child name, topic count (via `useTopics`), and `NodeTypeChip`. Empty state: "No child nodes yet."
+
+- Rows: **TopicTreeRows** — inline topic display within NodeTree rows. Renders for non-reserved node types only (`isReservedType` guard). Each topic shown as a tree row with a coloured dot (green = live, gray = draft) and title. Leaf nodes always show topics; branch nodes show topics only when expanded.
+
+- Domain: **admin-node-domain.ts** — pure functions (no React/Next imports): `isReservedType`, `isTypeDisabled` (hierarchy enforcement), `findNodeById`, `buildBreadcrumb`, `sortNodesByPosition`, `buildNestedTree` (handles both flat and pre-nested API shapes).
 
 - Inline: **RenameNodeInline** — double-click on a node name activates an inline text input. On blur or Enter: submits `PATCH /api/course-path-nodes/{id}` with `{name}` only. Escape cancels without saving.
 

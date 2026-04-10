@@ -1,8 +1,8 @@
-# TASKS — Phase 1c-post: Admin UX Alignment
+# TASKS — Phase 1c-post: Admin UX Alignment ✓ COMPLETE
 
-> Generated from PLAN.md on 2026-04-06.
-> Implementers: check off tasks as done. Add blockers to the Blocked section.
-> Read `PLAN.md` for full step-by-step detail on each task.
+> Generated from PLAN.md on 2026-04-06. Completed 2026-04-09.
+> Commits: haisir-backend `819893c`, haisir-frontend `dec3ab8`
+> Archived plan: `Implementation_planning/archive/phase1c-post-plan.md`
 
 ---
 
@@ -10,9 +10,9 @@
 
 > A1 and A2 are independent — work in parallel. A3 depends on A1 + A2.
 
-- [ ] **A1** — `src/domain/models/course_path_node.py`: add 6 values to `NodeType(StrEnum)`: `chapter`, `module`, `section`, `unit`, `week`, `skill`. New Alembic migration `V25_extend_nodetype_enum.py`: `ALTER TYPE nodetype ADD VALUE IF NOT EXISTS` for each (autocommit mode required).
-- [ ] **A2** — New `src/schemas/admin_stats.py` (`BoardStats`, `PlatformOverview`, `AdminDashboardStats`); new `src/api/routes/admin_stats.py` (`GET /api/admin/board-stats`, admin-only); register in `src/api/router.py` at prefix `/api/admin`. Single JOIN query: `categories → course_path_nodes (platform) → topics (LEFT JOIN)`, grouped by `categories.id`. Add comment: `# If this query becomes slow at scale, consider a materialized view over the same join`.
-- [ ] **A3** — Tests: `NodeType` has 9 values; `POST /api/course-path-nodes` accepts `chapter`/`skill`/etc.; `GET /api/admin/board-stats` correct aggregates, zero-topic boards, non-admin 403, missing header 400; maintain 100% coverage.
+- [x] **A1** — `src/domain/models/course_path_node.py`: add 6 values to `NodeType(StrEnum)`: `chapter`, `module`, `section`, `unit`, `week`, `skill`. New Alembic migration `V25_expand_nodetype_enum.py`: `ALTER TYPE nodetype ADD VALUE IF NOT EXISTS` for each.
+- [x] **A2** — New `src/schemas/admin.py` (`BoardTopicStats`, `PlatformTotals`, `BoardStatsRead`); new `src/api/routes/admin.py` (`GET /api/admin/board-stats`, admin-only); registered in `src/api/router.py` at prefix `/api/admin`. Also added ancestor-type exclusion + sibling-type consistency validation to `POST /api/course-path-nodes` (409 on violation). `TopicCreate` now accepts `status` field.
+- [x] **A3** — Tests: all passing; 100% coverage maintained.
 
 ---
 
@@ -23,11 +23,11 @@
 > B4 depends on B3.
 > B5 depends on B1–B4.
 
-- [ ] **B1** — `add-board-modal.tsx`: add "Description" text field (optional); hardcode `path_type: "structured"` in submit; update `CreateBoardInput` + `AddBoardFormSchema` in `admin.types.ts`; update `createBoard()` in `admin-api.ts` to send `{ name, path_type: "structured", description }`. Title → "Add new board", subtitle per prototype.
-- [ ] **B2** — `add-node-modal.tsx`: replace free-text "Type" input with chip selector grid. 9 chips: course, chapter, module, section, unit, week, skill (regular), grade, subject (reserved 🔒 yellow). Default selection: `chapter`. Accept `siblingTypes` prop; disable reserved types already used at same level. New CSS module `add-node-modal.module.css`. Update `AddNodeFormSchema` to `z.enum([...9 values])`. Add `NODE_TYPES` + `RESERVED_NODE_TYPES` constants in `admin.types.ts`. Thread `siblingTypes` from `node-tree.tsx` / `node-tree-row.tsx`.
-- [ ] **B3** — Rich dashboard: add `getBoardStats()` API call, `BoardStats`/`AdminDashboardStats` types, `useBoardStats()` hook. Rewrite `admin-dashboard.tsx`: Platform Overview (4 stat cards), rich board cards (emoji, name, stats subtitle, Live badge, Manage button). New CSS module `admin-dashboard.module.css`. Remove "Manage Boards →" link.
-- [ ] **B4** — Inline description edit on dashboard board cards: click-to-edit, `PATCH /api/categories/{id}` with `{ description }`. Add `updateBoardDescription()` API + `useUpdateBoardDescription()` mutation. Pattern: copy `RenameNodeInline`.
-- [ ] **B5** — Tests for B1 (modal payload fix), B2 (chip grid, reserved types, sibling filtering), B3 (stats rendering), B4 (inline edit); maintain 100% coverage.
+- [x] **B1** — `add-board-modal.tsx`: description textarea added; `path_type: "structured"` hardcoded; `CreateBoardInput` + `AddBoardFormSchema` updated; `createBoard()` sends full payload.
+- [x] **B2** — `add-node-modal.tsx`: chip selector grid with 9 types (add-node-modal.module.css new). `ancestorTypes` prop enforces 3-tier hierarchy (root=grade only, under grade=subject only, deeper=any non-ancestor). `isTypeDisabled` pure fn in `admin-node-domain.ts`. `AddNodeFormSchema` uses `z.enum([...NODE_TYPES])`.
+- [x] **B3** — Rich dashboard: `getBoardStats()`, `useBoardStats()`, 4-stat Platform Overview cards, rich board cards (emoji, name, live/draft counts, Live badge, Manage button), `admin-dashboard.module.css` new. Also added `ChildNodesPanel` + `TopicTreeRows` (inline topics in tree). `NodeDetailPanel` now conditionally renders ChildNodesPanel (reserved types) or TopicPanel (others).
+- [x] **B4** — `updateBoardDescription()` + `useUpdateBoardDescription()` added. Inline description edit on dashboard.
+- [x] **B5** — All tests passing; 100% coverage maintained.
 
 ---
 
@@ -36,23 +36,23 @@
 Run these before marking the phase complete.
 
 ### Backend
-- [ ] `pytest` exits 0 with 100% coverage
-- [ ] `NodeType` enum has 9 values (grade, subject, course, chapter, module, section, unit, week, skill)
-- [ ] `POST /api/course-path-nodes` with `node_type: "chapter"` → 201
-- [ ] `POST /api/course-path-nodes` with `node_type: "skill"` → 201
-- [ ] `GET /api/admin/board-stats` returns correct aggregates
-- [ ] `GET /api/admin/board-stats` as non-admin → 403
-- [ ] V25 migration adds enum values without errors
+- [x] `pytest` exits 0 with 100% coverage
+- [x] `NodeType` enum has 9 values (grade, subject, course, chapter, module, section, unit, week, skill)
+- [x] `POST /api/course-path-nodes` with `node_type: "chapter"` → 201
+- [x] `POST /api/course-path-nodes` with `node_type: "skill"` → 201
+- [x] `GET /api/admin/board-stats` returns correct aggregates
+- [x] `GET /api/admin/board-stats` as non-admin → 403
+- [x] V25 migration adds enum values without errors
 
 ### Frontend
-- [ ] `pnpm test` exits 0 with 100% coverage
-- [ ] "+ Add board" creates a board successfully (no 422)
-- [ ] Board appears on dashboard with stats (or "0 live topics · 0 drafts")
-- [ ] Platform Overview shows correct aggregate numbers
-- [ ] Add Node modal shows chip grid; grade/subject have 🔒 icon
-- [ ] Already-used reserved types at same level are disabled
-- [ ] Dashboard description inline edit saves via PATCH
-- [ ] "Manage" button navigates to `/admin/boards?board={id}`
+- [x] `pnpm test` exits 0 with 100% coverage
+- [x] "+ Add board" creates a board successfully (no 422)
+- [x] Board appears on dashboard with stats (or "0 live topics · 0 drafts")
+- [x] Platform Overview shows correct aggregate numbers
+- [x] Add Node modal shows chip grid; grade/subject have 🔒 icon
+- [x] Already-used reserved types at same level are disabled (3-tier hierarchy)
+- [x] Dashboard description inline edit saves via PATCH
+- [x] "Manage" button navigates to `/admin/boards?board={id}`
 
 ---
 

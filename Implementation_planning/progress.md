@@ -8,10 +8,10 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 
 ## Current State
 
-> Snapshot baseline: haisir-backend `78a5490` (admin topic PATCH/DELETE + live-topic guard, 2026-04-06), haisir-frontend `8b349e5` (admin topic management UI, 2026-04-06), haisir-deploy `b814471` (2026-04-06).
-> Next session: `git diff 78a5490..HEAD` in haisir-backend and `git diff 8b349e5..HEAD` in haisir-frontend instead of re-reading the full codebases.
+> Snapshot baseline: haisir-backend `819893c` (fix: SonarQube quality issues, 2026-04-09), haisir-frontend `dec3ab8` (fix: remaining SonarQube issues, 2026-04-09), haisir-deploy `b814471` (2026-04-06).
+> Next session: `git diff 819893c..HEAD` in haisir-backend and `git diff dec3ab8..HEAD` in haisir-frontend instead of re-reading the full codebases.
 
-Onboarding for Student and Parent is fully implemented end-to-end. The backend has 21 mapped tables: `user_metadata`, `student_profiles`, `teacher_profiles` (retained, instructor persona deferred), `parent_profiles`, `parent_link_codes`, `parent_child_links`, `class_invite_codes` (retained, class flow deferred), `categories`, a self-referential `course_path_nodes` tree, `topics`, `topic_contents`, `questions`, `paragraph_questions`, an orphaned `answers` table, deprecated `assessments`/`assessment_attempts`/`assessment_answers`, and the unified exam layer: `exam_templates`, `exam_template_questions`, `exam_sessions`, `exam_session_questions`. `owner_type`/`owner_id` columns exist on `course_path_nodes`, `topics`, and `exam_templates`; visibility filtering (BR-DATA-003, BR-SEC-005) is **fully enforced** on all GET endpoints. All error messages are sanitised (generic 403/500 detail strings; role context logged server-side only). Path traversal is hardened in file-serving routes. All route modules are wired with CSRF validation and role-based guards; `assign-role` calls the Keycloak Admin API and accepts only `student` or `parent`. **`X-Current-Role` is now strictly enforced** (BR-SEC-006): all role-gated endpoints return `400 "X-Current-Role header required"` when the header is absent; three onboarding endpoints (`GET /users/me`, `POST /users/me/assign-role`, `PATCH /users/me/onboarding-complete`) remain on the lenient dependency. The admin board content manager is fully built end-to-end including topic management: backend has `PATCH /api/topics/{id}` (rename / reorder / toggle draft-live), `DELETE /api/topics/{id}` (cascade delete), and an updated `DELETE /api/course-path-nodes/{id}` that now first checks for live topics in the subtree before checking for active exam sessions — the `status` field is also now exposed in all `TopicRead` responses. The admin UI (`/admin`, `/admin/boards`) now renders a live TopicPanel in the NodeDetailPanel with full per-topic inline rename, draft/live status toggle, "+ Add topic" modal (React Hook Form + Zod), and delete confirmation — replacing the previous Phase 1c placeholder. The admin shell layout is aligned to the prototype: a resizable 190px dark left sidenav (`AdminSidenav`), role-aware root redirect (`/` → `/admin` for admin, `/parent` for parent, `/home` for student/default), `AdminRouteGuard` blocking non-admin access with redirect to `/home`, a resizable 240px node-tree panel, a 60px vertical `BoardSelectorStrip` with emoji icons and "+" add button, and tree node labels at 14px with overflow tooltip — shared `useResize` drag-handle hook used for both panels (no external lib). The frontend (Next.js) also covers: full onboarding flow, course dashboard with hierarchical node navigation and inline PDF viewer, student exam-taking with timer and session resume, plus retained-but-deferred screens. The two-section student dashboard (Platform Board / Home Study split) is not yet built. **Not yet built:** two-section dashboard, parent dashboard and curriculum builder, link-code generation endpoint, admin topic-content management (uploading PDFs/videos to topics), pgvector/RAG pipeline.
+The platform admin board content manager is now fully aligned with the prototype. The AdminDashboard shows a 4-card Platform Overview (boards count, live topics, draft topics, total) sourced from `GET /api/admin/board-stats`, and per-board rich cards with emoji, live/draft topic counts, a "Live" badge, a "Manage" link, and click-to-edit inline description. The AddNodeModal uses a 9-type chip selector (course, chapter, module, section, unit, week, skill, grade 🔒, subject 🔒) with 3-tier hierarchy enforcement: root = grade only, under grade = subject only, deeper = any non-ancestor type; the backend validates both ancestor-type exclusion and sibling-type consistency (409 on violation). The NodeTree renders TopicTreeRows inline (live/draft dot + title) for non-reserved nodes; the NodeDetailPanel shows ChildNodesPanel (child cards with type chip + topic count) for reserved-type nodes and TopicPanel for all others. Topic creation defaults to `status: "draft"`. NodeType enum expanded to 9 values (V25 migration). All modals use native `<dialog>` elements. **Not yet built:** topic content upload (PDFs/videos to topics), two-section student dashboard, parent curriculum builder, link-code generation, admin sidenav Categories entry, board version display.
 
 ## Completed Phases
 
@@ -164,6 +164,36 @@ Onboarding for Student and Parent is fully implemented end-to-end. The backend h
 
 ---
 
+### Phase 1c-post — Admin UX Alignment ✓
+
+**Completed:** 2026-04-09
+**Commits:** haisir-backend `819893c`, haisir-frontend `dec3ab8`
+**Archived plan:** `Implementation_planning/archive/phase1c-post-plan.md`
+
+**What was done:**
+- V25 Alembic migration: expanded `nodetype` PostgreSQL enum from 3 → 9 values (added `chapter`, `module`, `section`, `unit`, `week`, `skill` via `ALTER TYPE nodetype ADD VALUE IF NOT EXISTS`)
+- `GET /api/admin/board-stats` — new admin-only endpoint; single LEFT JOIN query returning per-board `live_topics`/`draft_topics`/`total_topics` and platform-wide totals
+- `POST /api/course-path-nodes` — added two tree-structure invariants: (A) ancestor-type exclusion (new type must not appear in any ancestor), (B) sibling-type consistency (all platform-owned siblings share one type). Both violations return 409.
+- `POST /api/topics` / `TopicCreate` schema — `status: "draft" | "live"` is now a required field at API boundary (no silent default)
+- `CategoryCreate` schema — `path_type` defaults to `"structured"`
+- AdminDashboard rewritten: 4-stat Platform Overview cards (blue/green/amber/gray), rich per-board cards (emoji, live/draft counts, Live badge, Manage link, click-to-edit description)
+- `useBoardStats` + `useUpdateBoardDescription` hooks added
+- AddNodeModal: chip selector grid (9 types, 3-tier hierarchy enforcement via `isTypeDisabled`; reserved types show 🔒 amber chips; default = first enabled type)
+- NodeDetailPanel: conditionally renders `ChildNodesPanel` (for `grade`/`subject`) or `TopicPanel` (others)
+- `ChildNodesPanel`: child node cards with type chip + live topic count
+- `TopicTreeRows`: inline live/draft dot + title rows inside NodeTree for non-reserved nodes
+- `admin-node-domain.ts`: pure domain functions (`buildNestedTree`, `isTypeDisabled`, `buildBreadcrumb`, `findNodeById`, `sortNodesByPosition`)
+- All modals converted to native `<dialog>`; `BoardSelectorStrip` uses semantic `<ul>/<li>`; `AdminRouteGuard` spinner uses `<output>`
+- AddBoardModal: description textarea field added; `path_type` hardcoded to `"structured"`
+
+**Deviations from original plan:**
+- Schema/route files named `admin.py` (plan said `admin_stats.py`); response type names differ (`BoardTopicStats`/`PlatformTotals`/`BoardStatsRead` vs. plan's `BoardStats`/`PlatformOverview`/`AdminDashboardStats`)
+- Hierarchy enforcement is a 3-tier rule (root=grade only, under grade=subject only, deeper=any non-ancestor) rather than simple sibling-type disable
+- ChildNodesPanel and TopicTreeRows added (not in plan)
+- Native `<dialog>` + semantic HTML improvements throughout (SonarQube-driven, not planned)
+
+---
+
 ### Phase 1c — Admin Topics Management ✓
 
 **Completed:** 2026-04-06
@@ -189,6 +219,6 @@ Onboarding for Student and Parent is fully implemented end-to-end. The backend h
 ## Next Phase
 <!-- The agreed next concrete step. Updated after each /plan-next-state discussion. -->
 
-### Phase 1c-post — Admin UX Alignment
+### Phase 1d — Topic Content Upload
 
-Six UX gaps between the admin prototype and the current build, found during post-1c testing. Fixes: (1) Add Board modal sends `path_type` + `description` (was broken — 422), (2) inline description edit on dashboard (replaces legacy `/manage-categories`), (3) board version deferred (no schema), (4-5) Add Node modal chip selector with 9 enum types + sibling-type filtering for reserved types, (6) rich dashboard with Platform Overview stats + board cards with topic counts. Full task breakdown in `PLAN.md` and `TASKS.md`.
+PDF/video/text content management per topic. Admin selects a topic and can upload/attach content items (PDF, video link, text). Backend: `PATCH /api/topic-contents/{id}` and `DELETE /api/topic-contents/{id}` (create endpoint already exists). Frontend: topic content list in the NodeDetailPanel topic area, file upload modal or URL attach modal per content type. Full task breakdown: run `/plan` against `PLAN.md` (placeholder already seeded).

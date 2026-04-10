@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 78a5490 (feat: admin topic PATCH/DELETE + live-topic guard on node delete, 2026-04-06) |
-| haisir-frontend | 8b349e5 (feat: admin topic management UI, 2026-04-06) |
+| haisir-backend | 819893c (fix(auth,api): resolve SonarQube code quality issues, 2026-04-09) |
+| haisir-frontend | dec3ab8 (fix(admin): resolve 3 remaining SonarQube issues, 2026-04-09) |
 | haisir-deploy | b814471 (skill updates, 2026-04-06) |
 
-> Next session: run `git diff 78a5490..HEAD` in haisir-backend and `git diff 8b349e5..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff 819893c..HEAD` in haisir-backend and `git diff dec3ab8..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
@@ -135,6 +135,7 @@
 - Auth: admin (admin outside current increment)
 - Request: name, node_type, category_id, parent_id?, **order**? (field name is `order`, not `position`)
 - Response: node object
+- Errors: **409** if (A) the new node_type already appears in an ancestor node on the same branch (ancestor-type exclusion), or (B) existing platform-owned siblings at the same level use a different type (sibling-type consistency). Both checks run before INSERT.
 
 ### GET /api/course-path-nodes/path-to-root/{node_id}
 - Purpose: Get ancestor path from a node to the root
@@ -175,7 +176,7 @@
 ### POST /api/topics
 - Purpose: Create a topic
 - Auth: admin (admin outside current increment)
-- Request: title, course_path_node_id, order?
+- Request: title, course_path_node_id, **status** (`"draft"` | `"live"`, required), order?
 - Response: topic object
 
 ### PATCH /api/topics/{topic_id}
@@ -391,6 +392,16 @@
 ### GET /api/courses/enrolled
 - Purpose: Stub — returns None
 - Auth: student
+
+---
+
+## Admin
+
+### GET /api/admin/board-stats
+- Purpose: Return per-board topic statistics and platform-wide aggregate totals for the admin dashboard
+- Auth: admin only (CSRF not required — GET)
+- Response: `{ boards: [{ id, name, live_topics, draft_topics, total_topics }], platform_totals: { live_topics, draft_topics, total_topics } }`
+- Note: single LEFT JOIN query `categories → course_path_nodes (owner_type='platform') → topics (owner_type='platform')`, grouped by category. Categories with zero topics appear with zero counts. Frontend maps response to `AdminDashboardStats` shape (board_id/board_name aliases, overview.platform_boards = boards.length).
 
 ---
 

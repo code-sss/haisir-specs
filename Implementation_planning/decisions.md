@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-04-09 — Phase 1c-post: Admin UX Alignment (completion + deviations)
+
+- **Phase 1c-post is complete.** All six UX gaps listed in the plan are closed. Commits: haisir-backend `819893c`, haisir-frontend `dec3ab8`. Archived plan at `archive/phase1c-post-plan.md`. Next phase is 1d (topic content upload).
+- **"Custom node type" option rejected permanently.** The original audit listed a "custom / free-flow fallback" chip as a potential scope item. Decision: the 9-value fixed enum (`grade`, `subject`, `course`, `chapter`, `module`, `section`, `unit`, `week`, `skill`) is the complete and final set. No free-text escape hatch will be added. This removes ambiguity for admins and avoids DB enum proliferation.
+- **3-tier hierarchy instead of simple sibling filtering.** Plan specified disabling reserved types already used by siblings. Implementation went further: root-level nodes must be `grade`; immediate children of `grade` must be `subject`; deeper nodes may be any type not already in the ancestor chain. This maps to the standard curriculum hierarchy and is enforced both in `isTypeDisabled` (frontend) and in `create()` service validation (backend 409).
+- **`POST /api/course-path-nodes` returns 409 on hierarchy violations.** Two server-side checks added: (A) ancestor-type exclusion — the new node's type must not appear anywhere in the ancestor path; (B) sibling-type consistency — all platform-owned children of the same parent must share a single type. Both checks run before INSERT. TOCTOU window acknowledged but acceptable (admin-only, concurrent admin sessions not a realistic concern).
+- **`POST /api/topics` now requires `status`.** `TopicCreate` schema changed from having no `status` field to requiring `"draft" | "live"`. Frontend sends `"draft"` on all `AddTopicModal` submissions. This makes intent explicit and prevents ambiguous defaults at the API boundary.
+- **NodeDetailPanel is type-conditional.** Reserved-type nodes (`grade`, `subject`) cannot hold topics directly — they are structural containers. NodeDetailPanel now renders `ChildNodesPanel` for reserved types and `TopicPanel` for all others. This makes the UI structurally correct without needing backend enforcement.
+- **`admin-node-domain.ts` extracted as pure domain module.** Tree manipulation logic (`buildNestedTree`, `isTypeDisabled`, `buildBreadcrumb`, etc.) extracted from components into a pure functions file with no React/Next imports. Enables unit testing without React harness.
+- **Native `<dialog>` throughout.** All four admin modals (AddBoardModal, AddNodeModal, AddTopicModal, DeleteNodeDialog, DeleteTopicDialog) converted from `<div role="dialog" aria-modal="true">` to native `<dialog open>`. Fixes SonarQube accessibility issues and improves focus management semantics.
+- **Issue 2 (sidenav Categories) tracked as future scope.** Moving "Categories" from the avatar/profile menu to the `AdminSidenav` is new scope not covered by any existing phase. Recorded in PLAN.md backlog. Medium priority; frontend-only change, no backend work needed.
+- **Issue 3 + 6b (version display) remain deferred to Phase 2+.** No `version` column exists on `categories`. Requires Alembic migration + publish workflow + UI modal. Low priority. Recorded in PLAN.md backlog.
+
+---
+
 ## 2026-04-06 — Phase 1c-post: Admin UX Alignment
 
 - **Six UX gaps identified between prototype and built screens.** After hands-on testing of Phase 1c, six issues found: (1) Add Board modal sends incomplete payload (`name` only; backend requires `path_type` → 422), (2) category description editing buried on legacy `/manage-categories` page, (3) board version display deferred (no schema), (4) Add Node modal uses free-text for node type instead of chip selector, (5) no sibling-type filtering on reserved types, (6) dashboard shows bare board list instead of prototype's rich cards with stats.
