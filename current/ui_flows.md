@@ -4,10 +4,10 @@
 | Repo | Commit |
 |---|---|
 | haisir-backend | 819893c (fix(auth,api): resolve SonarQube code quality issues, 2026-04-09) |
-| haisir-frontend | dec3ab8 (fix(admin): resolve 3 remaining SonarQube issues, 2026-04-09) |
-| haisir-deploy | b814471 (skill updates, 2026-04-06) |
+| haisir-frontend | 82a69f1 (fix(admin): correct selectedNode conditional in AdminBoardsPage, 2026-04-17) |
+| haisir-deploy | 239f968 (fix(apisix): suppress Server header via nginx on all responses, 2026-04-17) |
 
-> Next session: run `git diff dec3ab8..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff 82a69f1..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 

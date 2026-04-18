@@ -1,33 +1,39 @@
-# TASKS — Phase 1c-post: Admin UX Alignment ✓ COMPLETE
+# TASKS — Phase 1d: Topic Content Upload
 
-> Generated from PLAN.md on 2026-04-06. Completed 2026-04-09.
-> Commits: haisir-backend `819893c`, haisir-frontend `dec3ab8`
-> Archived plan: `Implementation_planning/archive/phase1c-post-plan.md`
+> Generated from PLAN.md on 2026-04-17.
+> Commits: haisir-backend `819893c`, haisir-frontend `82a69f1`
 
 ---
 
 ## Ready now — Backend (`haisir-backend`)
 
-> A1 and A2 are independent — work in parallel. A3 depends on A1 + A2.
+> A1 and A2 are independent — work in parallel. A3 depends on A1 + A2. A4 depends on A3. A5 depends on A4.
 
-- [x] **A1** — `src/domain/models/course_path_node.py`: add 6 values to `NodeType(StrEnum)`: `chapter`, `module`, `section`, `unit`, `week`, `skill`. New Alembic migration `V25_expand_nodetype_enum.py`: `ALTER TYPE nodetype ADD VALUE IF NOT EXISTS` for each.
-- [x] **A2** — New `src/schemas/admin.py` (`BoardTopicStats`, `PlatformTotals`, `BoardStatsRead`); new `src/api/routes/admin.py` (`GET /api/admin/board-stats`, admin-only); registered in `src/api/router.py` at prefix `/api/admin`. Also added ancestor-type exclusion + sibling-type consistency validation to `POST /api/course-path-nodes` (409 on violation). `TopicCreate` now accepts `status` field.
-- [x] **A3** — Tests: all passing; 100% coverage maintained.
+- [ ] **A1** — `src/schemas/topic_content.py`: add `TopicContentUpdate(BaseModel)` with all-optional fields: `title`, `order`, `description`, `url`, `text`. No `content_type` — immutable after creation.
+- [ ] **A2** — `src/domain/repositories/topic_content_repository.py`: add two abstract methods: `update_platform_content(content_id, data: dict) -> TopicContent | None` and `delete_platform_content(content_id) -> bool`.
+- [ ] **A3** — `src/infrastructure/repositories/topic_content_repository.py`: implement the two abstract methods. Use a JOIN to the `topics` table (`topic_contents.topic_id = topics.id AND topics.owner_type = 'platform'`) for platform-oracle protection. Return `None`/`False` for both "not found" and "non-platform" cases (indistinguishable to caller).
+- [ ] **A4** — `src/domain/services/topic_content_service.py`: add `update_platform_content(content_id, data: TopicContentUpdate) -> TopicContent | None` and `delete_platform_content(content_id) -> bool`. Service strips None fields before delegating to repo.
+- [ ] **A5** — `src/api/routes/topic_content.py`: add `PATCH /api/topic-contents/{content_id}` (body: `TopicContentUpdate`, response: `TopicContentRead` 200 / 404) and `DELETE /api/topic-contents/{content_id}` (204 / 404). Both admin-only (`X-Current-Role: admin`), CSRF required. Follow existing POST handler pattern.
+- [ ] **A6** — Tests: PATCH/DELETE happy paths; 404 for non-platform + non-existent; 403 for non-admin + missing CSRF. Unit tests for infra repo + service. Maintain 100% coverage.
 
 ---
 
 ## Ready now — Frontend (`haisir-frontend`)
 
 > B1 and B2 are independent — start in parallel.
-> B3 depends on A2 (needs stats endpoint).
-> B4 depends on B3.
-> B5 depends on B1–B4.
+> B3 depends on B1 + B2.
+> B4, B5, B6 are independent of each other — work in parallel after B3.
+> B7 depends on B4 + B5 + B6.
+> B8 is test coverage — write alongside each task.
 
-- [x] **B1** — `add-board-modal.tsx`: description textarea added; `path_type: "structured"` hardcoded; `CreateBoardInput` + `AddBoardFormSchema` updated; `createBoard()` sends full payload.
-- [x] **B2** — `add-node-modal.tsx`: chip selector grid with 9 types (add-node-modal.module.css new). `ancestorTypes` prop enforces 3-tier hierarchy (root=grade only, under grade=subject only, deeper=any non-ancestor). `isTypeDisabled` pure fn in `admin-node-domain.ts`. `AddNodeFormSchema` uses `z.enum([...NODE_TYPES])`.
-- [x] **B3** — Rich dashboard: `getBoardStats()`, `useBoardStats()`, 4-stat Platform Overview cards, rich board cards (emoji, name, live/draft counts, Live badge, Manage button), `admin-dashboard.module.css` new. Also added `ChildNodesPanel` + `TopicTreeRows` (inline topics in tree). `NodeDetailPanel` now conditionally renders ChildNodesPanel (reserved types) or TopicPanel (others).
-- [x] **B4** — `updateBoardDescription()` + `useUpdateBoardDescription()` added. Inline description edit on dashboard.
-- [x] **B5** — All tests passing; 100% coverage maintained.
+- [ ] **B1** — `src/features/admin/types/admin.types.ts`: add `ContentType` union (`'video' | 'pdf' | 'text' | 'question' | 'question_answer'`), `TopicContent` interface, `CreateTopicContentInput`, `UpdateTopicContentInput`.
+- [ ] **B2** — `src/features/admin/api/admin-api.ts`: add `getTopicContents(topicId, csrfToken)`, `createTopicContent(input, csrfToken, refreshCSRF)`, `updateTopicContent(contentId, input, csrfToken, refreshCSRF)`, `deleteTopicContent(contentId, csrfToken, refreshCSRF)`. Mutations use `fetchWithCSRFRetry`.
+- [ ] **B3** — New `src/features/admin/hooks/use-topic-contents.ts`: `useTopicContents(topicId)` (query, disabled when null; key `["admin", "topic-contents", topicId]`), `useCreateTopicContent()`, `useUpdateTopicContent()`, `useDeleteTopicContent()` (mutations; all invalidate `["admin", "topic-contents", ...]`).
+- [ ] **B4** — New `src/features/admin/components/content-item-row.tsx` + `content-item-row.module.css`: renders one content item — type icon (🎬/📄/📝), title, optional description (truncated), order badge, edit button, delete button.
+- [ ] **B5** — New `src/features/admin/components/add-content-modal.tsx` + `add-content-modal.module.css`: native `<dialog>` modal; `mode: 'create' | 'edit'` + `initialValues?: TopicContent`; content type selector shows `video`/`pdf`/`text` only, disabled in edit mode; URL field for video/pdf, textarea for text; loading spinner on submit.
+- [ ] **B6** — New `src/features/admin/components/delete-content-dialog.tsx`: native `<dialog>` confirmation — "Delete '[title]'? This cannot be undone." Cancel + Confirm Delete (danger style); loading state on confirm.
+- [ ] **B7** — `src/features/admin/components/topic-row.tsx`: extend to show content section below topic header. Section: "Content" label + "Add Content" button, `ContentItemRow` list sorted by `order`, empty state. Wire `AddContentModal` (create/edit modes) and `DeleteContentDialog` via local state.
+- [ ] **B8** — Tests: `ContentItemRow` renders + callbacks; `AddContentModal` create/edit modes + submit; `DeleteContentDialog` cancel/confirm; `TopicRow` content section; `useTopicContents` hook. Maintain 100% coverage.
 
 ---
 
@@ -36,23 +42,24 @@
 Run these before marking the phase complete.
 
 ### Backend
-- [x] `pytest` exits 0 with 100% coverage
-- [x] `NodeType` enum has 9 values (grade, subject, course, chapter, module, section, unit, week, skill)
-- [x] `POST /api/course-path-nodes` with `node_type: "chapter"` → 201
-- [x] `POST /api/course-path-nodes` with `node_type: "skill"` → 201
-- [x] `GET /api/admin/board-stats` returns correct aggregates
-- [x] `GET /api/admin/board-stats` as non-admin → 403
-- [x] V25 migration adds enum values without errors
+- [ ] `pytest` exits 0 with 100% coverage
+- [ ] `POST /api/topic-contents/` still works (no regressions)
+- [ ] `PATCH /api/topic-contents/{id}` with valid admin + CSRF → 200 with updated fields
+- [ ] `PATCH /api/topic-contents/{id}` for non-platform topic → 404
+- [ ] `PATCH /api/topic-contents/{id}` as non-admin → 403
+- [ ] `DELETE /api/topic-contents/{id}` with valid admin + CSRF → 204
+- [ ] `DELETE /api/topic-contents/{id}` for non-platform topic → 404
+- [ ] `DELETE /api/topic-contents/{id}` as non-admin → 403
 
 ### Frontend
-- [x] `pnpm test` exits 0 with 100% coverage
-- [x] "+ Add board" creates a board successfully (no 422)
-- [x] Board appears on dashboard with stats (or "0 live topics · 0 drafts")
-- [x] Platform Overview shows correct aggregate numbers
-- [x] Add Node modal shows chip grid; grade/subject have 🔒 icon
-- [x] Already-used reserved types at same level are disabled (3-tier hierarchy)
-- [x] Dashboard description inline edit saves via PATCH
-- [x] "Manage" button navigates to `/admin/boards?board={id}`
+- [ ] `pnpm test` exits 0 with 100% coverage
+- [ ] Admin boards page: topic row shows content section when expanded
+- [ ] "No content yet — add some." empty state shown for topics with no content
+- [ ] "Add Content" button opens `AddContentModal` in create mode
+- [ ] Submit creates content item; item appears in list with correct icon
+- [ ] Edit button opens `AddContentModal` in edit mode, pre-filled; content type disabled
+- [ ] Delete button opens `DeleteContentDialog`; confirm removes item from list
+- [ ] Content type icons correct: 🎬 video, 📄 pdf, 📝 text
 
 ---
 
@@ -66,7 +73,8 @@ Run these before marking the phase complete.
 
 - Full step-by-step detail: `Implementation_planning/PLAN.md`
 - Critical rules (CSRF, role header, oracle protection, imperative mapping): `CLAUDE.md`
-- Visual spec: open `target/prototypes/haisir_admin_flow.html` in a browser — it is the authoritative layout reference
-- Backend pattern files: `src/api/routes/category.py` (category CRUD), `src/api/routes/course_path_node.py` (node CRUD + guards)
-- Frontend pattern files: `src/features/admin/components/rename-node-inline.tsx` (inline edit pattern), `src/features/admin/components/node-type-chip.tsx` (reserved type logic)
-- Alembic note: `ALTER TYPE ... ADD VALUE` cannot run inside a transaction. Use `autocommit` or `connection.execution_options(isolation_level="AUTOCOMMIT")`.
+- Visual spec: open `target/prototypes/haisir_admin_flow.html` in a browser — SA-boards section is the authoritative layout reference
+- Backend pattern files: `src/api/routes/topic.py` (platform-protected PATCH/DELETE), `src/infrastructure/repositories/topic_repository.py` (oracle JOIN pattern)
+- Frontend pattern files: `src/features/admin/components/add-board-modal.tsx` (native `<dialog>` pattern), `src/features/admin/hooks/use-topics.ts` (hook pattern)
+- **Binary file upload is OUT OF SCOPE** — admin provides URL/filename as plain text; actual binary upload deferred
+- **`content_type` is immutable** — omit from `TopicContentUpdate`; disable selector in edit modal
