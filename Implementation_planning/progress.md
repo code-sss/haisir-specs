@@ -8,8 +8,8 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 
 ## Current State
 
-> Snapshot baseline: haisir-backend `6dc7595` (fix: dependencies update, 2026-04-18), haisir-frontend `82a69f1` (fix: correct selectedNode conditional in AdminBoardsPage, 2026-04-17), haisir-deploy `239f968` (fix(apisix): suppress Server header via nginx, 2026-04-17).
-> Next session: `git diff 6dc7595..HEAD` in haisir-backend and `git diff 82a69f1..HEAD` in haisir-frontend instead of re-reading the full codebases.
+> Snapshot baseline: haisir-backend `6dc7595` (fix: dependencies update, 2026-04-18), haisir-frontend `43fa83d` (fix: reorder import for RESERVED_NODE_TYPES, 2026-04-18), haisir-deploy `239f968` (fix(apisix): suppress Server header via nginx, 2026-04-17).
+> Next session: `git diff 6dc7595..HEAD` in haisir-backend and `git diff 43fa83d..HEAD` in haisir-frontend instead of re-reading the full codebases.
 
 The platform admin board content manager is fully aligned with the prototype. The AdminDashboard shows a 4-card Platform Overview (boards count, live topics, draft topics, total) sourced from `GET /api/admin/board-stats`, and per-board rich cards with emoji, live/draft topic counts, a "Live" badge, a "Manage" link, and click-to-edit inline description. The AddNodeModal uses a 9-type chip selector (course, chapter, module, section, unit, week, skill, grade 🔒, subject 🔒) with 3-tier hierarchy enforcement: root = grade only, under grade = subject only, deeper = any non-ancestor type; the backend validates both ancestor-type exclusion and sibling-type consistency (409 on violation). The NodeTree renders TopicTreeRows inline (live/draft dot + title) for non-reserved nodes; the NodeDetailPanel shows ChildNodesPanel (child cards with type chip + topic count) for reserved-type nodes and TopicPanel for all others. Topic CRUD (create, rename, toggle draft/live, delete) is fully implemented. The APISIX gateway now suppresses the `Server` response header at the nginx level, returning `Server: HaiSir` instead of leaking the OpenResty version. **Not yet built:** topic content upload (PDFs/videos to topics), two-section student dashboard, parent curriculum builder, link-code generation, admin sidenav Categories entry, board version display.
 
@@ -167,7 +167,7 @@ The platform admin board content manager is fully aligned with the prototype. Th
 ### Phase 1c-post — Admin UX Alignment ✓
 
 **Completed:** 2026-04-18
-**Commits:** haisir-backend `819893c`, `c4abe28`, `6dc7595`; haisir-frontend `dec3ab8`
+**Commits:** haisir-backend `819893c`, `c4abe28`, `6dc7595`; haisir-frontend `dec3ab8`, `3d0dd72`, `afaf2d7`, `43fa83d`
 **Archived plan:** `Implementation_planning/archive/phase1c-post-plan.md`
 
 **What was done:**
@@ -190,6 +190,11 @@ The platform admin board content manager is fully aligned with the prototype. Th
 - AddBoardModal: description textarea field added; `path_type` hardcoded to `"structured"`
 - Added parametrized tests for all 9 `NodeType` enum values and `platform_boards` behaviour
 - Dependency fix: `python-multipart` → 0.0.26; added `mako` and `pytest` to dependency manifest
+- `admin-dashboard.tsx`: board description is now click-to-edit — inline `<input>` activates on click; Enter commits via `PATCH /api/categories/{id}`; Escape cancels; double-fire guard (`isCommittingRef`) prevents `onBlur` re-firing after Enter; save failures surface an error alert below the input
+- `admin-dashboard.module.css`: replaced hardcoded hex values with design tokens (`--color-text-secondary`, `--color-surface`, `--color-text-primary`)
+- `admin-node-domain.ts`: `RESERVED_TYPES` set now derived from canonical `RESERVED_NODE_TYPES` export in `admin.types.ts` — eliminated duplicate literal
+- Next.js upgraded to 16.2.3 (patched GHSA-q4gf-8mx6-v5v3: DoS via Server Components, affected ≥16.0.0-beta.0 <16.2.3)
+- 30 unit tests added for B4; 100% coverage maintained
 
 **Deviations from original plan:**
 - Schema/route files named `admin.py` (plan said `admin_stats.py`); response type names differ (`BoardTopicStats`/`PlatformTotals`/`BoardStatsRead` vs. plan's `BoardStats`/`PlatformOverview`/`AdminDashboardStats`)
