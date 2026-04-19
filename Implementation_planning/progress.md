@@ -8,8 +8,8 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 
 ## Current State
 
-> Snapshot baseline: haisir-backend `819893c` (fix: SonarQube quality issues, 2026-04-09), haisir-frontend `82a69f1` (fix: correct selectedNode conditional in AdminBoardsPage, 2026-04-17), haisir-deploy `239f968` (fix(apisix): suppress Server header via nginx, 2026-04-17).
-> Next session: `git diff 819893c..HEAD` in haisir-backend and `git diff 82a69f1..HEAD` in haisir-frontend instead of re-reading the full codebases.
+> Snapshot baseline: haisir-backend `6dc7595` (fix: dependencies update, 2026-04-18), haisir-frontend `82a69f1` (fix: correct selectedNode conditional in AdminBoardsPage, 2026-04-17), haisir-deploy `239f968` (fix(apisix): suppress Server header via nginx, 2026-04-17).
+> Next session: `git diff 6dc7595..HEAD` in haisir-backend and `git diff 82a69f1..HEAD` in haisir-frontend instead of re-reading the full codebases.
 
 The platform admin board content manager is fully aligned with the prototype. The AdminDashboard shows a 4-card Platform Overview (boards count, live topics, draft topics, total) sourced from `GET /api/admin/board-stats`, and per-board rich cards with emoji, live/draft topic counts, a "Live" badge, a "Manage" link, and click-to-edit inline description. The AddNodeModal uses a 9-type chip selector (course, chapter, module, section, unit, week, skill, grade 🔒, subject 🔒) with 3-tier hierarchy enforcement: root = grade only, under grade = subject only, deeper = any non-ancestor type; the backend validates both ancestor-type exclusion and sibling-type consistency (409 on violation). The NodeTree renders TopicTreeRows inline (live/draft dot + title) for non-reserved nodes; the NodeDetailPanel shows ChildNodesPanel (child cards with type chip + topic count) for reserved-type nodes and TopicPanel for all others. Topic CRUD (create, rename, toggle draft/live, delete) is fully implemented. The APISIX gateway now suppresses the `Server` response header at the nginx level, returning `Server: HaiSir` instead of leaking the OpenResty version. **Not yet built:** topic content upload (PDFs/videos to topics), two-section student dashboard, parent curriculum builder, link-code generation, admin sidenav Categories entry, board version display.
 
@@ -166,13 +166,16 @@ The platform admin board content manager is fully aligned with the prototype. Th
 
 ### Phase 1c-post — Admin UX Alignment ✓
 
-**Completed:** 2026-04-09
-**Commits:** haisir-backend `819893c`, haisir-frontend `dec3ab8`
+**Completed:** 2026-04-18
+**Commits:** haisir-backend `819893c`, `c4abe28`, `6dc7595`; haisir-frontend `dec3ab8`
 **Archived plan:** `Implementation_planning/archive/phase1c-post-plan.md`
 
 **What was done:**
 - V25 Alembic migration: expanded `nodetype` PostgreSQL enum from 3 → 9 values (added `chapter`, `module`, `section`, `unit`, `week`, `skill` via `ALTER TYPE nodetype ADD VALUE IF NOT EXISTS`)
 - `GET /api/admin/board-stats` — new admin-only endpoint; single LEFT JOIN query returning per-board `live_topics`/`draft_topics`/`total_topics` and platform-wide totals
+- `GET /api/admin/board-stats` now also returns `platform_boards` count in `PlatformTotals` (total number of platform-owned boards); backed by `BoardPlatformTotals` TypedDict in `category.py` domain model for typed service return
+- Added `response_model=BoardStatsRead` to `GET /api/admin/board-stats` (was missing)
+- Fixed `POST /api/course-path-nodes/` to return `201 Created` (was incorrectly returning 200)
 - `POST /api/course-path-nodes` — added two tree-structure invariants: (A) ancestor-type exclusion (new type must not appear in any ancestor), (B) sibling-type consistency (all platform-owned siblings share one type). Both violations return 409.
 - `POST /api/topics` / `TopicCreate` schema — `status: "draft" | "live"` is now a required field at API boundary (no silent default)
 - `CategoryCreate` schema — `path_type` defaults to `"structured"`
@@ -185,6 +188,8 @@ The platform admin board content manager is fully aligned with the prototype. Th
 - `admin-node-domain.ts`: pure domain functions (`buildNestedTree`, `isTypeDisabled`, `buildBreadcrumb`, `findNodeById`, `sortNodesByPosition`)
 - All modals converted to native `<dialog>`; `BoardSelectorStrip` uses semantic `<ul>/<li>`; `AdminRouteGuard` spinner uses `<output>`
 - AddBoardModal: description textarea field added; `path_type` hardcoded to `"structured"`
+- Added parametrized tests for all 9 `NodeType` enum values and `platform_boards` behaviour
+- Dependency fix: `python-multipart` → 0.0.26; added `mako` and `pytest` to dependency manifest
 
 **Deviations from original plan:**
 - Schema/route files named `admin.py` (plan said `admin_stats.py`); response type names differ (`BoardTopicStats`/`PlatformTotals`/`BoardStatsRead` vs. plan's `BoardStats`/`PlatformOverview`/`AdminDashboardStats`)
