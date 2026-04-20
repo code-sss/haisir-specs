@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 819893c (fix(auth,api): resolve SonarQube code quality issues, 2026-04-09) |
-| haisir-frontend | 82a69f1 (fix(admin): correct selectedNode conditional in AdminBoardsPage, 2026-04-17) |
-| haisir-deploy | 239f968 (fix(apisix): suppress Server header via nginx on all responses, 2026-04-17) |
+| haisir-backend | dd7da7f (fix(admin): remove response_model from get_board_stats endpoint, 2026-04-20) |
+| haisir-frontend | 43fa83d (fix: reorder import for RESERVED_NODE_TYPES, 2026-04-18) |
+| haisir-deploy | ccdbad5 (feat(data): add Citizenship, 2026-04-20) |
 
-> Next session: run `git diff 819893c..HEAD` in haisir-backend and `git diff 82a69f1..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff dd7da7f..HEAD` in haisir-backend and `git diff ccdbad5..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -401,7 +401,7 @@
 - Purpose: Return per-board topic statistics and platform-wide aggregate totals for the admin dashboard
 - Auth: admin only (CSRF not required — GET)
 - Response: `{ boards: [{ id, name, live_topics, draft_topics, total_topics }], platform_totals: { live_topics, draft_topics, total_topics } }`
-- Note: single LEFT JOIN query `categories → course_path_nodes (owner_type='platform') → topics (owner_type='platform')`, grouped by category. Categories with zero topics appear with zero counts. Frontend maps response to `AdminDashboardStats` shape (board_id/board_name aliases, overview.platform_boards = boards.length).
+- Note: single LEFT JOIN query `categories → course_path_nodes (owner_type='platform') → topics (owner_type='platform')`, grouped by category. Categories with zero topics appear with zero counts. Frontend maps response to `AdminDashboardStats` shape (board_id/board_name aliases, overview.platform_boards = boards.length). `response_model` removed from FastAPI decorator (dd7da7f) — output shape unchanged.
 
 ---
 
