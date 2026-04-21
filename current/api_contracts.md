@@ -214,6 +214,19 @@
 - Request: topic_id, content_type, title, url?, text?, order, description?
 - Response: content object
 
+### PATCH /api/topic-contents/{content_id}
+- Purpose: Partially update a platform-owned content item
+- Auth: admin (X-Current-Role: admin), CSRF required
+- Request: any of `title`, `order`, `description`, `url`, `text` (all optional; `content_type` is immutable)
+- Response: updated content object (200); empty payload returns current state unchanged
+- Errors: 404 if not found or not platform-owned; 403 if non-admin or missing CSRF
+
+### DELETE /api/topic-contents/{content_id}
+- Purpose: Delete a platform-owned content item
+- Auth: admin (X-Current-Role: admin), CSRF required
+- Response: 204 No Content
+- Errors: 404 if not found or not platform-owned; 403 if non-admin or missing CSRF
+
 ---
 
 ## Questions

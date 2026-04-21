@@ -33,7 +33,7 @@ push_to() {
   echo "==> Pushing to $container"
   for dir in "${DIRS[@]}"; do
     echo "    $dir/ → $container:$CONTAINER_BASE/$dir/"
-    docker cp "$dir/" "$container:$CONTAINER_BASE/$dir/"
+    docker cp "$dir/." "$container:$CONTAINER_BASE/$dir/"
   done
   for file in "${FILES[@]}"; do
     echo "    $file → $container:$CONTAINER_BASE/$file"
@@ -46,7 +46,8 @@ pull_from() {
   echo "==> Pulling from $container"
   for dir in "${DIRS[@]}"; do
     echo "    $container:$CONTAINER_BASE/$dir/ → ./$dir/"
-    docker cp "$container:$CONTAINER_BASE/$dir/" "./$dir/"
+    mkdir -p "./$dir"
+    docker cp "$container:$CONTAINER_BASE/$dir/." "./$dir/"
   done
   for file in "${FILES[@]}"; do
     echo "    $container:$CONTAINER_BASE/$file → ./$file"

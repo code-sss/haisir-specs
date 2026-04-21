@@ -1,7 +1,7 @@
 # TASKS — Phase 1d: Topic Content Upload
 
 > Generated from PLAN.md on 2026-04-17.
-> Commits: haisir-backend `819893c`, haisir-frontend `82a69f1`
+> Commits: haisir-backend `dd7da7f`, haisir-frontend `82a69f1`
 
 ---
 
@@ -9,12 +9,12 @@
 
 > A1 and A2 are independent — work in parallel. A3 depends on A1 + A2. A4 depends on A3. A5 depends on A4.
 
-- [ ] **A1** — `src/schemas/topic_content.py`: add `TopicContentUpdate(BaseModel)` with all-optional fields: `title`, `order`, `description`, `url`, `text`. No `content_type` — immutable after creation.
-- [ ] **A2** — `src/domain/repositories/topic_content_repository.py`: add two abstract methods: `update_platform_content(content_id, data: dict) -> TopicContent | None` and `delete_platform_content(content_id) -> bool`.
-- [ ] **A3** — `src/infrastructure/repositories/topic_content_repository.py`: implement the two abstract methods. Use a JOIN to the `topics` table (`topic_contents.topic_id = topics.id AND topics.owner_type = 'platform'`) for platform-oracle protection. Return `None`/`False` for both "not found" and "non-platform" cases (indistinguishable to caller).
-- [ ] **A4** — `src/domain/services/topic_content_service.py`: add `update_platform_content(content_id, data: TopicContentUpdate) -> TopicContent | None` and `delete_platform_content(content_id) -> bool`. Service strips None fields before delegating to repo.
-- [ ] **A5** — `src/api/routes/topic_content.py`: add `PATCH /api/topic-contents/{content_id}` (body: `TopicContentUpdate`, response: `TopicContentRead` 200 / 404) and `DELETE /api/topic-contents/{content_id}` (204 / 404). Both admin-only (`X-Current-Role: admin`), CSRF required. Follow existing POST handler pattern.
-- [ ] **A6** — Tests: PATCH/DELETE happy paths; 404 for non-platform + non-existent; 403 for non-admin + missing CSRF. Unit tests for infra repo + service. Maintain 100% coverage.
+- [x] **A1** — `src/schemas/topic_content.py`: add `TopicContentUpdate(BaseModel)` with all-optional fields: `title`, `order`, `description`, `url`, `text`. No `content_type` — immutable after creation. (2026-04-21)
+- [x] **A2** — `src/domain/repositories/topic_content_repository.py`: add two abstract methods: `update_platform_content(content_id, data: dict) -> TopicContent | None` and `delete_platform_content(content_id) -> bool`. (2026-04-21)
+- [x] **A3** — `src/infrastructure/repositories/topic_content_repository.py`: implement the two abstract methods. Use a JOIN to the `topics` table (`topic_contents.topic_id = topics.id AND topics.owner_type = 'platform'`) for platform-oracle protection. Return `None`/`False` for both "not found" and "non-platform" cases (indistinguishable to caller). (2026-04-21)
+- [x] **A4** — `src/domain/services/topic_content_service.py`: add `update_platform_content(content_id, data: TopicContentUpdate) -> TopicContent | None` and `delete_platform_content(content_id) -> bool`. Service strips None fields before delegating to repo. (2026-04-21)
+- [x] **A5** — `src/api/routes/topic_content.py`: add `PATCH /api/topic-contents/{content_id}` (body: `TopicContentUpdate`, response: `TopicContentRead` 200 / 404) and `DELETE /api/topic-contents/{content_id}` (204 / 404). Both admin-only (`X-Current-Role: admin`), CSRF required. Follow existing POST handler pattern. (2026-04-21)
+- [x] **A6** — Tests: PATCH/DELETE happy paths; 404 for non-platform + non-existent; 403 for non-admin + missing CSRF. Unit tests for infra repo + service. Maintain 100% coverage. (2026-04-21)
 
 ---
 
