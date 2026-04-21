@@ -125,7 +125,14 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 
 - Panel: **TopicPanel** — fetches topics for the selected node via `GET /api/topics/{nodeId}`; shows loading spinner, error state, topic list (one TopicRow per topic), and an "+ Add topic" button.
 
-- Row: **TopicRow** — individual topic card with: inline rename (click title → RenameTopicInline), draft/live status toggle ("Set live" / "Set draft" button calling `PATCH /api/topics/{id}`), and a delete (×) button opening DeleteTopicDialog.
+- Row: **TopicRow** — individual topic card with: inline rename (click title → RenameTopicInline), draft/live status toggle ("Set live" / "Set draft" button calling `PATCH /api/topics/{id}`), and a delete (×) button opening DeleteTopicDialog. Now also renders a **content management section** below the topic header: fetches `GET /api/topic-contents/{topicId}`; shows a "Content" label + "Add Content" button (admin accent blue); lists `ContentItemRow`s sorted by `order`; empty state "No content yet — add some." State: `addContentOpen`, `editingContent`, `deletingContent` drive three sub-components.
+  - API: `GET /api/topic-contents/{topicId}`, `POST /api/topic-contents/`, `PATCH /api/topic-contents/{id}`, `DELETE /api/topic-contents/{id}`
+
+- Row: **ContentItemRow** — one row per content item: type icon (🎬 video / 📄 pdf / 📝 text / ❓ question / 💬 question_answer), title, optional description (truncated, full text in `title` tooltip), order badge, "Edit" button, × delete button. Edit/delete callbacks passed from `TopicRow`.
+
+- Modal: **AddContentModal** — native `<dialog>`; `mode: 'create' | 'edit'`. Content type selector (`video`/`pdf`/`text` only shown, `disabled` in edit mode — `content_type` immutable after creation). URL field shown for video/pdf; textarea for text content; title, order (number input), description always visible. Zod-validated via React Hook Form (`zodResolver`). Submit shows "Saving…" spinner; inline error on failure. `useFocusTrap` traps keyboard focus.
+
+- Dialog: **DeleteContentDialog** — native `<dialog>` confirmation: "Delete '[title]'? This cannot be undone." Cancel + "Confirm Delete" (danger style); loading state on confirm. Calls `DELETE /api/topic-contents/{id}`; 404 treated as already-gone.
 
 - Inline: **RenameTopicInline** — controlled text input; Enter or blur saves (calls `PATCH /api/topics/{id}` with `{title}`), Escape cancels.
 

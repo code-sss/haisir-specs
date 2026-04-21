@@ -8,27 +8,31 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 
 ## Current State
 
-> Snapshot baseline: haisir-backend `54d6e23` (feat(topic_content): add PATCH and DELETE endpoints for platform content, 2026-04-20), haisir-frontend `43fa83d` (fix: reorder import for RESERVED_NODE_TYPES, 2026-04-18), haisir-deploy `ccdbad5` (feat(data): add Citizenship, 2026-04-20).
-> Next session: `git diff 54d6e23..HEAD` in haisir-backend and `git diff ccdbad5..HEAD` in haisir-deploy instead of re-reading the full codebases.
+> Snapshot baseline: haisir-backend `54d6e23` (feat(topic_content): add PATCH and DELETE endpoints for platform content, 2026-04-20), haisir-frontend `7de033e` (feat(admin): add topic content management (B1-B8), 2026-04-20), haisir-deploy `ccdbad5` (feat(data): add Citizenship, 2026-04-20).
+> Next session: `git diff 54d6e23..HEAD` in haisir-backend, `git diff 7de033e..HEAD` in haisir-frontend, and `git diff ccdbad5..HEAD` in haisir-deploy instead of re-reading the full codebases.
 
-The platform admin board content manager is fully aligned with the prototype. The AdminDashboard shows a 4-card Platform Overview (boards count, live topics, draft topics, total) sourced from `GET /api/admin/board-stats`, and per-board rich cards with emoji, live/draft topic counts, a "Live" badge, a "Manage" link, and click-to-edit inline description. The AddNodeModal uses a 9-type chip selector (course, chapter, module, section, unit, week, skill, grade 🔒, subject 🔒) with 3-tier hierarchy enforcement: root = grade only, under grade = subject only, deeper = any non-ancestor type; the backend validates both ancestor-type exclusion and sibling-type consistency (409 on violation). The NodeTree renders TopicTreeRows inline (live/draft dot + title) for non-reserved nodes; the NodeDetailPanel shows ChildNodesPanel (child cards with type chip + topic count) for reserved-type nodes and TopicPanel for all others. Topic CRUD (create, rename, toggle draft/live, delete) is fully implemented. Topic content CRUD is complete on the backend: `POST /api/topic-contents` (create), `PATCH /api/topic-contents/{id}` (partial update, platform-oracle protected), and `DELETE /api/topic-contents/{id}` (204, platform-oracle protected) — all admin-only with CSRF. The APISIX gateway suppresses the `Server` response header at the nginx level. A "Citizenship & Immigration" board with a "Discover Canada" course node has been added to seed data. **Not yet built:** topic content UI (frontend B1–B8: types, API functions, hook, ContentItemRow, AddContentModal, DeleteContentDialog, TopicRow extension), two-section student dashboard, parent curriculum builder, link-code generation, admin sidenav Categories entry, board version display.
+The platform admin board content manager is fully implemented end-to-end. The AdminDashboard shows a 4-card Platform Overview (boards count, live topics, draft topics, total) sourced from `GET /api/admin/board-stats`, and per-board rich cards with emoji, live/draft topic counts, a "Live" badge, a "Manage" link, and click-to-edit inline description. The AddNodeModal uses a 9-type chip selector (course, chapter, module, section, unit, week, skill, grade 🔒, subject 🔒) with 3-tier hierarchy enforcement: root = grade only, under grade = subject only, deeper = any non-ancestor type; the backend validates both ancestor-type exclusion and sibling-type consistency (409 on violation). The NodeTree renders TopicTreeRows inline (live/draft dot + title) for non-reserved nodes; the NodeDetailPanel shows ChildNodesPanel (child cards with type chip + topic count) for reserved-type nodes and TopicPanel for all others. Topic CRUD (create, rename, toggle draft/live, delete) is fully implemented. Topic content CRUD is fully implemented (backend + frontend): each TopicRow shows a content section with `ContentItemRow` list, `AddContentModal` (create/edit, native dialog, Zod-validated), and `DeleteContentDialog`; backed by `PATCH /api/topic-contents/{id}` and `DELETE /api/topic-contents/{id}` with platform-oracle protection. The APISIX gateway suppresses the `Server` response header at the nginx level. A "Citizenship & Immigration" board with a "Discover Canada" course node has been added to seed data. **Not yet built:** two-section student dashboard, parent curriculum builder, link-code generation, admin sidenav Categories entry, board version display.
 
 ## Completed Phases
 
-### Phase 1d — Topic Content Upload: backend complete (A1–A6) ✓
+### Phase 1d — Topic Content Management (A1–A6 backend + B1–B8 frontend) ✓
 
 **Completed:** 2026-04-20
-**Commit:** haisir-backend `54d6e23`
+**Commits:** haisir-backend `54d6e23`, haisir-frontend `7de033e`
 
 **What was done:**
-- Added `TopicContentUpdate` Pydantic schema (`title`, `order`, `description`, `url`, `text` — all optional; `content_type` excluded as immutable)
-- Added `update_platform_content` and `delete_platform_content` abstract methods to `TopicContentRepository`
-- Implemented both in infra repo with platform-oracle JOIN protection (`topic_contents → topics WHERE owner_type = 'platform'`); returns `None`/`False` for both "not found" and "non-platform" (indistinguishable to caller)
-- Added `update_platform_content` and `delete_platform_content` service methods; service strips `None` fields before delegating
-- Added `PATCH /api/topic-contents/{content_id}` (200 / 404) and `DELETE /api/topic-contents/{content_id}` (204 / 404); both admin-only, CSRF required
-- 100% test coverage maintained
-
-**Frontend (B1–B8) still pending.**
+- Added `TopicContentUpdate` Pydantic schema (`title`, `order`, `description`, `url`, `text` — all optional; `content_type` excluded as immutable after creation)
+- Added `update_platform_content` and `delete_platform_content` abstract + infra repo methods with platform-oracle JOIN protection (`topic_contents → topics WHERE owner_type = 'platform'`); returns `None`/`False` for both "not found" and "non-platform" (indistinguishable to caller)
+- Added `update_platform_content` and `delete_platform_content` service methods (service strips `None` fields before delegating)
+- `PATCH /api/topic-contents/{content_id}` (200 / 404) and `DELETE /api/topic-contents/{content_id}` (204 / 404); both admin-only, CSRF required
+- Frontend types: `ContentType`, `TopicContent`, `CreateTopicContentInput`, `UpdateTopicContentInput`
+- Frontend API functions: `getTopicContents`, `createTopicContent`, `updateTopicContent`, `deleteTopicContent` (mutations use `fetchWithCSRFRetry`)
+- `useTopicContents` hook: query (disabled when `topicId` is null) + create/update/delete mutations with cache invalidation
+- `ContentItemRow` component: type icon (🎬/📄/📝/❓/💬), title, description, order badge, edit/delete callbacks
+- `AddContentModal`: native `<dialog>`, `mode: 'create' | 'edit'`, content type selector (`video`/`pdf`/`text`, disabled in edit mode), conditional URL/textarea fields, Zod + React Hook Form validation, `useFocusTrap`
+- `DeleteContentDialog`: native `<dialog>` confirmation with loading state
+- `TopicRow` extended: content section below topic header with sorted `ContentItemRow` list, "Add Content" button, empty state
+- 100% test coverage maintained in both repos
 
 ---
 

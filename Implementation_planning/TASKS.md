@@ -1,7 +1,7 @@
 # TASKS — Phase 1d: Topic Content Upload
 
 > Generated from PLAN.md on 2026-04-17.
-> Commits: haisir-backend `dd7da7f`, haisir-frontend `82a69f1`
+> Commits: haisir-backend `819893c`, haisir-frontend `82a69f1`
 
 ---
 
@@ -9,12 +9,12 @@
 
 > A1 and A2 are independent — work in parallel. A3 depends on A1 + A2. A4 depends on A3. A5 depends on A4.
 
-- [x] **A1** — `src/schemas/topic_content.py`: add `TopicContentUpdate(BaseModel)` with all-optional fields: `title`, `order`, `description`, `url`, `text`. No `content_type` — immutable after creation. (2026-04-21)
-- [x] **A2** — `src/domain/repositories/topic_content_repository.py`: add two abstract methods: `update_platform_content(content_id, data: dict) -> TopicContent | None` and `delete_platform_content(content_id) -> bool`. (2026-04-21)
-- [x] **A3** — `src/infrastructure/repositories/topic_content_repository.py`: implement the two abstract methods. Use a JOIN to the `topics` table (`topic_contents.topic_id = topics.id AND topics.owner_type = 'platform'`) for platform-oracle protection. Return `None`/`False` for both "not found" and "non-platform" cases (indistinguishable to caller). (2026-04-21)
-- [x] **A4** — `src/domain/services/topic_content_service.py`: add `update_platform_content(content_id, data: TopicContentUpdate) -> TopicContent | None` and `delete_platform_content(content_id) -> bool`. Service strips None fields before delegating to repo. (2026-04-21)
-- [x] **A5** — `src/api/routes/topic_content.py`: add `PATCH /api/topic-contents/{content_id}` (body: `TopicContentUpdate`, response: `TopicContentRead` 200 / 404) and `DELETE /api/topic-contents/{content_id}` (204 / 404). Both admin-only (`X-Current-Role: admin`), CSRF required. Follow existing POST handler pattern. (2026-04-21)
-- [x] **A6** — Tests: PATCH/DELETE happy paths; 404 for non-platform + non-existent; 403 for non-admin + missing CSRF. Unit tests for infra repo + service. Maintain 100% coverage. (2026-04-21)
+- [ ] **A1** — `src/schemas/topic_content.py`: add `TopicContentUpdate(BaseModel)` with all-optional fields: `title`, `order`, `description`, `url`, `text`. No `content_type` — immutable after creation.
+- [ ] **A2** — `src/domain/repositories/topic_content_repository.py`: add two abstract methods: `update_platform_content(content_id, data: dict) -> TopicContent | None` and `delete_platform_content(content_id) -> bool`.
+- [ ] **A3** — `src/infrastructure/repositories/topic_content_repository.py`: implement the two abstract methods. Use a JOIN to the `topics` table (`topic_contents.topic_id = topics.id AND topics.owner_type = 'platform'`) for platform-oracle protection. Return `None`/`False` for both "not found" and "non-platform" cases (indistinguishable to caller).
+- [ ] **A4** — `src/domain/services/topic_content_service.py`: add `update_platform_content(content_id, data: TopicContentUpdate) -> TopicContent | None` and `delete_platform_content(content_id) -> bool`. Service strips None fields before delegating to repo.
+- [ ] **A5** — `src/api/routes/topic_content.py`: add `PATCH /api/topic-contents/{content_id}` (body: `TopicContentUpdate`, response: `TopicContentRead` 200 / 404) and `DELETE /api/topic-contents/{content_id}` (204 / 404). Both admin-only (`X-Current-Role: admin`), CSRF required. Follow existing POST handler pattern.
+- [ ] **A6** — Tests: PATCH/DELETE happy paths; 404 for non-platform + non-existent; 403 for non-admin + missing CSRF. Unit tests for infra repo + service. Maintain 100% coverage.
 
 ---
 
@@ -26,14 +26,14 @@
 > B7 depends on B4 + B5 + B6.
 > B8 is test coverage — write alongside each task.
 
-- [ ] **B1** — `src/features/admin/types/admin.types.ts`: add `ContentType` union (`'video' | 'pdf' | 'text' | 'question' | 'question_answer'`), `TopicContent` interface, `CreateTopicContentInput`, `UpdateTopicContentInput`.
-- [ ] **B2** — `src/features/admin/api/admin-api.ts`: add `getTopicContents(topicId, csrfToken)`, `createTopicContent(input, csrfToken, refreshCSRF)`, `updateTopicContent(contentId, input, csrfToken, refreshCSRF)`, `deleteTopicContent(contentId, csrfToken, refreshCSRF)`. Mutations use `fetchWithCSRFRetry`.
-- [ ] **B3** — New `src/features/admin/hooks/use-topic-contents.ts`: `useTopicContents(topicId)` (query, disabled when null; key `["admin", "topic-contents", topicId]`), `useCreateTopicContent()`, `useUpdateTopicContent()`, `useDeleteTopicContent()` (mutations; all invalidate `["admin", "topic-contents", ...]`).
-- [ ] **B4** — New `src/features/admin/components/content-item-row.tsx` + `content-item-row.module.css`: renders one content item — type icon (🎬/📄/📝), title, optional description (truncated), order badge, edit button, delete button.
-- [ ] **B5** — New `src/features/admin/components/add-content-modal.tsx` + `add-content-modal.module.css`: native `<dialog>` modal; `mode: 'create' | 'edit'` + `initialValues?: TopicContent`; content type selector shows `video`/`pdf`/`text` only, disabled in edit mode; URL field for video/pdf, textarea for text; loading spinner on submit.
-- [ ] **B6** — New `src/features/admin/components/delete-content-dialog.tsx`: native `<dialog>` confirmation — "Delete '[title]'? This cannot be undone." Cancel + Confirm Delete (danger style); loading state on confirm.
-- [ ] **B7** — `src/features/admin/components/topic-row.tsx`: extend to show content section below topic header. Section: "Content" label + "Add Content" button, `ContentItemRow` list sorted by `order`, empty state. Wire `AddContentModal` (create/edit modes) and `DeleteContentDialog` via local state.
-- [ ] **B8** — Tests: `ContentItemRow` renders + callbacks; `AddContentModal` create/edit modes + submit; `DeleteContentDialog` cancel/confirm; `TopicRow` content section; `useTopicContents` hook. Maintain 100% coverage.
+- [x] **B1** — `src/features/admin/types/admin.types.ts`: add `ContentType` union (`'video' | 'pdf' | 'text' | 'question' | 'question_answer'`), `TopicContent` interface, `CreateTopicContentInput`, `UpdateTopicContentInput`. (2026-04-21)
+- [x] **B2** — `src/features/admin/api/admin-api.ts`: add `getTopicContents(topicId, csrfToken)`, `createTopicContent(input, csrfToken, refreshCSRF)`, `updateTopicContent(contentId, input, csrfToken, refreshCSRF)`, `deleteTopicContent(contentId, csrfToken, refreshCSRF)`. Mutations use `fetchWithCSRFRetry`. (2026-04-21)
+- [x] **B3** — New `src/features/admin/hooks/use-topic-contents.ts`: `useTopicContents(topicId)` (query, disabled when null; key `["admin", "topic-contents", topicId]`), `useCreateTopicContent()`, `useUpdateTopicContent()`, `useDeleteTopicContent()` (mutations; all invalidate `["admin", "topic-contents", ...]`). (2026-04-21)
+- [x] **B4** — New `src/features/admin/components/content-item-row.tsx` + `content-item-row.module.css`: renders one content item — type icon (🎬/📄/📝), title, optional description (truncated), order badge, edit button, delete button. (2026-04-21)
+- [x] **B5** — New `src/features/admin/components/add-content-modal.tsx` + `add-content-modal.module.css`: native `<dialog>` modal; `mode: 'create' | 'edit'` + `initialValues?: TopicContent`; content type selector shows `video`/`pdf`/`text` only, disabled in edit mode; URL field for video/pdf, textarea for text; loading spinner on submit. (2026-04-21)
+- [x] **B6** — New `src/features/admin/components/delete-content-dialog.tsx`: native `<dialog>` confirmation — "Delete '[title]'? This cannot be undone." Cancel + Confirm Delete (danger style); loading state on confirm. (2026-04-21)
+- [x] **B7** — `src/features/admin/components/topic-row.tsx`: extend to show content section below topic header. Section: "Content" label + "Add Content" button, `ContentItemRow` list sorted by `order`, empty state. Wire `AddContentModal` (create/edit modes) and `DeleteContentDialog` via local state. (2026-04-21)
+- [x] **B8** — Tests: `ContentItemRow` renders + callbacks; `AddContentModal` create/edit modes + submit; `DeleteContentDialog` cancel/confirm; `TopicRow` content section; `useTopicContents` hook. Maintain 100% coverage. (2026-04-21)
 
 ---
 
