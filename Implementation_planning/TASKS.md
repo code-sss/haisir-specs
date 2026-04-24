@@ -1,80 +1,92 @@
-# TASKS — Phase 1d: Topic Content Upload
+# Progress
 
-> Generated from PLAN.md on 2026-04-17.
-> Commits: haisir-backend `819893c`, haisir-frontend `82a69f1`
+> Auto-generated from PLAN.md. Updated by `/implement` in each code repo.  
+> Last baselined: backend:0e6c7e8 frontend:689cf53 deploy:baa20bf (2026-04-24)
+
+## G1 [deploy]: Worker service provisioned
+- [ ] T1.1 [deploy]: Add worker service to Docker Compose (replicas:2, env vars, depends_on)
+- [ ] T1.2 [deploy]: STORAGE_ROOT volume mount to api + worker (depends on T1.1)
+- [ ] **G1: Worker service provisioned** — integration test: `docker compose ps` shows 2 worker containers
+
+## G2 [backend]: Schema ready
+- [ ] T2.1 [backend]: Alembic migration V25 — 6 new tables + source_extraction_job_id column + all indexes
+- [ ] **G2: Schema ready** — integration test: `alembic upgrade head && downgrade -1 && upgrade head`
+
+## G3 [backend]: Domain layer
+- [ ] T3.1 [backend]: Domain models — ExtractionJob, ExtractionJobPage, ExtractionJobAudit, RagIndexingOutbox, WorkerHeartbeat, ParentQuotaCounter dataclasses
+- [ ] T3.2 [backend]: Domain protocols — ExtractionProvider + PdfReader
+- [ ] T3.3 [backend]: ExtractionService — all 7 service methods with permission gates (depends on T3.1, T3.2)
+- [ ] **G3: Domain layer** — integration test: `pytest tests/unit/services/test_extraction_service.py`
+
+## G4 [backend]: Infrastructure layer
+- [ ] T4.1 [backend]: GlmOcrProvider — copy glm_ocr from haiguru; prefix-dispatch; streaming protocol (depends on T3.2)
+- [ ] T4.2 [backend]: PdfiumReader — pypdfium2 wrapping; extract_text, image_coverage, render, page_count (depends on T3.2)
+- [ ] T4.3 [backend]: ExtractionJobRepository — SQLAlchemy imperative; all methods including claim_next SKIP LOCKED (depends on T3.1, T2.1)
+- [ ] T4.4 [backend]: ExtractionSourceStorage — save_file with path-traversal guard; MIME sniff; delete_file; python-magic (depends on T3.1)
+- [ ] **G4: Infrastructure layer** — integration test: SKIP LOCKED claim with 2 concurrent DB sessions
+
+## G5 [backend]: Admin extraction API
+- [ ] T5.1 [backend]: POST /api/admin/topics/{topic_id}/extraction-jobs — streaming multipart, MIME sniff, SHA dedup, idempotency, oracle 404, file save, INSERT job (depends on T4.3, T4.4, T3.3, T2.1)
+- [ ] T5.2 [backend]: GET /api/admin/topics/{topic_id}/extraction-jobs — ETag/304, derived progress (depends on T4.3, T2.1)
+- [ ] T5.3 [backend]: GET /api/admin/extraction-jobs/{job_id} — detail (depends on T4.3, T2.1)
+- [ ] T5.4 [backend]: DELETE /api/admin/extraction-jobs/{job_id} — hard cancel pending / soft cancel extracting (depends on T4.3, T4.4, T2.1)
+- [ ] T5.5 [backend]: POST /api/admin/extraction-jobs/{job_id}/retry — re-queue extraction_failed (depends on T4.3, T4.4, T2.1)
+- [ ] T5.6 [backend]: GET /api/admin/system/workers — worker liveness with is_stale flag (depends on T4.3, T2.1)
+- [ ] **G5: Admin extraction API** — integration test: full API test suite including CSRF/header guard tests
+
+## G6 [backend]: Parent extraction API
+- [ ] T6.1 [backend]: POST /api/parent/curriculum/topics/{topic_id}/extraction-jobs — with quota gate (depends on T4.3, T4.4, T3.3, T2.1)
+- [ ] T6.2 [backend]: GET /api/parent/curriculum/topics/{topic_id}/extraction-jobs — filtered to own jobs (depends on T4.3, T2.1)
+- [ ] T6.3 [backend]: GET /api/parent/curriculum/extraction-jobs/{job_id} — isolation (depends on T4.3, T2.1)
+- [ ] T6.4 [backend]: DELETE /api/parent/curriculum/extraction-jobs/{job_id} — cancel + quota decrement (depends on T4.3, T4.4, T2.1)
+- [ ] T6.5 [backend]: POST /api/parent/curriculum/extraction-jobs/{job_id}/retry — filtered by created_by (depends on T4.3, T4.4, T2.1)
+- [ ] **G6: Parent extraction API** — integration test: quota 429 + cross-parent isolation
+
+## G7 [backend]: Worker process
+- [ ] T7.1 [backend]: worker/extraction_loop.py — claim loop, extract_page routing, per-page staging, cancel check, cost cap (depends on T4.1, T4.2, T4.3, T4.4, T2.1)
+- [ ] T7.2 [backend]: worker/finalize.py — atomic TX: ownership re-validate, content_order base, INSERT N topic_contents, INSERT N rag_outbox, INSERT audit, DELETE pages, UPDATE job done (depends on T4.3, T2.1)
+- [ ] T7.3 [backend]: worker/purge_loop.py — hourly expired job purge + outbox cleanup (depends on T4.3, T4.4, T2.1)
+- [ ] T7.4 [backend]: worker/rag_outbox_loop.py — UNRESOLVED: resolve haiguru/haisir embedding handoff before starting (depends on T4.3, T2.1)
+- [ ] T7.5 [backend]: worker/heartbeat.py — UPSERT every 10s + stale cleanup on startup (depends on T4.3, T2.1)
+- [ ] T7.6 [backend]: worker/__main__.py + prompt files — asyncio.gather all loops, SIGTERM handler, env validation, copy prompts from haiguru (depends on T7.1, T7.2, T7.3, T7.4, T7.5)
+- [ ] **G7: Worker process** — integration test: seed pending job → run worker → assert N topic_contents + audit row + job done
+
+## G8 [frontend]: CSRF + FormData gate ⚠️ BLOCKING for G9–G12
+- [ ] T8.1 [frontend]: CSRF + FormData integration test — verify re-clone on retry; fix fetchWithCSRFRetry if needed
+- [ ] **G8: CSRF gate** — test IS the integration test; must pass in CI before G9 work starts
+
+## G9 [frontend]: Add Content modal rebuilt
+- [ ] T9.1 [frontend]: ExtractionJob types + extraction-api.ts — createExtractionJob (FormData factory), listExtractionJobs (ETag), cancel, retry (depends on T8.1, T5.1 [backend], T5.2 [backend], T5.4 [backend], T5.5 [backend])
+- [ ] T9.2 [frontend]: useExtractionJobs hook — polling 2s/10s/stop-60s, pseudo-job state machine, onJobDone callback (depends on T9.1)
+- [ ] T9.3 [frontend]: Rebuild AddContentModal — file drop zone, type chips, cost preview, Upload-closes-immediately, retain Video/Text create/edit (depends on T9.2, T8.1)
+- [ ] **G9: Add Content modal** — Playwright: drop 2 PDFs → modal closes → pseudo-jobs on topic card
+
+## G10 [frontend]: Topic card jobs strip
+- [ ] T10.1 [frontend]: ExtractionJobRow component — all status variants, cancel/retry callbacks (depends on T9.1)
+- [ ] T10.2 [frontend]: Extend TopicRow with IN PROGRESS strip + useExtractionJobs + onJobDone invalidation (depends on T10.1, T9.2, T9.3)
+- [ ] **G10: Topic card strip** — Playwright: mock job transitions → strip updates → content list refetched
+
+## G11 [backend + frontend]: Provenance + editing
+- [ ] T11.1 [backend]: PATCH regression guard — assert source_extraction_job_id never overwritten; add test (depends on T2.1)
+- [ ] T11.2 [backend]: Extend GET /api/topic-contents — include provenance {source_filename, page_no} via audit JOIN (depends on T11.1, T2.1)
+- [ ] T11.3 [frontend]: Extend ContentItemRow — provenance badge, inline title rename, Edit modal provenance line, Delete audit message (depends on T11.2 [backend], T10.2 [frontend])
+- [ ] **G11: Provenance + editing** — Playwright: badge shows; inline rename preserves badge; Edit modal shows provenance line
+
+## G12 [frontend]: Worker health page
+- [ ] T12.1 [frontend]: Admin /system/workers page — worker table, is_stale highlight, 30s auto-refresh, sidebar link (depends on T5.6 [backend], T9.1 [frontend])
+- [ ] **G12: Worker health page** — Playwright: active + stale workers rendered correctly
+
+## ROOT acceptance test
+- [ ] **ROOT [e2e]: Full extraction flow** — Playwright: upload PDF → modal closes → strip → progress → done → content rows with provenance → inline rename → Edit modal provenance → health page
 
 ---
 
-## Ready now — Backend (`haisir-backend`)
+## Ready now
+Tasks with no pending dependencies — can be started immediately in parallel:
 
-> A1 and A2 are independent — work in parallel. A3 depends on A1 + A2. A4 depends on A3. A5 depends on A4.
-
-- [ ] **A1** — `src/schemas/topic_content.py`: add `TopicContentUpdate(BaseModel)` with all-optional fields: `title`, `order`, `description`, `url`, `text`. No `content_type` — immutable after creation.
-- [ ] **A2** — `src/domain/repositories/topic_content_repository.py`: add two abstract methods: `update_platform_content(content_id, data: dict) -> TopicContent | None` and `delete_platform_content(content_id) -> bool`.
-- [ ] **A3** — `src/infrastructure/repositories/topic_content_repository.py`: implement the two abstract methods. Use a JOIN to the `topics` table (`topic_contents.topic_id = topics.id AND topics.owner_type = 'platform'`) for platform-oracle protection. Return `None`/`False` for both "not found" and "non-platform" cases (indistinguishable to caller).
-- [ ] **A4** — `src/domain/services/topic_content_service.py`: add `update_platform_content(content_id, data: TopicContentUpdate) -> TopicContent | None` and `delete_platform_content(content_id) -> bool`. Service strips None fields before delegating to repo.
-- [ ] **A5** — `src/api/routes/topic_content.py`: add `PATCH /api/topic-contents/{content_id}` (body: `TopicContentUpdate`, response: `TopicContentRead` 200 / 404) and `DELETE /api/topic-contents/{content_id}` (204 / 404). Both admin-only (`X-Current-Role: admin`), CSRF required. Follow existing POST handler pattern.
-- [ ] **A6** — Tests: PATCH/DELETE happy paths; 404 for non-platform + non-existent; 403 for non-admin + missing CSRF. Unit tests for infra repo + service. Maintain 100% coverage.
-
----
-
-## Ready now — Frontend (`haisir-frontend`)
-
-> B1 and B2 are independent — start in parallel.
-> B3 depends on B1 + B2.
-> B4, B5, B6 are independent of each other — work in parallel after B3.
-> B7 depends on B4 + B5 + B6.
-> B8 is test coverage — write alongside each task.
-
-- [x] **B1** — `src/features/admin/types/admin.types.ts`: add `ContentType` union (`'video' | 'pdf' | 'text' | 'question' | 'question_answer'`), `TopicContent` interface, `CreateTopicContentInput`, `UpdateTopicContentInput`. (2026-04-21)
-- [x] **B2** — `src/features/admin/api/admin-api.ts`: add `getTopicContents(topicId, csrfToken)`, `createTopicContent(input, csrfToken, refreshCSRF)`, `updateTopicContent(contentId, input, csrfToken, refreshCSRF)`, `deleteTopicContent(contentId, csrfToken, refreshCSRF)`. Mutations use `fetchWithCSRFRetry`. (2026-04-21)
-- [x] **B3** — New `src/features/admin/hooks/use-topic-contents.ts`: `useTopicContents(topicId)` (query, disabled when null; key `["admin", "topic-contents", topicId]`), `useCreateTopicContent()`, `useUpdateTopicContent()`, `useDeleteTopicContent()` (mutations; all invalidate `["admin", "topic-contents", ...]`). (2026-04-21)
-- [x] **B4** — New `src/features/admin/components/content-item-row.tsx` + `content-item-row.module.css`: renders one content item — type icon (🎬/📄/📝), title, optional description (truncated), order badge, edit button, delete button. (2026-04-21)
-- [x] **B5** — New `src/features/admin/components/add-content-modal.tsx` + `add-content-modal.module.css`: native `<dialog>` modal; `mode: 'create' | 'edit'` + `initialValues?: TopicContent`; content type selector shows `video`/`pdf`/`text` only, disabled in edit mode; URL field for video/pdf, textarea for text; loading spinner on submit. (2026-04-21)
-- [x] **B6** — New `src/features/admin/components/delete-content-dialog.tsx`: native `<dialog>` confirmation — "Delete '[title]'? This cannot be undone." Cancel + Confirm Delete (danger style); loading state on confirm. (2026-04-21)
-- [x] **B7** — `src/features/admin/components/topic-row.tsx`: extend to show content section below topic header. Section: "Content" label + "Add Content" button, `ContentItemRow` list sorted by `order`, empty state. Wire `AddContentModal` (create/edit modes) and `DeleteContentDialog` via local state. (2026-04-21)
-- [x] **B8** — Tests: `ContentItemRow` renders + callbacks; `AddContentModal` create/edit modes + submit; `DeleteContentDialog` cancel/confirm; `TopicRow` content section; `useTopicContents` hook. Maintain 100% coverage. (2026-04-21)
-
----
-
-## Verification checklist
-
-Run these before marking the phase complete.
-
-### Backend
-- [ ] `pytest` exits 0 with 100% coverage
-- [ ] `POST /api/topic-contents/` still works (no regressions)
-- [ ] `PATCH /api/topic-contents/{id}` with valid admin + CSRF → 200 with updated fields
-- [ ] `PATCH /api/topic-contents/{id}` for non-platform topic → 404
-- [ ] `PATCH /api/topic-contents/{id}` as non-admin → 403
-- [ ] `DELETE /api/topic-contents/{id}` with valid admin + CSRF → 204
-- [ ] `DELETE /api/topic-contents/{id}` for non-platform topic → 404
-- [ ] `DELETE /api/topic-contents/{id}` as non-admin → 403
-
-### Frontend
-- [ ] `pnpm test` exits 0 with 100% coverage
-- [ ] Admin boards page: topic row shows content section when expanded
-- [ ] "No content yet — add some." empty state shown for topics with no content
-- [ ] "Add Content" button opens `AddContentModal` in create mode
-- [ ] Submit creates content item; item appears in list with correct icon
-- [ ] Edit button opens `AddContentModal` in edit mode, pre-filled; content type disabled
-- [ ] Delete button opens `DeleteContentDialog`; confirm removes item from list
-- [ ] Content type icons correct: 🎬 video, 📄 pdf, 📝 text
-
----
-
-## Blocked
-
-> Nothing blocked at time of writing.
-
----
-
-## Notes for implementers
-
-- Full step-by-step detail: `Implementation_planning/PLAN.md`
-- Critical rules (CSRF, role header, oracle protection, imperative mapping): `CLAUDE.md`
-- Visual spec: open `target/prototypes/haisir_admin_flow.html` in a browser — SA-boards section is the authoritative layout reference
-- Backend pattern files: `src/api/routes/topic.py` (platform-protected PATCH/DELETE), `src/infrastructure/repositories/topic_repository.py` (oracle JOIN pattern)
-- Frontend pattern files: `src/features/admin/components/add-board-modal.tsx` (native `<dialog>` pattern), `src/features/admin/hooks/use-topics.ts` (hook pattern)
-- **Binary file upload is OUT OF SCOPE** — admin provides URL/filename as plain text; actual binary upload deferred
-- **`content_type` is immutable** — omit from `TopicContentUpdate`; disable selector in edit modal
+- T1.1 [deploy]: Add worker service to Docker Compose
+- T1.2 [deploy]: STORAGE_ROOT volume *(after T1.1)*
+- T2.1 [backend]: Alembic migration V25
+- T3.1 [backend]: Domain models
+- T3.2 [backend]: Domain protocols
+- T8.1 [frontend]: CSRF + FormData integration test ⚠️ Start immediately — gates all other frontend work
