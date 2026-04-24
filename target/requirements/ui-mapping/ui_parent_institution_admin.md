@@ -193,7 +193,7 @@
 
 ## SA-boards — Board Content Manager (`/admin/boards`)
 
-**Prototype functions:** `renderBoardTree()`, `selectBoardNode()`, `renderBoardDetail()`, `confirmBoardPublish()`
+**Prototype functions:** `renderBoardTree()`, `selectBoardNode()`, `renderBoardDetail()`, `confirmBoardPublish()`, `openAddContent()`, `confirmAddContent()`, `simulateUpload()`, `simulateExtraction()`, `renderJobRow()`, `renderContentRow()`, `rerenderCurrentNode()`
 
 > Inside `main-area`, the boards page uses a three-column `.board-layout` (flex row): `.board-strip` | `.board-tree` | `.board-detail`.
 
@@ -205,10 +205,72 @@
 | "Add Child Node" | Appears on hover; adds a child to selected node |
 | "Rename" / "Delete" | Contextual; Delete blocked if node has live topics |
 | Right panel | Empty state until node selected |
-| Topic list | Title, content type icons, status badge (Draft/Live), "Upload Content", "Edit", "Delete" |
+| Topic card | Header (title + status pill + Live/Draft toggle), CONTENT section (rows of `renderContentRow`), IN PROGRESS section (rows of `renderJobRow`, hidden if zero jobs), `+ Add content` button at bottom |
 | Status toggle | Per topic: Draft ↔ Live |
 | "Add Topic" button | Below topic list |
 | "Publish Board" button | Top-right of right panel; opens Publish modal |
+
+### Add Content modal (Phase 1d-real)
+
+Native `<dialog id="modal-add-content">`, `.modal-inner.modal-wide` (560px). Type chip selector + dynamic body.
+
+| Element | Detail |
+|---|---|
+| Topic context line | "Topic: {topic.name}" — subtle grey, top of modal |
+| Type chips (`#uc-types`) | 4 chips horizontally: 📄 PDF / 🖼️ Image(s) / 🎬 Video URL / 📝 Text. Selected chip = `.uc-type.sel` (blue border + tint). Switching chip resets state. |
+| Drop zone (`.uc-drop`) | For PDF / Image: 120px tall dashed border zone with 📥 icon + "Drop files here or click to browse" + hint text. `.dragover` class on dragenter/dragover. Click triggers hidden `<input type="file" multiple>`. |
+| File list (`.uc-files`) | One `.uc-file` row per added file: icon, name, size (human), status text, mini progress bar (`.uc-file-bar` + `.uc-file-fill`), ✕ remove button (only when `status='pending'`). |
+| URL input (Video) | Single `<input type="url">` with placeholder "https://youtube.com/watch?v=…". Optional title input below. |
+| Text body | Title input + 6-row textarea. Live char count. |
+| Cost preview band | Right of Upload button: "Est. $0.50–$2.00". For >$2: confirmation checkbox required. |
+| Confirm button (`#uc-confirm-btn`) | Label changes by type: "Upload N PDFs" / "Upload N images" / "Add video" / "Save text". Disabled when no content provided. |
+| Cancel button | "Cancel" (close + drop pseudo-jobs not yet POSTed). Closing during in-flight POSTs does NOT cancel — work continues on topic card. |
+
+### Topic card — IN PROGRESS strip (`.tc-jobs`)
+
+Visible only when `topic.jobs.length > 0`. One `.job-row` per job from `renderJobRow(job, topicId)`.
+
+| Element | Detail |
+|---|---|
+| Section header | "IN PROGRESS ({n})" small caps, grey |
+| Job row layout | Icon (📄/🖼️) · main (filename, meta, progress bar) · status pill · actions |
+| Status pills | `.js-pending` "⏱ Queued" (grey) / `.js-uploading` "🌀 Uploading X%" (blue) / `.js-extracting` "🌀 Extracting" (purple, pulsing bar) / `.js-failed` "✕ Failed" (red) |
+| Progress bar | `.job-bar` 4px tall · `.job-fill` width=progress%, `.extracting` class adds pulse `@keyframes` |
+| Cancel | Visible for pending/uploading/failed; sets `cancel_requested=true` for extracting (soft) |
+| Retry | Visible only for `extraction_failed` |
+
+### Topic card — CONTENT section (`.tc-content`)
+
+Visible whenever topic has any `contents`. One `.content-row` per item from `renderContentRow(c)`.
+
+| Element | Detail |
+|---|---|
+| Row layout | Icon (📝 text / 🎬 video / 🖼️ image) · main (title, meta) · Edit / Delete buttons |
+| Title (`.cr-name`) | **Click to inline-rename**. `contenteditable=true`, blue outline, Enter saves, Esc reverts, empty reverts. Sends `PATCH /api/topic-contents/{id}` with `{title}`. |
+| Provenance badge (`.cr-prov`) | When `source_extraction_job_id` is set: "✨ from {source_filename} · p.{n}" pill on the meta line. Tooltip: "This row was created by an extraction job. The original PDF/image is no longer stored." Persists after edits. |
+| Edit button | Opens `#modal-edit-content` (560 px). Title input + markdown body textarea (or URL input for video). Provenance line shown at the top of the modal. Save sends `PATCH /api/topic-contents/{id}` with `{title, body}`. |
+| Delete button | Confirm dialog mentioning audit is preserved. Sends `DELETE /api/topic-contents/{id}`. Provenance audit row is NOT cascade-deleted. |
+| Empty state | When no content AND no jobs: "No content yet — add a PDF, image, video URL, or text below." |
+
+### Edit content modal (`#modal-edit-content`)
+
+Native `<dialog>`, 560 px wide. Triggered by Edit button on any content row.
+
+| Element | Detail |
+|---|---|
+| Provenance line | Top of modal. For extracted rows: "✨ Extracted from **{source_filename}** · page {n}. Edits don’t affect the audit record." For non-extracted: "Video URL content." / "Text content (manually authored)." |
+| Title input | Required. Cannot be empty. |
+| Body field | Markdown textarea (text/extracted) OR URL input (video). Body label and hint text adapt by content kind. |
+| Save | `PATCH /api/topic-contents/{id}`. `source_extraction_job_id` is NEVER touched. |
+| Cancel | Closes modal without sending. |
+
+### Polling cadence (frontend, JS)
+
+| Condition | Cadence | Notes |
+|---|---|---|
+| ≥1 job in `pending`/`extracting` for the topic | every 2s | Sends `If-None-Match: <last-etag>` |
+| No active jobs visible | every 10s | Backoff |
+| All-done for >60s | stop | Resumes on next user action that opens this topic |
 
 ### Publish Board modal
 
@@ -224,3 +286,15 @@
 - No node selected → right panel shows "Select a node to see topics."
 - Node with no topics → right panel shows "No topics yet — add one."
 - Node delete blocked → tooltip "Cannot delete: this node has live topics."
+- Cost estimate >$2 → Upload button disabled until checkbox confirmed.
+- Per-job cost cap exceeded → status pill "✕ Failed · cost cap reached" + admin contact link.
+
+### P-topic — Parent Topic Content Manager (`/parent/curriculum/:node_id/topics/:topic_id`)
+
+Mirrors SA-boards Add Content modal + topic card behaviour exactly. Differences:
+
+| Element | Difference |
+|---|---|
+| Endpoint base | `/api/parent/curriculum/...` instead of `/api/admin/...` |
+| Quota gate | Modal disables Upload when concurrent_jobs ≥ 5 (warning: "You have 5 jobs in progress. Cancel or wait."). Daily count shown in footer ("78 / 100 today"). |
+| Cost cap | Per-job cap same as platform; daily cap is parent-account scoped, not platform-wide. |

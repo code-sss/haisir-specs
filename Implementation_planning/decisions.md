@@ -4,6 +4,43 @@
 
 ---
 
+## 2026-04-23 — Phase 1d-real: Content Extraction architecture + post-challenger hardening
+
+> Spec: `target/requirements/12_content_extraction.md`. Schema deltas: `target/requirements/01_data_model.md` § "Schema Extensions (Phase 1d-real)". Prototype: `target/prototypes/haisir_admin_flow.html` (Playwright-validated).
+
+**Phase 1d (the URL-only stub) was retroactively renamed `1d-stub`.** It shipped a non-functional Add Content modal — PDF chip existed but no upload pipeline. Phase 1d-real is the actual functional extraction work.
+
+### Five base architecture decisions
+
+- **PDF library: `pypdfium2`** (Apache/BSD). PyMuPDF is BANNED (AGPL §13 SaaS clause). Same library used for both native-text extraction (fast path, no LLM) and rasterization (slow path, feeds the vision LLM).
+- **Vision LLM: `glm-ocr`** copied from `../haiguru/glm_ocr/`. Prefix-dispatch on model spec (`lmstudio://`, plain Ollama, `openai://`, `anthropic://`). Streaming tuple protocol (`__first_token__`/`chunk`/`__done__`). Default model spec via env `EXTRACTION_MODEL_SPEC`; per-upload model selection deferred.
+- **Persistence model: ONE upload → N `topic_contents` rows with `content_type='text'`.** Source PDF/image is transient (purged per status TTL). No new `content_type` enum value. Confirmed against haiguru `etl_pipeline/load.py:_load_contents` proof-of-concept.
+- **Queue: Postgres `FOR UPDATE SKIP LOCKED`.** No Redis, no ARQ, no Celery — 5–10 admins / ~50–200 PDFs/week shows no scale signal yet. Migration trigger to SSE/Redis documented as ">100 concurrent active jobs platform-wide".
+- **Worker = same backend repo, second process mode.** Compose `replicas: 2` from day one (SKIP LOCKED needs N≥2 to be meaningful). Docker image is shared with the API.
+
+### Nine critical challenger fixes (integrated into spec before any code)
+
+- **CSRF on multipart MUST be verified first.** `fetchWithCSRFRetry` with FormData is a known footgun (Body is consumed on first send). Integration test required as a blocking gate before worker code (BR-EXT-018).
+- **Resume-after-crash via `extraction_job_pages` staging table.** Worker death no longer wastes LLM tokens — reclaimer resumes from `MAX(page_no)+1` (BR-EXT-008).
+- **RAG embedding via outbox (`rag_indexing_outbox`).** Embedding failure can never roll back content. Content is visible immediately; searchable when outbox drains (BR-EXT-012).
+- **Provenance is permanent.** `topic_contents.source_extraction_job_id` (additive nullable column) + indefinite `extraction_job_audit` table. Survives source purge, survives content delete, survives content edit (BR-DATA-010, BR-EXT-022).
+- **`MAX(content_order) FOR UPDATE` inside finalize TX.** Prevents collisions with manual content rows added during extraction (BR-DATA-012).
+- **Owner_type re-validated by worker in finalize TX.** Defence in depth — API gate is not the only check. Mismatch → `extraction_failed` with `error='ownership_violation'` (BR-DATA-011, BR-EXT-010).
+- **`Idempotency-Key` UUID header REQUIRED on POST.** Replay returns the original 201. Unique index on `(created_by, idempotency_key)` (BR-EXT-005).
+- **No `'uploading'` enum value.** HTTP transfer is client-side; the row is INSERTed only after the multipart handler succeeds. Frontend renders an in-memory pseudo-job for upload progress; replaced by the real `pending` row on 201, marked `upload_failed` on error (BR-EXT-019).
+- **Varied final-state TTLs.** `done`=7d, `extraction_failed`=30d (admin retry window), `cancelled`=24h, `upload_failed`=7d. Single uniform 7d would have killed the retry path.
+
+### Two post-design refinements (today)
+
+- **No upload-time title for PDF/image.** One upload becomes N rows, so a single user-typed title cannot map. Per-page titles auto-derived from first H1 (fallback `"Page N — {filename}"`); editable post-hoc via inline rename or Edit modal. Video and Text uploads (1 upload → 1 row) DO accept a title at creation (BR-EXT-023b).
+- **Two edit affordances on every content row.** Click-on-title for inline rename (cheap path, frequent); Edit button for full title+body modal (heavy path, OCR-error fixes). `PATCH` MUST NOT clear `source_extraction_job_id` — provenance badge persists even after admin rewrites the body (BR-EXT-023a).
+
+### Out of scope (v1)
+
+`exercises` job type (column wired, UI not exposed — ships in 1d-real-2), per-upload model selection UI, HEIC/HEIF, ClamAV, SSE/WebSocket progress, bulk re-extract by model upgrade.
+
+---
+
 ## 2026-04-09 — Phase 1c-post: Admin UX Alignment (completion + deviations)
 
 - **Phase 1c-post is complete.** All six UX gaps listed in the plan are closed. Commits: haisir-backend `819893c`, haisir-frontend `dec3ab8`. Archived plan at `archive/phase1c-post-plan.md`. Next phase is 1d (topic content upload).

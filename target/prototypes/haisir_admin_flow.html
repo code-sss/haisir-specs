@@ -172,6 +172,85 @@ input,textarea,select{font-family:inherit;}
 /* ─── TOAST ──────────────────────────────────────── */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#080F17;color:#fff;font-size:12px;padding:10px 18px;border-radius:8px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;white-space:nowrap;border:0.5px solid rgba(255,255,255,.1);}
 .toast.show{opacity:1;}
+
+/* ─── ADD CONTENT MODAL ──────────────────────────── */
+.modal-inner.modal-wide{width:560px;}
+.uc-types{display:flex;gap:8px;flex-wrap:wrap;}
+.uc-type{flex:1;min-width:110px;padding:12px 10px;border:1px solid #e5e3dc;border-radius:8px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;transition:all .12s;}
+.uc-type:hover{border-color:#080F17;background:#fafaf8;}
+.uc-type.sel{border-color:#080F17;background:#080F17;color:#fff;}
+.uc-type-icon{font-size:20px;line-height:1;}
+.uc-type-label{font-size:11px;font-weight:600;}
+.uc-type-sub{font-size:9px;color:#888780;font-weight:400;}
+.uc-type.sel .uc-type-sub{color:rgba(255,255,255,.55);}
+
+/* drop zone */
+.uc-drop{border:1.5px dashed #d3d1c7;border-radius:10px;padding:24px 16px;text-align:center;background:#fafaf8;cursor:pointer;transition:all .12s;}
+.uc-drop:hover,.uc-drop.dragover{border-color:#080F17;background:#fff;}
+.uc-drop-icon{font-size:24px;margin-bottom:6px;}
+.uc-drop-title{font-size:13px;font-weight:600;color:#1a1a18;margin-bottom:3px;}
+.uc-drop-sub{font-size:11px;color:#888780;}
+.uc-drop-hint{font-size:10px;color:#888780;margin-top:8px;font-style:italic;}
+
+/* file list inside modal */
+.uc-files{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;}
+.uc-file{display:flex;align-items:center;gap:10px;padding:9px 11px;border:0.5px solid #e5e3dc;border-radius:7px;background:#fff;}
+.uc-file-icon{font-size:16px;flex-shrink:0;width:24px;text-align:center;}
+.uc-file-main{flex:1;min-width:0;}
+.uc-file-name{font-size:11px;font-weight:500;color:#1a1a18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.uc-file-meta{font-size:10px;color:#888780;margin-top:2px;display:flex;align-items:center;gap:6px;}
+.uc-file-bar{height:3px;background:#f0efe9;border-radius:2px;overflow:hidden;margin-top:5px;}
+.uc-file-fill{height:100%;background:#185FA5;border-radius:2px;transition:width .3s;}
+.uc-file-fill.done{background:#1D9E75;}
+.uc-file-fill.err{background:#D2462C;}
+.uc-file-x{background:transparent;border:none;color:#888780;font-size:14px;padding:2px 4px;flex-shrink:0;}
+.uc-file-x:hover{color:#D2462C;}
+
+/* simple URL/textarea forms */
+.uc-form-row{display:flex;flex-direction:column;gap:5px;}
+.uc-form-row label{font-size:11px;font-weight:600;color:#5f5e5a;}
+.uc-form-row input,.uc-form-row textarea{padding:8px 10px;border:0.5px solid #d3d1c7;border-radius:6px;font-size:12px;font-family:inherit;outline:none;}
+.uc-form-row input:focus,.uc-form-row textarea:focus{border-color:#080F17;}
+
+/* ─── EXTRACTION JOBS STRIP (inside topic card) ──── */
+.tc-jobs{padding:8px 14px 12px;background:#fafaf8;border-top:0.5px dashed #e5e3dc;display:flex;flex-direction:column;gap:5px;}
+.tc-jobs-hd{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888780;margin-bottom:2px;}
+.job-row{display:flex;align-items:center;gap:9px;padding:7px 9px;background:#fff;border:0.5px solid #e5e3dc;border-radius:6px;}
+.job-icon{font-size:14px;flex-shrink:0;width:20px;text-align:center;}
+.job-main{flex:1;min-width:0;}
+.job-name{font-size:11px;font-weight:500;color:#1a1a18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.job-meta{font-size:10px;color:#888780;margin-top:1px;}
+.job-bar{height:2px;background:#f0efe9;border-radius:1px;overflow:hidden;margin-top:4px;}
+.job-fill{height:100%;background:#EF9F27;border-radius:1px;transition:width .4s;width:30%;}
+.job-fill.extracting{background:#185FA5;animation:pulse 1.2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:.55;}50%{opacity:1;}}
+.job-status{flex-shrink:0;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;display:flex;align-items:center;gap:4px;}
+.js-pending{background:#FAEEDA;color:#854F0B;}
+.js-uploading{background:#E3F0FB;color:#0C447C;}
+.js-extracting{background:#E3F0FB;color:#0C447C;}
+.js-done{background:#E1F5EE;color:#085041;}
+.js-failed{background:#FBE3E0;color:#7A1B0A;}
+.job-actions{display:flex;gap:4px;flex-shrink:0;}
+.job-btn{font-size:10px;padding:3px 8px;border-radius:4px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
+.job-btn:hover{border-color:#080F17;color:#080F17;}
+.spinner{display:inline-block;width:9px;height:9px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ─── EXTRACTED CONTENT ROWS (inside topic card) ─── */
+.tc-content{padding:6px 14px 12px;display:flex;flex-direction:column;gap:5px;}
+.content-row{display:flex;align-items:center;gap:9px;padding:7px 9px;border:0.5px solid #e5e3dc;border-radius:6px;background:#fff;}
+.content-row:hover{border-color:#080F17;}
+.cr-icon{font-size:13px;flex-shrink:0;width:20px;text-align:center;}
+.cr-main{flex:1;min-width:0;}
+.cr-name{font-size:11px;font-weight:500;color:#1a1a18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text;border-radius:3px;padding:1px 3px;margin:-1px -3px;}
+.cr-name:hover{background:#fafaf8;}
+.cr-name[contenteditable="true"]{background:#fff;outline:1.5px solid #0C447C;cursor:text;white-space:normal;overflow:visible;}
+.cr-meta{font-size:10px;color:#888780;margin-top:1px;display:flex;align-items:center;gap:6px;}
+.cr-prov{display:inline-flex;align-items:center;gap:3px;font-size:9px;color:#5f5e5a;background:#f3f1ea;border-radius:3px;padding:1px 5px;}
+.cr-prov-icon{font-size:9px;}
+.cr-actions{display:flex;gap:4px;flex-shrink:0;}
+.tc-add-content{margin:0 14px 12px;padding:8px;border:1px dashed #d3d1c7;border-radius:7px;background:transparent;color:#5f5e5a;font-size:11px;font-weight:500;display:flex;align-items:center;justify-content:center;gap:6px;}
+.tc-add-content:hover{border-color:#080F17;color:#080F17;background:#fafaf8;}
 </style>
 </head>
 <body>
@@ -276,6 +355,53 @@ input,textarea,select{font-family:inherit;}
   </div>
 </div>
 
+<!-- Add content modal -->
+<div class="modal-overlay" id="modal-add-content" onclick="if(event.target===this)closeAddContent()">
+  <div class="modal-inner modal-wide">
+    <div>
+      <div class="modal-inner-title">Add content</div>
+      <div class="modal-inner-sub" id="add-content-topic-label">Topic: —</div>
+    </div>
+
+    <!-- Type chip selector -->
+    <div>
+      <label style="display:block;margin-bottom:6px;">Content type</label>
+      <div class="uc-types" id="uc-types"></div>
+    </div>
+
+    <!-- Body — swaps based on selected type -->
+    <div id="uc-body"></div>
+
+    <div class="modal-inner-actions">
+      <button class="modal-cancel" onclick="closeAddContent()" id="uc-cancel-btn">Cancel</button>
+      <button class="modal-confirm" onclick="confirmAddContent()" id="uc-confirm-btn">Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit content modal -->
+<div class="modal-overlay" id="modal-edit-content" onclick="if(event.target===this)closeEditContent()">
+  <div class="modal-inner modal-wide">
+    <div>
+      <div class="modal-inner-title">Edit content</div>
+      <div class="modal-inner-sub" id="ec-prov-line">—</div>
+    </div>
+    <div>
+      <label>Title</label>
+      <input type="text" id="ec-title" style="width:100%;padding:8px 10px;border:0.5px solid #d3d1c7;border-radius:6px;font-size:12px;font-family:inherit;outline:none;">
+    </div>
+    <div id="ec-body-wrap">
+      <label id="ec-body-label">Content</label>
+      <textarea id="ec-body" rows="10" style="width:100%;padding:8px 10px;border:0.5px solid #d3d1c7;border-radius:6px;font-size:12px;font-family:'SF Mono',Menlo,monospace;outline:none;resize:vertical;"></textarea>
+      <div id="ec-body-hint" style="font-size:10px;color:#888780;margin-top:4px;"></div>
+    </div>
+    <div class="modal-inner-actions">
+      <button class="modal-cancel" onclick="closeEditContent()">Cancel</button>
+      <button class="modal-confirm" onclick="confirmEditContent()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Publish modal -->
 <div class="modal-overlay" id="modal-board-publish" onclick="if(event.target===this)closeBoardModal('modal-board-publish')">
   <div class="modal-inner">
@@ -307,7 +433,16 @@ const boards = [
       { id:'n-g6', type:'grade', label:'Grade 6', expanded:true, children:[
         { id:'n-g6-mat', type:'subject', label:'Mathematics', expanded:true, children:[
           { id:'n-g6-mat-ch1', type:'chapter', label:'Knowing Our Numbers', children:[], topics:[
-            { id:'bt1', name:'Large Numbers',      status:'live',  content:3 },
+            { id:'bt1', name:'Large Numbers',      status:'live',  content:3,
+              contents:[
+                { id:'c1', kind:'text',  title:'Page 1 — Introduction',          body:'# Introduction\n\nLarge numbers extend our place-value system…', provenance:{ source:'chapter1.pdf', page:1, extractedAt:'2 min ago' } },
+                { id:'c2', kind:'text',  title:'Page 2 — Place value system',    body:'# Place value system\n\nEach digit’s value depends on its position…', provenance:{ source:'chapter1.pdf', page:2, extractedAt:'2 min ago' } },
+                { id:'c3', kind:'video', title:'Khan Academy: Place Value',      body:'https://youtube.com/watch?v=...', meta:'youtube.com/watch?v=…' },
+              ],
+              jobs:[
+                { id:'j1', source:'chapter1-extra.pdf', sourceType:'pdf', status:'extracting', progress:62, pages:14 },
+              ]
+            },
             { id:'bt2', name:'Roman Numerals',     status:'live',  content:2 },
             { id:'bt3', name:'Estimation',          status:'draft', content:0 },
           ]},
@@ -550,6 +685,18 @@ function selectBoardNode(nodeId) {
   renderBoardDetail(node);
 }
 
+// Re-render the currently selected node without toggling its expand state.
+// Used by upload/extraction lifecycle to refresh job + content rows in place.
+function rerenderCurrentNode() {
+  if (!selectedNodeId) return;
+  const board = boards.find(b => b.id === activeBoardId);
+  if (!board) return;
+  const node = findNode(board.tree, selectedNodeId);
+  if (!node) return;
+  renderBoardTree();
+  renderBoardDetail(node);
+}
+
 function findNode(tree, id) {
   for (const n of tree) {
     if (n.id === id) return n;
@@ -581,21 +728,36 @@ function renderBoardDetail(node) {
   }
 
   if (isLeaf || hasTopics) {
-    const topicRows = (node.topics || []).map(t => `
+    const topicRows = (node.topics || []).map(t => {
+      const jobs = (t.jobs || []).filter(j => j.status !== 'done');
+      const contents = t.contents || [];
+      const jobsHtml = jobs.length ? `
+        <div class="tc-jobs">
+          <div class="tc-jobs-hd">In progress (${jobs.length})</div>
+          ${jobs.map(j => renderJobRow(j, t.id)).join('')}
+        </div>` : '';
+      const contentsHtml = contents.length ? `
+        <div class="tc-content">
+          ${contents.map(c => renderContentRow(c)).join('')}
+        </div>` : (jobs.length ? '' : `<div style="padding:8px 14px 4px;color:#888780;font-size:11px;font-style:italic;">No content yet — add a PDF, image, video URL, or text below.</div>`);
+      return `
       <div class="topic-card">
         <div class="tc-row">
           <div class="tc-status-icon ${t.status === 'live' ? 'tc-live-icon' : 'tc-draft-icon'}">${t.status === 'live' ? '✓' : '✏'}</div>
           <div class="tc-main">
             <div class="tc-name">${t.name}</div>
-            <div class="tc-meta">${t.content} content item(s)</div>
+            <div class="tc-meta">${contents.length} content item(s)${jobs.length ? ` · ${jobs.length} processing` : ''}</div>
           </div>
           <div class="tc-right">
             <span class="version-pill ${t.status === 'live' ? 'vp-live' : 'vp-draft'}">${t.status}</span>
-            <button class="row-btn" onclick="showToast('Upload content for ${t.name}')">Upload content</button>
-            <button class="row-btn" onclick="t_status='${t.status}';showToast('Status toggled');">${t.status === 'live' ? 'Set draft' : 'Set live'}</button>
+            <button class="row-btn" onclick="event.stopPropagation();toggleTopicStatus('${t.id}')">${t.status === 'live' ? 'Set draft' : 'Set live'}</button>
           </div>
         </div>
-      </div>`).join('');
+        ${contentsHtml}
+        ${jobsHtml}
+        <button class="tc-add-content" onclick="openAddContent('${t.id}','${t.name.replace(/'/g, "\\'")}')">+ Add content</button>
+      </div>`;
+    }).join('');
 
     bodyHtml += `
       <div class="sec-hd" style="padding:0;"><span class="sec-title">Topics</span></div>
@@ -715,6 +877,406 @@ function showToast(msg) {
   el.textContent = msg;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+/* ════════════════════════════════════════════════
+   ADD CONTENT MODAL — upload + extraction lifecycle
+════════════════════════════════════════════════ */
+const CONTENT_TYPES = [
+  { id:'pdf',   icon:'📄', label:'PDF',       sub:'extracted to text' },
+  { id:'image', icon:'🖼️', label:'Image(s)',  sub:'OCR via vision LLM' },
+  { id:'video', icon:'🎬', label:'Video URL', sub:'YouTube, Vimeo…' },
+  { id:'text',  icon:'📝', label:'Text',      sub:'paste or write' },
+];
+const MAX_FILES = 10;
+let ucState = { topicId:null, topicName:'', type:'pdf', files:[], url:'', text:'', title:'', textTitle:'' };
+
+function findTopic(topicId) {
+  for (const b of boards) {
+    const stack = [...b.tree];
+    while (stack.length) {
+      const n = stack.pop();
+      for (const t of (n.topics || [])) if (t.id === topicId) return t;
+      for (const c of (n.children || [])) stack.push(c);
+    }
+  }
+  return null;
+}
+
+function openAddContent(topicId, topicName) {
+  ucState = { topicId, topicName, type:'pdf', files:[], url:'', text:'', title:'', textTitle:'' };
+  document.getElementById('add-content-topic-label').textContent = `Topic: ${topicName}`;
+  renderUcTypes();
+  renderUcBody();
+  document.getElementById('uc-confirm-btn').textContent = 'Upload';
+  document.getElementById('uc-confirm-btn').disabled = false;
+  document.getElementById('modal-add-content').classList.add('open');
+}
+function closeAddContent() { document.getElementById('modal-add-content').classList.remove('open'); }
+
+function renderUcTypes() {
+  document.getElementById('uc-types').innerHTML = CONTENT_TYPES.map(t => `
+    <button class="uc-type ${ucState.type === t.id ? 'sel' : ''}" onclick="selectUcType('${t.id}')">
+      <div class="uc-type-icon">${t.icon}</div>
+      <div class="uc-type-label">${t.label}</div>
+      <div class="uc-type-sub">${t.sub}</div>
+    </button>`).join('');
+}
+function selectUcType(id) {
+  ucState.type = id;
+  ucState.files = []; ucState.url = ''; ucState.text = ''; ucState.title = ''; ucState.textTitle = '';
+  renderUcTypes(); renderUcBody();
+}
+
+function renderUcBody() {
+  const body = document.getElementById('uc-body');
+  const confirmBtn = document.getElementById('uc-confirm-btn');
+  if (ucState.type === 'pdf' || ucState.type === 'image') {
+    const accept = ucState.type === 'pdf' ? '.pdf' : '.jpg,.jpeg,.png,.webp';
+    const hint = ucState.type === 'pdf'
+      ? 'Drop a PDF here or click to browse · max 10 files · 50 MB each'
+      : 'Drop image(s) here or click to browse · JPG/PNG/WebP · max 10 files';
+    const filesHtml = ucState.files.length ? `
+      <div class="uc-files" style="margin-top:10px;">
+        ${ucState.files.map((f,i) => `
+          <div class="uc-file">
+            <div class="uc-file-icon">${ucState.type === 'pdf' ? '📄' : '🖼️'}</div>
+            <div class="uc-file-main">
+              <div class="uc-file-name">${f.name}</div>
+              <div class="uc-file-meta">
+                <span>${formatBytes(f.size)}</span>
+                <span>·</span>
+                <span>${f.status === 'pending' ? 'Ready' : f.status === 'uploading' ? Math.round(f.progress) + '%' : f.status === 'done' ? '✓ Uploaded' : '⚠ ' + (f.error || 'Failed')}</span>
+              </div>
+              <div class="uc-file-bar"><div class="uc-file-fill ${f.status === 'done' ? 'done' : f.status === 'failed' ? 'err' : ''}" style="width:${f.status === 'done' ? 100 : f.status === 'failed' ? 100 : (f.progress || 0)}%"></div></div>
+            </div>
+            ${f.status === 'pending' ? `<button class="uc-file-x" onclick="removeUcFile(${i})" title="Remove">✕</button>` : ''}
+          </div>`).join('')}
+      </div>` : '';
+    body.innerHTML = `
+      <div class="uc-drop" id="uc-drop" onclick="document.getElementById('uc-file-input').click()">
+        <div class="uc-drop-icon">📥</div>
+        <div class="uc-drop-title">Drop files here or click to browse</div>
+        <div class="uc-drop-sub">${hint}</div>
+        ${ucState.files.length >= MAX_FILES ? `<div class="uc-drop-hint">Max ${MAX_FILES} files reached. Split larger batches.</div>` : ''}
+      </div>
+      <input type="file" id="uc-file-input" accept="${accept}" multiple style="display:none;" onchange="addUcFiles(this.files)">
+      ${filesHtml}`;
+    wireDropZone();
+    confirmBtn.disabled = ucState.files.length === 0;
+    confirmBtn.textContent = `Upload ${ucState.files.length || ''} ${ucState.type === 'pdf' ? 'PDF' : 'image'}${ucState.files.length === 1 ? '' : 's'}`.trim();
+  } else if (ucState.type === 'video') {
+    body.innerHTML = `
+      <div class="uc-form-row">
+        <label>Video URL</label>
+        <input type="url" placeholder="https://youtube.com/watch?v=…" value="${ucState.url}" oninput="ucState.url=this.value;document.getElementById('uc-confirm-btn').disabled=!this.value.trim();">
+      </div>
+      <div class="uc-form-row" style="margin-top:10px;">
+        <label>Title (optional)</label>
+        <input type="text" placeholder="e.g. Khan Academy: Place Value" value="${ucState.title || ''}" oninput="ucState.title=this.value;">
+      </div>`;
+    confirmBtn.disabled = !ucState.url.trim();
+    confirmBtn.textContent = 'Add video';
+  } else if (ucState.type === 'text') {
+    body.innerHTML = `
+      <div class="uc-form-row">
+        <label>Title</label>
+        <input type="text" placeholder="e.g. Quick reference notes" value="${ucState.textTitle || ''}" oninput="ucState.textTitle=this.value;">
+      </div>
+      <div class="uc-form-row" style="margin-top:10px;">
+        <label>Content</label>
+        <textarea rows="6" placeholder="Paste or write content here…" oninput="ucState.text=this.value;document.getElementById('uc-confirm-btn').disabled=!this.value.trim();">${ucState.text}</textarea>
+      </div>`;
+    confirmBtn.disabled = !ucState.text.trim();
+    confirmBtn.textContent = 'Save text';
+  }
+}
+
+function wireDropZone() {
+  const dz = document.getElementById('uc-drop'); if (!dz) return;
+  ['dragenter','dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('dragover'); }));
+  ['dragleave','drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('dragover'); }));
+  dz.addEventListener('drop', ev => addUcFiles(ev.dataTransfer.files));
+}
+
+function addUcFiles(fileList) {
+  const remaining = MAX_FILES - ucState.files.length;
+  const files = Array.from(fileList).slice(0, remaining);
+  files.forEach(f => ucState.files.push({ name:f.name, size:f.size, status:'pending', progress:0 }));
+  if (fileList.length > remaining) showToast(`Only added first ${remaining} — max ${MAX_FILES} per upload.`);
+  renderUcBody();
+}
+function removeUcFile(i) { ucState.files.splice(i, 1); renderUcBody(); }
+
+function confirmAddContent() {
+  const topic = findTopic(ucState.topicId); if (!topic) return;
+  topic.contents = topic.contents || []; topic.jobs = topic.jobs || [];
+
+  if (ucState.type === 'video') {
+    topic.contents.unshift({ id:'c-' + Date.now(), kind:'video', title:(ucState.title || ucState.url.slice(0, 60)), body:ucState.url, meta:ucState.url });
+    closeAddContent(); rerenderCurrentNode();
+    showToast('Video added.'); return;
+  }
+  if (ucState.type === 'text') {
+    topic.contents.unshift({ id:'c-' + Date.now(), kind:'text', title:(ucState.textTitle || 'Untitled text'), body:ucState.text, meta:ucState.text.length + ' chars · just now' });
+    closeAddContent(); rerenderCurrentNode();
+    showToast('Text saved.'); return;
+  }
+
+  // PDF / Image — create one job per file IMMEDIATELY on the topic card,
+  // close modal, then run upload+extract in background. Single source of
+  // truth for progress is the topic card. Closing the modal never affects
+  // in-flight work.
+  const newJobs = ucState.files.filter(f => f.status === 'pending').map(f => ({
+    id:        'j-' + Date.now() + '-' + Math.random().toString(36).slice(2,5),
+    source:    f.name,
+    sourceType: ucState.type,
+    sizeBytes: f.size,
+    status:    'uploading',
+    progress:  0,
+    pages:     ucState.type === 'pdf' ? Math.ceil(f.size / 100000) : 1,
+  }));
+  topic.jobs.push(...newJobs);
+  const count = newJobs.length;
+  closeAddContent();
+  rerenderCurrentNode();
+  showToast(`${count} ${ucState.type === 'pdf' ? 'PDF' : 'image'}${count === 1 ? '' : 's'} queued — track progress on the topic card.`);
+  newJobs.forEach(j => simulateUpload(j, topic));
+}
+
+function simulateUpload(job, topic) {
+  // Phase 1: HTTP upload (status='uploading', 0→100%)
+  const tick = setInterval(() => {
+    job.progress += 8 + Math.random() * 12;
+    if (job.progress >= 100) {
+      job.progress = 100;
+      clearInterval(tick);
+      // Hand off to extraction phase
+      job.status = 'pending'; job.progress = 0;
+      rerenderCurrentNode();
+      simulateExtraction(job, topic);
+    } else {
+      rerenderCurrentNode();
+    }
+  }, 220);
+}
+
+function simulateExtraction(job, topic) {
+  // Phase 2: pending → extracting → done (or failed)
+  setTimeout(() => {
+    job.status = 'extracting'; job.progress = 5;
+    rerenderCurrentNode();
+    const tick = setInterval(() => {
+      job.progress += 6 + Math.random() * 8;
+      if (job.progress >= 100) {
+        job.progress = 100; job.status = 'done';
+        clearInterval(tick);
+        // Promote to actual content rows (one per page)
+        const baseId = 'c-' + Date.now();
+        for (let p = 1; p <= job.pages; p++) {
+          topic.contents.push({
+            id: baseId + '-' + p, kind: 'text',
+            title: `Page ${p} — extracted heading`,
+            body: `# Page ${p}\n\n_Extracted markdown body for page ${p} from ${job.source}…_`,
+            provenance: { source: job.source, page: p, extractedAt: 'just now' },
+          });
+        }
+        // Drop the completed job from the in-progress strip
+        topic.jobs = topic.jobs.filter(j => j.id !== job.id);
+        rerenderCurrentNode();
+      } else {
+        rerenderCurrentNode();
+      }
+    }, 500);
+  }, 900);
+}
+
+/* ════════════════════════════════════════════════
+   TOPIC CARD — job + content row renderers
+════════════════════════════════════════════════ */
+function renderJobRow(j, topicId) {
+  const icon = j.sourceType === 'pdf' ? '📄' : j.sourceType === 'image' ? '🖼️' : '📦';
+  const statusBlock = ({
+    pending:    `<span class="job-status js-pending">⏱ Queued</span>`,
+    uploading:  `<span class="job-status js-uploading"><span class="spinner"></span> Uploading ${Math.round(j.progress)}%</span>`,
+    extracting: `<span class="job-status js-extracting"><span class="spinner"></span> Extracting</span>`,
+    failed:     `<span class="job-status js-failed">✕ Failed</span>`,
+  })[j.status] || '';
+  const fillClass = j.status === 'extracting' ? 'extracting' : '';
+  let fillWidth = 0;
+  if (j.status === 'uploading') fillWidth = j.progress;
+  else if (j.status === 'extracting') fillWidth = Math.min(j.progress, 95);
+  else if (j.status === 'pending') fillWidth = 5;
+  else if (j.status === 'failed') fillWidth = 100;
+  const metaText = j.status === 'uploading' ? `uploading ${formatBytes(j.sizeBytes || 0)}…`
+                  : j.status === 'extracting' ? 'reading text & images via vision LLM'
+                  : j.status === 'pending' ? 'queued for extraction'
+                  : j.status === 'failed' ? (j.error || 'extraction error')
+                  : 'processing';
+  return `
+    <div class="job-row">
+      <div class="job-icon">${icon}</div>
+      <div class="job-main">
+        <div class="job-name">${j.source}</div>
+        <div class="job-meta">${j.sourceType === 'pdf' && j.pages ? `${j.pages} page(s) · ` : ''}${metaText}</div>
+        <div class="job-bar"><div class="job-fill ${fillClass}" style="width:${fillWidth}%"></div></div>
+      </div>
+      ${statusBlock}
+      <div class="job-actions">
+        ${j.status === 'failed' ? `<button class="job-btn" onclick="retryJob('${topicId}','${j.id}')">Retry</button>` : ''}
+        ${j.status !== 'extracting' ? `<button class="job-btn" onclick="cancelJob('${topicId}','${j.id}')">Cancel</button>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderContentRow(c) {
+  const icon = c.kind === 'video' ? '🎬' : c.kind === 'image' ? '🖼️' : '📝';
+  const safeId = String(c.id).replace(/'/g, "\\'");
+  // Provenance badge: only for extracted rows
+  const prov = c.provenance
+    ? `<span class="cr-prov" title="This row was created by an extraction job. The original PDF/image is no longer stored."><span class="cr-prov-icon">✨</span> from ${c.provenance.source} · p.${c.provenance.page}</span>`
+    : '';
+  // Meta line shows free-form meta (video URL, char count) OR extraction time
+  const metaText = c.provenance
+    ? `extracted ${c.provenance.extractedAt}`
+    : (c.meta || '');
+  return `
+    <div class="content-row">
+      <div class="cr-icon">${icon}</div>
+      <div class="cr-main">
+        <div class="cr-name"
+             title="Click to rename"
+             onclick="beginInlineTitleEdit(this, '${safeId}')">${escapeHtml(c.title)}</div>
+        <div class="cr-meta"><span>${escapeHtml(metaText)}</span>${prov}</div>
+      </div>
+      <div class="cr-actions">
+        <button class="job-btn" onclick="openEditContent('${safeId}')">Edit</button>
+        <button class="job-btn" onclick="deleteContent('${safeId}')">Delete</button>
+      </div>
+    </div>`;
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function findContent(contentId) {
+  for (const b of boards) {
+    const stack = [...b.tree];
+    while (stack.length) {
+      const n = stack.pop();
+      for (const t of (n.topics || [])) {
+        if (!t.contents) continue;
+        const c = t.contents.find(x => String(x.id) === String(contentId));
+        if (c) return { topic: t, content: c };
+      }
+      for (const c of (n.children || [])) stack.push(c);
+    }
+  }
+  return { topic: null, content: null };
+}
+
+/* ── Inline title rename (cheap path) ── */
+function beginInlineTitleEdit(el, contentId) {
+  if (el.getAttribute('contenteditable') === 'true') return;
+  el.setAttribute('contenteditable', 'true');
+  el.dataset.original = el.textContent;
+  // Place caret at end
+  const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
+  const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  el.focus();
+  el.onkeydown = (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); el.blur(); }
+    if (ev.key === 'Escape') { el.textContent = el.dataset.original; el.blur(); }
+  };
+  el.onblur = () => {
+    el.removeAttribute('contenteditable');
+    const next = el.textContent.trim();
+    el.onkeydown = null; el.onblur = null;
+    if (!next) { el.textContent = el.dataset.original; return; }
+    if (next === el.dataset.original) return;
+    const { content } = findContent(contentId);
+    if (content) { content.title = next; showToast('Title updated.'); }
+  };
+}
+
+function deleteContent(contentId) {
+  const { topic, content } = findContent(contentId);
+  if (!topic || !content) return;
+  if (!confirm(`Delete “${content.title}”?\n\nProvenance is preserved — this row’s extraction history stays in the audit log.`)) return;
+  topic.contents = topic.contents.filter(x => x.id !== contentId);
+  rerenderCurrentNode();
+  showToast('Content deleted.');
+}
+
+/* ── Full edit modal (title + body) ── */
+let editingContentId = null;
+function openEditContent(contentId) {
+  const { content } = findContent(contentId);
+  if (!content) return;
+  editingContentId = contentId;
+  document.getElementById('ec-title').value = content.title || '';
+  document.getElementById('ec-body').value = content.body || '';
+  const provLine = document.getElementById('ec-prov-line');
+  if (content.provenance) {
+    provLine.innerHTML = `✨ Extracted from <strong>${escapeHtml(content.provenance.source)}</strong> · page ${content.provenance.page}. Edits don’t affect the audit record.`;
+  } else {
+    provLine.textContent = content.kind === 'video' ? 'Video URL content.' : 'Text content (manually authored).';
+  }
+  const label = document.getElementById('ec-body-label');
+  const hint  = document.getElementById('ec-body-hint');
+  if (content.kind === 'video') {
+    label.textContent = 'Video URL';
+    hint.textContent  = 'YouTube or Vimeo URL.';
+  } else {
+    label.textContent = 'Markdown body';
+    hint.textContent  = content.provenance
+      ? 'Fix OCR errors, rewrite, or restructure. Provenance badge stays.'
+      : 'Plain markdown.';
+  }
+  document.getElementById('modal-edit-content').classList.add('open');
+}
+function closeEditContent() {
+  document.getElementById('modal-edit-content').classList.remove('open');
+  editingContentId = null;
+}
+function confirmEditContent() {
+  if (!editingContentId) return;
+  const { content } = findContent(editingContentId);
+  if (!content) return;
+  const newTitle = document.getElementById('ec-title').value.trim();
+  const newBody  = document.getElementById('ec-body').value;
+  if (!newTitle) { alert('Title cannot be empty.'); return; }
+  content.title = newTitle;
+  content.body  = newBody;
+  if (content.kind === 'video') content.meta = newBody;
+  closeEditContent();
+  rerenderCurrentNode();
+  showToast('Content saved.');
+}
+
+function retryJob(topicId, jobId) {
+  const t = findTopic(topicId); const j = (t.jobs || []).find(x => x.id === jobId); if (!j) return;
+  j.status = 'pending'; j.progress = 0; simulateExtraction(j, t);
+  rerenderCurrentNode();
+}
+function cancelJob(topicId, jobId) {
+  const t = findTopic(topicId); t.jobs = (t.jobs || []).filter(j => j.id !== jobId);
+  rerenderCurrentNode();
+  showToast('Job cancelled.');
+}
+function toggleTopicStatus(topicId) {
+  const t = findTopic(topicId); if (!t) return;
+  t.status = t.status === 'live' ? 'draft' : 'live';
+  rerenderCurrentNode();
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+  return (b/(1024*1024)).toFixed(1) + ' MB';
 }
 
 /* ════════════════════════════════════════════════

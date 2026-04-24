@@ -151,3 +151,183 @@ Access is granted automatically when the link is created. Revoking (`revoked_at`
   - `exam_templates.owner_id = current_parent.idp_sub` (parent-owned exams only)
   - Active `parent_child_links` record exists
 - Parents do NOT see results for platform exams the child has taken.
+
+---
+
+## Schema Extensions (Phase 1d-real — Content Extraction)
+
+> Detailed behaviour and business rules in `target/requirements/12_content_extraction.md`. This section defines the storage shape only.
+
+### 1 column added to existing `topic_contents` (additive, nullable)
+
+```sql
+ALTER TABLE topic_contents
+  ADD COLUMN source_extraction_job_id UUID NULL;
+```
+
+| Column | Type | Constraint | Notes |
+|---|---|---|---|
+| `source_extraction_job_id` | UUID | NULL | Soft pointer (no FK per CLAUDE.md identity convention). Set only for rows materialized by an extraction job. Joins to `extraction_job_audit.job_id` for provenance display. |
+
+**Migration:** No backfill required. Existing rows remain `NULL`.
+
+### New table — `extraction_jobs`
+
+Working state of an active or recently-finished extraction job. Purged after final-state TTL (`done`=7d, `extraction_failed`=30d, `cancelled`=24h, `upload_failed`=7d). Audit trail lives in `extraction_job_audit` (indefinite).
+
+```sql
+CREATE TABLE extraction_jobs (
+    id                   UUID PRIMARY KEY,
+    topic_id             UUID NOT NULL,                       -- soft FK to topics.id
+    created_by           VARCHAR NOT NULL,                    -- idp_sub
+    expected_owner_type  VARCHAR NOT NULL,                    -- 'platform' | 'parent'
+    job_type             VARCHAR NOT NULL DEFAULT 'contents', -- 'contents' | 'exercises'
+    source_type          VARCHAR NOT NULL,                    -- 'pdf' | 'image'
+    source_filename      VARCHAR NOT NULL,
+    source_size_bytes    BIGINT  NOT NULL,
+    source_path          VARCHAR NOT NULL,                    -- relative to STORAGE_ROOT
+    source_sha256        CHAR(64) NOT NULL,
+    status               VARCHAR NOT NULL,                    -- see § Job Lifecycle in 12_*
+    pages_total          INT     NULL,
+    pages_completed      INT     NOT NULL DEFAULT 0,
+    cancel_requested     BOOLEAN NOT NULL DEFAULT FALSE,
+    error_message        TEXT    NULL,
+    idempotency_key      UUID    NOT NULL,
+    running_cost_usd     NUMERIC(10,4) NOT NULL DEFAULT 0,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at           TIMESTAMPTZ NULL,
+    finished_at          TIMESTAMPTZ NULL,
+    purge_at             TIMESTAMPTZ NULL,
+    locked_at            TIMESTAMPTZ NULL,
+    locked_by            VARCHAR NULL                         -- worker hostname
+);
+
+CREATE INDEX ix_extraction_jobs_queue   ON extraction_jobs (status, created_at);
+CREATE INDEX ix_extraction_jobs_topic   ON extraction_jobs (topic_id, status);
+CREATE INDEX ix_extraction_jobs_purge   ON extraction_jobs (purge_at) WHERE purge_at IS NOT NULL;
+CREATE UNIQUE INDEX ux_extraction_jobs_idempotency
+    ON extraction_jobs (created_by, idempotency_key);
+CREATE UNIQUE INDEX ux_extraction_jobs_dedup
+    ON extraction_jobs (topic_id, source_sha256)
+    WHERE status NOT IN ('cancelled','upload_failed');
+
+-- Trigger: keep updated_at fresh for ETag generation
+CREATE TRIGGER trg_extraction_jobs_touch BEFORE UPDATE ON extraction_jobs
+    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+```
+
+**Status enum (string, not PG enum — easier to evolve):**
+`pending` | `extracting` | `done` | `upload_failed` | `extraction_failed` | `cancelled`. **No `'uploading'` state** — HTTP transfer is client-side; frontend uses an in-memory pseudo-job until 201 returns the real `'pending'` row.
+
+### New table — `extraction_job_pages`
+
+Per-page extracted markdown. Staged during extraction so a worker death can resume from `MAX(page_no)+1` instead of re-running the LLM (challenger #2).
+
+```sql
+CREATE TABLE extraction_job_pages (
+    job_id         UUID NOT NULL,        -- soft FK to extraction_jobs.id
+    page_no        INT  NOT NULL,
+    markdown_text  TEXT NOT NULL,
+    sha256         CHAR(64) NOT NULL,
+    extracted_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (job_id, page_no)
+);
+```
+
+Rows for a job are deleted at finalize-TX time, after `topic_contents` are materialized.
+
+### New table — `extraction_job_audit`
+
+Indefinite provenance record. Survives purge of the working `extraction_jobs` row and the source file. Carries the link from `topic_contents.source_extraction_job_id` to the original filename.
+
+```sql
+CREATE TABLE extraction_job_audit (
+    job_id           UUID PRIMARY KEY,         -- same id as the (now-purged) extraction_jobs.id
+    topic_id         UUID NOT NULL,
+    idp_sub          VARCHAR NOT NULL,
+    source_filename  VARCHAR NOT NULL,
+    source_sha256    CHAR(64) NOT NULL,
+    source_type      VARCHAR NOT NULL,
+    job_type         VARCHAR NOT NULL,
+    model_spec_used  VARCHAR NOT NULL,
+    pages_extracted  INT NOT NULL,
+    cost_usd         NUMERIC(10,4) NOT NULL,
+    final_status     VARCHAR NOT NULL,         -- 'done' | 'extraction_failed' | 'cancelled'
+    started_at       TIMESTAMPTZ NOT NULL,
+    finished_at      TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX ix_extraction_job_audit_topic ON extraction_job_audit (topic_id);
+CREATE INDEX ix_extraction_job_audit_user_day
+    ON extraction_job_audit (idp_sub, finished_at DESC);
+```
+
+### New table — `rag_indexing_outbox`
+
+Async embedding queue (challenger #3). Decouples user-visible content materialization from embedding latency / failure. New `topic_contents` rows from any source (extraction, manual, future) enqueue here.
+
+```sql
+CREATE TABLE rag_indexing_outbox (
+    content_id    UUID PRIMARY KEY,                     -- soft FK to topic_contents.id
+    status        VARCHAR NOT NULL DEFAULT 'pending',   -- 'pending' | 'done' | 'failed'
+    retry_count   SMALLINT NOT NULL DEFAULT 0,
+    last_error    TEXT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    locked_at     TIMESTAMPTZ NULL,
+    locked_by     VARCHAR NULL
+);
+
+CREATE INDEX ix_rag_outbox_pending
+    ON rag_indexing_outbox (status, created_at)
+    WHERE status = 'pending';
+```
+
+`status='done'` rows are deleted by the same hourly purge sweep.
+
+### New table — `worker_heartbeats`
+
+Worker liveness for the `/api/admin/system/workers` health endpoint. Stale rows (`last_seen > NOW()-INTERVAL '60s'`) flagged in the API response.
+
+```sql
+CREATE TABLE worker_heartbeats (
+    worker_id   VARCHAR PRIMARY KEY,        -- hostname
+    started_at  TIMESTAMPTZ NOT NULL,
+    last_seen   TIMESTAMPTZ NOT NULL,
+    job_id      UUID NULL                   -- currently-executing job, if any
+);
+```
+
+### New table — `parent_quota_counters`
+
+Application-layer rate gate for parents (challenger #15). APISIX rate limits are coarse; this is the authoritative gate.
+
+```sql
+CREATE TABLE parent_quota_counters (
+    idp_sub             VARCHAR PRIMARY KEY,                    -- parent's idp_sub
+    concurrent_jobs     INT NOT NULL DEFAULT 0,                 -- pending + extracting
+    daily_jobs          INT NOT NULL DEFAULT 0,
+    daily_window_start  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+**Caps:** `concurrent_jobs ≤ 5`, `daily_jobs ≤ 100`. Locked `FOR UPDATE` inside the POST handler TX. Counter row created on first parent upload.
+
+### Extraction Business Rules
+
+**BR-DATA-008 — Extraction produces text-only content:**
+A successful job materializes `topic_contents` rows with `content_type='text'` only. The source PDF/image is **not** stored as a `topic_contents` row. No new `content_type` enum value is added.
+
+**BR-DATA-009 — Source files are transient; audit is permanent:**
+`extraction_jobs.source_path` files and `extraction_jobs` rows are purged per status TTL. `extraction_job_audit` rows are **never purged** — they preserve provenance for materialized `topic_contents`.
+
+**BR-DATA-010 — Provenance is preserved across content deletes:**
+Manually deleting a `topic_contents` row via `DELETE /api/topic-contents/{id}` does not cascade to `extraction_job_audit`. The audit retains "this job extracted N pages on date X by user Y" forever.
+
+**BR-DATA-011 — Owner-type is re-validated by the worker:**
+The worker re-reads `topics.owner_type` and `topics.owner_id` inside the finalize TX. Mismatch with `extraction_jobs.expected_owner_type` (and `created_by` for parent jobs) → `status='extraction_failed'`, `error_message='ownership_violation'`. Defence in depth — the API gate already enforces ownership at request time.
+
+**BR-DATA-012 — `topic_contents.content_order` is base-shifted:**
+On finalize, the worker computes `base = COALESCE(MAX(content_order), 0) FROM topic_contents WHERE topic_id = :t FOR UPDATE` and inserts new rows at `base + page_no`. Prevents collision with manually-added content and re-runs.
