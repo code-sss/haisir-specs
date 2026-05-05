@@ -1,7 +1,7 @@
 # Progress
 
-> Auto-generated from PLAN.md. Updated by `/implement` in each code repo.  
-> Last baselined: backend:0e6c7e8 frontend:689cf53 deploy:baa20bf (2026-04-24)
+> Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
+> Last baselined: backend:0e6c7e8 frontend:689cf53 deploy:d065707 (2026-04-24)
 
 ## G1 [deploy]: Worker service provisioned
 - [ ] T1.1 [deploy]: Add worker service to Docker Compose (replicas:2, env vars, depends_on)
@@ -26,7 +26,7 @@
 - [ ] **G4: Infrastructure layer** — integration test: SKIP LOCKED claim with 2 concurrent DB sessions
 
 ## G5 [backend]: Admin extraction API
-- [ ] T5.0 [deploy]: APISIX dedicated plugin config and route for multipart extraction upload
+- [x] T5.0 [deploy]: APISIX dedicated plugin config and route for multipart extraction upload (2026-05-04)
 - [ ] T5.1 [backend]: POST /api/admin/topics/{topic_id}/extraction-jobs — streaming multipart, MIME sniff, SHA dedup, idempotency, oracle 404, file save, INSERT job (depends on T4.3, T4.4, T3.3, T2.1; e2e through APISIX requires T5.0 [deploy])
 - [ ] T5.2 [backend]: GET /api/admin/topics/{topic_id}/extraction-jobs — ETag/304, derived progress (depends on T4.3, T2.1)
 - [ ] T5.3 [backend]: GET /api/admin/extraction-jobs/{job_id} — detail (depends on T4.3, T2.1)
@@ -90,5 +90,4 @@ Tasks with no pending dependencies — can be started immediately in parallel:
 - T2.1 [backend]: Alembic migration V25
 - T3.1 [backend]: Domain models
 - T3.2 [backend]: Domain protocols
-- T5.0 [deploy]: APISIX dedicated plugin config and route for multipart extraction upload
 - T8.1 [frontend]: CSRF + FormData integration test ⚠️ Start immediately — gates all other frontend work
