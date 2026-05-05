@@ -11,10 +11,50 @@ argument-hint: "backend|frontend"
 
 # sync-spec — Pull, Diff, and Merge Spec Files
 
+## Core principle — containers ALWAYS carry stale specs
+
+Every container (backend, frontend, deploy) receives a copy of the spec at the
+time of the last `./sync-specs.sh push`. The spec repo keeps moving forward after
+that push, but the container's copy never updates automatically.
+
+**The versioning always looks like this:**
+
+```
+spec repo:    v1 ──push──> container gets v1
+                    │
+                    │  (spec evolves: planning, task specs, decisions added)
+                    ▼
+spec repo:    v2  ← container still has v1
+                    │
+                    │  (container does implementation work, marks tasks done)
+                    ▼
+pull →  container returns v1 + completions  (stale on everything except its own work)
+```
+
+When multiple containers are involved (backend then frontend, or vice-versa):
+
+```
+spec after backend sync:  v3  (v2 + backend completions)
+frontend container:       still has v1
+pull frontend →  frontend returns v1 + its completions  (stale on v2 and v3 additions)
+```
+
+**The golden rule:**
+> The container's pull is ALWAYS a step backward on the spec. The ONLY things
+> to extract from it are:
+> 1. **Task completions** (`[ ]` → `[x]` with date) — primary value
+> 2. **Implementation-discovered changes** to `target/` files — rare but real
+>    (e.g. a field name changed during implementation, a rule was clarified)
+>
+> Everything else in the pulled files that differs from HEAD is the container
+> being stale. It must be discarded and the HEAD version restored.
+
+---
+
 This skill syncs spec files from a named container into the `haisir-specs` repo.
-The key challenge: the container may have completed tasks and added new lines, but
-also may be missing spec-ahead planning content that was added here after the last
-push. The skill must keep both sets of changes.
+The mechanical challenge: the pull overwrites files with stale content. The skill
+diffs the overwritten files against HEAD, extracts only the useful changes from the
+container, and restores everything else.
 
 ---
 
@@ -235,13 +275,17 @@ The following are **NOT** synced and must be updated separately:
 
 ## Quick-reference merge rules
 
+**Remember:** the container is ALWAYS stale on spec content. Default is to RESTORE
+HEAD content and only KEEP things that represent real work done by the container.
+
 | Situation | Action |
 |---|---|
-| Backend removed a spec task block from PLAN.md | Restore (spec was ahead) |
-| Backend removed a `[x]` done task from TASKS.md | Restore as `[x]` (preserve history) |
-| Backend added `[x]` with date to a previously `[ ]` task | Keep (backend completed it) |
-| Backend updated "Ready now" queue | Keep (reflects real unblocked state) |
-| Backend changed deploy SHA in TASKS.md header | Keep |
-| New file inside `Implementation_planning/` or `target/` | Keep as-is |
-| File changed at repo root other than `CLAUDE.md` | **Ignore** — not from this pull |
-| Same line changed both sides differently | Ask user |
+| Container removed any spec content (task specs, planning text, decisions) | **Restore** — container was stale, never had it |
+| Container removed a `[x]` completion that WAS in HEAD | **Restore** as `[x]` — container was stale |
+| Container changed a `[ ]` to `[x]` with a date | **Keep** — container completed real work |
+| Container updated the "Ready now" queue | **Merge** — combine both sets of unblocked tasks, remove only tasks now marked `[x]` |
+| Container updated deploy SHA / baseline date in TASKS.md header | **Keep** for the container's own repo SHA; preserve other repos' SHAs from HEAD |
+| Container changed a `target/` file content (not just task status) | **Examine carefully** — keep only if it reflects an implementation-discovered correction; restore spec-ahead content |
+| New file inside `Implementation_planning/` or `target/` | **Keep** as-is (additive) |
+| File changed at repo root other than `CLAUDE.md` | **Ignore** — not produced by this pull |
+| Same line changed both in HEAD (spec evolution) and container (implementation) | **Ask user** |

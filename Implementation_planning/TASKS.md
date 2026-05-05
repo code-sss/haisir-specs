@@ -1,7 +1,7 @@
 # Progress
 
-> Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:0e6c7e8 frontend:689cf53 deploy:baa20bf (2026-04-24)
+> Auto-generated from PLAN.md. Updated by `/implement` in each code repo.  
+> Last baselined: backend:0e6c7e8 frontend:e0ec802 deploy:baa20bf (2026-05-02)
 
 ## G1 [deploy]: Worker service provisioned
 - [ ] T1.1 [deploy]: Add worker service to Docker Compose (replicas:2, env vars, depends_on)
@@ -15,7 +15,7 @@
 ## G3 [backend]: Domain layer
 - [x] T3.1 [backend]: Domain models — ExtractionJob, ExtractionJobPage, ExtractionJobAudit, RagIndexingOutbox, WorkerHeartbeat, ParentQuotaCounter dataclasses (2026-04-24)
 - [x] T3.2 [backend]: Domain protocols — ExtractionProvider + PdfReader (2026-04-24)
-- [x] T3.3 [backend]: ExtractionService — all 7 service methods with permission gates (depends on T3.1, T3.2)
+- [x] T3.3 [backend]: ExtractionService — all 7 service methods with permission gates (depends on T3.1, T3.2) (2026-04-24)
 - [ ] **G3: Domain layer** — integration test: `pytest tests/unit/services/test_extraction_service.py`
 
 ## G4 [backend]: Infrastructure layer
@@ -53,13 +53,13 @@
 - [ ] **G7: Worker process** — integration test: seed pending job → run worker → assert N topic_contents + audit row + job done
 
 ## G8 [frontend]: CSRF + FormData gate ⚠️ BLOCKING for G9–G12
-- [ ] T8.1 [frontend]: CSRF + FormData integration test — verify re-clone on retry; fix fetchWithCSRFRetry if needed
-- [ ] **G8: CSRF gate** — test IS the integration test; must pass in CI before G9 work starts
+- [x] T8.1 [frontend]: CSRF + FormData integration test — verify re-clone on retry; fix fetchWithCSRFRetry if needed (2026-04-24)
+- [x] **G8: CSRF gate** — test IS the integration test; must pass in CI before G9 work starts (2026-04-24)
 
 ## G9 [frontend]: Add Content modal rebuilt
-- [ ] T9.1 [frontend]: ExtractionJob types + extraction-api.ts — createExtractionJob (FormData factory), listExtractionJobs (ETag), cancel, retry (depends on T8.1, T5.1 [backend], T5.2 [backend], T5.4 [backend], T5.5 [backend])
-- [ ] T9.2 [frontend]: useExtractionJobs hook — polling 2s/10s/stop-60s, pseudo-job state machine, onJobDone callback (depends on T9.1)
-- [ ] T9.3 [frontend]: Rebuild AddContentModal — file drop zone, type chips, cost preview, Upload-closes-immediately, retain Video/Text create/edit (depends on T9.2, T8.1)
+- [x] T9.1 [frontend]: ExtractionJob types + extraction-api.ts — createExtractionJob (FormData factory), listExtractionJobs (ETag), cancel, retry (depends on T8.1, T5.1 [backend], T5.2 [backend], T5.4 [backend], T5.5 [backend]) — done 2026-05-01
+- [x] T9.2 [frontend]: useExtractionJobs hook — polling 2s/10s/stop-60s, pseudo-job state machine, onJobDone callback (depends on T9.1) — done 2026-05-02
+- [x] T9.3 [frontend]: Rebuild AddContentModal — file drop zone, type chips, cost preview, Upload-closes-immediately, retain Video/Text create/edit (depends on T9.2, T8.1) — done 2026-05-02
 - [ ] **G9: Add Content modal** — Playwright: drop 2 PDFs → modal closes → pseudo-jobs on topic card
 
 ## G10 [frontend]: Topic card jobs strip
@@ -94,7 +94,7 @@ Tasks with no pending dependencies — can be started immediately in parallel:
 - T6.3 [backend]: GET /api/parent/curriculum/extraction-jobs/{job_id} *(unblocked by T4.3, T2.1)*
 - T6.4 [backend]: DELETE /api/parent/curriculum/extraction-jobs/{job_id} *(unblocked by T4.3, T4.4, T2.1)*
 - T6.5 [backend]: POST /api/parent/curriculum/extraction-jobs/{job_id}/retry *(unblocked by T4.3, T4.4, T2.1)*
-- T8.1 [frontend]: CSRF + FormData integration test ⚠️ Start immediately — gates all other frontend work
-- T9.1 [frontend]: ExtractionJob types + extraction-api.ts *(unblocked by T5.1-T5.6 ✅)*
+- T10.1 [frontend]: ExtractionJobRow component *(T9.1 ✓)*
+- T10.2 [frontend]: Extend TopicRow with IN PROGRESS strip *(T10.1, T9.2 ✓, T9.3 ✓)*
 - T11.1 [backend]: PATCH regression guard — assert source_extraction_job_id never overwritten *(unblocked by T2.1)*
 - T12.1 [frontend]: Admin /system/workers page *(unblocked by T5.6 ✅)*

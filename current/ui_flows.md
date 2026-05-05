@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | dd7da7f (fix(admin): remove response_model from get_board_stats endpoint, 2026-04-20) |
-| haisir-frontend | 43fa83d (fix: reorder import for RESERVED_NODE_TYPES, 2026-04-18) |
-| haisir-deploy | ccdbad5 (feat(data): add Citizenship, 2026-04-20) |
+| haisir-backend | 0e6c7e8 (chore(deps): upgrade all dependencies and pre-commit hooks, 2026-04-22) |
+| haisir-frontend | 7633f19 (feat(admin): add extraction status panel, toast system, and upload fixes, 2026-05-05) |
+| haisir-deploy | baa20bf (fix(deploy): auto-restart services whose image_tag is overridden in manifest, 2026-04-22) |
 
-> Next session: run `git diff 43fa83d..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff 7633f19..HEAD` in haisir-frontend to see only what changed since this snapshot.
 
 ---
 
@@ -125,14 +125,26 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 
 - Panel: **TopicPanel** — fetches topics for the selected node via `GET /api/topics/{nodeId}`; shows loading spinner, error state, topic list (one TopicRow per topic), and an "+ Add topic" button.
 
-- Row: **TopicRow** — individual topic card with: inline rename (click title → RenameTopicInline), draft/live status toggle ("Set live" / "Set draft" button calling `PATCH /api/topics/{id}`), and a delete (×) button opening DeleteTopicDialog. Now also renders a **content management section** below the topic header: fetches `GET /api/topic-contents/{topicId}`; shows a "Content" label + "Add Content" button (admin accent blue); lists `ContentItemRow`s sorted by `order`; empty state "No content yet — add some." State: `addContentOpen`, `editingContent`, `deletingContent` drive three sub-components.
-  - API: `GET /api/topic-contents/{topicId}`, `POST /api/topic-contents/`, `PATCH /api/topic-contents/{id}`, `DELETE /api/topic-contents/{id}`
+- Row: **TopicRow** — individual topic card with: inline rename (click title → RenameTopicInline), draft/live status toggle ("Set live" / "Set draft" button calling `PATCH /api/topics/{id}`), and a delete (×) button opening DeleteTopicDialog. Renders a **content management section** (ContentItemRows, "Add Content" button) and an **extraction jobs strip** below the content section. The jobs strip shows the last 3 extraction jobs (sorted newest-first) via `useExtractionJobs`; each job row shows filename, status label, pages_completed/pages_total progress, and Cancel/Retry actions. When a job transitions to `done`, the strip fires `onJobDone` which invalidates the topic contents query and shows a toast. When all jobs are terminal and 60 s have elapsed with no active jobs, polling stops.
+  - API: `GET /api/topic-contents/{topicId}`, `POST /api/topic-contents/`, `PATCH /api/topic-contents/{id}`, `DELETE /api/topic-contents/{id}`, `GET /api/admin/topics/{topicId}/extraction-jobs`, `DELETE /api/admin/extraction-jobs/{jobId}`, `POST /api/admin/extraction-jobs/{jobId}/retry`
 
 - Row: **ContentItemRow** — one row per content item: type icon (🎬 video / 📄 pdf / 📝 text / ❓ question / 💬 question_answer), title, optional description (truncated, full text in `title` tooltip), order badge, "Edit" button, × delete button. Edit/delete callbacks passed from `TopicRow`.
 
-- Modal: **AddContentModal** — native `<dialog>`; `mode: 'create' | 'edit'`. Content type selector (`video`/`pdf`/`text` only shown, `disabled` in edit mode — `content_type` immutable after creation). URL field shown for video/pdf; textarea for text content; title, order (number input), description always visible. Zod-validated via React Hook Form (`zodResolver`). Submit shows "Saving…" spinner; inline error on failure. `useFocusTrap` traps keyboard focus.
+- Modal: **AddContentModal** — native `<dialog>`; `mode: 'create' | 'edit'`. **4-chip type selector**: PDF, Image(s), Video URL, Text (chips disabled in edit mode). For PDF/Image chips: drag-and-drop file zone (or click to browse, accepts `application/pdf`/`image/*`); shows file list with remove buttons; cost estimate preview (pages × per-page rate) with a confirmation checkbox before upload is enabled; up to 5 files per submission; validates size ≤ 50 MB and MIME type. **Upload-closes-immediately**: on submit with files, modal closes at once and background upload fires via `extractionHook.uploadFiles()`; pseudo-jobs appear in the topic strip immediately. For Video URL chip: URL field + title/description/order fields, same Zod validation as before. For Text chip: textarea + title/description/order. In edit mode, only Video/Text are editable; content_type is immutable. `useFocusTrap` traps keyboard focus.
 
 - Dialog: **DeleteContentDialog** — native `<dialog>` confirmation: "Delete '[title]'? This cannot be undone." Cancel + "Confirm Delete" (danger style); loading state on confirm. Calls `DELETE /api/topic-contents/{id}`; 404 treated as already-gone.
+
+- Hook: **useExtractionJobs(topicId, { onJobDone })** — manages extraction job lifecycle for a single topic. Merges pseudo-jobs (local optimistic state for in-flight uploads) with server-polled jobs. Polling interval: 3 s while any job is `uploading|pending|extracting`; 5 s for 60 s after last active job ends; then stops. Exposes `{ jobs: DisplayJob[], isLoading, isError, uploadFiles, cancelJob, retryJob }`. `uploadFiles(files)` creates one pseudo-job per file, calls `createExtractionJob` with a UUID idempotency key, replaces the pseudo-job with the server job on success or marks it `upload_failed` on error.
+
+- API module: **extraction-api.ts** — `createExtractionJob` (multipart POST, bodyFactory re-clone on CSRF retry per BR-EXT-018, throws `ExtractionJobDuplicateError` on 409), `listExtractionJobs` (ETag/304 support), `getExtractionJob`, `cancelExtractionJob`, `retryExtractionJob`, `listAdminWorkers`.
+
+- Component: **Toast** (`src/shared/components/ui/toast/`) — lightweight imperative toast system. `useToast()` hook exposes `showToast(message, variant)`. Variants: `success`, `error`, `info`. Auto-dismisses after 4 s. Rendered by `ToastProvider` mounted in `AdminProviders`. Used by TopicRow to surface extraction-complete and extraction-failed notifications.
+
+- Hook: **useExtractionJobs(topicId, { onJobDone })** — manages extraction job lifecycle for a single topic. Merges pseudo-jobs (local optimistic state for in-flight uploads) with server-polled jobs. Polling interval: 3 s while any job is `uploading|pending|extracting`; 5 s for 60 s after last active job ends; then stops. Exposes `{ jobs: DisplayJob[], isLoading, isError, uploadFiles, cancelJob, retryJob }`. `uploadFiles(files)` creates one pseudo-job per file, calls `createExtractionJob` with a UUID idempotency key, replaces the pseudo-job with the server job on success or marks it `upload_failed` on error.
+
+- API module: **extraction-api.ts** — `createExtractionJob` (multipart POST, bodyFactory re-clone on CSRF retry per BR-EXT-018, throws `ExtractionJobDuplicateError` on 409), `listExtractionJobs` (ETag/304 support), `getExtractionJob`, `cancelExtractionJob`, `retryExtractionJob`, `listAdminWorkers`.
+
+- Component: **Toast** (`src/shared/components/ui/toast/`) — lightweight imperative toast system. `useToast()` hook exposes `showToast(message, variant)`. Variants: `success`, `error`, `info`. Auto-dismisses after 4 s. Rendered by `ToastProvider` mounted in `AdminProviders`. Used by TopicRow to surface extraction-complete and extraction-failed notifications.
 
 - Inline: **RenameTopicInline** — controlled text input; Enter or blur saves (calls `PATCH /api/topics/{id}` with `{title}`), Escape cancels.
 
