@@ -201,6 +201,33 @@ Platform admins can add video URLs and pasted text to topics, but cannot upload 
 
 **Purpose:** All admin-facing extraction endpoints. Pattern reference: existing `src/api/routes/topic.py` for oracle protection and `src/auth/permission.py` for `require_admin`.
 
+##### T5.0 [deploy]: APISIX dedicated plugin config and route for multipart extraction upload
+- **Root cause — Bug 1 (400):** `05-api-write.json` has `request-validation` → `body_schema: { type: [object, array] }`. APISIX JSON-decodes the raw multipart body, fails at character 1 (`--boundary...`), and returns 400. Zero latency and `- - -` upstream in the access log confirm it never reaches FastAPI. Direct `curl` to port 8000 returns 200.
+- **Root cause — Bug 2 (413):** All shared plugin configs (`01/02/03`) set `tx.max_file_size=1048576` and `tx.combined_file_sizes=1048576` (1 MB). Coraza CRS rule 920160 blocks any upload > 1 MB with 413. The backend spec allows up to 50 MB. Raising the shared limit would weaken Coraza protection on all other API routes.
+- **Affected routes:** `POST /api/admin/topics/*/extraction-jobs` and `POST /api/parent/curriculum/topics/*/extraction-jobs`
+- **Build:**
+  - **File 1 — `common/plugin_configs/04-secured-api-upload.json`:** Clone of `03-secured-api.json`. Add Coraza rule `id:199004` that overrides only three variables:
+    - `setvar:tx.max_file_size=52428800` (50 MB)
+    - `setvar:tx.combined_file_sizes=52428800` (50 MB)
+    - `SecRequestBodyLimit 54525952` (52 MB — buffer above the combined limit so Coraza does not truncate the body before WAF rules can inspect multipart part headers; `@recommended-conf` default is ~13 MB)
+    - Everything else preserved exactly: OWASP CRS PL2, anomaly scoring, OIDC (`unauth_action: deny` → 401), rate limiting, UA/referer/URI blocking, all arg limits (`max_num_args`, `arg_name_length`, `arg_length`, `total_arg_length`)
+    - **Implementer note:** verify `id:199004` is in the project's Coraza rule ID namespace — check existing override rule IDs in `03-secured-api.json` for the convention
+  - **File 2 — `common/routes/15-api-extraction-upload.json`:**
+    - URIs: `/api/admin/topics/*/extraction-jobs` and `/api/parent/curriculum/topics/*/extraction-jobs`, method `POST` only
+    - `priority: 20` — higher than `05-api-write.json` (`priority: 10`) so it matches first
+    - `plugin_config_id: "secured-api-upload"` (the new plugin config above)
+    - Route-level `request-validation` with `header_schema` only: enforces `Content-Type: multipart/form-data` via pattern `(?i)^multipart/form-data(;.*)?$`; **no `body_schema`** — multipart body is binary not JSON; Coraza WAF (CRS PL2) inspects multipart field values; FastAPI + MIME sniff own file content validation
+    - Upstream `read` timeout: `120s` (50 MB uploads on slow connections; default 6s would timeout mid-upload)
+    - `backend:8000` upstream, same as all other API routes
+- **Done when:**
+  - `POST multipart/form-data` with a PDF > 1 MB via APISIX port 9080/9443 → FastAPI response (not 400 or 413)
+  - `POST application/json` to the same URI → 400 (header_schema rejects non-multipart)
+  - `jq '.' common/plugin_configs/04-secured-api-upload.json` exits 0
+  - `jq '.' common/routes/15-api-extraction-upload.json` exits 0
+- **Test:** `curl -X POST http://localhost:9080/api/admin/topics/{id}/extraction-jobs -F file=@tests/fixtures/sample.pdf -H 'Content-Type: multipart/form-data; boundary=xxx'` → reaches FastAPI (not 400 or 413). `curl` with `-H 'Content-Type: application/json'` → 400.
+- **Manifest flags when deploying:** `apisix_routes: true`, `apisix_plugins: true`
+- **Depends on:** None — can be deployed standalone; prerequisite for T5.1 to be testable end-to-end through the gateway
+
 ##### T5.1 [backend]: POST /api/admin/topics/{topic_id}/extraction-jobs
 - **Build:** Route in `src/api/routes/admin/extraction.py`. Dependencies: `require_admin`, CSRF, `current_active_user`.
   - Streaming multipart parser: reject if `content_length > 50_000_000` before buffering → 413
