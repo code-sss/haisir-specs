@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | dd7da7f (fix(admin): remove response_model from get_board_stats endpoint, 2026-04-20) |
-| haisir-frontend | 43fa83d (fix: reorder import for RESERVED_NODE_TYPES, 2026-04-18) |
-| haisir-deploy | ccdbad5 (feat(data): add Citizenship, 2026-04-20) |
+| haisir-backend | e18508c (feat(extraction): add document extraction pipeline, 2026-04-30) |
+| haisir-frontend | 7633f19 (feat(admin): add extraction status panel, toast system, and upload fixes, 2026-05-05) |
+| haisir-deploy | eea5152 (fix(apisix): add dedicated route for empty-body POST action endpoints, 2026-05-05) |
 
-> Next session: run `git diff dd7da7f..HEAD` in haisir-backend and `git diff ccdbad5..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff e18508c..HEAD` in haisir-backend, `git diff 7633f19..HEAD` in haisir-frontend, and `git diff eea5152..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -226,6 +226,51 @@
 - Auth: admin (X-Current-Role: admin), CSRF required
 - Response: 204 No Content
 - Errors: 404 if not found or not platform-owned; 403 if non-admin or missing CSRF
+
+---
+
+## Admin Extraction Jobs
+
+> All endpoints require `X-Current-Role: admin` and CSRF on mutating methods. The upload route passes through a dedicated APISIX plugin config (`04-secured-api-upload.json`) which raises the Coraza body size limit to 50 MB.
+
+### POST /api/admin/topics/{topic_id}/extraction-jobs
+- Purpose: Upload a PDF or image file for extraction; creates an `extraction_jobs` row with `status='pending'`
+- Auth: admin
+- Request: multipart/form-data — `file` (binary), `idempotency_key` (UUID string)
+- Headers: `X-Force-Reextract: true` (optional) to bypass SHA dedup
+- Response: `ExtractionJobRead` (201)
+- Errors: 404 if topic not found or not platform-owned; 409 if SHA dedup match (same file already queued/done for this topic); 409 if idempotency replay returns the existing job
+- Note: file saved to `STORAGE_ROOT/extraction_sources/{idp_sub}/{uuid}_{filename}` before DB insert; MIME-sniffed (not trusted from Content-Type header)
+
+### GET /api/admin/topics/{topic_id}/extraction-jobs
+- Purpose: List extraction jobs for a topic, newest first
+- Auth: admin
+- Response: array of `ExtractionJobRead`; supports ETag/304
+- Note: includes derived `progress` field (0–100 percentage)
+
+### GET /api/admin/extraction-jobs/{job_id}
+- Purpose: Get a single extraction job detail
+- Auth: admin
+- Response: `ExtractionJobRead` (200) or 404
+
+### DELETE /api/admin/extraction-jobs/{job_id}
+- Purpose: Cancel an extraction job
+- Auth: admin, CSRF required
+- Response: updated `ExtractionJobRead`
+- Behaviour: `pending` → hard cancel (status=`cancelled`, file deleted); `extracting` → soft cancel (sets `cancel_requested=true`, worker reads flag between pages)
+- Errors: 404 if not found; 409 if job is already terminal (`done`/`cancelled`/`upload_failed`)
+
+### POST /api/admin/extraction-jobs/{job_id}/retry
+- Purpose: Re-queue a failed extraction job
+- Auth: admin, CSRF required
+- Request: `{ idempotency_key: UUID }` (new key to avoid idempotency collision)
+- Response: new `ExtractionJobRead` (201)
+- Errors: 404 if not found; 409 if job is not in `extraction_failed` state; 422 if source file no longer on disk
+
+### GET /api/admin/system/workers
+- Purpose: List all registered worker heartbeats with liveness annotation
+- Auth: admin
+- Response: array of `{ worker_id, started_at, last_seen, job_id, is_stale }` where `is_stale = (now - last_seen) > 30 s`
 
 ---
 

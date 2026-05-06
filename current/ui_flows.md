@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 0e6c7e8 (chore(deps): upgrade all dependencies and pre-commit hooks, 2026-04-22) |
+| haisir-backend | e18508c (feat(extraction): add document extraction pipeline, 2026-04-30) |
 | haisir-frontend | 7633f19 (feat(admin): add extraction status panel, toast system, and upload fixes, 2026-05-05) |
-| haisir-deploy | baa20bf (fix(deploy): auto-restart services whose image_tag is overridden in manifest, 2026-04-22) |
+| haisir-deploy | eea5152 (fix(apisix): add dedicated route for empty-body POST action endpoints, 2026-05-05) |
 
-> Next session: run `git diff 7633f19..HEAD` in haisir-frontend to see only what changed since this snapshot.
+> Next session: run `git diff e18508c..HEAD` in haisir-backend, `git diff 7633f19..HEAD` in haisir-frontend, and `git diff eea5152..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -133,12 +133,6 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 - Modal: **AddContentModal** — native `<dialog>`; `mode: 'create' | 'edit'`. **4-chip type selector**: PDF, Image(s), Video URL, Text (chips disabled in edit mode). For PDF/Image chips: drag-and-drop file zone (or click to browse, accepts `application/pdf`/`image/*`); shows file list with remove buttons; cost estimate preview (pages × per-page rate) with a confirmation checkbox before upload is enabled; up to 5 files per submission; validates size ≤ 50 MB and MIME type. **Upload-closes-immediately**: on submit with files, modal closes at once and background upload fires via `extractionHook.uploadFiles()`; pseudo-jobs appear in the topic strip immediately. For Video URL chip: URL field + title/description/order fields, same Zod validation as before. For Text chip: textarea + title/description/order. In edit mode, only Video/Text are editable; content_type is immutable. `useFocusTrap` traps keyboard focus.
 
 - Dialog: **DeleteContentDialog** — native `<dialog>` confirmation: "Delete '[title]'? This cannot be undone." Cancel + "Confirm Delete" (danger style); loading state on confirm. Calls `DELETE /api/topic-contents/{id}`; 404 treated as already-gone.
-
-- Hook: **useExtractionJobs(topicId, { onJobDone })** — manages extraction job lifecycle for a single topic. Merges pseudo-jobs (local optimistic state for in-flight uploads) with server-polled jobs. Polling interval: 3 s while any job is `uploading|pending|extracting`; 5 s for 60 s after last active job ends; then stops. Exposes `{ jobs: DisplayJob[], isLoading, isError, uploadFiles, cancelJob, retryJob }`. `uploadFiles(files)` creates one pseudo-job per file, calls `createExtractionJob` with a UUID idempotency key, replaces the pseudo-job with the server job on success or marks it `upload_failed` on error.
-
-- API module: **extraction-api.ts** — `createExtractionJob` (multipart POST, bodyFactory re-clone on CSRF retry per BR-EXT-018, throws `ExtractionJobDuplicateError` on 409), `listExtractionJobs` (ETag/304 support), `getExtractionJob`, `cancelExtractionJob`, `retryExtractionJob`, `listAdminWorkers`.
-
-- Component: **Toast** (`src/shared/components/ui/toast/`) — lightweight imperative toast system. `useToast()` hook exposes `showToast(message, variant)`. Variants: `success`, `error`, `info`. Auto-dismisses after 4 s. Rendered by `ToastProvider` mounted in `AdminProviders`. Used by TopicRow to surface extraction-complete and extraction-failed notifications.
 
 - Hook: **useExtractionJobs(topicId, { onJobDone })** — manages extraction job lifecycle for a single topic. Merges pseudo-jobs (local optimistic state for in-flight uploads) with server-polled jobs. Polling interval: 3 s while any job is `uploading|pending|extracting`; 5 s for 60 s after last active job ends; then stops. Exposes `{ jobs: DisplayJob[], isLoading, isError, uploadFiles, cancelJob, retryJob }`. `uploadFiles(files)` creates one pseudo-job per file, calls `createExtractionJob` with a UUID idempotency key, replaces the pseudo-job with the server job on success or marks it `upload_failed` on error.
 

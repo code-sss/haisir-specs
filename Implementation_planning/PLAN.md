@@ -11,8 +11,9 @@
 > - `update_platform_content` / `delete_platform_content` infra repo methods (oracle JOIN protection)
 > - Frontend: `TopicContent` type, `ContentItemRow`, `AddContentModal` (create/edit), `DeleteContentDialog`, `useTopicContents` hook — all working for video URL + text types
 >
-> **What does NOT exist (this plan builds it):**
-> - Multipart upload pipeline, 6 new DB tables + 1 column, extraction worker, 11 backend endpoints, rebuilt frontend modal, topic card jobs strip, provenance badges, worker health page
+> **Status as of 2026-05-06 (reconciled):**
+> ✅ Shipped: V26 migration (6 tables + column), domain layer (models/protocols/service), infra repos (ExtractionJobRepository, ExtractionSourceStorage), admin API (T5.1–T5.6), APISIX upload route, rebuilt AddContentModal (G9), topic card jobs strip (G10), CSRF gate (G8).
+> ❌ Remaining: GlmOcrProvider (T4.1), PdfiumReader (T4.2), worker process (G7), worker Docker Compose (G1), worker health page (G12), provenance + editing (G11), parent extraction API (G6).
 
 ---
 
@@ -68,8 +69,9 @@ Platform admins can add video URLs and pasted text to topics, but cannot upload 
 
 **Purpose:** All 6 new tables + 1 new column must exist before any domain/infra code can reference them.
 
-##### T2.1 [backend]: Alembic migration V25 — extraction tables
-- **Build:** Create `alembic/versions/V25_extraction_tables.py`. Include in a single migration:
+##### T2.1 [backend]: Alembic migration V26 — extraction tables ✅ shipped 2026-04-30
+- **Note:** Shipped as `V26_extraction_tables.py` (V25 was already used for `expand_nodetype_enum`). Build spec below preserved for reference.
+- **Build:** Create `alembic/versions/V26_extraction_tables.py`. Include in a single migration:
   1. `ALTER TABLE topic_contents ADD COLUMN source_extraction_job_id UUID NULL`
   2. `CREATE TABLE extraction_jobs` (all columns per `01_data_model.md`; `updated_at` trigger: `CREATE TRIGGER trg_extraction_jobs_touch BEFORE UPDATE ON extraction_jobs FOR EACH ROW EXECUTE FUNCTION touch_updated_at()`)
   3. All indexes: `ix_extraction_jobs_queue (status, created_at)`, `ix_extraction_jobs_topic (topic_id, status)`, `ix_extraction_jobs_purge (purge_at) WHERE purge_at IS NOT NULL`, UNIQUE `ux_extraction_jobs_idempotency (created_by, idempotency_key)`, UNIQUE `ux_extraction_jobs_dedup (topic_id, source_sha256) WHERE status NOT IN ('cancelled','upload_failed')`
@@ -620,4 +622,4 @@ Playwright full-flow `tests/e2e/extraction-full-flow.spec.ts`:
 - `X-Current-Role` missing → 400 (not 403) per CLAUDE.md
 - `Idempotency-Key` missing on POST → 400
 
-<!-- plan-baseline: backend:0e6c7e85784c76ddf0e19d240deb86f3e6b94c8b frontend:689cf53438e2e0f0916ef05f0e2dc958cdde42c2 deploy:baa20bf8fa1708f06b068a38c2e45fa0237c143d -->
+<!-- plan-baseline: backend:e18508caa46148916f6c5f55a8e685a173fd9395 frontend:7633f198e5c3c1fcccf45ca59e79d0972039fb72 deploy:eea51520a266219ebac9641f9527a179bb6c931d -->

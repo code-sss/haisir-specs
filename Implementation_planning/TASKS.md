@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.  
-> Last baselined: backend:0e6c7e8 frontend:e0ec802 deploy:baa20bf (2026-05-02)
+> Last baselined: backend:e18508c frontend:7633f19 deploy:eea5152 (2026-05-06)
 
 ## G1 [deploy]: Worker service provisioned
 - [ ] T1.1 [deploy]: Add worker service to Docker Compose (replicas:2, env vars, depends_on)
@@ -9,7 +9,7 @@
 - [ ] **G1: Worker service provisioned** — integration test: `docker compose ps` shows 2 worker containers
 
 ## G2 [backend]: Schema ready
-- [x] T2.1 [backend]: Alembic migration V25 — 6 new tables + source_extraction_job_id column + all indexes (2026-04-24)
+- [x] T2.1 [backend]: Alembic migration V26 — 6 new tables + source_extraction_job_id column + all indexes (2026-04-30)
 - [ ] **G2: Schema ready** — integration test: `alembic upgrade head && downgrade -1 && upgrade head` *(requires real DB — not run in CI yet)*
 
 ## G3 [backend]: Domain layer
@@ -63,8 +63,8 @@
 - [ ] **G9: Add Content modal** — Playwright: drop 2 PDFs → modal closes → pseudo-jobs on topic card
 
 ## G10 [frontend]: Topic card jobs strip
-- [ ] T10.1 [frontend]: ExtractionJobRow component — all status variants, cancel/retry callbacks (depends on T9.1)
-- [ ] T10.2 [frontend]: Extend TopicRow with IN PROGRESS strip + useExtractionJobs + onJobDone invalidation (depends on T10.1, T9.2, T9.3)
+- [x] T10.1 [frontend]: ExtractionJobRow component — all status variants, cancel/retry callbacks (depends on T9.1) — done 2026-05-05 (inline in topic-row.tsx)
+- [x] T10.2 [frontend]: Extend TopicRow with IN PROGRESS strip + useExtractionJobs + onJobDone invalidation (depends on T10.1, T9.2, T9.3) — done 2026-05-05
 - [ ] **G10: Topic card strip** — Playwright: mock job transitions → strip updates → content list refetched
 
 ## G11 [backend + frontend]: Provenance + editing
@@ -94,7 +94,5 @@ Tasks with no pending dependencies — can be started immediately in parallel:
 - T6.3 [backend]: GET /api/parent/curriculum/extraction-jobs/{job_id} *(unblocked by T4.3, T2.1)*
 - T6.4 [backend]: DELETE /api/parent/curriculum/extraction-jobs/{job_id} *(unblocked by T4.3, T4.4, T2.1)*
 - T6.5 [backend]: POST /api/parent/curriculum/extraction-jobs/{job_id}/retry *(unblocked by T4.3, T4.4, T2.1)*
-- T10.1 [frontend]: ExtractionJobRow component *(T9.1 ✓)*
-- T10.2 [frontend]: Extend TopicRow with IN PROGRESS strip *(T10.1, T9.2 ✓, T9.3 ✓)*
 - T11.1 [backend]: PATCH regression guard — assert source_extraction_job_id never overwritten *(unblocked by T2.1)*
 - T12.1 [frontend]: Admin /system/workers page *(unblocked by T5.6 ✅)*

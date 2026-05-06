@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | dd7da7f (fix(admin): remove response_model from get_board_stats endpoint, 2026-04-20) |
-| haisir-frontend | 43fa83d (fix: reorder import for RESERVED_NODE_TYPES, 2026-04-18) |
-| haisir-deploy | ccdbad5 (feat(data): add Citizenship, 2026-04-20) |
+| haisir-backend | e18508c (feat(extraction): add document extraction pipeline, 2026-04-30) |
+| haisir-frontend | 7633f19 (feat(admin): add extraction status panel, toast system, and upload fixes, 2026-05-05) |
+| haisir-deploy | eea5152 (fix(apisix): add dedicated route for empty-body POST action endpoints, 2026-05-05) |
 
-> Next session: run `git diff dd7da7f..HEAD` in haisir-backend and `git diff ccdbad5..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff e18508c..HEAD` in haisir-backend, `git diff 7633f19..HEAD` in haisir-frontend, and `git diff eea5152..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -18,6 +18,7 @@
 | V23_visibility_enforcement | Alters `course_path_nodes.owner_id` and `topics.owner_id` from Integer → String; adds `exam_templates.owner_id` (String, nullable); adds `parent_child_links.revoked_at` (DateTime TZ, nullable) |
 | V24_add_visibility_indexes | Adds covering index `ix_parent_child_links_child_sub_revoked` on `(child_sub, revoked_at) INCLUDE (parent_sub)` for BR-DATA-003 subquery performance |
 | V25_expand_nodetype_enum | Adds 6 new values to the `nodetype` PostgreSQL enum: `chapter`, `module`, `section`, `unit`, `week`, `skill`. Uses `ALTER TYPE nodetype ADD VALUE IF NOT EXISTS` (run outside transaction). No downgrade path — PostgreSQL does not support removing enum values. |
+| V26_extraction_tables | Installs `touch_updated_at()` trigger function. Adds `source_extraction_job_id` (UUID nullable) to `topic_contents`. Creates 6 new tables: `extraction_jobs`, `extraction_job_pages`, `extraction_job_audit`, `rag_indexing_outbox`, `worker_heartbeats`, `parent_quota_counters`, with all indexes. |
 
 ---
 
@@ -116,6 +117,7 @@
 - `text` (String, nullable)
 - `order` (Integer)
 - `description` (String, nullable)
+- `source_extraction_job_id` (UUID, nullable) — provenance link to the extraction job that created this row; set by the worker finalize step; **never cleared by PATCH** (BR-EXT-023a)
 
 ## questions
 - `id` (UUID, PK)
@@ -225,6 +227,82 @@
 - `user_answer` (String, nullable)
 - `is_correct` (Boolean, nullable)
 - `earned_points` (Float, nullable)
+
+## extraction_jobs
+- `id` (UUID, PK)
+- `topic_id` (UUID) — target topic
+- `created_by` (String) — creator's `idp_sub`
+- `expected_owner_type` (String) — snapshot of topic's owner_type at upload time; used by worker finalize to detect ownership race
+- `job_type` (String, default `'contents'`) — always `'contents'` for now
+- `source_type` (String) — `'pdf'` or `'image'`
+- `source_filename` (String)
+- `source_size_bytes` (BigInteger)
+- `source_path` (String) — path relative to `STORAGE_ROOT`
+- `source_sha256` (CHAR 64) — SHA-256 of uploaded file bytes
+- `status` (String) — `pending` | `extracting` | `done` | `upload_failed` | `extraction_failed` | `cancelled`
+- `pages_total` (Integer, nullable) — set once PDF page count is known
+- `pages_completed` (Integer, default 0)
+- `cancel_requested` (Boolean, default false) — soft cancel flag read by worker between pages
+- `error_message` (Text, nullable)
+- `idempotency_key` (UUID) — client-supplied dedup key
+- `running_cost_usd` (Numeric 10,4, default 0)
+- `created_at`, `updated_at` (DateTime TZ) — `updated_at` auto-maintained via `touch_updated_at()` trigger
+- `started_at`, `finished_at`, `purge_at` (DateTime TZ, nullable)
+- `locked_at` (DateTime TZ, nullable), `locked_by` (String, nullable) — worker row-lock state
+
+Indexes: `ix_extraction_jobs_queue (status, created_at)`, `ix_extraction_jobs_topic (topic_id, status)`, `ix_extraction_jobs_purge (purge_at) WHERE purge_at IS NOT NULL`, UNIQUE `ux_extraction_jobs_idempotency (created_by, idempotency_key)`, UNIQUE `ux_extraction_jobs_dedup (topic_id, source_sha256) WHERE status NOT IN ('cancelled','upload_failed')`
+
+## extraction_job_pages
+> Ephemeral staging table — rows deleted atomically when job finalises.
+
+- `job_id` (UUID, PK composite) — FK → extraction_jobs
+- `page_no` (Integer, PK composite)
+- `markdown_text` (Text) — extracted page content
+- `sha256` (CHAR 64) — hash of markdown_text
+- `extracted_at` (DateTime TZ)
+
+## extraction_job_audit
+> Permanent provenance record — never purged.
+
+- `job_id` (UUID, PK)
+- `topic_id` (UUID)
+- `idp_sub` (String) — who submitted
+- `source_filename` (String)
+- `source_sha256` (CHAR 64)
+- `source_type` (String)
+- `job_type` (String)
+- `model_spec_used` (String) — value of `EXTRACTION_MODEL_SPEC` env var at job time
+- `pages_extracted` (Integer)
+- `cost_usd` (Numeric 10,4)
+- `final_status` (String)
+- `started_at`, `finished_at` (DateTime TZ)
+
+Indexes: `ix_extraction_job_audit_topic (topic_id)`, `ix_extraction_job_audit_user_day (idp_sub, finished_at DESC)`
+
+## rag_indexing_outbox
+> Written by worker finalize step; drained by haiguru (embedding handoff — UNRESOLVED).
+
+- `content_id` (UUID, PK) — FK → topic_contents
+- `status` (String) — `pending` | `locked` | `done` | `failed`
+- `retry_count` (Integer, default 0)
+- `last_error` (Text, nullable)
+- `created_at`, `updated_at` (DateTime TZ)
+- `locked_at` (DateTime TZ, nullable), `locked_by` (String, nullable)
+
+Index: `ix_rag_outbox_pending (status, created_at) WHERE status = 'pending'`
+
+## worker_heartbeats
+- `worker_id` (String, PK) — unique worker instance identifier
+- `started_at` (DateTime TZ)
+- `last_seen` (DateTime TZ) — updated every 10 s by the worker loop
+- `job_id` (UUID, nullable) — current job being processed (NULL = idle)
+
+## parent_quota_counters
+- `idp_sub` (String, PK) — parent's identity key
+- `concurrent_jobs` (Integer, default 0) — active extraction jobs count
+- `daily_jobs` (Integer, default 0) — jobs started today
+- `daily_window_start` (DateTime TZ)
+- `updated_at` (DateTime TZ)
 
 ---
 
