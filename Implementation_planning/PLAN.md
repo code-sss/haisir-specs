@@ -136,6 +136,14 @@ Platform admins can add video URLs and pasted text to topics, but cannot upload 
 
 **Purpose:** Concrete implementations of protocols and repositories. All I/O isolated here.
 
+##### T4.5 [backend]: ExtractionSourceStorage.read() — `infrastructure/storage/extraction_source.py`
+- **Build:**
+  - Add `async def read(self, path: str) -> bytes: ...` to `ExtractionSourceStorage` protocol in `domain/protocols/extraction.py`
+  - Add concrete `async def read(self, path: str) -> bytes` to `ExtractionSourceStorageImpl`: resolve via `_resolve_safe(path)`, return `await asyncio.to_thread(resolved.read_bytes)`
+- **Done when:** `await storage.read("extraction/abc/file.pdf")` returns the bytes previously written by `save()`; path traversal attempt raises `ValueError`.
+- **Test:** Add test case to `tests/unit/infrastructure/test_extraction_source_storage.py` — round-trip save → read returns same bytes; traversal raises.
+- **Depends on:** T4.4
+
 ##### T4.1 [backend]: GLM-OCR provider — `infrastructure/extraction/glm_ocr_provider.py`
 - **Build:** Copy `../haiguru/glm_ocr/` into `src/infrastructure/extraction/glm_ocr/`. Write `GlmOcrProvider` implementing `ExtractionProvider`:
   - Parse model spec from env `EXTRACTION_MODEL_SPEC`: `lmstudio://host:port/base_path` → OpenAI-compat; `openai://model-name` → OpenAI API; `anthropic://model-name` → Anthropic; plain string → Ollama
@@ -360,7 +368,7 @@ Platform admins can add video URLs and pasted text to topics, but cannot upload 
   - `enumerate_pages(job, storage, pdf_reader)`: for PDF → list `range(page_count)`; for image → `[0]` (single page)
 - **Done when:** `pytest tests/integration/worker/test_extraction_loop.py` — seed pending PDF job → run loop for one iteration → extraction_job_pages row created; cancelled job check works.
 - **Test:** Integration test with real DB + mocked provider (returns fixed markdown). Assert page row created; status becomes `extracting`; cancel check stops loop.
-- **Depends on:** T4.1, T4.2, T4.3, T4.4, T2.1
+- **Depends on:** T4.1, T4.2, T4.3, T4.4, T4.5, T2.1
 
 ##### T7.2 [backend]: Finalize transaction — `worker/finalize.py`
 - **Build:** `def finalize(job, repo, session)` — runs as one atomic TX:

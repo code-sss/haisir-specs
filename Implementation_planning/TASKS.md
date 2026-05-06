@@ -19,10 +19,12 @@
 - [ ] **G3: Domain layer** — integration test: `pytest tests/unit/services/test_extraction_service.py`
 
 ## G4 [backend]: Infrastructure layer
+- [ ] T4.5 [backend]: ExtractionSourceStorage.read() *(unblocked by T4.4 ✅ — start here)*
 - [ ] T4.1 [backend]: GlmOcrProvider — copy glm_ocr from haiguru; prefix-dispatch; streaming protocol (depends on T3.2)
 - [ ] T4.2 [backend]: PdfiumReader — pypdfium2 wrapping; extract_text, image_coverage, render, page_count (depends on T3.2)
 - [x] T4.3 [backend]: ExtractionJobRepository — SQLAlchemy imperative; all methods including claim_next SKIP LOCKED (depends on T3.1, T2.1) (2026-04-30)
 - [x] T4.4 [backend]: ExtractionSourceStorage — save_file with path-traversal guard; MIME sniff; delete_file; python-magic (depends on T3.1) (2026-04-30)
+- [ ] T4.5 [backend]: ExtractionSourceStorage.read() — add `async def read(self, path: str) -> bytes` to protocol (domain/protocols/extraction.py) and impl (infrastructure/storage/extraction_source.py); uses _resolve_safe + asyncio.to_thread(read_bytes); add unit test (depends on T4.4)
 - [ ] **G4: Infrastructure layer** — integration test: SKIP LOCKED claim with 2 concurrent DB sessions
 
 ## G5 [backend]: Admin extraction API
@@ -87,6 +89,7 @@ Tasks with no pending dependencies — can be started immediately in parallel:
 
 - T1.1 [deploy]: Add worker service to Docker Compose
 - T1.2 [deploy]: STORAGE_ROOT volume *(after T1.1)*
+- T4.5 [backend]: ExtractionSourceStorage.read() *(unblocked by T4.4 ✅ — start here)*
 - T4.1 [backend]: GlmOcrProvider *(unblocked by T3.2)*
 - T4.2 [backend]: PdfiumReader *(unblocked by T3.2)*
 - T6.1 [backend]: POST /api/parent/curriculum/topics/{topic_id}/extraction-jobs *(unblocked by T4.3, T4.4, T3.3, T2.1)*

@@ -174,6 +174,8 @@ All endpoints require: APISIX-injected JWT, `X-Current-Role` header, CSRF token 
 
 ## 5 — Worker Behaviour
 
+> **Storage read contract:** The worker loads source file bytes via `await storage.read(job.source_path)` before passing them to pypdfium2 or the vision LLM. `ExtractionSourceStorage` protocol exposes `async def read(self, path: str) -> bytes` in addition to `save`, `exists`, and `delete`. Raises `ValueError` on path traversal.
+
 ```python
 # Pseudocode — see haisir-backend/src/worker/extraction_loop.py
 while True:
