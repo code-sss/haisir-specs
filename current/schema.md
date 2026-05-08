@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | e18508c (feat(extraction): add document extraction pipeline, 2026-04-30) |
+| haisir-backend | 7dccbe6 (feat(extraction): add GlmOcrProvider, PdfiumReader, ExtractionSourceStorage.read, 2026-05-07) |
 | haisir-frontend | 7633f19 (feat(admin): add extraction status panel, toast system, and upload fixes, 2026-05-05) |
 | haisir-deploy | eea5152 (fix(apisix): add dedicated route for empty-body POST action endpoints, 2026-05-05) |
 
-> Next session: run `git diff e18508c..HEAD` in haisir-backend, `git diff 7633f19..HEAD` in haisir-frontend, and `git diff eea5152..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 7dccbe6..HEAD` in haisir-backend, `git diff 7633f19..HEAD` in haisir-frontend, and `git diff eea5152..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -318,3 +318,37 @@ Index: `ix_rag_outbox_pending (status, created_at) WHERE status = 'pending'`
 - `total_topics` (int) — `live_topics + draft_topics`
 
 Query: single LEFT JOIN `categories → course_path_nodes (owner_type='platform') → topics (owner_type='platform')`, grouped by `categories.id`. Categories with zero nodes/topics return zero counts.
+
+---
+
+## Infrastructure Components (not DB tables)
+
+### GlmOcrProvider
+- Location: `src/infrastructure/extraction/glm_ocr_provider.py`
+- Implements: `ExtractionProvider` protocol
+- Backends (prefix-dispatch): `lmstudio://host:port/base_path` (OpenAI-compat), `openai://model-name` (official OpenAI), `anthropic://model-name` (Anthropic Messages), plain model name (Ollama via httpx)
+- Key method: `process(image: bytes, prompt: str) -> str` — synchronous; call via `asyncio.to_thread()` in the worker
+- Factory: `GlmOcrProvider.from_settings(settings.extraction)`
+- Config reads from `ExtractionSettings` (`EXTRACTION__MODEL_SPEC`, `EXTRACTION__MAX_TOKENS`, `EXTRACTION__OLLAMA_BASE_URL`)
+- OPENAI_API_KEY / ANTHROPIC_API_KEY read directly by their SDKs — not in ExtractionSettings
+
+### PdfiumReader
+- Location: `src/infrastructure/extraction/pdfium_reader.py`
+- Implements: `PdfReader` protocol
+- Dependency: `pypdfium2` (Apache/BSD licence — PyMuPDF / fitz MUST NOT be imported: AGPL §13 SaaS clause)
+- Methods:
+  - `page_count(pdf_bytes) -> int`
+  - `extract_text(pdf_bytes, page_no) -> str` — 0-indexed page
+  - `image_coverage(pdf_bytes, page_no) -> float` — [0.0, 1.0] fraction of page area covered by image objects
+  - `render(pdf_bytes, page_no, scale=2.0) -> bytes` — JPEG-encoded page at ~144 DPI
+- All methods synchronous — designed for `asyncio.to_thread()` wrapping in the worker
+
+### ExtractionSourceStorage.read()
+- Added to protocol: `src/domain/protocols/extraction.py`
+- Implemented in: `src/infrastructure/storage/extraction_source.py`
+- Signature: `async def read(self, path: str) -> bytes`
+- Path-traversal-safe (uses existing `_resolve_safe`); reads via `asyncio.to_thread(path.read_bytes)`
+
+### ExtractionSettings
+- Source: `src/shared/config.py`, nested under `settings.extraction`
+- Env vars (nested via `EXTRACTION__*`): `MODEL_SPEC` (model URI string, default empty), `OLLAMA_BASE_URL` (default `http://localhost:11434`), `MAX_TOKENS` (int, default 4096)

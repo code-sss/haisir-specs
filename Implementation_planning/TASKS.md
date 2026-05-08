@@ -1,7 +1,7 @@
 # Progress
 
-> Auto-generated from PLAN.md. Updated by `/implement` in each code repo.  
-> Last baselined: backend:e18508c frontend:7633f19 deploy:eea5152 (2026-05-06)
+> Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
+> Last baselined: backend:7dccbe6 frontend:7633f19 deploy:eea5152 (2026-05-07)
 
 ## G1 [deploy]: Worker service provisioned
 - [ ] T1.1 [deploy]: Add worker service to Docker Compose (replicas:2, env vars, depends_on)
@@ -19,12 +19,11 @@
 - [ ] **G3: Domain layer** — integration test: `pytest tests/unit/services/test_extraction_service.py`
 
 ## G4 [backend]: Infrastructure layer
-- [ ] T4.5 [backend]: ExtractionSourceStorage.read() *(unblocked by T4.4 ✅ — start here)*
-- [ ] T4.1 [backend]: GlmOcrProvider — copy glm_ocr from haiguru; prefix-dispatch; streaming protocol (depends on T3.2)
-- [ ] T4.2 [backend]: PdfiumReader — pypdfium2 wrapping; extract_text, image_coverage, render, page_count (depends on T3.2)
+- [x] T4.5 [backend]: ExtractionSourceStorage.read() — add `async def read(self, path: str) -> bytes` to protocol (domain/protocols/extraction.py) and impl (infrastructure/storage/extraction_source.py); uses _resolve_safe + asyncio.to_thread(read_bytes); add unit test (depends on T4.4) (2026-05-07)
+- [x] T4.1 [backend]: GlmOcrProvider — copy glm_ocr from haiguru; prefix-dispatch; streaming protocol (depends on T3.2) (2026-05-07)
+- [x] T4.2 [backend]: PdfiumReader — pypdfium2 wrapping; extract_text, image_coverage, render, page_count (depends on T3.2) (2026-05-07)
 - [x] T4.3 [backend]: ExtractionJobRepository — SQLAlchemy imperative; all methods including claim_next SKIP LOCKED (depends on T3.1, T2.1) (2026-04-30)
 - [x] T4.4 [backend]: ExtractionSourceStorage — save_file with path-traversal guard; MIME sniff; delete_file; python-magic (depends on T3.1) (2026-04-30)
-- [ ] T4.5 [backend]: ExtractionSourceStorage.read() — add `async def read(self, path: str) -> bytes` to protocol (domain/protocols/extraction.py) and impl (infrastructure/storage/extraction_source.py); uses _resolve_safe + asyncio.to_thread(read_bytes); add unit test (depends on T4.4)
 - [ ] **G4: Infrastructure layer** — integration test: SKIP LOCKED claim with 2 concurrent DB sessions
 
 ## G5 [backend]: Admin extraction API
@@ -46,12 +45,13 @@
 - [ ] **G6: Parent extraction API** — integration test: quota 429 + cross-parent isolation
 
 ## G7 [backend]: Worker process
+> **Pre-implementation gap:** `TopicContent` domain model (`src/domain/models/topic_content.py`) and SQLAlchemy table (`src/infrastructure/models/topic_content.py`) are missing `source_extraction_job_id` field — fix before writing finalize.py.
 - [ ] T7.1 [backend]: worker/extraction_loop.py — claim loop, extract_page routing, per-page staging, cancel check, cost cap (depends on T4.1, T4.2, T4.3, T4.4, T2.1)
 - [ ] T7.2 [backend]: worker/finalize.py — atomic TX: ownership re-validate, content_order base, INSERT N topic_contents, INSERT N rag_outbox, INSERT audit, DELETE pages, UPDATE job done (depends on T4.3, T2.1)
 - [ ] T7.3 [backend]: worker/purge_loop.py — hourly expired job purge + outbox cleanup (depends on T4.3, T4.4, T2.1)
-- [ ] T7.4 [backend]: worker/rag_outbox_loop.py — UNRESOLVED: resolve haiguru/haisir embedding handoff before starting (depends on T4.3, T2.1)
+- [ ] T7.4 [backend]: worker/rag_outbox_loop.py — **DEFERRED to haiguru repo**: outbox rows are written by finalize but drain is haiguru's concern; haisir worker does not implement this loop
 - [ ] T7.5 [backend]: worker/heartbeat.py — UPSERT every 10s + stale cleanup on startup (depends on T4.3, T2.1)
-- [ ] T7.6 [backend]: worker/__main__.py + prompt files — asyncio.gather all loops, SIGTERM handler, env validation, copy prompts from haiguru (depends on T7.1, T7.2, T7.3, T7.4, T7.5)
+- [ ] T7.6 [backend]: worker/__main__.py + prompt module — asyncio.gather all loops (T7.1/T7.2/T7.3/T7.5 only), SIGTERM handler, env validation (EXTRACTION__MODEL_SPEC required); prompt as src/worker/prompts.py Python constant (no haiguru copy needed) (depends on T7.1, T7.2, T7.3, T7.5)
 - [ ] **G7: Worker process** — integration test: seed pending job → run worker → assert N topic_contents + audit row + job done
 
 ## G8 [frontend]: CSRF + FormData gate ⚠️ BLOCKING for G9–G12
@@ -89,9 +89,7 @@ Tasks with no pending dependencies — can be started immediately in parallel:
 
 - T1.1 [deploy]: Add worker service to Docker Compose
 - T1.2 [deploy]: STORAGE_ROOT volume *(after T1.1)*
-- T4.5 [backend]: ExtractionSourceStorage.read() *(unblocked by T4.4 ✅ — start here)*
-- T4.1 [backend]: GlmOcrProvider *(unblocked by T3.2)*
-- T4.2 [backend]: PdfiumReader *(unblocked by T3.2)*
+- T7.1 [backend]: worker/extraction_loop.py *(newly unblocked — T4.1 ✅ T4.2 ✅ T4.3 ✅ T4.4 ✅ T2.1 ✅)*
 - T6.1 [backend]: POST /api/parent/curriculum/topics/{topic_id}/extraction-jobs *(unblocked by T4.3, T4.4, T3.3, T2.1)*
 - T6.2 [backend]: GET /api/parent/curriculum/topics/{topic_id}/extraction-jobs *(unblocked by T4.3, T2.1)*
 - T6.3 [backend]: GET /api/parent/curriculum/extraction-jobs/{job_id} *(unblocked by T4.3, T2.1)*
