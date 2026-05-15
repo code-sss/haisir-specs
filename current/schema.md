@@ -3,8 +3,8 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 024a805 (feat(worker): add URL allowlist validation + ValueError→400 in topic_content route, 2026-05-14) |
-| haisir-frontend | 9fb52ef (feat(admin): add worker health page and fix topic-contents API path, 2026-05-14) |
+| haisir-backend | 01a909a (fix(security): mitigate DoS regex hotspot and make LM Studio protocol configurable, 2026-05-15) |
+| haisir-frontend | f7d0a2a (fix(admin): resolve sonarqube quality issues, 2026-05-15) |
 | haisir-deploy | 7e4d886 (feat(deploy): add worker service + WAF exclusion for topics-contents POST, 2026-05-14) |
 
 > Next session: run `git diff 024a805..HEAD` in haisir-backend, `git diff 9fb52ef..HEAD` in haisir-frontend, and `git diff 7e4d886..HEAD` in haisir-deploy to see only what changed since this snapshot.
