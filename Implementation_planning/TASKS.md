@@ -76,7 +76,7 @@
 - [ ] **G11: Provenance + editing** — Playwright: badge shows; inline rename preserves badge; Edit modal shows provenance line
 
 ## G12 [frontend]: Worker health page
-- [ ] T12.1 [frontend]: Admin /system/workers page — worker table, is_stale highlight, 30s auto-refresh, sidebar link (depends on T5.6 [backend], T9.1 [frontend])
+- [x] T12.1 [frontend]: Admin /system/workers page — worker table, is_stale highlight, 30s auto-refresh, sidebar link (depends on T5.6 [backend], T9.1 [frontend]) (2026-05-13)
 - [ ] **G12: Worker health page** — Playwright: active + stale workers rendered correctly
 
 ## G13 [deploy + backend]: WAF exclusion + URL validation for topic content
@@ -99,4 +99,3 @@ Tasks with no pending dependencies — can be started immediately in parallel:
 - T6.4 [backend]: DELETE /api/parent/curriculum/extraction-jobs/{job_id} *(unblocked by T4.3, T4.4, T2.1)*
 - T6.5 [backend]: POST /api/parent/curriculum/extraction-jobs/{job_id}/retry *(unblocked by T4.3, T4.4, T2.1)*
 - T11.1 [backend]: PATCH regression guard — assert source_extraction_job_id never overwritten *(unblocked by T2.1)*
-- T12.1 [frontend]: Admin /system/workers page *(unblocked by T5.6 ✅)*

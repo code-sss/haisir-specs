@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 7dccbe6 (feat(extraction): add GlmOcrProvider, PdfiumReader, ExtractionSourceStorage.read, 2026-05-07) |
-| haisir-frontend | 7633f19 (feat(admin): add extraction status panel, toast system, and upload fixes, 2026-05-05) |
-| haisir-deploy | eea5152 (fix(apisix): add dedicated route for empty-body POST action endpoints, 2026-05-05) |
+| haisir-backend | 024a805 (feat(worker): add URL allowlist validation + ValueError→400 in topic_content route, 2026-05-14) |
+| haisir-frontend | 9fb52ef (feat(admin): add worker health page and fix topic-contents API path, 2026-05-14) |
+| haisir-deploy | 7e4d886 (feat(deploy): add worker service + WAF exclusion for topics-contents POST, 2026-05-14) |
 
-> Next session: run `git diff 7dccbe6..HEAD` in haisir-backend, `git diff 7633f19..HEAD` in haisir-frontend, and `git diff eea5152..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 024a805..HEAD` in haisir-backend, `git diff 9fb52ef..HEAD` in haisir-frontend, and `git diff 7e4d886..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 

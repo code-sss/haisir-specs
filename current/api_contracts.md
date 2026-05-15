@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 7dccbe6 (feat(extraction): add GlmOcrProvider, PdfiumReader, ExtractionSourceStorage.read, 2026-05-07) |
-| haisir-frontend | 7633f19 (feat(admin): add extraction status panel, toast system, and upload fixes, 2026-05-05) |
-| haisir-deploy | eea5152 (fix(apisix): add dedicated route for empty-body POST action endpoints, 2026-05-05) |
+| haisir-backend | 024a805 (feat(worker): add URL allowlist validation + ValueError→400 in topic_content route, 2026-05-14) |
+| haisir-frontend | 9fb52ef (feat(admin): add worker health page and fix topic-contents API path, 2026-05-14) |
+| haisir-deploy | 7e4d886 (feat(deploy): add worker service + WAF exclusion for topics-contents POST, 2026-05-14) |
 
-> Next session: run `git diff 7dccbe6..HEAD` in haisir-backend, `git diff 7633f19..HEAD` in haisir-frontend, and `git diff eea5152..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 024a805..HEAD` in haisir-backend, `git diff 9fb52ef..HEAD` in haisir-frontend, and `git diff 7e4d886..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -196,32 +196,35 @@
 
 ## Topic Contents
 
-### GET /api/topic-contents/{topic_id}
+### GET /api/topics-contents/{topic_id}
 - Purpose: List content items for a topic
 - Auth: student | instructor | admin (any platform role)
-- Response: array of `{ id, topic_id, content_type, title, url, text, order, description }`
+- Response: array of `{ id, topic_id, content_type, title, url, text, order, description, source_extraction_job_id }`
 - Note: visibility scoped by the parent topic's owner_type — student sees only items whose parent topic is visible to them.
 
-### GET /api/topic-contents/{content_type}/{topic_id}
+### GET /api/topics-contents/{content_type}/{topic_id}
 - Purpose: Serve a media file for a topic (PDF, video, etc.)
 - Auth: student | instructor | admin (any platform role)
 - Response: FileResponse (binary)
 - Note: stored files follow the path `topics/{content_type}/{filename}` on disk (e.g. `topics/pdf/filename.pdf`).
 
-### POST /api/topic-contents
+### POST /api/topics-contents
 - Purpose: Create a content item
 - Auth: admin
 - Request: topic_id, content_type, title, url?, text?, order, description?
 - Response: content object
+- Validation: `url` field — if content_type is `video`: must be `https://` scheme and hostname in allowlist (`youtube.com`, `www.youtube.com`, `youtu.be`, `vimeo.com`, `www.vimeo.com`); local paths (no scheme/netloc) pass through; returns 422 on failure.
+- WAF: OWASP CRS rule 931130 is suppressed for `POST /api/topics-contents/` to allow external video URLs in the body (Coraza SecRule chain in `03-secured-api.json`); SSRF/XSS risk mitigated by backend allowlist.
 
-### PATCH /api/topic-contents/{content_id}
+### PATCH /api/topics-contents/{content_id}
 - Purpose: Partially update a platform-owned content item
 - Auth: admin (X-Current-Role: admin), CSRF required
 - Request: any of `title`, `order`, `description`, `url`, `text` (all optional; `content_type` is immutable)
 - Response: updated content object (200); empty payload returns current state unchanged
-- Errors: 404 if not found or not platform-owned; 403 if non-admin or missing CSRF
+- Errors: 404 if not found or not platform-owned; 403 if non-admin or missing CSRF; 400 if `url` fails allowlist validation (ValueError → HTTP 400)
+- Validation: same `url` allowlist rules as POST above.
 
-### DELETE /api/topic-contents/{content_id}
+### DELETE /api/topics-contents/{content_id}
 - Purpose: Delete a platform-owned content item
 - Auth: admin (X-Current-Role: admin), CSRF required
 - Response: 204 No Content
@@ -270,7 +273,7 @@
 ### GET /api/admin/system/workers
 - Purpose: List all registered worker heartbeats with liveness annotation
 - Auth: admin
-- Response: array of `{ worker_id, started_at, last_seen, job_id, is_stale }` where `is_stale = (now - last_seen) > 30 s`
+- Response: `{ workers: [{ worker_id, started_at, last_seen, job_id, is_stale }], active_count, stale_count }` where `is_stale = (now - last_seen) > 60 s` (BR-EXT-031; defined by `_STALE_THRESHOLD_SECONDS = 60` in `extraction_service.py`)
 
 ---
 

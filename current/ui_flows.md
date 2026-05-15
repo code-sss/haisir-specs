@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 7dccbe6 (feat(extraction): add GlmOcrProvider, PdfiumReader, ExtractionSourceStorage.read, 2026-05-07) |
-| haisir-frontend | 7633f19 (feat(admin): add extraction status panel, toast system, and upload fixes, 2026-05-05) |
-| haisir-deploy | eea5152 (fix(apisix): add dedicated route for empty-body POST action endpoints, 2026-05-05) |
+| haisir-backend | 024a805 (feat(worker): add URL allowlist validation + ValueError→400 in topic_content route, 2026-05-14) |
+| haisir-frontend | 9fb52ef (feat(admin): add worker health page and fix topic-contents API path, 2026-05-14) |
+| haisir-deploy | 7e4d886 (feat(deploy): add worker service + WAF exclusion for topics-contents POST, 2026-05-14) |
 
-> Next session: run `git diff 7dccbe6..HEAD` in haisir-backend, `git diff 7633f19..HEAD` in haisir-frontend, and `git diff eea5152..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 024a805..HEAD` in haisir-backend, `git diff 9fb52ef..HEAD` in haisir-frontend, and `git diff 7e4d886..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -111,7 +111,7 @@
 
 Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner while auth resolves then redirects non-admin to `/home`. Backend also rejects non-admin API calls (defence-in-depth).
 
-**Shell layout** — All `/admin` routes render inside `AdminShell`: topbar + flex-row(`AdminSidenav` | `main`). `AdminSidenav` is a resizable dark sidebar (190px default, 140–300px range) with 2 nav items (🏠 Dashboard → `/admin`, 📚 Board content → `/admin/boards`) and a drag handle on its right edge. Active item highlighted via `usePathname()`.
+**Shell layout** — All `/admin` routes render inside `AdminShell`: topbar + flex-row(`AdminSidenav` | `main`). `AdminSidenav` is a resizable dark sidebar (190px default, 140–300px range) with 3 nav items (🏠 Dashboard → `/admin`, 📚 Board content → `/admin/boards`, ⚙️ Workers → `/admin/system/workers`) and a drag handle on its right edge. Active item highlighted via `usePathname()`.
 
 - Screen: `/admin` — AdminDashboard. **Platform Overview** — 4 stat cards (Platform boards / Live topics / Draft topics / Total topics) fetched from `GET /api/admin/board-stats`. Stat cards use colour-coded left borders (blue / green / amber / gray). If the stats endpoint is unavailable, an alert is shown and cards display “—”. **Boards section** — header with "+ Add board" button (opens AddBoardModal directly from dashboard). Each board renders as a rich card: emoji icon (cycling 📗📘📙…), board name, "{live} live topics · {draft} drafts" subtitle, unconditional "Live" green badge, "Manage" link to `/admin/boards?board={id}`. Click-to-edit board description: click shows inline textarea, Enter/blur calls `PATCH /api/categories/{id}` with `{ description }`, Escape cancels. Empty state: "No boards yet." with the "+ Add board" button still visible.
   - API: `GET /api/categories`, `GET /api/admin/board-stats`, `POST /api/categories`, `PATCH /api/categories/{id}`
@@ -126,13 +126,13 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 - Panel: **TopicPanel** — fetches topics for the selected node via `GET /api/topics/{nodeId}`; shows loading spinner, error state, topic list (one TopicRow per topic), and an "+ Add topic" button.
 
 - Row: **TopicRow** — individual topic card with: inline rename (click title → RenameTopicInline), draft/live status toggle ("Set live" / "Set draft" button calling `PATCH /api/topics/{id}`), and a delete (×) button opening DeleteTopicDialog. Renders a **content management section** (ContentItemRows, "Add Content" button) and an **extraction jobs strip** below the content section. The jobs strip shows the last 3 extraction jobs (sorted newest-first) via `useExtractionJobs`; each job row shows filename, status label, pages_completed/pages_total progress, and Cancel/Retry actions. When a job transitions to `done`, the strip fires `onJobDone` which invalidates the topic contents query and shows a toast. When all jobs are terminal and 60 s have elapsed with no active jobs, polling stops.
-  - API: `GET /api/topic-contents/{topicId}`, `POST /api/topic-contents/`, `PATCH /api/topic-contents/{id}`, `DELETE /api/topic-contents/{id}`, `GET /api/admin/topics/{topicId}/extraction-jobs`, `DELETE /api/admin/extraction-jobs/{jobId}`, `POST /api/admin/extraction-jobs/{jobId}/retry`
+  - API: `GET /api/topics-contents/{topicId}`, `POST /api/topics-contents/`, `PATCH /api/topics-contents/{id}`, `DELETE /api/topics-contents/{id}`, `GET /api/admin/topics/{topicId}/extraction-jobs`, `DELETE /api/admin/extraction-jobs/{jobId}`, `POST /api/admin/extraction-jobs/{jobId}/retry`
 
 - Row: **ContentItemRow** — one row per content item: type icon (🎬 video / 📄 pdf / 📝 text / ❓ question / 💬 question_answer), title, optional description (truncated, full text in `title` tooltip), order badge, "Edit" button, × delete button. Edit/delete callbacks passed from `TopicRow`.
 
 - Modal: **AddContentModal** — native `<dialog>`; `mode: 'create' | 'edit'`. **4-chip type selector**: PDF, Image(s), Video URL, Text (chips disabled in edit mode). For PDF/Image chips: drag-and-drop file zone (or click to browse, accepts `application/pdf`/`image/*`); shows file list with remove buttons; cost estimate preview (pages × per-page rate) with a confirmation checkbox before upload is enabled; up to 5 files per submission; validates size ≤ 50 MB and MIME type. **Upload-closes-immediately**: on submit with files, modal closes at once and background upload fires via `extractionHook.uploadFiles()`; pseudo-jobs appear in the topic strip immediately. For Video URL chip: URL field + title/description/order fields, same Zod validation as before. For Text chip: textarea + title/description/order. In edit mode, only Video/Text are editable; content_type is immutable. `useFocusTrap` traps keyboard focus.
 
-- Dialog: **DeleteContentDialog** — native `<dialog>` confirmation: "Delete '[title]'? This cannot be undone." Cancel + "Confirm Delete" (danger style); loading state on confirm. Calls `DELETE /api/topic-contents/{id}`; 404 treated as already-gone.
+- Dialog: **DeleteContentDialog** — native `<dialog>` confirmation: "Delete '[title]'? This cannot be undone." Cancel + "Confirm Delete" (danger style); loading state on confirm. Calls `DELETE /api/topics-contents/{id}`; 404 treated as already-gone.
 
 - Hook: **useExtractionJobs(topicId, { onJobDone })** — manages extraction job lifecycle for a single topic. Merges pseudo-jobs (local optimistic state for in-flight uploads) with server-polled jobs. Polling interval: 3 s while any job is `uploading|pending|extracting`; 5 s for 60 s after last active job ends; then stops. Exposes `{ jobs: DisplayJob[], isLoading, isError, uploadFiles, cancelJob, retryJob }`. `uploadFiles(files)` creates one pseudo-job per file, calls `createExtractionJob` with a UUID idempotency key, replaces the pseudo-job with the server job on success or marks it `upload_failed` on error.
 
@@ -161,6 +161,15 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 - Dialog: **DeleteNodeDialog** — triggered from NodeTreeRow action menu. Shows node name and a confirm button. On 409 response from backend: displays a human-readable blocked reason (node has children or topics). On success: removes node from tree and clears node selection if the deleted node was selected.
 
 - Accessibility: `useFocusTrap` hook traps keyboard focus inside any open modal (AddNodeModal, AddBoardModal, DeleteNodeDialog).
+
+---
+
+## Admin: Worker Health (Phase 1e)
+
+- Screen: `/admin/system/workers` — Worker health page. Shows a table of registered worker heartbeats polled from `GET /api/admin/system/workers` every 30 s (via `useAdminWorkers` hook, `refetchInterval: 30_000`). Table columns: hostname (`worker_id`), Started (ISO), Last Seen (relative, via `formatRelativeTime()`), Job (first 8 chars of `job_id` or —), Status pill (Active = green / Stale = red, derived from `is_stale` flag via `getWorkerStatus()` — never re-derived on client per BR-EXT-031). Zero-active-workers banner shown when `active_count === 0`. Shows loading spinner on initial fetch; error state on failure. No user actions.
+  - Hook: `useAdminWorkers()` in `src/features/admin/hooks/use-admin-workers.ts` — `useQuery` wrapping `listAdminWorkers` from extraction-api.ts; `refetchInterval: 30_000`.
+  - Domain: `formatRelativeTime(iso: string): string` and `getWorkerStatus(is_stale: boolean): 'Active' | 'Stale'` pure functions in `src/features/admin/domain/worker-domain.ts`.
+  - Types: `AdminWorkerSchema = { worker_id, started_at, last_seen, job_id, is_stale }`; `WorkerListResponseSchema = { workers: AdminWorker[], active_count, stale_count }` in `src/features/admin/types/admin.types.ts`.
 
 ---
 
