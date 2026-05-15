@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement-deploy` in each code repo.
-> Last baselined: backend:7dccbe6 frontend:7633f19 deploy:73c0d0b (2026-05-07)
+> Last baselined: backend:7dccbe6 frontend:7633f19 deploy:eea5152 (2026-05-14)
 
 ## G1 [deploy]: Worker service provisioned
 - [x] T1.1 [deploy]: Add worker service to Docker Compose (replicas:2, env vars, depends_on) (2026-05-12)
@@ -45,13 +45,13 @@
 - [ ] **G6: Parent extraction API** — integration test: quota 429 + cross-parent isolation
 
 ## G7 [backend]: Worker process
-> **Pre-implementation gap:** `TopicContent` domain model (`src/domain/models/topic_content.py`) and SQLAlchemy table (`src/infrastructure/models/topic_content.py`) are missing `source_extraction_job_id` field — fix before writing finalize.py.
-- [ ] T7.1 [backend]: worker/extraction_loop.py — claim loop, extract_page routing, per-page staging, cancel check, cost cap (depends on T4.1, T4.2, T4.3, T4.4, T2.1)
-- [ ] T7.2 [backend]: worker/finalize.py — atomic TX: ownership re-validate, content_order base, INSERT N topic_contents, INSERT N rag_outbox, INSERT audit, DELETE pages, UPDATE job done (depends on T4.3, T2.1)
-- [ ] T7.3 [backend]: worker/purge_loop.py — hourly expired job purge + outbox cleanup (depends on T4.3, T4.4, T2.1)
+> **Pre-implementation gap resolved (2026-05-08):** `source_extraction_job_id` now exists in both `TopicContent` domain model and SQLAlchemy table mapping.
+- [x] T7.1 [backend]: worker/extraction_loop.py — claim loop, extract_page routing, per-page staging, cancel check, cost cap (depends on T4.1, T4.2, T4.3, T4.4, T2.1) (2026-05-08)
+- [x] T7.2 [backend]: worker/finalize.py — atomic TX: ownership re-validate, content_order base, INSERT N topic_contents, INSERT N rag_outbox, INSERT audit, DELETE pages, UPDATE job done (depends on T4.3, T2.1) (2026-05-08)
+- [x] T7.3 [backend]: worker/purge_loop.py — hourly expired job purge + outbox cleanup (depends on T4.3, T4.4, T2.1) (2026-05-12)
 - [ ] T7.4 [backend]: worker/rag_outbox_loop.py — **DEFERRED to haiguru repo**: outbox rows are written by finalize but drain is haiguru's concern; haisir worker does not implement this loop
-- [ ] T7.5 [backend]: worker/heartbeat.py — UPSERT every 10s + stale cleanup on startup (depends on T4.3, T2.1)
-- [ ] T7.6 [backend]: worker/__main__.py + prompt module — asyncio.gather all loops (T7.1/T7.2/T7.3/T7.5 only), SIGTERM handler, env validation (EXTRACTION__MODEL_SPEC required); prompt as src/worker/prompts.py Python constant (no haiguru copy needed) (depends on T7.1, T7.2, T7.3, T7.5)
+- [x] T7.5 [backend]: worker/heartbeat.py — UPSERT every 10s + stale cleanup on startup (depends on T4.3, T2.1) (2026-05-12)
+- [x] T7.6 [backend]: worker/__main__.py + prompt module — asyncio.gather all loops (T7.1/T7.2/T7.3/T7.5 only), SIGTERM handler, env validation (EXTRACTION__MODEL_SPEC required); prompt as src/worker/prompts.py Python constant (no haiguru copy needed) (depends on T7.1, T7.2, T7.3, T7.5) (2026-05-12)
 - [ ] **G7: Worker process** — integration test: seed pending job → run worker → assert N topic_contents + audit row + job done
 
 ## G8 [frontend]: CSRF + FormData gate ⚠️ BLOCKING for G9–G12
@@ -81,8 +81,8 @@
 
 ## G13 [deploy + backend]: WAF exclusion + URL validation for topic content
 > **Context:** `POST /api/topics-contents/` accepts a `url` field for video links (e.g. YouTube). OWASP CRS rule 931130 ("RFI: Off-Domain Reference/Link") blocks any external URL in a POST body. Fix requires a scoped WAF exclusion in deploy **and** backend-side allowlist validation to prevent SSRF / stored XSS now that the WAF no longer blocks the field.
-- [ ] T13.1 [deploy]: Add Coraza rule exclusion to 03-secured-api.json — `ctl:ruleRemoveTargetById=931130;ARGS:url` scoped to `REQUEST_URI @beginsWith /api/topics-contents/`; reload APISIX plugin configs via release manifest (`apisix_plugins: true`)
-- [ ] T13.2 [backend]: Validate `url` field in `POST /api/topics-contents/` Pydantic schema — scheme must be `https`; hostname must be in allowlist (`youtube.com`, `www.youtube.com`, `youtu.be`, `vimeo.com`, `www.vimeo.com`); return HTTP 422 with clear error on failure; if URL is ever fetched server-side, apply same allowlist and disallow redirect chains to off-allowlist domains (depends on T13.1)
+- [x] T13.1 [deploy]: Add Coraza rule exclusion to 03-secured-api.json — `ctl:ruleRemoveTargetById=931130;ARGS:url` scoped to `REQUEST_URI @beginsWith /api/topics-contents/`; reload APISIX plugin configs via release manifest (`apisix_plugins: true`) (2026-05-14)
+- [x] T13.2 [backend]: Validate `url` field in `POST /api/topics-contents/` Pydantic schema — scheme must be `https`; hostname must be in allowlist (`youtube.com`, `www.youtube.com`, `youtu.be`, `vimeo.com`, `www.vimeo.com`); return HTTP 422 with clear error on failure; if URL is ever fetched server-side, apply same allowlist and disallow redirect chains to off-allowlist domains (2026-05-14)
 - [ ] **G13: WAF exclusion + URL validation** — manual: `POST /api/topics-contents/` with `https://www.youtube.com/watch?v=xxx` returns 2xx; `http://...`, `javascript:...`, or any non-allowlisted domain returns 422; APISIX no longer blocks the request
 
 ## ROOT acceptance test
@@ -93,8 +93,6 @@
 ## Ready now
 Tasks with no pending dependencies — can be started immediately in parallel:
 
-- T13.1 [deploy]: WAF exclusion for topic content URL field *(no dependencies)*
-- T7.1 [backend]: worker/extraction_loop.py *(newly unblocked — T4.1 ✅ T4.2 ✅ T4.3 ✅ T4.4 ✅ T2.1 ✅)*
 - T6.1 [backend]: POST /api/parent/curriculum/topics/{topic_id}/extraction-jobs *(unblocked by T4.3, T4.4, T3.3, T2.1)*
 - T6.2 [backend]: GET /api/parent/curriculum/topics/{topic_id}/extraction-jobs *(unblocked by T4.3, T2.1)*
 - T6.3 [backend]: GET /api/parent/curriculum/extraction-jobs/{job_id} *(unblocked by T4.3, T2.1)*
