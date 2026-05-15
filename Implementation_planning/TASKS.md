@@ -1,11 +1,11 @@
 # Progress
 
-> Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:7dccbe6 frontend:7633f19 deploy:eea5152 (2026-05-07)
+> Auto-generated from PLAN.md. Updated by `/implement-deploy` in each code repo.
+> Last baselined: backend:7dccbe6 frontend:7633f19 deploy:73c0d0b (2026-05-07)
 
 ## G1 [deploy]: Worker service provisioned
-- [ ] T1.1 [deploy]: Add worker service to Docker Compose (replicas:2, env vars, depends_on)
-- [ ] T1.2 [deploy]: STORAGE_ROOT volume mount to api + worker (depends on T1.1)
+- [x] T1.1 [deploy]: Add worker service to Docker Compose (replicas:2, env vars, depends_on) (2026-05-12)
+- [x] T1.2 [deploy]: STORAGE_ROOT volume mount to api + worker (depends on T1.1) (2026-05-12)
 - [ ] **G1: Worker service provisioned** — integration test: `docker compose ps` shows 2 worker containers
 
 ## G2 [backend]: Schema ready
@@ -79,6 +79,12 @@
 - [ ] T12.1 [frontend]: Admin /system/workers page — worker table, is_stale highlight, 30s auto-refresh, sidebar link (depends on T5.6 [backend], T9.1 [frontend])
 - [ ] **G12: Worker health page** — Playwright: active + stale workers rendered correctly
 
+## G13 [deploy + backend]: WAF exclusion + URL validation for topic content
+> **Context:** `POST /api/topics-contents/` accepts a `url` field for video links (e.g. YouTube). OWASP CRS rule 931130 ("RFI: Off-Domain Reference/Link") blocks any external URL in a POST body. Fix requires a scoped WAF exclusion in deploy **and** backend-side allowlist validation to prevent SSRF / stored XSS now that the WAF no longer blocks the field.
+- [ ] T13.1 [deploy]: Add Coraza rule exclusion to 03-secured-api.json — `ctl:ruleRemoveTargetById=931130;ARGS:url` scoped to `REQUEST_URI @beginsWith /api/topics-contents/`; reload APISIX plugin configs via release manifest (`apisix_plugins: true`)
+- [ ] T13.2 [backend]: Validate `url` field in `POST /api/topics-contents/` Pydantic schema — scheme must be `https`; hostname must be in allowlist (`youtube.com`, `www.youtube.com`, `youtu.be`, `vimeo.com`, `www.vimeo.com`); return HTTP 422 with clear error on failure; if URL is ever fetched server-side, apply same allowlist and disallow redirect chains to off-allowlist domains (depends on T13.1)
+- [ ] **G13: WAF exclusion + URL validation** — manual: `POST /api/topics-contents/` with `https://www.youtube.com/watch?v=xxx` returns 2xx; `http://...`, `javascript:...`, or any non-allowlisted domain returns 422; APISIX no longer blocks the request
+
 ## ROOT acceptance test
 - [ ] **ROOT [e2e]: Full extraction flow** — Playwright: upload PDF → modal closes → strip → progress → done → content rows with provenance → inline rename → Edit modal provenance → health page
 
@@ -87,8 +93,7 @@
 ## Ready now
 Tasks with no pending dependencies — can be started immediately in parallel:
 
-- T1.1 [deploy]: Add worker service to Docker Compose
-- T1.2 [deploy]: STORAGE_ROOT volume *(after T1.1)*
+- T13.1 [deploy]: WAF exclusion for topic content URL field *(no dependencies)*
 - T7.1 [backend]: worker/extraction_loop.py *(newly unblocked — T4.1 ✅ T4.2 ✅ T4.3 ✅ T4.4 ✅ T2.1 ✅)*
 - T6.1 [backend]: POST /api/parent/curriculum/topics/{topic_id}/extraction-jobs *(unblocked by T4.3, T4.4, T3.3, T2.1)*
 - T6.2 [backend]: GET /api/parent/curriculum/topics/{topic_id}/extraction-jobs *(unblocked by T4.3, T2.1)*
