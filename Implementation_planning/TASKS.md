@@ -37,11 +37,11 @@
 - [ ] **G5: Admin extraction API** — integration test: full API test suite including CSRF/header guard tests
 
 ## G6 [backend]: Parent extraction API
-- [ ] T6.1 [backend]: POST /api/parent/curriculum/topics/{topic_id}/extraction-jobs — with quota gate (depends on T4.3, T4.4, T3.3, T2.1)
-- [ ] T6.2 [backend]: GET /api/parent/curriculum/topics/{topic_id}/extraction-jobs — filtered to own jobs (depends on T4.3, T2.1)
-- [ ] T6.3 [backend]: GET /api/parent/curriculum/extraction-jobs/{job_id} — isolation (depends on T4.3, T2.1)
-- [ ] T6.4 [backend]: DELETE /api/parent/curriculum/extraction-jobs/{job_id} — cancel + quota decrement (depends on T4.3, T4.4, T2.1)
-- [ ] T6.5 [backend]: POST /api/parent/curriculum/extraction-jobs/{job_id}/retry — filtered by created_by (depends on T4.3, T4.4, T2.1)
+- [x] T6.1 [backend]: POST /api/parent/curriculum/topics/{topic_id}/extraction-jobs — with quota gate (depends on T4.3, T4.4, T3.3, T2.1) (2026-05-18)
+- [x] T6.2 [backend]: GET /api/parent/curriculum/topics/{topic_id}/extraction-jobs — filtered to own jobs (depends on T4.3, T2.1) (2026-05-18)
+- [x] T6.3 [backend]: GET /api/parent/curriculum/extraction-jobs/{job_id} — isolation (depends on T4.3, T2.1) (2026-05-18)
+- [x] T6.4 [backend]: DELETE /api/parent/curriculum/extraction-jobs/{job_id} — cancel + quota decrement (depends on T4.3, T4.4, T2.1) (2026-05-18)
+- [x] T6.5 [backend]: POST /api/parent/curriculum/extraction-jobs/{job_id}/retry — filtered by created_by (depends on T4.3, T4.4, T2.1) (2026-05-18)
 - [ ] **G6: Parent extraction API** — integration test: quota 429 + cross-parent isolation
 
 ## G7 [backend]: Worker process
@@ -70,8 +70,8 @@
 - [ ] **G10: Topic card strip** — Playwright: mock job transitions → strip updates → content list refetched
 
 ## G11 [backend + frontend]: Provenance + editing
-- [ ] T11.1 [backend]: PATCH regression guard — assert source_extraction_job_id never overwritten; add test (depends on T2.1)
-- [ ] T11.2 [backend]: Extend GET /api/topic-contents — include provenance {source_filename, page_no} via audit JOIN (depends on T11.1, T2.1)
+- [x] T11.1 [backend]: PATCH regression guard — assert source_extraction_job_id never overwritten; add test (depends on T2.1) (2026-05-18)
+- [x] T11.2 [backend]: Extend GET /api/topic-contents — include provenance {source_filename, page_no} via audit JOIN (depends on T11.1, T2.1) (2026-05-18)
 - [ ] T11.3 [frontend]: Extend ContentItemRow — provenance badge, inline title rename, Edit modal provenance line, Delete audit message (depends on T11.2 [backend], T10.2 [frontend])
 - [ ] **G11: Provenance + editing** — Playwright: badge shows; inline rename preserves badge; Edit modal shows provenance line
 
@@ -93,9 +93,4 @@
 ## Ready now
 Tasks with no pending dependencies — can be started immediately in parallel:
 
-- T6.1 [backend]: POST /api/parent/curriculum/topics/{topic_id}/extraction-jobs *(unblocked by T4.3, T4.4, T3.3, T2.1)*
-- T6.2 [backend]: GET /api/parent/curriculum/topics/{topic_id}/extraction-jobs *(unblocked by T4.3, T2.1)*
-- T6.3 [backend]: GET /api/parent/curriculum/extraction-jobs/{job_id} *(unblocked by T4.3, T2.1)*
-- T6.4 [backend]: DELETE /api/parent/curriculum/extraction-jobs/{job_id} *(unblocked by T4.3, T4.4, T2.1)*
-- T6.5 [backend]: POST /api/parent/curriculum/extraction-jobs/{job_id}/retry *(unblocked by T4.3, T4.4, T2.1)*
-- T11.1 [backend]: PATCH regression guard — assert source_extraction_job_id never overwritten *(unblocked by T2.1)*
+- T11.3 [frontend]: Extend ContentItemRow — provenance badge, inline title rename, Edit modal provenance line, Delete audit message *(unblocked by T11.2 [backend], T10.2 [frontend])*
