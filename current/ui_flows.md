@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | cb0a966 (feat(extraction): add Ollama cloud API support with Bearer auth, 2026-05-18) |
-| haisir-frontend | f7d0a2a (fix(admin): resolve sonarqube quality issues, 2026-05-15) |
+| haisir-backend | dc273c6 (fix(extraction): harden quota accounting and extraction guardrails, 2026-05-18) |
+| haisir-frontend | 5324cdf (feat(admin): add inline content rename and provenance badge, 2026-05-18) |
 | haisir-deploy | 7e4d886 (feat(deploy): add worker service + WAF exclusion for topics-contents POST, 2026-05-14) |
 
-> Next session: run `git diff cb0a966..HEAD` in haisir-backend, `git diff f7d0a2a..HEAD` in haisir-frontend, and `git diff 7e4d886..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff dc273c6..HEAD` in haisir-backend, `git diff 5324cdf..HEAD` in haisir-frontend, and `git diff 7e4d886..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -125,14 +125,14 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 
 - Panel: **TopicPanel** — fetches topics for the selected node via `GET /api/topics/{nodeId}`; shows loading spinner, error state, topic list (one TopicRow per topic), and an "+ Add topic" button.
 
-- Row: **TopicRow** — individual topic card with: inline rename (click title → RenameTopicInline), draft/live status toggle ("Set live" / "Set draft" button calling `PATCH /api/topics/{id}`), and a delete (×) button opening DeleteTopicDialog. Renders a **content management section** (ContentItemRows, "Add Content" button) and an **extraction jobs strip** below the content section. The jobs strip shows the last 3 extraction jobs (sorted newest-first) via `useExtractionJobs`; each job row shows filename, status label, pages_completed/pages_total progress, and Cancel/Retry actions. When a job transitions to `done`, the strip fires `onJobDone` which invalidates the topic contents query and shows a toast. When all jobs are terminal and 60 s have elapsed with no active jobs, polling stops.
+- Row: **TopicRow** — individual topic card with: inline rename (click title → RenameTopicInline), draft/live status toggle ("Set live" / "Set draft" button calling `PATCH /api/topics/{id}`), and a delete (×) button opening DeleteTopicDialog. Renders a **content management section** (ContentItemRows with inline rename + provenance badges, "Add Content" button) and an **extraction jobs strip** below the content section. The jobs strip shows the last 3 extraction jobs (sorted newest-first) via `useExtractionJobs`; each job row shows filename, status label, pages_completed/pages_total progress, and Cancel/Retry actions. When a job transitions to `done`, the strip fires `onJobDone` which invalidates the topic contents query and shows a toast. When all jobs are terminal and 60 s have elapsed with no active jobs, polling stops. **Inline content rename**: `handleRenameContent` uses `useUpdateTopicContent` mutation; `renamingContentId` state tracks the in-flight item; `isTitleSaving` prop passed to `ContentItemRow` for disabled state.
   - API: `GET /api/topics-contents/{topicId}`, `POST /api/topics-contents/`, `PATCH /api/topics-contents/{id}`, `DELETE /api/topics-contents/{id}`, `GET /api/admin/topics/{topicId}/extraction-jobs`, `DELETE /api/admin/extraction-jobs/{jobId}`, `POST /api/admin/extraction-jobs/{jobId}/retry`
 
-- Row: **ContentItemRow** — one row per content item: type icon (🎬 video / 📄 pdf / 📝 text / ❓ question / 💬 question_answer), title, optional description (truncated, full text in `title` tooltip), order badge, "Edit" button, × delete button. Edit/delete callbacks passed from `TopicRow`.
+- Row: **ContentItemRow** — one row per content item: type icon (🎬 video / 📄 pdf / 📝 text / ❓ question / 💬 question_answer), **inline title rename** (title rendered as a `<button>`; click → switches to `<input>` with `autoFocus`, max 200 chars; Enter saves, Escape/blur cancels; disabled while save is in-flight), **provenance badge** (if `item.provenance != null`, renders `✨ from {source_filename} · p.{page_no}` pill below title with tooltip “Edits don’t affect the audit record”), optional description (truncated, full text in `title` tooltip), order badge, “Edit” button, × delete button. Rename callback `onRename(item, title)` and `isTitleSaving` prop passed from `TopicRow`.
 
 - Modal: **AddContentModal** — native `<dialog>`; `mode: 'create' | 'edit'`. **4-chip type selector**: PDF, Image(s), Video URL, Text (chips disabled in edit mode). For PDF/Image chips: drag-and-drop file zone (or click to browse, accepts `application/pdf`/`image/*`); shows file list with remove buttons; cost estimate preview (pages × per-page rate) with a confirmation checkbox before upload is enabled; up to 5 files per submission; validates size ≤ 50 MB and MIME type. **Upload-closes-immediately**: on submit with files, modal closes at once and background upload fires via `extractionHook.uploadFiles()`; pseudo-jobs appear in the topic strip immediately. For Video URL chip: URL field + title/description/order fields, same Zod validation as before. For Text chip: textarea + title/description/order. In edit mode, only Video/Text are editable; content_type is immutable. `useFocusTrap` traps keyboard focus.
 
-- Dialog: **DeleteContentDialog** — native `<dialog>` confirmation: "Delete '[title]'? This cannot be undone." Cancel + "Confirm Delete" (danger style); loading state on confirm. Calls `DELETE /api/topics-contents/{id}`; 404 treated as already-gone.
+- Dialog: **DeleteContentDialog** — native `<dialog>` confirmation: “Delete this content? The extraction audit record will be preserved.” Cancel + “Confirm Delete” (danger style); loading state on confirm. Calls `DELETE /api/topics-contents/{id}`; 404 treated as already-gone.
 
 - Hook: **useExtractionJobs(topicId, { onJobDone })** — manages extraction job lifecycle for a single topic. Merges pseudo-jobs (local optimistic state for in-flight uploads) with server-polled jobs. Polling interval: 3 s while any job is `uploading|pending|extracting`; 5 s for 60 s after last active job ends; then stops. Exposes `{ jobs: DisplayJob[], isLoading, isError, uploadFiles, cancelJob, retryJob }`. `uploadFiles(files)` creates one pseudo-job per file, calls `createExtractionJob` with a UUID idempotency key, replaces the pseudo-job with the server job on success or marks it `upload_failed` on error.
 

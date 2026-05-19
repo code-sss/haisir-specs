@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | cb0a966 (feat(extraction): add Ollama cloud API support with Bearer auth, 2026-05-18) |
-| haisir-frontend | f7d0a2a (fix(admin): resolve sonarqube quality issues, 2026-05-15) |
+| haisir-backend | dc273c6 (fix(extraction): harden quota accounting and extraction guardrails, 2026-05-18) |
+| haisir-frontend | 5324cdf (feat(admin): add inline content rename and provenance badge, 2026-05-18) |
 | haisir-deploy | 7e4d886 (feat(deploy): add worker service + WAF exclusion for topics-contents POST, 2026-05-14) |
 
-> Next session: run `git diff cb0a966..HEAD` in haisir-backend, `git diff f7d0a2a..HEAD` in haisir-frontend, and `git diff 7e4d886..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff dc273c6..HEAD` in haisir-backend, `git diff 5324cdf..HEAD` in haisir-frontend, and `git diff 7e4d886..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -118,6 +118,7 @@
 - `order` (Integer)
 - `description` (String, nullable)
 - `source_extraction_job_id` (UUID, nullable) — provenance link to the extraction job that created this row; set by the worker finalize step; **never cleared by PATCH** (BR-EXT-023a)
+- `provenance` — **transient, not a DB column**; populated by the repository via `LEFT JOIN extraction_job_audit ON source_extraction_job_id = job_id`; exposed in `GET /api/topics-contents/{topic_id}` response as `{ source_filename: str, page_no: int } | null`
 
 ## questions
 - `id` (UUID, PK)

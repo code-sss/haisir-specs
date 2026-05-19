@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | cb0a966 (feat(extraction): add Ollama cloud API support with Bearer auth, 2026-05-18) |
-| haisir-frontend | f7d0a2a (fix(admin): resolve sonarqube quality issues, 2026-05-15) |
+| haisir-backend | dc273c6 (fix(extraction): harden quota accounting and extraction guardrails, 2026-05-18) |
+| haisir-frontend | 5324cdf (feat(admin): add inline content rename and provenance badge, 2026-05-18) |
 | haisir-deploy | 7e4d886 (feat(deploy): add worker service + WAF exclusion for topics-contents POST, 2026-05-14) |
 
-> Next session: run `git diff cb0a966..HEAD` in haisir-backend, `git diff f7d0a2a..HEAD` in haisir-frontend, and `git diff 7e4d886..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff dc273c6..HEAD` in haisir-backend, `git diff 5324cdf..HEAD` in haisir-frontend, and `git diff 7e4d886..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -199,7 +199,7 @@
 ### GET /api/topics-contents/{topic_id}
 - Purpose: List content items for a topic
 - Auth: student | instructor | admin (any platform role)
-- Response: array of `{ id, topic_id, content_type, title, url, text, order, description, source_extraction_job_id }`
+- Response: array of `{ id, topic_id, content_type, title, url, text, order, description, source_extraction_job_id, provenance: { source_filename, page_no } | null }` — `provenance` is populated via LEFT JOIN on `extraction_job_audit` when the item was produced by the extraction worker; `null` for manually-created items
 - Note: visibility scoped by the parent topic's owner_type — student sees only items whose parent topic is visible to them.
 
 ### GET /api/topics-contents/{content_type}/{topic_id}
@@ -274,6 +274,46 @@
 - Purpose: List all registered worker heartbeats with liveness annotation
 - Auth: admin
 - Response: `{ workers: [{ worker_id, started_at, last_seen, job_id, is_stale }], active_count, stale_count }` where `is_stale = (now - last_seen) > 60 s` (BR-EXT-031; defined by `_STALE_THRESHOLD_SECONDS = 60` in `extraction_service.py`)
+
+---
+
+## Parent Extraction Jobs
+
+> All endpoints require `X-Current-Role: parent` and CSRF on mutating methods. Prefix: `/api/parent/curriculum`. APISIX routes these through the same upload plugin config as admin (50 MB body limit). Per-parent quota: max 3 concurrent jobs and max 20 daily jobs (hardcoded in `extraction_service.py`).
+
+### POST /api/parent/curriculum/topics/{topic_id}/extraction-jobs
+- Purpose: Upload a PDF or image file for extraction on a parent-owned topic; enforces quota, SHA-256 dedup, topic ownership
+- Auth: parent, CSRF required
+- Request: multipart/form-data — `file` (binary); `Idempotency-Key` header (UUID, required)
+- Headers: `X-Force-Reextract: true` (optional) to bypass SHA dedup
+- Response: `ExtractionJobRead` (201)
+- Errors: 400 if `Idempotency-Key` missing or invalid UUID; 404 if topic not found or not owned by calling parent; 409 if SHA dedup match (file already queued/done); 413 if file > 50 MB; 415 if unsupported MIME type; 429 if concurrent or daily quota exceeded (body: `{ detail: "Concurrent job limit exceeded" | "Daily job limit exceeded" }`)
+- Note: quota atomically incremented on job insert (`INSERT … ON CONFLICT DO UPDATE` — no read-modify-write race); decremented when job completes (finalize) or is cancelled
+
+### GET /api/parent/curriculum/topics/{topic_id}/extraction-jobs
+- Purpose: List the calling parent's extraction jobs for a topic, filtered to `created_by = caller`
+- Auth: parent, CSRF required
+- Response: `{ jobs: ExtractionJobRead[] }`; supports ETag/304
+
+### GET /api/parent/curriculum/extraction-jobs/{job_id}
+- Purpose: Get a single extraction job owned by the calling parent
+- Auth: parent, CSRF required
+- Response: `ExtractionJobRead` (200)
+- Errors: 404 if not found **or** owned by another parent (enumeration prevention — BR-SEC-002)
+
+### DELETE /api/parent/curriculum/extraction-jobs/{job_id}
+- Purpose: Cancel a pending or extracting job owned by the calling parent
+- Auth: parent, CSRF required
+- Response: updated `ExtractionJobRead` (200) or `{ detail: "cancellation requested" }` for extracting jobs
+- Behaviour: `pending` → hard cancel (status=`cancelled`) + quota concurrent counter decremented; `extracting` → soft cancel (`cancel_requested=true`); `done` → 404 (hidden); terminal non-done statuses (`extraction_failed`, `cancelled`, `upload_failed`) → 409
+- Errors: 404 if not found, belongs to another parent, or status is `done`; 409 if already in a non-cancellable terminal status
+
+### POST /api/parent/curriculum/extraction-jobs/{job_id}/retry
+- Purpose: Re-queue a failed extraction job (`extraction_failed`) owned by the calling parent
+- Auth: parent, CSRF required
+- Request: `Idempotency-Key` header (UUID, required — new key for the retry)
+- Response: `ExtractionJobRead` (201)
+- Errors: 400 if `Idempotency-Key` missing/invalid or job not in `extraction_failed` status; 404 if not found, belongs to another parent, or source file has been purged
 
 ---
 
