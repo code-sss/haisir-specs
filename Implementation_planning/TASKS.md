@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement-deploy` in each code repo.
-> Last baselined: backend:7dccbe6 frontend:7633f19 deploy:eea5152 (2026-05-14)
+> Last baselined: backend:7dccbe6 frontend:f7d0a2a deploy:eea5152 (2026-05-14)
 
 ## G1 [deploy]: Worker service provisioned
 - [x] T1.1 [deploy]: Add worker service to Docker Compose (replicas:2, env vars, depends_on) (2026-05-12)
@@ -72,7 +72,7 @@
 ## G11 [backend + frontend]: Provenance + editing
 - [x] T11.1 [backend]: PATCH regression guard — assert source_extraction_job_id never overwritten; add test (depends on T2.1) (2026-05-18)
 - [x] T11.2 [backend]: Extend GET /api/topic-contents — include provenance {source_filename, page_no} via audit JOIN (depends on T11.1, T2.1) (2026-05-18)
-- [ ] T11.3 [frontend]: Extend ContentItemRow — provenance badge, inline title rename, Edit modal provenance line, Delete audit message (depends on T11.2 [backend], T10.2 [frontend])
+- [x] T11.3 [frontend]: Extend ContentItemRow — provenance badge, inline title rename, Edit modal provenance line, Delete audit message (depends on T11.2 [backend], T10.2 [frontend]) (2026-05-18)
 - [ ] **G11: Provenance + editing** — Playwright: badge shows; inline rename preserves badge; Edit modal shows provenance line
 
 ## G12 [frontend]: Worker health page
@@ -93,4 +93,4 @@
 ## Ready now
 Tasks with no pending dependencies — can be started immediately in parallel:
 
-- T11.3 [frontend]: Extend ContentItemRow — provenance badge, inline title rename, Edit modal provenance line, Delete audit message *(unblocked by T11.2 [backend], T10.2 [frontend])*
+*(none — all individual tasks complete; only Playwright gate tests and integration tests remain)*
