@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement-deploy` in each code repo.
-> Last baselined: backend:7dccbe6 frontend:f7d0a2a deploy:eea5152 (2026-05-14)
+> Last baselined: backend:7dccbe6 frontend:f7d0a2a deploy:7bd52d9 (2026-05-14)
 
 ## G1 [deploy]: Worker service provisioned
 - [x] T1.1 [deploy]: Add worker service to Docker Compose (replicas:2, env vars, depends_on) (2026-05-12)
@@ -88,13 +88,13 @@
 ## G14 [backend + deploy + specs]: Backend OAuth2 token introspection (RFC 7662)
 > **Context:** The backend validates JWTs locally only (JWKS RS256 in `auth/user.py`), so it cannot detect a revoked token (logout / admin-disable / password reset) within the 300s access-token lifespan. Add RFC 7662 introspection as a **hybrid** second check (local decode first, then introspection when enabled), with a short-lived per-token cache and fail-closed behavior. Reuses the existing `haisir-backend-admin` service-account client (creds already in backend config). Keycloak 26 needs the `token-introspection` scope (default) + the introspecting client in the token `aud`; deploy provisions this declaratively in `setup-keycloak.sh`, superseding the temp `add-token-introspection-scope.sh`. Decision record: decisions.md (2026-06-02). Cross-cutting security hardening — not part of the 1d-real extraction goal tree.
 - [x] T14.0 [specs]: Update `target/requirements/02_auth_and_roles.md` (Token Introspection subsection + BR-SEC-009/010) and `00_overview.md` (auth invariant) (2026-06-02)
-- [ ] T14.1 [deploy]: Provision `token-introspection` client scope declaratively — new `common/keycloak/00-client-scopes.json` (`include.in.token.scope=false`, `display.on.consent.screen=false`); extend `setup-keycloak.sh` with an idempotent "Loading Client Scopes" section that creates the scope and assigns it as a **default** scope to `haisir-backend-admin`. Leave `add-token-introspection-scope.sh` as a manual recovery tool only.
-- [ ] T14.2 [deploy]: Add `oidc-audience-mapper` to `common/keycloak/03-client.json` `protocolMappers` (`included.client.audience=haisir-backend-admin`, `access.token.claim=true`) so APISIX-issued tokens carry `haisir-backend-admin` in `aud`; confirm the `setup-keycloak.sh` client PUT applies it idempotently on re-run (depends on T14.1)
+- [x] T14.1 [deploy]: Provision `token-introspection` client scope declaratively — new `common/keycloak/00-client-scopes.json` (`include.in.token.scope=false`, `display.on.consent.screen=false`); extend `setup-keycloak.sh` with an idempotent "Loading Client Scopes" section that creates the scope and assigns it as a **default** scope to `haisir-backend-admin`. Leave `add-token-introspection-scope.sh` as a manual recovery tool only. (2026-06-02)
+- [x] T14.2 [deploy]: Add `oidc-audience-mapper` to `common/keycloak/03-client.json` `protocolMappers` (`included.client.audience=haisir-backend-admin`, `access.token.claim=true`) so APISIX-issued tokens carry `haisir-backend-admin` in `aud`; confirm the `setup-keycloak.sh` client PUT applies it idempotently on re-run (depends on T14.1) (2026-06-02)
 - [ ] T14.3 [backend]: Extend `KeycloakSettings` (`src/shared/config.py`) — `introspection_enabled: bool = False`, `introspection_cache_ttl_seconds: int = 30`; introspection auth reuses `admin_client_id` / `admin_client_secret`
 - [ ] T14.4 [backend]: New `TokenIntrospectionClient` (`src/infrastructure/token_introspection.py`) — `POST .../protocol/openid-connect/token/introspect` with client-credentials auth; per-token cache keyed by `sha256(token)`, TTL `min(config, token exp)`; tenacity retry on `TransportError`; raise `ExternalServiceUnavailableError` on unreachable. Mirror `infrastructure/keycloak_admin.py` (depends on T14.3)
 - [ ] T14.5 [backend]: Wire into `verify_token` (`src/auth/user.py`) — after local JWKS decode + issuer check, when `introspection_enabled` call the client; `active:false` → 401, unreachable → 503. Convert `verify_token` to `async` and confirm `current_active_user` / `current_active_user_lenient` call sites (depends on T14.4)
 - [ ] T14.6 [backend]: Tests — `tests/unit/infrastructure/test_token_introspection.py` (cache hit avoids 2nd HTTP call, active/inactive, unreachable) + extend `tests/unit/auth/test_user.py` (enabled→active passes, inactive→401, unreachable→503, flag-off path unchanged) (depends on T14.5)
-- [ ] T14.7 [deploy]: Update integration test OIDC-10 (`common/scripts/tests/10-test-oidc.sh` + `config.sh`) to introspect using `haisir-backend-admin` creds, asserting `active==true` (depends on T14.1, T14.2)
+- [x] T14.7 [deploy]: Update integration test OIDC-10 (`common/scripts/tests/10-test-oidc.sh` + `config.sh`) to introspect using `haisir-backend-admin` creds, asserting `active==true` (depends on T14.1, T14.2) (2026-06-02)
 - [ ] **G14: Token introspection** — integration test: with `introspection_enabled`, valid token → 200; revoked/logged-out token → 401 within cache TTL; Keycloak introspection down → 503; OIDC-10 passes introspecting as `haisir-backend-admin`
 
 ## ROOT acceptance test
@@ -108,5 +108,6 @@ Tasks with no pending dependencies — can be started immediately in parallel:
 *(1d-real: none — all individual tasks complete; only Playwright gate tests and integration tests remain)*
 
 **G14 (token introspection) — ready now:**
-- T14.1 [deploy] — provision `token-introspection` client scope + assign as default to `haisir-backend-admin`
 - T14.3 [backend] — add `introspection_enabled` / `introspection_cache_ttl_seconds` to `KeycloakSettings`
+
+*(T14.4, T14.5, T14.6 unblock sequentially after T14.3; no further deploy tasks in G14)*

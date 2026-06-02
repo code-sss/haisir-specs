@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | dc273c6 (fix(extraction): harden quota accounting and extraction guardrails, 2026-05-18) |
-| haisir-frontend | 5324cdf (feat(admin): add inline content rename and provenance badge, 2026-05-18) |
-| haisir-deploy | 7e4d886 (feat(deploy): add worker service + WAF exclusion for topics-contents POST, 2026-05-14) |
+| haisir-backend | 5516caf (fix(worker): pass ollama_api_key to GlmOcrProvider, 2026-06-02) |
+| haisir-frontend | 5ba0680 (test(utils): restore 100% coverage after CSRF self-healing changes, 2026-06-02) |
+| haisir-deploy | a1a48f7 (feat(keycloak): add token-introspection scope and backend-admin audience mapper, 2026-06-02) |
 
-> Next session: run `git diff dc273c6..HEAD` in haisir-backend, `git diff 5324cdf..HEAD` in haisir-frontend, and `git diff 7e4d886..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 5516caf..HEAD` in haisir-backend, `git diff 5ba0680..HEAD` in haisir-frontend, and `git diff a1a48f7..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
