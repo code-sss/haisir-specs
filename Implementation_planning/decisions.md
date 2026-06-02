@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-06-02 — Backend OAuth2 token introspection (RFC 7662)
+
+> Spec: `target/requirements/02_auth_and_roles.md` § "Token Introspection (backend, RFC 7662)" + BR-SEC-009/010; invariant added to `target/requirements/00_overview.md`. Task breakdown: TASKS.md G14. Cross-cutting security hardening (not tied to a persona phase). Specs updated this cycle; backend + deploy implementation queued.
+
+**Problem.** The backend validates JWTs locally only (`PyJWKClient` JWKS + `jwt.decode` for signature/exp/iat/issuer in `auth/user.py`). Stateless validation cannot detect a revoked token (logout, admin-disabled account, password reset) within the 300s access-token lifespan, and if the backend is ever reached bypassing APISIX it trusts a token the gateway would reject. The Keycloak side was unblocked manually in staging via `haisir-deploy/common/scripts/add-token-introspection-scope.sh` — a temp workaround that is now being made declarative.
+
+### Decisions
+
+- **Hybrid model, not replace (challenged).** Keep local JWKS decode as the fast first gate, then call RFC 7662 introspection when enabled. Replacing local validation entirely was rejected — it removes the fast-fail path and couples *all* auth liveness to a Keycloak round-trip. The "is this over-engineering given APISIX already validates + 300s tokens?" challenge was considered: the value is revocation enforcement + defense-in-depth at the resource server, made cheap by caching + fail-closed.
+- **Short-lived per-token cache.** Keyed by `sha256(token)` (raw tokens never stored/logged — BR-SEC-007), TTL `min(configured_ttl, token_remaining_exp)`, default ~30s. Bounds Keycloak load; revocation detected within the TTL window.
+- **Fail closed.** Keycloak introspection unreachable → `503`; `active:false` → `401`. A token is never accepted on local validation alone while introspection is enabled (BR-SEC-010).
+- **Introspecting identity = existing `haisir-backend-admin` service-account client.** Its credentials are already in backend config (`OAUTH__KEYCLOAK__ADMIN_CLIENT_ID/SECRET`) and wired through deploy — zero new secret distribution, and the web/gateway client secret is never shared with the backend. Architecturally correct: the resource server introspects with its own machine identity.
+- **Declarative deploy replaces the temp script.** Keycloak 26 requires the `token-introspection` client scope (as a *default* scope on the introspecting client) AND the introspecting client present in the introspected token's `aud`. Provisioned in `setup-keycloak.sh` (new client-scope config + audience mapper on the web client). `add-token-introspection-scope.sh` is retained only as a manual recovery tool.
+- **Feature-flagged, staging-first.** `introspection_enabled` defaults `false`; enable in staging before prod.
+
+### Out of scope / follow-up
+
+- **Tighten `verify_aud`** (currently `False`): once the audience mapper reliably puts `haisir-backend-admin` in token `aud`, a follow-up can flip local validation to enforce audience. Kept separate to avoid coupling an auth-breaking change to this feature.
+- Frontend: no changes (APISIX/session-cookie flow unchanged).
+
+---
+
 ## 2026-04-23 — Phase 1d-real: Content Extraction architecture + post-challenger hardening
 
 > Spec: `target/requirements/12_content_extraction.md`. Schema deltas: `target/requirements/01_data_model.md` § "Schema Extensions (Phase 1d-real)". Prototype: `target/prototypes/haisir_admin_flow.html` (Playwright-validated).

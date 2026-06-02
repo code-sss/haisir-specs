@@ -30,6 +30,7 @@ Apache APISIX (TLS termination · WAF/Coraza · OIDC · CSRF · JWT injection)
 - APISIX injects `Authorization: Bearer <JWT>` — the client never sends a Bearer token.
 - Every request carries `X-Current-Role: <role>` and `X-CSRF-Token: <token>` on mutations.
 - Identity is the Keycloak `sub` claim (`idp_sub`) — a raw UUID string. No local users table.
+- The backend independently verifies each JWT (local JWKS decode + optional Keycloak token introspection for revocation, RFC 7662). Introspection requires the `token-introspection` client scope and the backend client present in the token `aud` (Keycloak 26). See `target/requirements/02_auth_and_roles.md`.
 
 ---
 

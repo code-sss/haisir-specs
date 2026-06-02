@@ -27,9 +27,23 @@ FastAPI receives all four. Never reads cookies directly.
 - Frontend: use `fetchWithCSRFRetry()` — auto-retries on 403
 
 ### JWT
-- Keycloak signs RS256; APISIX validates via JWKS (24-hour cache)
+- Keycloak signs RS256; APISIX validates via JWKS (24-hour cache) **at the gateway**
+- The **backend independently re-validates** every JWT (local JWKS decode + optional token introspection — see *Token Introspection* below)
 - `sub` claim is `idp_sub` — UUID string used as identity across all tables
 - Rotate signing keys with 24-hour overlap
+
+### Token Introspection (backend, RFC 7662)
+
+Layered on top of APISIX gateway validation, the FastAPI backend verifies every JWT in two steps:
+
+1. **Local JWKS decode (always):** verify RS256 signature, `exp`, `iat`, and issuer against Keycloak's JWKS. Fast, no network call — rejects malformed / expired / wrong-issuer tokens immediately.
+2. **Introspection (when `introspection_enabled`):** `POST {keycloak}/realms/{realm}/protocol/openid-connect/token/introspect` to confirm the token is *active*. Catches revocation (logout, admin-disabled account, password reset) that stateless JWT validation cannot detect within the 300s access-token lifespan.
+
+- **Introspecting identity:** the existing `haisir-backend-admin` service-account client (credentials already in backend config). The web/gateway client secret is never shared with the backend.
+- **Cache:** introspection results are cached per token, keyed by a hash of the token, for a short TTL (`min(configured_ttl, token_remaining_exp)`, default ~30s) to bound Keycloak load. Raw tokens are never stored or logged (BR-SEC-007).
+- **Failure mode (fail closed):** Keycloak introspection unreachable → `503`; `active: false` → `401`.
+- **Keycloak 26 requirements (provisioned declaratively by deploy):** the introspecting client must have the `token-introspection` client scope as a *default* scope, and must appear in the introspected token's `aud` claim (an audience mapper on the web client adds `haisir-backend-admin` to `aud`). `haisir-deploy/common/scripts/setup-keycloak.sh` provisions both — superseding the temporary `add-token-introspection-scope.sh` workaround.
+- **Rollout:** feature-flagged via `introspection_enabled` (default off); enabled in staging before prod.
 
 ---
 
@@ -113,6 +127,8 @@ CurrentUser: idp_sub, email, name, email_verified, roles: list[str], current_rol
 - **BR-SEC-006:** `X-Current-Role` is required on all role-gated endpoints. Missing header returns `400 "X-Current-Role header required"`. Explicit exceptions (use lenient path — no header required): `GET /api/users/me`, `POST /api/users/me/assign-role`, `PATCH /api/users/me/onboarding-complete`.
 - **BR-SEC-007:** Never log JWT, CSRF tokens, or session cookies; use structlog with redaction.
 - **BR-SEC-008:** `POST /api/users/me/assign-role` accepts only `student` or `parent` → 422 otherwise.
+- **BR-SEC-009:** When `introspection_enabled`, the backend confirms the token is active via Keycloak introspection (RFC 7662) *after* local JWKS validation; an inactive (revoked) token returns `401` even when its signature and expiry are still valid.
+- **BR-SEC-010:** Introspection fails closed — if the Keycloak introspection endpoint is unreachable the request is rejected (`503`); a token is never accepted on local JWKS validation alone while introspection is enabled.
 
 ---
 
