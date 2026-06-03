@@ -97,6 +97,31 @@
 - [x] T14.7 [deploy]: Update integration test OIDC-10 (`common/scripts/tests/10-test-oidc.sh` + `config.sh`) to introspect using `haisir-backend-admin` creds, asserting `active==true` (depends on T14.1, T14.2) (2026-06-02)
 - [ ] **G14: Token introspection** — integration test: with `introspection_enabled`, valid token → 200; revoked/logged-out token → 401 within cache TTL; Keycloak introspection down → 503; OIDC-10 passes introspecting as `haisir-backend-admin`
 
+## G15 [frontend]: Admin UX — board tile navigation + tree row expand
+
+> **Context:** Two usability gaps found 2026-06-03.
+>
+> **Gap 1 — Dashboard board tiles (`/admin`):** Only the "Manage" `<a>` button navigates to the board content page. The whole `<li>` card should navigate on click. Exception: clicking the description `<button>` (or its `<input>` while editing) must still open the inline editor, not navigate.
+> File: `src/features/admin/components/admin-dashboard.tsx`
+>
+> **Gap 2 — Board content tree node rows (`/admin/boards`):** Only the tiny ▸/▾ `<button className={styles.toggle}>` expands/collapses a node. The whole `<div className={styles.tnode}>` row should toggle expand/collapse on click. Exception: action buttons (+, ✎, ✕) already have `e.stopPropagation()` — no change needed.
+> File: `src/features/admin/components/node-tree-row.tsx`
+
+- [ ] T15.1 [frontend]: Board card click-through navigation
+  - Add `import { useRouter } from 'next/navigation'` and `const router = useRouter()` to `AdminDashboard`
+  - Add `onClick={() => router.push(\`/admin/boards?board=${board.id}\`)}` and `cursor: 'pointer'` style to each board `<li>`
+  - Add `e.stopPropagation()` to the description `<button>` `onClick` (before calling `startEdit`)
+  - Wrap the editing `<input>` + error span in a `<div onClick={(e) => e.stopPropagation()}>` so clicks inside the input don't trigger tile navigation
+  - Add `onClick={(e) => e.stopPropagation()}` to the "Manage" `<a>` link to prevent double-navigation
+  - **Done when:** clicking anywhere on a board tile (except description text / input) navigates to board content; clicking description text still opens the inline editor
+
+- [ ] T15.2 [frontend]: Tree node row click-to-expand
+  - Add `onClick={() => { if (hasChildren && !isRenaming) onToggle(node.id); }}` to the outer `<div className={styles.tnode}>` in `node-tree-row.tsx`
+  - No other changes needed — action buttons already call `e.stopPropagation()`; the toggle `<button>` already calls `e.stopPropagation()`; clicking the name select button will also bubble to the outer div (intentional: click name = select + toggle)
+  - **Done when:** clicking anywhere on a tree node row (except +/✎/✕ buttons) expands or collapses the node when it has children; clicking a childless row is a no-op for expand
+
+- [ ] **G15: Admin UX** — manual test: (1) click board tile body → navigates to board content; (2) click board description text → opens inline editor without navigating; (3) click tree node row → expands; (4) click again → collapses
+
 ## ROOT acceptance test
 - [ ] **ROOT [e2e]: Full extraction flow** — Playwright: upload PDF → modal closes → strip → progress → done → content rows with provenance → inline rename → Edit modal provenance → health page
 
@@ -108,3 +133,5 @@ Tasks with no pending dependencies — can be started immediately in parallel:
 *(1d-real: none — all individual tasks complete; only Playwright gate tests and integration tests remain)*
 
 **G14 (token introspection) — all implementation tasks complete (T14.0–T14.7 ✅):** Only the integration gate test remains.
+
+**G15 (Admin UX) — T15.1 and T15.2 are both ready now.** No dependencies. Implement in `haisir-frontend`.
