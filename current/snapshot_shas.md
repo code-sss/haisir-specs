@@ -1,5 +1,5 @@
 ## Snapshot SHAs
-- haisir-backend: 5516caf5b57d3903cd704107176b7d2024098c3a
-- haisir-frontend: 5ba0680eb4a7ffcc64f96e85a377fd699ca302bd
-- haisir-deploy: a1a48f7f00e1f399946be4fab04863ca8ef7f348
-- captured: 2026-06-02
+- haisir-backend: bb697980c1da23b6a17d3694477344f64941875e
+- haisir-frontend: 64c20ec0687a3ab63765a9410793114f7ee27925
+- haisir-deploy: 7eb0eea322733de29aa94dda165c02685cf92d50
+- captured: 2026-06-04

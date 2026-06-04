@@ -3,17 +3,19 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 5516caf (fix(worker): pass ollama_api_key to GlmOcrProvider, 2026-06-02) |
-| haisir-frontend | 5ba0680 (test(utils): restore 100% coverage after CSRF self-healing changes, 2026-06-02) |
-| haisir-deploy | a1a48f7 (feat(keycloak): add token-introspection scope and backend-admin audience mapper, 2026-06-02) |
+| haisir-backend | bb69798 (feat(devcontainer): add devcontainer lock file, 2026-06-04) |
+| haisir-frontend | 64c20ec (fix(admin): restore board tile navigation and tree row expand on click, 2026-06-04) |
+| haisir-deploy | 7eb0eea (feat(manifest): add release manifest for version 2026.3.1, 2026-06-04) |
 
-> Next session: run `git diff 5516caf..HEAD` in haisir-backend, `git diff 5ba0680..HEAD` in haisir-frontend, and `git diff a1a48f7..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff bb69798..HEAD` in haisir-backend, `git diff 64c20ec..HEAD` in haisir-frontend, and `git diff 7eb0eea..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
 ## Auth & User
 
 > **BR-SEC-006 (enforced as of Phase 1c-pre):** `X-Current-Role` is required on all role-gated endpoints. Missing header returns `400 "X-Current-Role header required"`. The three onboarding endpoints below are explicitly exempt (use lenient dependency that defaults to `roles[0]`).
+
+> **Token introspection (on by default as of bb69798):** After JWKS validation, `verify_token` calls `TokenIntrospectionClient` (RFC 7662). `active: false` → 401 `"Token has been revoked"`. Keycloak unreachable → 503 `"Authentication service unavailable"`. Disable with `KEYCLOAK__INTROSPECTION_ENABLED=false`.
 
 ### GET /api/auth/csrf
 - Purpose: Return a CSRF token

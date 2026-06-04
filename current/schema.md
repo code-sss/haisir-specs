@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 5516caf (fix(worker): pass ollama_api_key to GlmOcrProvider, 2026-06-02) |
-| haisir-frontend | 5ba0680 (test(utils): restore 100% coverage after CSRF self-healing changes, 2026-06-02) |
-| haisir-deploy | a1a48f7 (feat(keycloak): add token-introspection scope and backend-admin audience mapper, 2026-06-02) |
+| haisir-backend | bb69798 (feat(devcontainer): add devcontainer lock file, 2026-06-04) |
+| haisir-frontend | 64c20ec (fix(admin): restore board tile navigation and tree row expand on click, 2026-06-04) |
+| haisir-deploy | 7eb0eea (feat(manifest): add release manifest for version 2026.3.1, 2026-06-04) |
 
-> Next session: run `git diff 5516caf..HEAD` in haisir-backend, `git diff 5ba0680..HEAD` in haisir-frontend, and `git diff a1a48f7..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff bb69798..HEAD` in haisir-backend, `git diff 64c20ec..HEAD` in haisir-frontend, and `git diff 7eb0eea..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -353,3 +353,15 @@ Query: single LEFT JOIN `categories → course_path_nodes (owner_type='platform'
 ### ExtractionSettings
 - Source: `src/shared/config.py`, nested under `settings.extraction`
 - Env vars (nested via `EXTRACTION__*`): `MODEL_SPEC` (model URI string, default empty), `OLLAMA_BASE_URL` (default `http://localhost:11434`), `MAX_TOKENS` (int, default 4096)
+
+### TokenIntrospectionClient
+- Location: `src/infrastructure/token_introspection.py`
+- Wired into `verify_token` (`src/auth/user.py`) when `KEYCLOAK__INTROSPECTION_ENABLED=true` (default: **`True`** as of bb69798)
+- Calls `{keycloak_url}/realms/{realm}/protocol/openid-connect/token/introspect` (RFC 7662) using `haisir-backend-admin` client credentials
+- Cache: in-process dict keyed by `sha256(token)`; TTL = `min(introspection_cache_ttl_seconds, token_remaining_exp)`
+- Retries: up to 3× on `httpx.TransportError` with 1–10 s exponential backoff
+- Failure modes: `active: false` → HTTP 401 `"Token has been revoked"`; Keycloak unreachable → HTTP 503 `"Authentication service unavailable"`
+
+### KeycloakSettings (introspection fields)
+- `introspection_enabled` (bool, default **`True`**) — feature flag for RFC 7662 introspection; env: `KEYCLOAK__INTROSPECTION_ENABLED`
+- `introspection_cache_ttl_seconds` (int, default `30`, min `1`) — per-token cache TTL in seconds; env: `KEYCLOAK__INTROSPECTION_CACHE_TTL_SECONDS`
