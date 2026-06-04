@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement-deploy` in each code repo.
-> Last baselined: backend:5516caf frontend:f7d0a2a deploy:7bd52d9 (2026-05-14)
+> Last baselined: backend:5516caf frontend:5ba0680 deploy:7bd52d9 (2026-05-14)
 
 ## G1 [deploy]: Worker service provisioned
 - [x] T1.1 [deploy]: Add worker service to Docker Compose (replicas:2, env vars, depends_on) (2026-05-12)
@@ -107,7 +107,7 @@
 > **Gap 2 — Board content tree node rows (`/admin/boards`):** Only the tiny ▸/▾ `<button className={styles.toggle}>` expands/collapses a node. The whole `<div className={styles.tnode}>` row should toggle expand/collapse on click. Exception: action buttons (+, ✎, ✕) already have `e.stopPropagation()` — no change needed.
 > File: `src/features/admin/components/node-tree-row.tsx`
 
-- [ ] T15.1 [frontend]: Board card click-through navigation
+- [x] T15.1 [frontend]: Board card click-through navigation (2026-06-03)
   - Add `import { useRouter } from 'next/navigation'` and `const router = useRouter()` to `AdminDashboard`
   - Add `onClick={() => router.push(\`/admin/boards?board=${board.id}\`)}` and `cursor: 'pointer'` style to each board `<li>`
   - Add `e.stopPropagation()` to the description `<button>` `onClick` (before calling `startEdit`)
@@ -115,7 +115,7 @@
   - Add `onClick={(e) => e.stopPropagation()}` to the "Manage" `<a>` link to prevent double-navigation
   - **Done when:** clicking anywhere on a board tile (except description text / input) navigates to board content; clicking description text still opens the inline editor
 
-- [ ] T15.2 [frontend]: Tree node row click-to-expand
+- [x] T15.2 [frontend]: Tree node row click-to-expand (2026-06-03)
   - Add `onClick={() => { if (hasChildren && !isRenaming) onToggle(node.id); }}` to the outer `<div className={styles.tnode}>` in `node-tree-row.tsx`
   - No other changes needed — action buttons already call `e.stopPropagation()`; the toggle `<button>` already calls `e.stopPropagation()`; clicking the name select button will also bubble to the outer div (intentional: click name = select + toggle)
   - **Done when:** clicking anywhere on a tree node row (except +/✎/✕ buttons) expands or collapses the node when it has children; clicking a childless row is a no-op for expand
@@ -134,4 +134,4 @@ Tasks with no pending dependencies — can be started immediately in parallel:
 
 **G14 (token introspection) — all implementation tasks complete (T14.0–T14.7 ✅):** Only the integration gate test remains.
 
-**G15 (Admin UX) — T15.1 and T15.2 are both ready now.** No dependencies. Implement in `haisir-frontend`.
+**G15 (Admin UX) — T15.1 ✅ and T15.2 ✅ complete (2026-06-03).** Gate test is manual only — no automatable frontend tasks remain for G15.
