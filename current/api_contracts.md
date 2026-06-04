@@ -5,7 +5,7 @@
 |---|---|
 | haisir-backend | bb69798 (feat(devcontainer): add devcontainer lock file, 2026-06-04) |
 | haisir-frontend | 64c20ec (fix(admin): restore board tile navigation and tree row expand on click, 2026-06-04) |
-| haisir-deploy | 7eb0eea (feat(manifest): add release manifest for version 2026.3.1, 2026-06-04) |
+| haisir-deploy | 32e028c (fix(scripts): expand comma-separated CIDRs in template-configs.sh, 2026-06-04) |
 
 > Next session: run `git diff bb69798..HEAD` in haisir-backend, `git diff 64c20ec..HEAD` in haisir-frontend, and `git diff 7eb0eea..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
