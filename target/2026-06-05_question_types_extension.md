@@ -144,3 +144,13 @@ ALTER TABLE exam_session_questions
 3. **`QuestionOption` dataclass** — extend with `side: str | None = None` to support `matching` options without breaking existing question types.
 
 4. **Shuffle seed timing** — `shuffle_seed` must be generated and written to `exam_session_questions` at session-creation time (`POST /api/student/exam-sessions`), not at submission time, so the student sees the same right-column order on page refresh.
+
+---
+
+## Open Points (to spec later)
+
+1. **S-results rendering for `matching`** — the current S-results spec says "student's answer, correct answer, points awarded" but doesn't define how to display pair selections (e.g., "Mitochondria → Powerhouse of the cell ✓"). Needs a per-type results breakdown format added to `target/requirements/03_student.md`.
+
+2. **S-results rendering for `problem_solving`** — whether `working_text` is shown in the results breakdown (and if so, with what label / formatting). The `working_text` is currently described as "visible to the parent who owns the exam" but the student-facing results view is unspecified for this type.
+
+3. **P-exam question creator UI** — the parent exam creator (`target/requirements/ui-mapping/ui_parent_institution_admin.md`) only covers MCQ and paragraph question types. Needs UI spec for creating `matching`, `one_word_response`, and `problem_solving` questions (input forms, pair-builder for matching, answer + working fields for problem_solving).
