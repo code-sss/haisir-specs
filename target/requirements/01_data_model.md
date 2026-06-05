@@ -154,6 +154,74 @@ Access is granted automatically when the link is created. Revoking (`revoked_at`
 
 ---
 
+## Schema Extensions (Question Types)
+
+Adds three new `question_type` values and supporting columns. All columns are additive — nothing is dropped or renamed.
+
+### `question_type` enum values
+
+The `questions.question_type` column is a string enum. Full set after this extension:
+
+| Value | Grading | Notes |
+|---|---|---|
+| `single_choice` | Auto | One correct option |
+| `multiple_choice` | Auto, partial credit | Multiple correct options |
+| `true_false` | Auto | Options must be exactly `True` / `False` |
+| `fill_in_the_blank` | Auto, normalized match | |
+| `one_word_response` | Auto, normalized match | Compact inline UI; template can cap count independently |
+| `essay` | Manual | `essay_subtype` distinguishes `'short'` / `'long'` (rendering hint only) |
+| `matching` | Auto, partial credit per pair | `options` JSONB has `side` field; `correct_answers` are `"Lx:Rx"` pair strings |
+| `problem_solving` | Auto (answer); working captured unscored | See below |
+
+### `matching` options JSONB structure
+
+```json
+[
+  {"id": "L1", "side": "left",  "text": "Mitochondria"},
+  {"id": "L2", "side": "left",  "text": "Nucleus"},
+  {"id": "R1", "side": "right", "text": "Powerhouse of the cell"},
+  {"id": "R2", "side": "right", "text": "Controls cell activity"}
+]
+```
+
+`correct_answers`: `["L1:R1", "L2:R2"]` (left-id:right-id pair strings).
+
+Grading formula: `correct_pairs / total_pairs × available_points`. No penalty for wrong pairings.
+
+Right-column items are shuffled per-session using seeded Fisher-Yates. `shuffle_seed` (INT) is generated at session-creation time and stored on `exam_session_questions`. Frontend replicates the same algorithm — this is a cross-stack contract.
+
+### New columns on `questions`
+
+```sql
+ALTER TABLE questions
+  ADD COLUMN essay_subtype    VARCHAR(10) NULL,
+  ADD COLUMN working_required BOOLEAN     NOT NULL DEFAULT false;
+```
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `essay_subtype` | VARCHAR(10) | `null` | `'short'` \| `'long'` \| `null`; rendering hint only — no grading impact |
+| `working_required` | BOOLEAN | `false` | `problem_solving` only; when `true`, UI renders a free-text working area |
+
+**Migration:** no backfill required. Existing rows remain `null` / `false`.
+
+### New columns on `exam_session_questions`
+
+```sql
+ALTER TABLE exam_session_questions
+  ADD COLUMN working_text  TEXT NULL,
+  ADD COLUMN shuffle_seed  INT  NULL;
+```
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `working_text` | TEXT | `null` | Student's working for `problem_solving`; captured on submit, not scored this phase |
+| `shuffle_seed` | INT | `null` | `matching` only; generated at session creation; drives seeded Fisher-Yates right-column display order |
+
+**Migration:** no backfill required. Existing rows remain `null`.
+
+---
+
 ## Schema Extensions (Phase 1d-real — Content Extraction)
 
 > Detailed behaviour and business rules in `target/requirements/12_content_extraction.md`. This section defines the storage shape only.

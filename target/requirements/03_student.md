@@ -70,10 +70,23 @@ Two source tabs: **Platform** | **Home Study**.
 
 - Timer displayed (countdown from `exam_templates.time_limit_minutes`; no time limit → no timer shown).
 - Questions rendered one per page or all-at-once (controlled by `exam_templates.display_mode`; default: all-at-once).
-- MCQ options are radio buttons; paragraph questions show a text area.
 - "Submit" button — disabled until at least one question answered.
 - Confirmation modal before submission.
 - On submit: `POST /api/student/exam-sessions/:session_id/submit`.
+
+**Question rendering by type:**
+
+| Type | UI element |
+|---|---|
+| `single_choice` | Radio button group |
+| `multiple_choice` | Checkbox group |
+| `true_false` | Two radio buttons: "True" / "False" |
+| `fill_in_the_blank` | Multi-word text input |
+| `one_word_response` | Compact single-word inline input |
+| `essay` (`short`) | Text area; hint: "Write 4–5 sentences" |
+| `essay` (`long`) | Text area; hint: "Write 1–2 paragraphs" |
+| `matching` | Two columns; right-column items displayed in shuffled order (seeded per-session); student pairs via drag-and-drop or dropdown selectors |
+| `problem_solving` | Single-line answer input; when `working_required = true`, a free-text working area is shown below the answer field |
 
 **Exam color theme:**
 - Platform exams: blue accent (`#185FA5`).
