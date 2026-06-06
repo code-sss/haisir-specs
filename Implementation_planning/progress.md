@@ -277,9 +277,3 @@ The platform admin board content manager is fully implemented end-to-end. The Ad
 
 ---
 
-## Next Phase
-<!-- The agreed next concrete step. Updated after each /plan-next-state discussion. -->
-
-### Phase 1d — Topic Content Upload
-
-PDF/video/text content management per topic. Admin selects a topic and can upload/attach content items (PDF, video link, text). Backend: `PATCH /api/topic-contents/{id}` and `DELETE /api/topic-contents/{id}` (create endpoint already exists). Frontend: topic content list in the NodeDetailPanel topic area, file upload modal or URL attach modal per content type. Full task breakdown: run `/plan` against `PLAN.md` (placeholder already seeded).

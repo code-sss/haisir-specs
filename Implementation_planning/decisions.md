@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-06-05 — Question type extension: architecture decisions
+
+> Spec: `target/2026-06-05_question_types_extension.md`. Plan archived from previous phase (1d-real) before starting fresh. Tasks: PLAN.md G1–G6.
+
+- **No backend shuffle for matching.** Backend generates a random uint31 `shuffle_seed` via `random.randint(0, 2**31-1)` at session-creation time and stores it on `exam_session_questions`. The frontend applies a seeded LCG Fisher-Yates shuffle to right-column items. This keeps shuffle deterministic (page-refresh safe) without requiring server-side ordering logic.
+- **LCG cross-stack contract.** Algorithm: `next_state = (state * 1664525 + 1013904223) & 0xFFFFFFFF` (Python) / `(Math.imul(state, 1664525) + 1013904223) >>> 0` (TypeScript). Fisher-Yates: `i` from `len-1` down to `1`, `j = next() % (i+1)`. Both sides must use this exact formula — no Python `random.shuffle` or JS `Math.random`.
+- **working_text at submit time.** No per-question answer endpoint exists; `working_text` is captured as part of the bulk `POST /session/{id}/submit` payload via an optional `working_text` field on `AnswerCreate`. Only stored for `problem_solving` questions; ignored for all other types.
+- **Canonical matching correct_answers format.** `correct_answers` for matching = list of `"Lx:Ry"` strings (left option ID : right option ID). This format is the contract between authoring validation, grading, and frontend answer serialization.
+- **essay_subtype is a rendering hint only.** No enum, no validation rule. `essay_subtype VARCHAR(10) NULL` on `questions`. Values `'short'`/`'long'`/`null`. Grading and storage unchanged.
+- **Alembic V27 non-transactional migration.** `ALTER TYPE ... ADD VALUE` must use `op.get_bind().execution_options(isolation_level="AUTOCOMMIT")` — cannot run inside a transaction. The four `ADD COLUMN` statements run inside normal transaction. V27 migration must be applied before deploying application code referencing new `QuestionType` values.
+- **problem_solving working_text unscored this phase.** Captured and stored, visible to parent who owns the exam, but carries no `earned_points`. Instructor scoring deferred to when instructor scope is added.
+- **Open points deferred.** P-exam question creator UI for new types, S-results rendering for matching/problem_solving, and instructor working_text scoring are all explicitly deferred (see PLAN.md "Open Points").
+
+---
+
 ## 2026-06-02 — Backend OAuth2 token introspection (RFC 7662)
 
 > Spec: `target/requirements/02_auth_and_roles.md` § "Token Introspection (backend, RFC 7662)" + BR-SEC-009/010; invariant added to `target/requirements/00_overview.md`. Task breakdown: TASKS.md G14. Cross-cutting security hardening (not tied to a persona phase). Specs updated this cycle; backend + deploy implementation queued.
