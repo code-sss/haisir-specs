@@ -33,7 +33,7 @@ Always read specs in this order before generating code in any sibling repo:
 2. `target/requirements/01_data_model.md` — existing schema (extend, never drop/rename)
 3. `target/requirements/02_auth_and_roles.md` — APISIX JWT injection, CSRF pattern, `X-Current-Role` header, permission matrix
 4. `vision/requirements/11_role_migration.md` — **required before any auth/role work**
-5. Target persona spec — `target/requirements/03_student.md` / `target/requirements/04_teacher_tutor.md` / `target/requirements/05_06_07_personas.md`
+5. Target persona spec — `target/requirements/03_student.md` / `target/requirements/04_teacher_tutor.md` / `target/requirements/05_parent.md` / `target/requirements/06_institution_admin.md` / `target/requirements/07_platform_admin.md`
 6. `target/requirements/ui-mapping/` files — frontend only, for colours, component states, screen IDs (stub; fall back to `vision/requirements/ui-mapping/` until filled)
 
 UI mapping files reference prototype screen IDs (e.g. `s-home` → `renderHome()`) in `vision/prototypes/*.html` — open in a browser for the visual reference. For Platform Admin screens, use `target/prototypes/haisir_admin_flow.html`.

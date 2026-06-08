@@ -34,7 +34,9 @@ haisir-specs/
 │   ├── 02_auth_and_roles.md
 │   ├── 03_student.md
 │   ├── 04_teacher_tutor.md
-│   ├── 05_06_07_personas.md
+│   ├── 05_parent.md
+│   ├── 06_institution_admin.md
+│   ├── 07_platform_admin.md
 │   ├── 08_haitu_ai_layer.md
 │   ├── 09_onboarding.md
 │   ├── 10_notifications.md
@@ -118,7 +120,7 @@ The `.html` files are the definitive visual reference. Every UI mapping file lin
 | 2 | `requirements/01_data_model.md` | Existing schema + new tables, Pydantic models, indexes, Alembic migrations |
 | 3 | `requirements/02_auth_and_roles.md` | APISIX JWT injection, CSRF pattern, `X-Current-Role`, permission matrix |
 | 4 | `requirements/11_role_migration.md` | **Read before any auth or role work** — exact changes to existing codebase |
-| 5 | Your persona spec | `03_student.md` / `04_teacher_tutor.md` / `05_06_07_personas.md` |
+| 5 | Your persona spec | `03_student.md` / `04_teacher_tutor.md` / `05_parent.md` / `06_institution_admin.md` / `07_platform_admin.md` |
 | 6 | `requirements/08_haitu_ai_layer.md` | If building any hAITU endpoint |
 | 7 | `requirements/10_notifications.md` | If building notification generation or the polling endpoint |
 | 8 | `requirements/09_onboarding.md` | If building onboarding API endpoints |
@@ -134,7 +136,7 @@ The `.html` files are the definitive visual reference. Every UI mapping file lin
 | 1 | `requirements/00_overview.md` | Architecture, existing routes, `fetch` + CSRF + `X-Current-Role` conventions, no Redux rule |
 | 2 | `requirements/02_auth_and_roles.md` | `X-Current-Role` header, role switching, `fetchWithCSRFRetry()` pattern |
 | 3 | `requirements/11_role_migration.md` | **Read before touching `useAuth`** — new roles, metadata map, route guards |
-| 4 | Your persona spec | `03_student.md` / `04_teacher_tutor.md` / `05_06_07_personas.md` / `09_onboarding.md` |
+| 4 | Your persona spec | `03_student.md` / `04_teacher_tutor.md` / `05_parent.md` / `06_institution_admin.md` / `07_platform_admin.md` / `09_onboarding.md` |
 | 5 | Your UI mapping file | `ui-mapping/ui_student.md` etc. — screen IDs, colours, states, component layout |
 | 6 | Open prototype in browser | `prototypes/haisir_student_flow.html` etc. — interactive visual reference |
 
@@ -174,7 +176,9 @@ Read files in this exact order for each task:
 | `requirements/11_role_migration.md` section 9 | Role migration checklist — 17 explicit test cases |
 | `requirements/03_student.md` Edge Cases | Empty states, error states, permission failures |
 | `requirements/04_teacher_tutor.md` Edge Cases | Doubt reply validation, empty class states |
-| `requirements/05_06_07_personas.md` Edge Cases | Parent link expiry, board publish conflicts |
+| `requirements/05_parent.md` Edge Cases | Parent link expiry, child link empty state |
+| `requirements/06_institution_admin.md` Edge Cases | Board import conflicts, teacher invite existing account |
+| `requirements/07_platform_admin.md` Edge Cases | Board publish conflicts, suspended user sessions |
 | `requirements/09_onboarding.md` Edge Cases | Mid-flow abandonment, duplicate role setup |
 | `requirements/10_notifications.md` section 4 | Generation rules — test cron-triggered notifications |
 | `requirements/01_data_model.md` section 5 | Unique indexes — test constraint violations |
@@ -207,7 +211,9 @@ Read files in this exact order for each task:
 | `02_auth_and_roles.md` | APISIX auth flow, CSRF, role switching, permission matrix, security rules | ~300 |
 | `03_student.md` | 11 student screens — business rules, API endpoints, edge cases | ~500 |
 | `04_teacher_tutor.md` | 8 teacher/tutor screens — business rules, API endpoints, edge cases | ~450 |
-| `05_06_07_personas.md` | Parent (5), Institution Admin (6), Admin (6) screens — all APIs | ~700 |
+| `05_parent.md` | Parent screens (P01–P05) — business rules, API endpoints, edge cases | ~250 |
+| `06_institution_admin.md` | Institution Admin screens (I01–I06) — curriculum, people, analytics | ~280 |
+| `07_platform_admin.md` | Platform Admin / SuperAdmin screens (SA01–SA06) — board, orgs, settings | ~250 |
 | `08_haitu_ai_layer.md` | 8 hAITU interaction types, prompt contracts, caching, token limits, failure handling | ~250 |
 | `09_onboarding.md` | 8 onboarding screens, role switcher spec, 29 business rules | ~200 |
 | `10_notifications.md` | Notification types, delivery model, generation rules, API | ~180 |

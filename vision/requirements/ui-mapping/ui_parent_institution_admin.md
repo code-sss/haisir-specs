@@ -1,7 +1,7 @@
 # hAIsir — UI Mapping: Parent, Institution Admin, and Admin Flows
 > Maps requirement screen IDs to prototype screens and documents UX details.
 > → Prototype files: `haisir_parent_flow.html`, `haisir_institution_flow.html`, `haisir_superadmin_flow.html`
-> → Spec file: `05_06_07_personas.md`
+> → Spec files: `05_parent.md` / `06_institution_admin.md` / `07_platform_admin.md`
 
 ---
 

@@ -1,6 +1,6 @@
 # hAIsir — hAITU AI Layer Specification
 > Version 1.0 | All hAITU behaviours, prompt contracts, escalation logic, and API patterns.
-> → Depends on: `00_overview.md` through `05_06_07_personas.md`
+> → Depends on: `00_overview.md` through `07_platform_admin.md`
 > → Model is configurable by SuperAdmin. Default: `claude-sonnet-4-6`
 
 ---

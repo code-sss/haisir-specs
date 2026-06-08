@@ -2,6 +2,34 @@
 
 > **Target state scope:** Student, Parent, Platform Admin. See `vision/requirements/01_data_model.md` for the full vision schema.
 
+<!--
+## Table of Contents (section quick-jump)
+  Identity Convention
+  Existing Schema (baseline)
+  Schema Extensions (this increment)
+      1. course_path_nodes
+      2. topics
+      3. exam_templates
+  Content Ownership Rules
+  Parent Adopt (Clone) Flow
+  Parent-Child Access
+  Exam Results Visibility (parent)
+  Schema Extensions (Question Types)
+      question_type enum values
+      matching options JSONB structure
+      New columns on questions
+      New columns on exam_session_questions
+  Schema Extensions (Phase 1d-real — Content Extraction)
+      1 column added to topic_contents
+      New table — extraction_jobs
+      New table — extraction_job_pages
+      New table — extraction_job_audit
+      New table — rag_indexing_outbox
+      New table — worker_heartbeats
+      New table — parent_quota_counters
+      Extraction Business Rules
+-->
+
 ---
 
 ## Identity Convention

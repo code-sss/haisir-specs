@@ -4,6 +4,39 @@
 > All tables are PostgreSQL. Migrations managed by Alembic.
 > → Depends on: `00_overview.md`
 
+<!--
+## Table of Contents (section quick-jump)
+  §1  Identity Convention
+  §2  Existing Schema (baseline)
+      2.1 Content Hierarchy
+      2.2 Question Bank
+      2.3 Assessments (DEPRECATED)
+      2.4 Exam Templates (unified model)
+  §3  Schema Extensions (alter existing tables)
+      3.1 course_path_nodes — ownership columns
+      3.2 topics — status + ownership columns
+      3.3 exam_templates — owner columns
+  §4  New Tables
+      4.0 User Metadata
+      4.1 Profile Tables
+      4.2 Organizations
+      4.3 Enrollments and Progress
+      4.4 Tutor–Student Relationships
+      4.5 Parent–Child Links
+      4.6 Doubts
+      4.7 Class Assignments
+      4.8 Notifications
+      4.9 Parent–Tutor Messages
+      4.10 Board Adoptions
+      4.11 Platform Events
+      4.12 Topic Reviews
+  §5  Key Indexes
+  §6  Search Indexes (pgvector + Full-Text)
+  §6a Content Extraction Cache
+  §6b RAG Chunk Store
+  §7  Soft Delete Convention
+-->
+
 ---
 
 ## 1. Identity Convention
