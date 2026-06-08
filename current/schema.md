@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | bb69798 (feat(devcontainer): add devcontainer lock file, 2026-06-04) |
-| haisir-frontend | 64c20ec (fix(admin): restore board tile navigation and tree row expand on click, 2026-06-04) |
+| haisir-backend | 681d97a (fix(exam_session): replace random seed generation with secrets for improved security, 2026-06-06) |
+| haisir-frontend | 0446707 (fix(exam): resolve 9 SonarQube issues from last CI build, 2026-06-06) |
 | haisir-deploy | 32e028c (fix(scripts): expand comma-separated CIDRs in template-configs.sh, 2026-06-04) |
 
-> Next session: run `git diff bb69798..HEAD` in haisir-backend, `git diff 64c20ec..HEAD` in haisir-frontend, and `git diff 7eb0eea..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 681d97a..HEAD` in haisir-backend, `git diff 0446707..HEAD` in haisir-frontend, and `git diff 32e028c..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -19,6 +19,8 @@
 | V24_add_visibility_indexes | Adds covering index `ix_parent_child_links_child_sub_revoked` on `(child_sub, revoked_at) INCLUDE (parent_sub)` for BR-DATA-003 subquery performance |
 | V25_expand_nodetype_enum | Adds 6 new values to the `nodetype` PostgreSQL enum: `chapter`, `module`, `section`, `unit`, `week`, `skill`. Uses `ALTER TYPE nodetype ADD VALUE IF NOT EXISTS` (run outside transaction). No downgrade path — PostgreSQL does not support removing enum values. |
 | V26_extraction_tables | Installs `touch_updated_at()` trigger function. Adds `source_extraction_job_id` (UUID nullable) to `topic_contents`. Creates 6 new tables: `extraction_jobs`, `extraction_job_pages`, `extraction_job_audit`, `rag_indexing_outbox`, `worker_heartbeats`, `parent_quota_counters`, with all indexes. |
+| V27_add_new_question_types | Adds three values to the `questiontype` PostgreSQL enum (`matching`, `one_word_response`, `problem_solving`) via `ALTER TYPE … ADD VALUE IF NOT EXISTS` in AUTOCOMMIT block. Adds four columns: `questions.essay_subtype VARCHAR(10) NULL`, `questions.working_required BOOLEAN NOT NULL DEFAULT false`, `exam_session_questions.working_text TEXT NULL`, `exam_session_questions.shuffle_seed INTEGER NULL`. No downgrade path for enum values. |
+| V28_essay_subtype_constraint_and_penalty_matching | Widens `questions.essay_subtype` from `VARCHAR(10)` → `VARCHAR(50)`. Adds CHECK constraint `ck_questions_essay_subtype` enforcing valid values: `analytical`, `critical`, `extended`, `narrative`, `reflective`, `short`. Adds `questions.penalty_matching BOOLEAN NOT NULL DEFAULT false`. |
 
 ---
 
@@ -123,13 +125,16 @@
 ## questions
 - `id` (UUID, PK)
 - `question_text` (String)
-- `question_type` (Enum: single_choice | multiple_choice | true_false | fill_in_the_blank | essay)
-- `options` (JSONB) — array of {id, text, image_url}
-- `correct_answers` (JSONB) — array of option IDs
+- `question_type` (Enum: single_choice | multiple_choice | true_false | fill_in_the_blank | essay | one_word_response | matching | problem_solving) — 8 values as of V27
+- `options` (JSONB) — array of `{id, text, image_url}` for most types; for `matching`, each item also carries `side: "left" | "right"`
+- `correct_answers` (JSONB) — array of option IDs for choice types; for `matching`, array of `"<left_id>:<right_id>"` pair strings (e.g. `["L1:R2", "L2:R1"]`)
 - `explanation` (String, nullable)
 - `difficulty` (Enum: easy | medium | hard)
 - `tags` (JSONB, nullable)
 - `image_url` (String, nullable)
+- `essay_subtype` (VARCHAR(50), nullable) — `essay` questions only; valid values: `analytical`, `critical`, `extended`, `narrative`, `reflective`, `short`; rendering hint only, no grading impact (V27+V28)
+- `working_required` (BOOLEAN, default false) — `problem_solving` only; when true, UI renders a free-text working area (V27)
+- `penalty_matching` (BOOLEAN, default false) — `matching` only; when true, wrong pairings reduce score: `max(0, (correct − wrong) / total) × points` (V28)
 
 ## paragraph_questions
 - `id` (UUID, PK)
@@ -228,6 +233,8 @@
 - `user_answer` (String, nullable)
 - `is_correct` (Boolean, nullable)
 - `earned_points` (Float, nullable)
+- `working_text` (TEXT, nullable) — `problem_solving` only; student's working captured at submit time, unscored this phase (V27)
+- `shuffle_seed` (INTEGER, nullable) — `matching` only; generated at session creation via `secrets.randbelow(2**31)`; frontend uses this to replicate the same Fisher-Yates shuffle for right-column ordering (V27)
 
 ## extraction_jobs
 - `id` (UUID, PK)
