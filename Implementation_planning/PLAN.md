@@ -8,7 +8,7 @@
 
 ## Problem Statement
 
-The exam format requires three question types not yet in the `QuestionType` enum: `one_word_response`, `matching`, and `problem_solving`. The `essay` type also needs a `short`/`long` sub-type distinction. This plan extends the schema, domain, grading, session creation, API contracts, and student exam UI to support all four new capabilities.
+The exam format requires three question types not yet in the `QuestionType` enum: `one_word_response`, `matching`, and `problem_solving`. The `essay` type also needs an `essay_subtype` distinction. This plan extends the schema, domain, grading, session creation, API contracts, and student exam UI to support all four new capabilities.
 
 ---
 
@@ -58,7 +58,7 @@ The exam format requires three question types not yet in the `QuestionType` enum
 
 ### G2 — Domain Layer Supports New Types
 **Goal**: The Python domain model recognises all eight question types, validates each type's constraints, and carries the two new `ExamSessionQuestion` fields.
-**Goal test**: Call `Question.validate()` for each new type with valid and invalid data; load a `Question` with `essay_subtype='long'` from the DB and confirm the field is accessible; instantiate `ExamSessionQuestion` with `working_text` and `shuffle_seed` and assert the fields are present.
+**Goal test**: Call `Question.validate()` for each new type with valid and invalid data; load a `Question` with `essay_subtype='extended'` from the DB and confirm the field is accessible; instantiate `ExamSessionQuestion` with `working_text` and `shuffle_seed` and assert the fields are present.
 **Repos**: [backend]
 
 ---
@@ -94,7 +94,7 @@ The exam format requires three question types not yet in the `QuestionType` enum
 - **Test**: In `tests/unit/domain/test_models/test_exam_session.py`, assert instantiation with and without the new fields.
 - **Depends on**: None
 
-**G2 integration test**: Call `Question.validate()` for each new type through the service layer against a real DB; load a `Question` with `essay_subtype='long'` seeded in DB; confirm field value; confirm `ExamSessionQuestion` with `shuffle_seed=99` persists and reloads via SQLAlchemy session.
+**G2 integration test**: Call `Question.validate()` for each new type through the service layer against a real DB; load a `Question` with `essay_subtype='extended'` seeded in DB; confirm field value; confirm `ExamSessionQuestion` with `shuffle_seed=99` persists and reloads via SQLAlchemy session.
 
 ---
 
@@ -210,7 +210,7 @@ The exam format requires three question types not yet in the `QuestionType` enum
 ##### T6.0 [frontend] — Extend frontend type system for new question types
 - **Build**: In `src/features/exam/types/exam.types.ts`:
   - Add `'one_word_response' | 'matching' | 'problem_solving'` to the `QuestionType` union.
-  - Add `shuffle_seed?: number`, `working_required?: boolean`, `essay_subtype?: 'short' | 'long' | null` to `ExamQuestionType` interface.
+  - Add `shuffle_seed?: number | null`, `working_required?: boolean`, `essay_subtype?: EssaySubtype | null` to `ExamQuestionType` interface, where `EssaySubtype = 'short' | 'extended' | 'critical' | 'narrative' | 'analytical' | 'reflective'` (backend-defined enum; original plan said `'short' | 'long'` but backend uses the six-value form).
   - Add new discriminated union variants to `QuestionAnswer`: `| { type: 'one_word_response'; text: string } | { type: 'matching'; pairs: { left_id: string; right_id: string }[] } | { type: 'problem_solving'; text: string; working_text?: string }`.
   - Add `working_text?: string | null` to `AnswerPayload` (optional; only populated for `problem_solving`).
 - **Done when**: TypeScript compiles with zero errors; `const t: QuestionType = 'matching'` compiles; `ExamQuestionType` accepts `shuffle_seed: 42`.
@@ -264,10 +264,11 @@ The exam format requires three question types not yet in the `QuestionType` enum
 - **Depends on**: T6.0, T6.0b
 
 ##### T6.5 [frontend] — essay_subtype rendering hint
-- **Build**: In `src/features/exam/components/exam-form/essay-input.tsx`, add optional prop `essaySubtype?: 'short' | 'long' | null`. When `'short'`, render a guidance `<p>` below the textarea: "Aim for 4–5 sentences." When `'long'`: "Aim for 1–2 paragraphs." When `null`/`undefined`: render nothing extra. In `question-renderer.tsx`, update the essay case to pass `essaySubtype={question.essay_subtype}` to `<EssayInput>`.
-- **Done when**: Essay with `essaySubtype='short'` shows sentence guidance; `'long'` shows paragraph guidance; `null`/`undefined` shows nothing; existing essay tests pass without change.
-- **Test**: Add three test cases to `tests/unit/features/exam/components/exam-form/essay-input.test.tsx` covering all three values.
+- **Build**: In `src/features/exam/components/exam-form/essay-input.tsx`, add optional prop `essaySubtype?: EssaySubtype | null`. Render a guidance `<p>` for each subtype value using a lookup map (`ESSAY_GUIDANCE: Record<EssaySubtype, string>`): `short` → "Aim for 4–5 sentences.", `extended` → "Aim for 2–3 paragraphs.", `critical` → "Analyse the topic and support your view with evidence.", `narrative` → "Write a story with a clear beginning, middle, and end.", `analytical` → "Break down the topic and examine each part in detail.", `reflective` → "Describe your experience and what you learned from it." When `null`/`undefined`: render nothing. In `question-renderer.tsx`, update the essay case to pass `essaySubtype={question.essay_subtype}` to `<EssayInput>`.
+- **Done when**: Each of the 6 subtypes renders the correct guidance text; `null`/`undefined` shows nothing; existing essay tests pass.
+- **Test**: Test all 6 subtype values plus null/undefined in `essay-input.test.tsx`.
 - **Depends on**: T6.0
+- **Implementation note**: Original plan specified `'short' | 'long'`; backend uses the full 6-value enum. The `'long'` value is not valid — use `'extended'` instead.
 
 **G6 integration test**: Render `QuestionRenderer` via React Testing Library for each of the 8 question types with appropriate mock props; assert correct child component is mounted (`getByRole('textbox')` for one_word_response, two `<select>` elements for a 2-pair matching question, `<textarea>` for problem_solving with `workingRequired=true`, guidance text for short essay); call `answersToPayload` on a mock answer for each type and assert shape.
 

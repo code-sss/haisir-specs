@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:bb69798 frontend:64c20ec deploy:32e028c (2026-06-05)
+> Last baselined: backend:bb69798 frontend:0446707 deploy:32e028c (2026-06-08)
 
 ## G1 [backend]: Schema extended
 
@@ -37,14 +37,14 @@
 
 ## G6 [frontend]: Student exam UI renders new types
 
-- [ ] T6.0 [frontend]: Extend frontend type system — QuestionType union, ExamQuestionType interface, QuestionAnswer variants, AnswerPayload
-- [ ] T6.0b [frontend]: Update question-type-utils.ts + answer-transformer.ts for all 3 new types (depends on T6.0)
-- [ ] T6.1 [frontend]: Seeded Fisher-Yates utility (LCG) — seeded-shuffle.ts
-- [ ] T6.2 [frontend]: one_word_response question component (depends on T6.0, T6.0b)
-- [ ] T6.3 [frontend]: matching question component — two-column dropdown + seeded shuffle (depends on T6.0, T6.0b, T6.1)
-- [ ] T6.4 [frontend]: problem_solving question component — answer input + optional working textarea (depends on T6.0, T6.0b)
-- [ ] T6.5 [frontend]: essay_subtype rendering hint in essay-input.tsx (depends on T6.0)
-- [ ] **G6: Student exam UI** — integration test: render QuestionRenderer for all 8 types; assert components + payload shapes
+- [x] T6.0 [frontend]: Extend frontend type system — QuestionType union, ExamQuestionType interface, QuestionAnswer variants, AnswerPayload (2026-06-06)
+- [x] T6.0b [frontend]: Update question-type-utils.ts + answer-transformer.ts for all 3 new types (depends on T6.0) (2026-06-06)
+- [x] T6.1 [frontend]: Seeded Fisher-Yates utility (LCG) — seeded-shuffle.ts (2026-06-06)
+- [x] T6.2 [frontend]: one_word_response question component (depends on T6.0, T6.0b) (2026-06-06)
+- [x] T6.3 [frontend]: matching question component — two-column dropdown + seeded shuffle (depends on T6.0, T6.0b, T6.1) (2026-06-06)
+- [x] T6.4 [frontend]: problem_solving question component — answer input + optional working textarea (depends on T6.0, T6.0b) (2026-06-06)
+- [x] T6.5 [frontend]: essay_subtype rendering hint in essay-input.tsx (depends on T6.0) (2026-06-06)
+- [x] **G6: Student exam UI** — integration test: render QuestionRenderer for all 8 types; assert components + payload shapes (2026-06-06)
 
 ## ROOT acceptance test
 
@@ -59,5 +59,5 @@ Tasks with no pending dependencies — can be started immediately in parallel:
 - T1.1 [backend]: Alembic V27 migration (no deps)
 - T2.1 [backend]: QuestionType enum + QuestionOption.side (no deps; deploy after T1.1)
 - T2.3 [backend]: ExamSessionQuestion domain model new fields (no deps)
-- T6.0 [frontend]: Extend frontend type system (no deps)
-- T6.1 [frontend]: Seeded Fisher-Yates LCG utility (no deps)
+
+**Note:** All G6 [frontend] tasks are complete. ROOT acceptance test requires backend tasks T1.1–T5.1b to be done first.
