@@ -169,8 +169,8 @@ The `questions.question_type` column is a string enum. Full set after this exten
 | `true_false` | Auto | Options must be exactly `True` / `False` |
 | `fill_in_the_blank` | Auto, normalized match | |
 | `one_word_response` | Auto, normalized match | Compact inline UI; template can cap count independently |
-| `essay` | Manual | `essay_subtype` distinguishes `'short'` / `'long'` (rendering hint only) |
-| `matching` | Auto, partial credit per pair | `options` JSONB has `side` field; `correct_answers` are `"Lx:Rx"` pair strings |
+| `essay` | Manual | `essay_subtype` is a rendering hint (see valid values below); no grading impact |
+| `matching` | Auto, partial credit per pair | `options` JSONB has `side` field; `correct_answers` are `"Lx:Rx"` pair strings; see `penalty_matching` |
 | `problem_solving` | Auto (answer); working captured unscored | See below |
 
 ### `matching` options JSONB structure
@@ -186,7 +186,9 @@ The `questions.question_type` column is a string enum. Full set after this exten
 
 `correct_answers`: `["L1:R1", "L2:R2"]` (left-id:right-id pair strings).
 
-Grading formula: `correct_pairs / total_pairs × available_points`. No penalty for wrong pairings.
+Grading formula (default, `penalty_matching = false`): `correct_pairs / total_pairs × available_points`. Wrong pairings are ignored.
+
+Grading formula (penalty mode, `penalty_matching = true`): `max(0, (correct_pairs − extra_wrong_pairs) / total_pairs) × available_points`. Exam creators can enable this per-question to discourage guessing.
 
 Right-column items are shuffled per-session using seeded Fisher-Yates. `shuffle_seed` (INT) is generated at session-creation time and stored on `exam_session_questions`. Frontend replicates the same algorithm — this is a cross-stack contract.
 
@@ -194,16 +196,21 @@ Right-column items are shuffled per-session using seeded Fisher-Yates. `shuffle_
 
 ```sql
 ALTER TABLE questions
-  ADD COLUMN essay_subtype    VARCHAR(10) NULL,
-  ADD COLUMN working_required BOOLEAN     NOT NULL DEFAULT false;
+  ADD COLUMN essay_subtype    VARCHAR(50) NULL
+    CHECK (essay_subtype IS NULL
+           OR essay_subtype IN ('analytical','critical','extended',
+                                'narrative','reflective','short')),
+  ADD COLUMN working_required BOOLEAN     NOT NULL DEFAULT false,
+  ADD COLUMN penalty_matching BOOLEAN     NOT NULL DEFAULT false;
 ```
 
 | Column | Type | Default | Notes |
 |---|---|---|---|
-| `essay_subtype` | VARCHAR(10) | `null` | `'short'` \| `'long'` \| `null`; rendering hint only — no grading impact |
+| `essay_subtype` | VARCHAR(50) | `null` | Rendering hint for `essay` questions only. Valid values: `analytical`, `critical`, `extended`, `narrative`, `reflective`, `short`. No grading impact. |
 | `working_required` | BOOLEAN | `false` | `problem_solving` only; when `true`, UI renders a free-text working area |
+| `penalty_matching` | BOOLEAN | `false` | `matching` only; when `true`, extra wrong pairings reduce the score (see grading formula above). Set by exam creator at question level. |
 
-**Migration:** no backfill required. Existing rows remain `null` / `false`.
+**Migration (V28):** no backfill required. Existing rows remain `null` / `false`.
 
 ### New columns on `exam_session_questions`
 
