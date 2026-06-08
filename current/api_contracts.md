@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | bb69798 (feat(devcontainer): add devcontainer lock file, 2026-06-04) |
-| haisir-frontend | 64c20ec (fix(admin): restore board tile navigation and tree row expand on click, 2026-06-04) |
-| haisir-deploy | 32e028c (fix(scripts): expand comma-separated CIDRs in template-configs.sh, 2026-06-04) |
+| haisir-backend | 681d97a (fix(exam_session): replace random seed generation with secrets for improved security, 2026-06-06) |
+| haisir-frontend | 0446707 (fix(exam): resolve 9 SonarQube issues from last CI build, 2026-06-06) |
+| haisir-deploy | 0dfc6c0 (fix(scripts): use exact version boundary match for image tag stale-bump, 2026-06-08) |
 
-> Next session: run `git diff bb69798..HEAD` in haisir-backend, `git diff 64c20ec..HEAD` in haisir-frontend, and `git diff 7eb0eea..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 681d97a..HEAD` in haisir-backend, `git diff 0446707..HEAD` in haisir-frontend, and `git diff 0dfc6c0..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -429,13 +429,13 @@
 ### POST /api/exams/{node_id}/static
 - Purpose: Create a static exam template with questions in one call
 - Auth: instructor (outside current target increment)
-- Request: title, description, mode, duration_minutes, passing_score, items[]
+- Request: title, description, mode, duration_minutes, passing_score, items[] — each item supports: `working_required: bool` (problem_solving), `essay_subtype: string | null` (essay), `penalty_matching: bool` (matching)
 - Response: template object
 
 ### PATCH /api/exams/{node_id}/static
 - Purpose: Upsert questions on a static template
 - Auth: instructor (outside current target increment)
-- Request: template_id, questions[], duration_minutes?, passing_score?
+- Request: template_id, questions[], duration_minutes?, passing_score? — each question supports: `working_required: bool`, `essay_subtype: string | null`, `penalty_matching: bool`, `clear_essay_subtype: bool` (explicit null-clear for essay_subtype)
 - Response: updated template with questions
 
 ---
@@ -457,13 +457,13 @@
 
 ### GET /api/exam-sessions/session/{session_id}/questions
 - Purpose: Get questions for an exam session
-- Auth: student (session owner)
-- Response: `{ questions[], paragraph_questions[] }` with point allocations; images base64-encoded
+- Auth: student (session owner) — returns 404 if session does not belong to the caller
+- Response: `{ questions[], paragraph_questions[], duration_minutes: int | null }` with point allocations; images base64-encoded. Each question includes: `shuffle_seed: int | null` (matching only — frontend uses this with `seededShuffle` LCG to replicate right-column ordering); `working_required: bool` (problem_solving only — when true, UI renders a working textarea); `essay_subtype: string | null` (essay only — one of `analytical | critical | extended | narrative | reflective | short`). Each option includes `side: "left" | "right" | null` (matching only).
 
 ### POST /api/exam-sessions/session/{session_id}/answer
 - Purpose: Record or update a single answer during an active session
 - Auth: student (session owner)
-- Request: `{ question_id: UUID, user_answer: string }`
+- Request: `{ question_id: UUID, user_answer: string, working_text?: string }` — `working_text` (problem_solving only, optional) stored to `exam_session_questions.working_text`; omitting it does not clear a previously saved value (only non-null values are persisted)
 - Response: `{ message: "Answer recorded" }`
 
 ### POST /api/exam-sessions/session/{session_id}/submit
@@ -471,11 +471,12 @@
 - Auth: student (session owner)
 - Request: (no body)
 - Response: session with score, finished_at, and per-question results (correct answers + explanations)
+- WAF: protected by dedicated APISIX route `18-api-exam-session-submit.json` (PL2 Coraza); `text_answer` (matching questions submit JSON pair arrays) and `working_text` (may contain mathematical notation) have targeted CRS rule exclusions for RCE/SQLi/XSS false positives; session cookies exempt from rules 942440/932220 (SQL comment / RCE Unix pipe detection); all other CRS rules remain active
 
 ### GET /api/exam-sessions/session/{session_id}/review
 - Purpose: Get graded results for a completed session
 - Auth: student (session owner)
-- Response: same shape as submit response
+- Response: same shape as submit response; matching question answers decoded from raw JSON pairs to `"left_text → right_text"` strings for display (falls back to IDs if option text is unavailable)
 
 ### GET /api/exam-sessions/session/unfinished/{exam_template_id}
 - Purpose: Check for an existing unfinished session (resume support)

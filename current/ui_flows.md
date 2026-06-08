@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | bb69798 (feat(devcontainer): add devcontainer lock file, 2026-06-04) |
-| haisir-frontend | 64c20ec (fix(admin): restore board tile navigation and tree row expand on click, 2026-06-04) |
-| haisir-deploy | 32e028c (fix(scripts): expand comma-separated CIDRs in template-configs.sh, 2026-06-04) |
+| haisir-backend | 681d97a (fix(exam_session): replace random seed generation with secrets for improved security, 2026-06-06) |
+| haisir-frontend | 0446707 (fix(exam): resolve 9 SonarQube issues from last CI build, 2026-06-06) |
+| haisir-deploy | 0dfc6c0 (fix(scripts): use exact version boundary match for image tag stale-bump, 2026-06-08) |
 
-> Next session: run `git diff bb69798..HEAD` in haisir-backend, `git diff 64c20ec..HEAD` in haisir-frontend, and `git diff 7eb0eea..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 681d97a..HEAD` in haisir-backend, `git diff 0446707..HEAD` in haisir-frontend, and `git diff 0dfc6c0..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -63,8 +63,9 @@
 
 - Screen: `/exam?node_id=...` (list) — Lists active exam templates for the node. Shows title, description, duration, passing score. "Try Exam" opens summary modal; "View Results" opens attempts list.
 
-- Screen: `/exam` (active session) — Timed exam form. Questions (MCQ + paragraph-based). Timer counts down from `duration_minutes`. Image zoom modal for questions with images. "Submit" sends all answers in one call.
-  - API: `POST /api/exams/session/create`, `POST /api/exams/session/{id}/start`, `GET /api/exams/session/{id}/questions`, `POST /api/exams/session/{id}/submit`
+- Screen: `/exam` (active session) — Timed exam form. Questions rendered by type: `single_choice` / `true_false` / `multiple_choice` (radio/checkbox), `fill_in_the_blank` (text input), `essay` (textarea with subtype-specific guidance from `ESSAY_GUIDANCE` lookup when `essay_subtype` is set — e.g. "Aim for 2–3 paragraphs" for `short`, "Analyse the topic and support your view with evidence" for `critical`), **`one_word_response`** (`OneWordResponseInput` — 12rem single-line text input, placeholder "One word…"), **`matching`** (`MatchingInput` — two-column grid; right column pre-shuffled via `seededShuffle(shuffle_seed)` LCG for deterministic per-session ordering; user selects right-side pair for each left item), **`problem_solving`** (`ProblemSolvingInput` — answer text input + working textarea shown when `working_required=true`). Timer counts down from `duration_minutes`. Image zoom modal for questions with images. Answers recorded individually via `POST .../answer` (includes `working_text` for problem_solving). **Auto-scroll after answering choice questions was removed** (was causing UX issues). "Submit" calls `POST .../submit`.
+  - Key behaviour: `useCourseNavigation` waits for both `csrfToken` AND `currentRole` before fetching categories — prevents a role-header race on cold load where the JWT has refreshed but `buildApiHeaders` hasn't yet received the role.
+  - API: `POST /api/exam-sessions/session/create`, `GET /api/exam-sessions/session/{id}/questions`, `POST /api/exam-sessions/session/{id}/answer`, `POST /api/exam-sessions/session/{id}/submit`
 
 - Screen: `/exam` (results) — Score, pass/fail badge, answer review with correct answers highlighted.
   - API: `GET /api/exams/session/{id}/answers`

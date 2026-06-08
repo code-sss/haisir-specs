@@ -5,9 +5,9 @@
 |---|---|
 | haisir-backend | 681d97a (fix(exam_session): replace random seed generation with secrets for improved security, 2026-06-06) |
 | haisir-frontend | 0446707 (fix(exam): resolve 9 SonarQube issues from last CI build, 2026-06-06) |
-| haisir-deploy | 32e028c (fix(scripts): expand comma-separated CIDRs in template-configs.sh, 2026-06-04) |
+| haisir-deploy | 0dfc6c0 (fix(scripts): use exact version boundary match for image tag stale-bump, 2026-06-08) |
 
-> Next session: run `git diff 681d97a..HEAD` in haisir-backend, `git diff 0446707..HEAD` in haisir-frontend, and `git diff 32e028c..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 681d97a..HEAD` in haisir-backend, `git diff 0446707..HEAD` in haisir-frontend, and `git diff 0dfc6c0..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 

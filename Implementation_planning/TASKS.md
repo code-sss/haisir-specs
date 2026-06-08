@@ -1,13 +1,14 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:681d97a frontend:0446707 deploy:32e028c (2026-06-08)
+> Last baselined: backend:681d97a frontend:0446707 deploy:0dfc6c0 (2026-06-08)
 
 ## G1 [backend]: Schema extended
 
 - [x] T1.1 [backend]: Alembic V27 non-transactional migration — AUTOCOMMIT enum extension + 4 new columns (2026-06-06)
 - [x] T1.2 [backend]: SQLAlchemy imperative table mappings updated (essay_subtype, working_required on questions; working_text, shuffle_seed on exam_session_questions) (depends on T1.1) (2026-06-06)
-- [ ] **G1: Schema extended** — integration test: insert rows with all 4 new fields; assert round-trip via SQLAlchemy
+- [x] T1.3 [backend]: Alembic V28 migration (unplanned) — widens essay_subtype VARCHAR(10)→VARCHAR(50), adds CHECK constraint (6 valid values), adds penalty_matching BOOLEAN NOT NULL DEFAULT false; domain/schemas/frontend extended accordingly (2026-06-06)
+- [ ] **G1: Schema extended** — integration test: insert rows with all 4 new fields + penalty_matching; assert round-trip via SQLAlchemy
 
 ## G2 [backend]: Domain layer supports new types
 
@@ -54,12 +55,14 @@
 
 ## Ready now
 
-All leaf tasks (G1–G5 backend, G6 frontend) are complete. Ready to run integration tests — can be started in parallel:
+All leaf implementation tasks (G1–G5 backend, G6 frontend) are complete. Remaining: G1–G5 integration tests (can run in parallel) and ROOT e2e (requires G1–G5 to pass first).
 
-- **G1 integration test** [backend]: insert rows with all 4 new fields; assert round-trip via SQLAlchemy
-- **G2 integration test** [backend]: validate() for each new type; load from DB; confirm field persistence
-- **G3 integration test** [backend]: full Question from DB, grade_question() end-to-end, assert partial credit
-- **G4 integration test** [backend]: create session → shuffle_seed non-null for matching; submit problem_solving with working_text → assert persisted
-- **G5 integration test** [backend]: GET /session/{id}/questions returns shuffle_seed, working_required, essay_subtype per question
+**G1–G5 integration tests — ready in parallel [backend]:**
+- **G1 integration test**: insert rows with all 4 new fields + `penalty_matching`; assert round-trip via SQLAlchemy
+- **G2 integration test**: `validate()` for each new type through service layer; load `Question` with `essay_subtype='extended'` from DB; confirm field; confirm `ExamSessionQuestion` with `shuffle_seed=99` persists and reloads
+- **G3 integration test**: full `Question` from DB, `grade_question()` end-to-end, assert partial credit (1 of 2 pairs = `points/2.0`); also assert `penalty_matching=True` reduces score on wrong pairs
+- **G4 integration test**: create session with `matching` question → assert `shuffle_seed` non-null; submit `problem_solving` with `working_text` → assert persisted in DB
+- **G5 integration test**: `GET /session/{id}/questions` via test client → assert JSON includes `shuffle_seed`, `working_required`, `essay_subtype`, `duration_minutes` per question
 
-ROOT acceptance test requires G1–G5 integration tests above (G6 is already done).
+**ROOT e2e [frontend] — requires G1–G5 passing:**
+- Playwright `tests/e2e/question-type-extension.spec.ts`: one_word_response answer flow, matching two-column shuffle + partial credit, problem_solving with working_text, essay with `essaySubtype='short'` guidance, submit → completed + results

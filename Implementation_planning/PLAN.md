@@ -306,4 +306,11 @@ Playwright `tests/e2e/question-type-extension.spec.ts`:
 3. S-results rendering for `problem_solving` — whether `working_text` is shown in student results view
 4. Instructor scoring of `problem_solving.working_text` — deferred to when instructor scope is added
 
-<!-- plan-baseline: backend:bb697980c1da23b6a17d3694477344f64941875e frontend:64c20ec0687a3ab63765a9410793114f7ee27925 deploy:32e028cb269b3647d1fbf5cc711d51d3d49599c6 -->
+## Implementation Deviations (recorded 2026-06-08)
+
+- **T4.1 — shuffle_seed generation**: Plan specified `random.randint(0, 2**31-1)`; implementation uses `secrets.randbelow(2**31)` — security improvement, no contract change.
+- **T4.2 — working_text capture**: Plan said captured at submit (`POST /submit`); implementation captures it at answer-recording time (`POST /answer` — `AnswerCreate.working_text`) then persists on `ExamSessionQuestion` when non-null. Semantically equivalent.
+- **V28 migration (unplanned)**: After V27 shipped, a V28 migration was added: widens `essay_subtype` from `VARCHAR(10)` → `VARCHAR(50)` (needed for 6-value enum values), adds CHECK constraint on valid subtype values (`analytical|critical|extended|narrative|reflective|short`), and adds `questions.penalty_matching BOOLEAN NOT NULL DEFAULT false` (enables score-reduction mode for matching: `max(0, (correct − wrong) / total) × points`). Grading, domain model, Pydantic schemas, and frontend types were extended accordingly. All V28 work is complete.
+- **duration_minutes in GET /questions response**: Not in original plan scope; the session-question display endpoint now also returns `duration_minutes: int | null` from the template. Done as part of T5.1b.
+
+<!-- plan-baseline: backend:681d97aa488fac2aaf8ab9b8215dbbcc9a4c7596 frontend:044670747b0641b03b490bc62bda41fcca8a0225 deploy:0dfc6c026336fb873137d2f1dd40f5f3b20ea59e -->
