@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 681d97a (fix(exam_session): replace random seed generation with secrets for improved security, 2026-06-06) |
-| haisir-frontend | 0446707 (fix(exam): resolve 9 SonarQube issues from last CI build, 2026-06-06) |
-| haisir-deploy | 0dfc6c0 (fix(scripts): use exact version boundary match for image tag stale-bump, 2026-06-08) |
+| haisir-backend | 6108c60 (doc/tooling only since 681d97a — no API changes, 2026-06-08) |
+| haisir-frontend | 8827aa3 (doc/tooling only since 0446707 — no UI changes, 2026-06-08) |
+| haisir-deploy | 11d65d0 (doc/tooling only since 0dfc6c0 — no infra changes, 2026-06-08) |
 
-> Next session: run `git diff 681d97a..HEAD` in haisir-backend, `git diff 0446707..HEAD` in haisir-frontend, and `git diff 0dfc6c0..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 6108c60..HEAD` in haisir-backend, `git diff 8827aa3..HEAD` in haisir-frontend, and `git diff 11d65d0..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
