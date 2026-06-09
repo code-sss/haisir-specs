@@ -314,3 +314,243 @@ Playwright `tests/e2e/question-type-extension.spec.ts`:
 - **duration_minutes in GET /questions response**: Not in original plan scope; the session-question display endpoint now also returns `duration_minutes: int | null` from the template. Done as part of T5.1b.
 
 <!-- plan-baseline: backend:681d97aa488fac2aaf8ab9b8215dbbcc9a4c7596 frontend:044670747b0641b03b490bc62bda41fcca8a0225 deploy:0dfc6c026336fb873137d2f1dd40f5f3b20ea59e -->
+
+---
+
+# PLAN — AI Essay Grading Engine
+
+> Written: 2026-06-08
+> Spec: `target/requirements/08_essay_ai_grading.md`
+> Schema deltas: `target/requirements/01_data_model.md` § "Schema Extensions (Essay AI Grading)"
+> Auth updates: `target/requirements/02_auth_and_roles.md`
+> Persona updates: `03_student.md`, `04_teacher_tutor.md`, `05_parent.md`
+
+---
+
+## Problem Statement
+
+`essay` questions return `(None, 0.0)` from `grade_question()` and sit ungraded forever. No rubric model, grading workflow, feedback storage, or owner-override path exists. This plan adds an async AI-grading pipeline that reuses the existing LLM provider pattern (same prefix-dispatch, config, worker infra as content extraction).
+
+---
+
+## Architecture Decisions
+
+See `Implementation_planning/decisions.md` (2026-06-08) for full rationale. Key:
+1. Per-exam `essay_grading_mode` (`auto_release` default / `review_first` opt-in).
+2. Optional rubric on `questions`; default rubric by `essay_subtype` when NULL.
+3. LLM outputs per-criterion levels only; backend computes score. Temperature 0, JSON output.
+4. Local-first model (`qwen3:14b`); Ollama-cloud and Anthropic as opt-in config.
+5. Async worker loop (`essay_grading_loop`) + `essay_grading_jobs` table (same polling pattern as extraction).
+6. Grading owner = exam owner (parent for parent-owned, admin for platform); instructor deferred.
+
+---
+
+## Goal Tree
+
+### G7 — Schema Extended (Essay AI Grading)
+**Goal:** V29 Alembic migration adds new columns to `questions`, `exam_templates`,
+`exam_session_questions` and creates `essay_grading_jobs`.
+**Goal test:** `alembic upgrade V29`; insert an essay question with `rubric` JSONB; create an
+exam template with `essay_grading_mode='review_first'`; submit an essay answer and verify
+`grading_status='pending'`; insert an `essay_grading_jobs` row; all round-trip via SQLAlchemy.
+**Repos:** [backend]
+
+---
+
+##### T7.1 [backend] — Alembic V29 migration
+- **Build:** In `alembic/versions/V29_essay_ai_grading.py` with `revision="V29"`, `down_revision="V28"`. In `upgrade()`, use normal transaction (no AUTOCOMMIT needed — no `ALTER TYPE` calls, only `ADD COLUMN` and `CREATE TABLE`):
+  1. `ALTER TABLE questions ADD COLUMN rubric JSONB NULL, ADD COLUMN model_answer TEXT NULL, ADD COLUMN auto_grade_essay BOOLEAN NOT NULL DEFAULT true`.
+  2. `ALTER TABLE exam_templates ADD COLUMN essay_grading_mode VARCHAR NOT NULL DEFAULT 'auto_release'` with CHECK constraint.
+  3. `ALTER TABLE exam_session_questions ADD COLUMN ai_score FLOAT NULL, ai_feedback TEXT NULL, ai_rationale JSONB NULL, grader_confidence FLOAT NULL, grading_status VARCHAR NOT NULL DEFAULT 'pending', graded_by VARCHAR NULL, graded_at TIMESTAMPTZ NULL, override_score FLOAT NULL, override_feedback TEXT NULL`.
+  4. `CREATE TABLE essay_grading_jobs (id UUID PK, exam_session_question_id UUID NOT NULL, status VARCHAR NOT NULL DEFAULT 'queued', attempts INT NOT NULL DEFAULT 0, last_error TEXT NULL, grading_model VARCHAR NULL, locked_at TIMESTAMPTZ NULL, locked_by VARCHAR NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`.
+  5. Create indexes: `ix_essay_grading_jobs_queue` (status, created_at WHERE status='queued'), `ix_essay_grading_jobs_session_question` (exam_session_question_id).
+  6. Add trigger `trg_essay_grading_jobs_touch` (reuse existing `touch_updated_at()` function).
+  In `downgrade()`: drop all added columns and the `essay_grading_jobs` table.
+- **Done when:** `alembic upgrade V29` + `alembic downgrade V28` round-trip without error; `essay_grading_jobs` exists with all columns; `exam_session_questions` has `grading_status` defaulting to `'pending'`.
+- **Test:** Import migration module; integration test runs upgrade/downgrade round-trip.
+- **Depends on:** None (but must run after V28 is applied)
+
+##### T7.2 [backend] — SQLAlchemy imperative table mappings
+- **Build:** In `src/infrastructure/models/question.py`: add `Column("rubric", JSONB, nullable=True)`, `Column("model_answer", Text, nullable=True)`, `Column("auto_grade_essay", Boolean, nullable=False, server_default="true")`. In `src/infrastructure/models/exam.py`: add `Column("essay_grading_mode", String, nullable=False, server_default="auto_release")`. In `src/infrastructure/models/exam_session.py`: add 9 new columns to `exam_session_questions` table. Create new `src/infrastructure/models/essay_grading_job.py` with the `essay_grading_jobs` table definition.
+- **Done when:** `alembic check` shows no autogenerate diff.
+- **Test:** Assert new column names in each table's `.columns`.
+- **Depends on:** T7.1
+
+**G7 integration test:** Insert `Question(question_type='essay', rubric={...}, auto_grade_essay=True)`, `ExamTemplate(essay_grading_mode='review_first')`, `ExamSessionQuestion(grading_status='pending')`; assert all fields round-trip via SQLAlchemy.
+
+---
+
+### G8 — Domain Layer: EssayGradingJob + Updated Models
+**Goal:** Domain model represents `EssayGradingJob` and `Question` carries rubric/model_answer/auto_grade_essay; grading_status values are typed.
+**Goal test:** Instantiate `EssayGradingJob`, `Question` with rubric, confirm field access.
+**Repos:** [backend]
+
+---
+
+##### T8.1 [backend] — EssayGradingJob domain model
+- **Build:** Create `src/domain/models/essay_grading_job.py` with `@dataclass EssayGradingJob` fields: `id`, `exam_session_question_id`, `status: str`, `attempts: int`, `last_error: str | None`, `grading_model: str | None`, `locked_at`, `locked_by`, `created_at`, `updated_at`. Add `EssayGradingStatus` StrEnum: `queued`, `processing`, `done`, `error`. Create `EssayGradingJobRepository` abstract interface in `src/domain/repositories/`.
+- **Depends on:** None
+
+##### T8.2 [backend] — Question domain model: rubric + new fields
+- **Build:** In `src/domain/models/question.py`, add `rubric: dict | None = None`, `model_answer: str | None = None`, `auto_grade_essay: bool = True` to the `Question` dataclass.
+- **Depends on:** None
+
+##### T8.3 [backend] — ExamSession domain model: grading_status
+- **Build:** In `src/domain/models/exam_session.py`, add to `ExamSessionQuestion`: `ai_score: float | None = None`, `ai_feedback: str | None = None`, `ai_rationale: dict | None = None`, `grader_confidence: float | None = None`, `grading_status: str = 'pending'`, `graded_by: str | None = None`, `graded_at: datetime | None = None`, `override_score: float | None = None`, `override_feedback: str | None = None`. Add `EssayGradingStatus` import/reuse. In `src/domain/models/exam.py` (or exam template model), add `essay_grading_mode: str = 'auto_release'`.
+- **Depends on:** None
+
+**G8 integration test:** Load a seeded `Question` with `rubric` JSONB from DB; confirm `question.rubric` is a dict; instantiate `EssayGradingJob` and persist via repository; read back; assert fields.
+
+---
+
+### G9 — Grader Provider
+**Goal:** `EssayGraderProvider` in `src/infrastructure/grading/` implements the same prefix-dispatch pattern as `GlmOcrProvider`; grades an essay text against a rubric and returns a structured `GradingResult`.
+**Goal test:** Mock an Ollama HTTP endpoint; call `provider.grade(...)` with a rubric; assert returned `GradingResult` has per-criterion levels and the backend computes the correct `ai_score` via the formula.
+**Repos:** [backend]
+
+---
+
+##### T9.1 [backend] — GradingSettings + config wiring
+- **Build:** In `src/shared/config.py`, add `GradingSettings(BaseModel)` with fields `model_spec`, `ollama_base_url`, `ollama_api_key`, `lmstudio_use_https`, `max_tokens`, `temperature` (see `08_essay_ai_grading.md` § GradingSettings). Wire into `AppSettings` as `grading: GradingSettings`.
+- **Done when:** `Settings().grading.model_spec` accessible; `GRADING__MODEL_SPEC` env var overrides it.
+- **Depends on:** None
+
+##### T9.2 [backend] — EssayGraderProvider class
+- **Build:** Create `src/infrastructure/grading/essay_grader_provider.py`. Model on `GlmOcrProvider`:
+  - Reuse `_parse_spec()` for prefix-dispatch (local Ollama / `lmstudio://` / `openai://` / `anthropic://`).
+  - `from_settings(GradingSettings)` factory.
+  - Method `grade(*, question_text: str, answer_text: str, rubric: dict, model_answer: str | None, max_points: int, language: str | None = None) -> GradingResult`.
+  - `GradingResult` dataclass: `per_criterion: list[CriterionResult]`, `ai_score: float`, `ai_feedback: str`, `ai_rationale: dict`, `grader_confidence: float`.
+  - Prompt construction: system prompt with untrusted-data delimiters around `answer_text` (see `08_essay_ai_grading.md` § Prompt & Output Contract).
+  - Temperature 0; JSON output; parse → validate → clamp → retry (3 attempts).
+  - Score-mapping: `ai_score = Σ(level/scale_max × weight) × max_points`, clamped to `[0, max_points]`.
+  - Blank/short answer guard: if `not answer_text or len(answer_text.strip()) < 10`, return zero result immediately (no HTTP call).
+  - `_stream_ollama` for local; existing dispatch handles `openai://` and `anthropic://`.
+- **Done when:** `provider.grade(...)` returns a valid `GradingResult`; mock Ollama test passes; blank-answer guard works; score formula is correct for known inputs.
+- **Test:** Mirror `tests/unit/infrastructure/test_glm_ocr_provider.py` structure — mock HTTP, test local + cloud + anthropic paths, parse error retry, blank guard, score formula.
+- **Depends on:** T9.1
+
+##### T9.3 [backend] — Default rubric resolver
+- **Build:** Create `src/domain/services/rubric_resolver.py` with `resolve_rubric(question: Question) -> dict`: if `question.rubric` is not None → return it; else return the built-in default rubric for `question.essay_subtype` (or NULL fallback). Built-in rubrics are hardcoded from `08_essay_ai_grading.md` § Default Rubrics.
+- **Done when:** Each of the 7 subtype values (6 + NULL) returns the correct rubric dict.
+- **Test:** `test_rubric_resolver.py` — assert correct rubric for each subtype + custom override.
+- **Depends on:** T8.2
+
+**G9 integration test:** Against real local Ollama (if available) or mocked: call `provider.grade(...)` end-to-end; assert `ai_score ∈ [0, max_points]`; assert retry fires on first malformed response.
+
+---
+
+### G10 — Worker Essay Grading Loop
+**Goal:** A new asyncio task in the worker polls `essay_grading_jobs`, grades essays, writes results, and recomputes session score. The loop handles retries, backoff, and error state.
+**Goal test:** Seed an `essay_grading_jobs` row with `status='queued'`; run one loop iteration; assert `exam_session_questions.grading_status` transitions correctly and `exam_sessions.score` is updated.
+**Repos:** [backend]
+
+---
+
+##### T10.1 [backend] — EssayGradingJobRepository (infra)
+- **Build:** Create `src/infrastructure/repositories/essay_grading_job_repository.py`. Implement `EssayGradingJobRepository` abstract: `get_next_queued()` (FOR UPDATE SKIP LOCKED), `update_status()`, `mark_done()`, `mark_error()`. Also implement `EssaySessionQuestionGradingWriter` (or extend existing repo) for writing `ai_score`, `ai_feedback`, etc. and updating `earned_points`.
+- **Depends on:** T7.2, T8.1
+
+##### T10.2 [backend] — essay_grading_loop.py
+- **Build:** Create `src/worker/essay_grading_loop.py`. Mirrors `extraction_loop.py` structure:
+  - Poll `get_next_queued()` with SKIP LOCKED.
+  - Set `status='processing'`, `locked_at`, `locked_by`.
+  - Load `ExamSessionQuestion`, `Question`, `ExamTemplate` (for `essay_grading_mode`).
+  - Resolve rubric via `rubric_resolver.resolve_rubric(question)`.
+  - Call `await asyncio.to_thread(grader.grade, ...)`.
+  - Write results to `exam_session_questions` per `08_essay_ai_grading.md` § Worker Integration.
+  - If `auto_release`: set `earned_points = ai_score`, `is_correct`, `grading_status='released'`; recompute session score.
+  - If `review_first`: leave `earned_points=NULL`, `grading_status='ai_graded'`.
+  - On exception: increment `attempts`; if `>= 3` → `grading_status='error'`, job `status='error'`.
+  - Backoff: sleep `min(2 ** attempts, 30)` seconds on error before next poll.
+- **Done when:** One loop iteration processes a queued job; correct state transitions verified.
+- **Test:** Unit test with mocked repos + provider; assert state transitions for auto_release and review_first modes; assert error path on 3 consecutive failures.
+- **Depends on:** T8.3, T9.2, T9.3, T10.1
+
+##### T10.3 [backend] — Register loop in worker __main__.py
+- **Build:** In `src/worker/__main__.py`, import `essay_grading_loop` and register it alongside `extraction_loop` in `asyncio.gather(...)`. Add `EssayGraderProvider.from_settings(settings.grading)` construction next to the OCR provider.
+- **Done when:** Worker starts without error; new loop appears in heartbeat/health output.
+- **Depends on:** T9.1, T10.2
+
+**G10 integration test:** Against test DB: seed essay session question + job; run loop; assert `grading_status='released'`; assert session `score` updated.
+
+---
+
+### G11 — Submit Enqueue + Grading Results API
+**Goal:** Submit endpoint enqueues grading jobs for essay answers; GET answers endpoint returns grading state and AI feedback.
+**Goal test:** POST submit with an essay answer → `essay_grading_jobs` row exists with `status='queued'`; GET answers after worker runs → response includes `grading_status`, `ai_feedback`, and correct `earned_points`.
+**Repos:** [backend]
+
+---
+
+##### T11.1 [backend] — Submit endpoint enqueues grading jobs
+- **Build:** In `src/api/routes/exam_session.py`, `submit_exam()`: after persisting all answers, for each essay-type `ExamSessionQuestion` where `question.auto_grade_essay = True`:
+  - If `user_answer` is blank → set `grading_status='released'` (auto_release) or `'finalized'` (review_first), `earned_points=0`, `ai_feedback="No answer was submitted."`; recompute session score; skip enqueue.
+  - Else: insert `essay_grading_jobs` row with `status='queued'`.
+- **Depends on:** T7.2, T8.1, T8.2
+
+##### T11.2 [backend] — GET answers surfaces grading state
+- **Build:** In `_build_answer_results()`, extend `ExamSessionAnswer` Pydantic schema with `grading_status: str | None`, `ai_feedback: str | None`, `ai_rationale: dict | None` (owner-only). Update `pending_review_count` to count only `grading_status IN ('pending', 'ai_graded')`. Pass `ai_rationale` only when requester's `current_role` is `parent`/`admin` and is the exam owner.
+- **Depends on:** T8.3
+
+##### T11.3 [backend] — Dispute, confirm-grade, override endpoints
+- **Build:** In `src/api/routes/exam_session.py`:
+  - `POST .../dispute`: require `student` (own session) or `parent` (linked child, parent-owned exam). Pre-condition: `grading_status='released'`. Effect: `→ 'disputed'`. Response: 204.
+  - `POST .../confirm-grade`: require exam owner (parent or admin per ownership). Pre-condition: `grading_status IN ('ai_graded','review_required')`. Effect: write `earned_points=ai_score`, `is_correct`, `grading_status='finalized'`, recompute session score. Response: 200.
+  - `PATCH .../grade`: require exam owner. Body: `{score: float, feedback: str}`. Validate `score ∈ [0, points]`. Effect: write override fields, `earned_points=override_score`, `is_correct`, `grading_status='overridden'`, `graded_by=owner.idp_sub`, recompute session score. Response: 200.
+  - All three require CSRF + `X-Current-Role`. Auth guards per BR-SEC-011, BR-SEC-012.
+- **Depends on:** T8.3, T11.2
+
+##### T11.4 [backend] — Question + exam template create/update accept new fields
+- **Build:** Extend `QuestionCreate`/`QuestionUpdate` Pydantic schemas with `rubric`, `model_answer`, `auto_grade_essay`. Extend `ExamTemplateCreate`/`ExamTemplateUpdate` with `essay_grading_mode`. Validate rubric structure (criteria count, weight sum, scale_max range) in the schema or service layer.
+- **Depends on:** T8.2
+
+**G11 integration test:** Submit exam session with essay answer; assert `essay_grading_jobs` row created; run grading loop; call GET answers; assert full `grading_result` shape; call dispute; call confirm-grade; assert state transitions.
+
+---
+
+### G12 — Config & Deploy
+**Goal:** `GRADING__*` env vars are wired in `docker-compose.yml` worker block; default `.env` uses local `qwen3:14b`; cloud/premium options documented as commented-out opt-in lines.
+**Goal test:** `docker-compose config` shows `GRADING__MODEL_SPEC` in worker environment; fresh deploy with default config starts worker without error.
+**Repos:** [deploy]
+
+---
+
+##### T12.1 [deploy] — docker-compose.yml GRADING env vars
+- **Build:** In `common/docker-compose.yml` worker service block, add `GRADING__MODEL_SPEC`, `GRADING__OLLAMA_BASE_URL`, `GRADING__OLLAMA_API_KEY`, `GRADING__MAX_TOKENS`, `GRADING__TEMPERATURE` alongside the `EXTRACTION__*` vars.
+- **Depends on:** T9.1
+
+##### T12.2 [deploy] — .env examples / documentation
+- **Build:** In deploy `.env.example`: add `GRADING__MODEL_SPEC=qwen3:14b`, `GRADING__OLLAMA_BASE_URL=http://localhost:11434`, `GRADING__TEMPERATURE=0` as defaults. Add commented blocks for cloud and premium options with PII-egress warning.
+- **Depends on:** T12.1
+
+**G12 integration test:** Deploy fresh stack with defaults; worker heartbeat shows `essay_grading_loop` active; grading job created → job processed → `grading_status` transitions correctly.
+
+---
+
+## ROOT Acceptance Test
+
+Manual E2E against local `qwen3:14b`:
+1. Create essay question (`essay_subtype='analytical'`, no custom rubric) + `auto_grade_essay=true`.
+2. Create exam template with `essay_grading_mode='auto_release'`.
+3. Student creates session, submits essay answer.
+4. Worker picks up job → `GET /answers` → `grading_status='released'`, `ai_score ∈ [0, points]`, `ai_feedback` non-empty.
+5. Repeat with custom rubric; assert `ai_rationale` has per-criterion entries matching rubric criteria.
+6. Repeat with `essay_grading_mode='review_first'`; assert student sees `grading_status='ai_graded'` (held); owner calls confirm-grade → `'finalized'`; student sees score.
+7. In auto_release mode: student calls dispute → `'disputed'`; owner calls PATCH grade with override score → `'overridden'`; session score recomputes.
+8. Submit blank essay → immediate `earned_points=0`, no grading job enqueued.
+9. Force 3 grading failures (malformed mock response) → `grading_status='error'`; `earned_points` remains NULL.
+
+---
+
+## Implementation Notes
+
+**Backend pattern references:**
+- Provider: `src/infrastructure/extraction/glm_ocr_provider.py` — prefix-dispatch, streaming, from_settings factory.
+- Config: `src/shared/config.py` `ExtractionSettings` — copy structure for `GradingSettings`.
+- Worker loop: `src/worker/extraction_loop.py` — polling, FOR UPDATE SKIP LOCKED, backoff pattern.
+- Worker entry: `src/worker/__main__.py` — asyncio.gather, provider construction.
+- Grading hook: `src/shared/grading.py:36` — `case QuestionType.essay: return None, 0.0` → this case will remain for sync path; async grading happens via the worker/jobs table, not inline in `grade_question()`.
+
+**Deploy pattern reference:**
+- `common/docker-compose.yml` worker block `EXTRACTION__*` env vars → mirror for `GRADING__*`.

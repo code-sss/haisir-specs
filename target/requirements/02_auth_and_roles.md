@@ -90,6 +90,7 @@ CurrentUser: idp_sub, email, name, email_verified, roles: list[str], current_rol
 | Own `exam_sessions` | Read + submit |
 | Own `student_profiles` | Read + write |
 | Own `parent_link_codes` | Read + generate |
+| Dispute own essay grade (`POST .../dispute`) | Yes — own session only, `grading_status = 'released'` |
 | Other students' data | 404 (not 403) |
 
 ### Parent (`X-Current-Role: parent`)
@@ -105,6 +106,9 @@ CurrentUser: idp_sub, email, name, email_verified, roles: list[str], current_rol
 | Own `parent_profiles` | Read + write |
 | `parent_child_links` | Create + revoke |
 | Adopt platform board (`POST /api/parent/curriculum/adopt`) | ✓ |
+| Override AI essay grade on own exam (`PATCH .../grade`) | Yes — `exam_templates.owner_id = self` only |
+| Confirm AI grade on own exam (`POST .../confirm-grade`) | Yes — `exam_templates.owner_id = self` only |
+| Dispute child's essay grade (`POST .../dispute`) | Yes — linked child's session on parent-owned exam only |
 
 ### Platform Admin (`X-Current-Role: admin`)
 
@@ -112,7 +116,9 @@ CurrentUser: idp_sub, email, name, email_verified, roles: list[str], current_rol
 |---|---|
 | Platform `course_path_nodes` / `topics` / `topic_contents` (`owner_type = 'platform'`) | Full CRUD |
 | Platform `exam_templates` (`owner_type = 'platform'`) | Full CRUD |
-| Parent-owned content | No access |
+| Override AI essay grade on platform exam (`PATCH .../grade`) | Yes — `exam_templates.owner_type = 'platform'` only |
+| Confirm AI grade on platform exam (`POST .../confirm-grade`) | Yes — `exam_templates.owner_type = 'platform'` only |
+| Parent-owned content (incl. parent essay overrides) | No access — BR-SEC-005 |
 | Student / parent data | No access |
 
 ---
@@ -129,6 +135,8 @@ CurrentUser: idp_sub, email, name, email_verified, roles: list[str], current_rol
 - **BR-SEC-008:** `POST /api/users/me/assign-role` accepts only `student` or `parent` → 422 otherwise.
 - **BR-SEC-009:** When `introspection_enabled`, the backend confirms the token is active via Keycloak introspection (RFC 7662) *after* local JWKS validation; an inactive (revoked) token returns `401` even when its signature and expiry are still valid.
 - **BR-SEC-010:** Introspection fails closed — if the Keycloak introspection endpoint is unreachable the request is rejected (`503`); a token is never accepted on local JWKS validation alone while introspection is enabled.
+- **BR-SEC-011:** Essay grade dispute (`POST .../dispute`) is allowed only for the student who owns the session (own `exam_sessions.user_id = current_user.idp_sub`), or for a parent acting on their linked child's session on a parent-owned exam (`exam_templates.owner_id = parent.idp_sub` AND active `parent_child_links`). All other callers → 403.
+- **BR-SEC-012:** Essay grade override and confirm-grade (`PATCH .../grade`, `POST .../confirm-grade`) are allowed only for the exam owner: Parent for `owner_type='parent'` exams (`owner_id = parent.idp_sub`); Admin for `owner_type='platform'` exams. A Platform Admin cannot override or confirm grades on parent-owned exams (BR-SEC-005 extends here). Missing or wrong role → 403.
 
 ---
 

@@ -104,12 +104,50 @@ Two entry paths:
   - `user_id = child.idp_sub`
   - `exam_templates.owner_id = parent.idp_sub` (parent's own exams only)
   - Active `parent_child_links` record exists for this parent-child pair.
-- Table: exam name, date taken, score, pass/fail.
-- Clicking a row: per-question breakdown (student's answer, correct answer, points).
+- Table: exam name, date taken, score, pass/fail. Essays with pending grading show "Grading in progress" or "Pending review" in the score column (Phase 2 UI).
+- Clicking a row: per-question breakdown (student's answer, correct answer, points, `grading_status` for essays).
 
 **Business rules:**
 - BR-PAR-012: Parents do NOT see results for platform exams the child has taken.
 - BR-PAR-013: Results access is revoked immediately if the `parent_child_links` record is revoked.
+
+---
+
+## P-essay-grading — Essay Grade Review
+
+Parents are the grading owners for their private exams. They see:
+- `ai_score`, `ai_feedback`, and (owner-only) `ai_rationale` (per-criterion breakdown) for each graded essay.
+- `grading_status` for each essay question.
+- A "Confirm" button (review_first mode) and an "Override" form (all modes) per essay.
+
+### Grading modes
+
+- **`auto_release` (default):** The AI score is immediately visible to the student after grading.
+  The parent can override at any time. If the child disputes, the parent sees a "Dispute" flag and
+  can confirm or override.
+- **`review_first` (opt-in):** Set on the exam template. The AI score is hidden from the student
+  until the parent confirms. The parent sees the AI score + per-criterion rationale in P-results
+  and chooses to confirm or override before the student sees anything.
+
+The parent sets `essay_grading_mode` when creating or editing an exam template in P-exam.
+
+### Override flow (API)
+
+`PATCH /api/exam-sessions/session/{session_id}/questions/{question_id}/grade`
+(CSRF + `X-Current-Role: parent`). Body: `{ "score": float, "feedback": "..." }`.
+Effect: `override_score` stored; `earned_points` updated; session score recomputed.
+Allowed when `exam_templates.owner_id = parent.idp_sub` (own exams only — BR-SEC-012).
+
+### Confirm-grade flow (API, review_first only)
+
+`POST /api/exam-sessions/session/{session_id}/questions/{question_id}/confirm-grade`
+(CSRF + `X-Current-Role: parent`). Effect: `earned_points = ai_score`; `grading_status →
+'finalized'`; student can now see the score.
+
+**Business rules:**
+- BR-PAR-017: Parents can only override essay grades for exams where `exam_templates.owner_id = parent.idp_sub`. Platform exam grading is outside parent scope.
+- BR-PAR-018: When a student disputes an essay grade (`grading_status = 'disputed'`), the parent sees the dispute flag in P-results. The parent can confirm the original AI grade (confirm-grade) or override with a different score.
+- BR-PAR-019: The `ai_rationale` (per-criterion breakdown from the LLM) is visible to the parent only — never returned to the student. This prevents coaching answers based on criterion feedback before a dispute.
 
 ---
 
@@ -158,4 +196,8 @@ Two entry paths:
 | `PATCH` | `/api/parent/exams/:exam_id/questions/:q_id` | Update a question |
 | `DELETE` | `/api/parent/exams/:exam_id/questions/:q_id` | Delete a question |
 | `GET` | `/api/parent/children/:child_idp_sub/exam-sessions` | Child's exam results (parent-owned only) |
-| `GET` | `/api/parent/children/:child_idp_sub/exam-sessions/:session_id` | Per-question breakdown |
+| `GET` | `/api/parent/children/:child_idp_sub/exam-sessions/:session_id` | Per-question breakdown (incl. `ai_rationale` for essays) |
+| `POST` | `/api/exam-sessions/session/{session_id}/questions/{question_id}/dispute` | Dispute essay grade on behalf of linked child (parent-owned exam) |
+| `POST` | `/api/exam-sessions/session/{session_id}/questions/{question_id}/confirm-grade` | Confirm AI grade (review_first mode; parent-owned exam only) |
+| `PATCH` | `/api/exam-sessions/session/{session_id}/questions/{question_id}/grade` | Override AI essay grade (parent-owned exam only) |
+| `PATCH` | `/api/parent/exams/:exam_id` | Update exam template incl. `essay_grading_mode` |

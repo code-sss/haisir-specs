@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-06-08 — AI Essay Grading Engine: architecture decisions
+
+> Spec: `target/requirements/08_essay_ai_grading.md`. Schema deltas: `target/requirements/01_data_model.md` § "Schema Extensions (Essay AI Grading)". Auth: `02_auth_and_roles.md`. Persona updates: `03_student.md`, `04_teacher_tutor.md`, `05_parent.md`. Implementation tasks: PLAN.md G7–G12.
+
+### Problem
+`essay` questions return `(None, 0.0)` from `grade_question()` — no evaluation path exists (neither automatic nor manual). The platform already runs an LLM for content extraction (`glm-ocr` / Ollama cloud); that pattern maps cleanly onto essay grading with no new infra.
+
+### Decisions
+
+- **Per-exam grading mode, not global flag.** `exam_templates.essay_grading_mode` defaults to `auto_release` (AI score released to student immediately; student can dispute, owner can override). `review_first` is opt-in for high-stakes exams (score held until owner confirms). A global flag would block results for all exams even when only one is sensitive.
+- **Rubric optional + smart default.** Creator may attach an analytic JSONB rubric (3–6 criteria, weighted, with per-level descriptors) and optional `model_answer`. If absent, the worker selects a built-in default rubric by `essay_subtype`. Requiring a rubric would block quick exam creation; a pure default would be too generic.
+- **Backend computes score, LLM outputs levels only.** The LLM returns per-criterion `level` integers; the backend computes `ai_score = Σ(level/scale_max × weight) × points`. This eliminates hallucinated arithmetic, length/fluency bias, and number-range drift.
+- **Temperature 0, structured JSON output.** Temperature 0 for grading consistency. Output is validated JSON matching a fixed schema; on parse failure or out-of-range levels → retry up to 3 times; on exhaustion → `error` status, not silent zero.
+- **Local-first model path.** Default `GRADING__MODEL_SPEC=qwen3:14b` (on-prem, PII stays local). Ollama-cloud (`gpt-oss:120b-cloud`) and `anthropic://claude-sonnet-4-6` are opt-in config swaps. Mirrors OCR's `glm-ocr` local / `gemma` cloud pattern.
+- **Async worker, not inline grading.** Submit returns immediately; a new `essay_grading_jobs` table is polled by a new `essay_grading_loop` alongside the existing extraction loop. Same `FOR UPDATE SKIP LOCKED` pattern, same worker process.
+- **Rubric lives on `questions`, not per-session-question.** One essay question can be reused in multiple exams; the rubric should not be duplicated per attempt. No per-instance rubric override in v1.
+- **Grading owner = exam owner.** Parent for parent-owned exams (`owner_id = self`); Admin for platform exams (`owner_type='platform'`). Instructor/tutor grading is deferred until the role migration (`vision/requirements/11_role_migration.md`) is complete.
+- **`auto_grade_essay = false` escape hatch.** Lets a creator opt out of AI grading per question (e.g. subjective creative writing where AI scoring is inappropriate).
+
+### Challenger resolutions
+- Admin cannot override parent-owned essay grades — BR-SEC-005 + BR-SEC-012 enforce this explicitly.
+- `error` state never writes `earned_points = 0` — silently zeroing a failed-grading essay would be misleading. Owner must manually override.
+- `ai_rationale` (per-criterion breakdown) is owner-only — not returned to student to prevent coaching before disputes.
+
+### Out of scope / follow-up
+- **Phase 2:** Teacher/parent review dashboard, per-criterion feedback display in S-results, regrade UI controls.
+- **Phase 3:** Self-consistency (median of N), confidence-based auto-flagging, prompt-injection test suite, AI-written essay detection.
+
+---
+
 ## 2026-06-05 — Question type extension: architecture decisions
 
 > Spec: `target/2026-06-05_question_types_extension.md`. Plan archived from previous phase (1d-real) before starting fresh. Tasks: PLAN.md G1–G6.

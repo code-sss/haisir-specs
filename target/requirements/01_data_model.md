@@ -28,6 +28,15 @@
       New table — worker_heartbeats
       New table — parent_quota_counters
       Extraction Business Rules
+  Schema Extensions (Essay AI Grading)
+      Updated question_type grading column
+      New columns on questions (rubric)
+      New column on exam_templates (essay_grading_mode)
+      New columns on exam_session_questions (AI grading state)
+      New table — essay_grading_jobs
+      grading_status state machine
+      Score-mapping formula
+      Essay Grading Business Rules
 -->
 
 ---
@@ -197,7 +206,7 @@ The `questions.question_type` column is a string enum. Full set after this exten
 | `true_false` | Auto | Options must be exactly `True` / `False` |
 | `fill_in_the_blank` | Auto, normalized match | |
 | `one_word_response` | Auto, normalized match | Compact inline UI; template can cap count independently |
-| `essay` | Manual | `essay_subtype` is a rendering hint (see valid values below); no grading impact |
+| `essay` | AI-graded async (configurable: auto_release / review_first) | `essay_subtype` is a rendering hint; grading via LLM pipeline — see `08_essay_ai_grading.md` |
 | `matching` | Auto, partial credit per pair | `options` JSONB has `side` field; `correct_answers` are `"Lx:Rx"` pair strings; see `penalty_matching` |
 | `problem_solving` | Auto (answer); working captured unscored | See below |
 
@@ -434,3 +443,215 @@ The worker re-reads `topics.owner_type` and `topics.owner_id` inside the finaliz
 
 **BR-DATA-012 — `topic_contents.content_order` is base-shifted:**
 On finalize, the worker computes `base = COALESCE(MAX(content_order), 0) FROM topic_contents WHERE topic_id = :t FOR UPDATE` and inserts new rows at `base + page_no`. Prevents collision with manually-added content and re-runs.
+
+---
+
+## Schema Extensions (Essay AI Grading)
+
+> Full behaviour and business rules in `target/requirements/08_essay_ai_grading.md`. This section
+> defines the storage shape and the grading-status state machine.
+
+All columns are additive — nothing is dropped or renamed. Migration: **V29**.
+
+### New columns on `questions`
+
+```sql
+ALTER TABLE questions
+  ADD COLUMN rubric          JSONB    NULL,
+  ADD COLUMN model_answer    TEXT     NULL,
+  ADD COLUMN auto_grade_essay BOOLEAN NOT NULL DEFAULT true;
+```
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `rubric` | JSONB | NULL | Analytic rubric definition (see `08_essay_ai_grading.md` § Rubric Model). NULL → use default rubric by `essay_subtype`. Only meaningful for `essay` questions. |
+| `model_answer` | TEXT | NULL | Reference answer / key points; passed to the LLM as grading context. Optional even when `rubric` is set. |
+| `auto_grade_essay` | BOOLEAN | `true` | When `false`, essay question is skipped by the AI grading pipeline and stays `pending` for manual grading. Allows a creator to opt out of AI grading per-question. |
+
+**Migration:** no backfill required. Existing essay questions default to `auto_grade_essay = true`
+(AI grading will run when the worker is deployed).
+
+### New column on `exam_templates`
+
+```sql
+ALTER TABLE exam_templates
+  ADD COLUMN essay_grading_mode VARCHAR NOT NULL DEFAULT 'auto_release'
+    CHECK (essay_grading_mode IN ('auto_release', 'review_first'));
+```
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `essay_grading_mode` | VARCHAR | `'auto_release'` | `auto_release` → AI score released to student immediately after grading. `review_first` → score held until owner confirms. Applies to all essay questions in this template. |
+
+**Migration:** `UPDATE exam_templates SET essay_grading_mode = 'auto_release';`
+
+### New columns on `exam_session_questions`
+
+```sql
+ALTER TABLE exam_session_questions
+  ADD COLUMN ai_score         FLOAT      NULL,
+  ADD COLUMN ai_feedback      TEXT       NULL,
+  ADD COLUMN ai_rationale     JSONB      NULL,
+  ADD COLUMN grader_confidence FLOAT     NULL,
+  ADD COLUMN grading_status   VARCHAR    NOT NULL DEFAULT 'pending'
+                               CHECK (grading_status IN (
+                                 'pending', 'ai_graded', 'released', 'disputed',
+                                 'finalized', 'overridden', 'error'
+                               )),
+  ADD COLUMN graded_by        VARCHAR    NULL,
+  ADD COLUMN graded_at        TIMESTAMPTZ NULL,
+  ADD COLUMN override_score   FLOAT      NULL,
+  ADD COLUMN override_feedback TEXT      NULL;
+```
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `ai_score` | FLOAT | NULL | LLM-computed score, scaled to `points`. Computed by backend from per-criterion levels. |
+| `ai_feedback` | TEXT | NULL | Student-facing narrative feedback (1–5 sentences). |
+| `ai_rationale` | JSONB | NULL | Per-criterion levels + justifications. Owner/debug view only; not returned to student. |
+| `grader_confidence` | FLOAT | NULL | Model confidence `[0, 1]`; future use for auto-flagging. |
+| `grading_status` | VARCHAR | `'pending'` | State machine — see below. Applies only to `essay` questions; non-essay rows stay at `'pending'` (ignored). |
+| `graded_by` | VARCHAR | NULL | Model spec string (e.g. `qwen3:14b`) when AI-graded; owner `idp_sub` when manually overridden. |
+| `graded_at` | TIMESTAMPTZ | NULL | When grading (AI or override) was applied. |
+| `override_score` | FLOAT | NULL | Owner's override score. If set, `earned_points = override_score`. |
+| `override_feedback` | TEXT | NULL | Owner's override feedback shown to student instead of `ai_feedback`. |
+
+**Note:** The existing `earned_points` column holds the **final authoritative score** used for
+session totals. It is written only when the essay reaches a terminal graded state (released,
+finalized, overridden). While an essay is pending or held, `earned_points` remains NULL and is
+excluded from `exam_sessions.score`.
+
+**Migration:** no backfill required.
+
+### New table — `essay_grading_jobs`
+
+```sql
+CREATE TABLE essay_grading_jobs (
+    id                       UUID PRIMARY KEY,
+    exam_session_question_id UUID        NOT NULL,  -- soft FK to exam_session_questions.id
+    status                   VARCHAR     NOT NULL DEFAULT 'queued',
+                                                    -- 'queued' | 'processing' | 'done' | 'error'
+    attempts                 INT         NOT NULL DEFAULT 0,
+    last_error               TEXT        NULL,
+    grading_model            VARCHAR     NULL,      -- model spec used (set on processing start)
+    locked_at                TIMESTAMPTZ NULL,      -- worker lock timestamp
+    locked_by                VARCHAR     NULL,      -- worker hostname
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX ix_essay_grading_jobs_queue
+    ON essay_grading_jobs (status, created_at)
+    WHERE status = 'queued';
+CREATE INDEX ix_essay_grading_jobs_session_question
+    ON essay_grading_jobs (exam_session_question_id);
+
+CREATE TRIGGER trg_essay_grading_jobs_touch BEFORE UPDATE ON essay_grading_jobs
+    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+```
+
+**One job per dispute/re-grade:** If a student disputes and the owner triggers a re-grade, a new
+`essay_grading_jobs` row is inserted. The previous `done` job row is retained for audit. The
+`exam_session_question_id` is not unique — multiple job rows per question are allowed.
+
+### grading_status state machine
+
+```
+auto_release mode:
+  pending → ai_graded → released  ← student sees score + feedback
+                             ↓
+                         disputed  ← student disputes (POST .../dispute)
+                         ↙       ↘
+               finalized         overridden
+           (confirm-grade)     (PATCH .../grade)
+
+review_first mode:
+  pending → ai_graded  ← score held, student sees "Pending review"
+              ↙       ↘
+        finalized    overridden
+    (confirm-grade)  (PATCH .../grade, directly)
+
+Error path (any mode):
+  pending → error  ← after 3 failed grading attempts
+  (essay stays ungraded; owner sees "Grading unavailable"; session score excludes essay)
+  (owner can recover via PATCH .../grade override from error state)
+```
+
+**Terminal states:** `released`, `finalized`, `overridden`, `error` — no further automatic
+transitions. An owner can call the override endpoint (`PATCH .../grade`) from any non-`pending`
+state, including `error`. `confirm-grade` is accepted from `'ai_graded'` (review_first) or
+`'disputed'` (auto_release after dispute).
+
+### Score-mapping formula
+
+```
+ai_score = Σ(level_i / scale_max × weight_i) × max_points
+```
+
+- Computed by the backend worker (never by the LLM).
+- Clamped to `[0, max_points]` before storage.
+- `earned_points` is set to `ai_score` on `released`/`finalized`, or to `override_score` on
+  `overridden`.
+- `is_correct = (earned_points / points >= 0.5)` (50% threshold for consistency with other
+  question types).
+
+### Essay Grading Business Rules
+
+**BR-DATA-013 — AI grading is async:**
+`POST /session/{id}/submit` enqueues a job but does not wait for grading. The submit response
+returns immediately; `grading_status = 'pending'` until the worker processes the job.
+
+**BR-DATA-014 — Blank answers bypass the LLM:**
+`user_answer` that is NULL or `len(strip()) < 10` is scored `0` immediately without a worker job.
+`ai_feedback = "No answer was submitted."` No `essay_grading_jobs` row is inserted.
+
+**BR-DATA-015 — Error state is never a silent zero:**
+A grading job that exhausts all retries sets `grading_status = 'error'`. `earned_points` remains
+NULL. The session score excludes the essay. The owner is responsible for manually overriding if
+they want a score assigned.
+
+**BR-DATA-016 — Override rewrites earned_points and recomputes session score:**
+`PATCH .../grade` writes `override_score` to `earned_points`, sets `is_correct`, and atomically
+updates `exam_sessions.score = SUM(earned_points) WHERE session_id = :sid`.
+
+**BR-DATA-017 — Rubric is resolved at grading time:**
+The worker reads `question.rubric` at the time the job is processed. Changes to a question's rubric
+after submission do not affect already-graded essays. A re-grade (new job after dispute) uses the
+current rubric at that time.
+
+**BR-DATA-018 — `auto_grade_essay = false` questions are never enqueued:**
+If `question.auto_grade_essay = false`, no `essay_grading_jobs` row is inserted at submit time.
+`grading_status` stays `'pending'` indefinitely — the owner must override manually.
+
+**BR-DATA-019 — `graded_by` audit trail is immutable after override:**
+Once `graded_by` is set (by AI or owner), it is never cleared. Each override appends to an
+`overrides` array in `ai_rationale` (JSONB in-place, not a separate table in Phase 1).
+
+`ai_rationale` shape after initial AI grading:
+```json
+{
+  "per_criterion": [
+    { "id": "thesis", "level": 3, "justification": "..." },
+    { "id": "evidence", "level": 2, "justification": "..." }
+  ],
+  "confidence": 0.82,
+  "overrides": []
+}
+```
+
+Each owner override appends to `overrides`:
+```json
+{
+  "overrides": [
+    {
+      "score": 7.5,
+      "feedback": "Good effort, minor factual error.",
+      "graded_by": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "graded_at": "2026-06-08T14:22:00Z"
+    }
+  ]
+}
+```
+
+Append using `jsonb_set(ai_rationale, '{overrides}', (ai_rationale->'overrides') || new_entry)`.
+If `ai_rationale` is NULL at override time (e.g., blank-answer path), initialise to `{"overrides": [new_entry]}`.

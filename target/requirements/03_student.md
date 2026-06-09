@@ -103,14 +103,36 @@ Two source tabs: **Platform** | **Home Study**.
 
 Shown immediately after submission.
 
-- Score: `X / Y` and percentage.
+- Score: `X / Y` and percentage (essay questions excluded from score until graded).
 - Pass / Fail badge (based on `exam_templates.pass_mark`).
-- Per-question breakdown: question text, student's answer, correct answer, points awarded.
+- Per-question breakdown: question text, student's answer, correct answer (where applicable), points awarded.
 - "Back to Home Study" or "Back to Platform" CTA (context-aware based on exam source).
+
+### Essay question states in results (API contract — Phase 1, UI is Phase 2)
+
+`GET /api/student/exam-sessions/:session_id/results` returns `grading_status` per essay question:
+
+| grading_status | What the student sees (Phase 2 UI) |
+|---|---|
+| `pending` | "Grading in progress…" |
+| `ai_graded` (review_first, held) | "Pending review" |
+| `released` | AI score + `ai_feedback` + "Dispute" action |
+| `disputed` | "Under review" (score shown but locked pending owner action) |
+| `finalized` | Score + feedback |
+| `overridden` | Score + `override_feedback` |
+| `error` | "Grading unavailable — contact your exam creator" |
+
+### Dispute flow (API)
+
+Student calls `POST /api/exam-sessions/session/{session_id}/questions/{question_id}/dispute`
+(CSRF + `X-Current-Role: student`). Pre-condition: `grading_status = 'released'`. Effect:
+`grading_status → 'disputed'`. Response: `204`.
 
 **Business rules:**
 - BR-STU-009: Results are shown immediately after submission — no teacher review gate in this increment.
 - BR-STU-010: Students can re-visit their own results from S-home or via direct URL.
+- BR-STU-013: For `auto_release` exams, essay AI score and feedback are shown to the student immediately after the worker grades the essay. The student sees the score in `S-results` when they re-visit.
+- BR-STU-014: For `review_first` exams, the student sees "Pending review" for essay questions until the owner confirms or overrides. The session pass/fail badge is deferred until all essays are resolved.
 
 ---
 
@@ -143,7 +165,8 @@ Shown immediately after submission.
 | `POST` | `/api/student/exam-sessions` | Create a new exam session |
 | `GET` | `/api/student/exam-sessions/:session_id` | Get session questions |
 | `POST` | `/api/student/exam-sessions/:session_id/submit` | Submit answers |
-| `GET` | `/api/student/exam-sessions/:session_id/results` | Get results after submission |
+| `GET` | `/api/student/exam-sessions/:session_id/results` | Get results after submission (includes `grading_status` per essay question) |
+| `POST` | `/api/exam-sessions/session/{session_id}/questions/{question_id}/dispute` | Dispute an AI essay grade (`auto_release` mode; CSRF required) |
 | `GET` | `/api/student/parent-link-codes` | Get current link code |
 | `POST` | `/api/student/parent-link-codes` | Generate new link code |
 | `GET` | `/api/student/parent-links` | List active parent links |
