@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:681d97a frontend:0446707 deploy:0dfc6c0 (2026-06-08)
+> Last baselined: backend:681d97a frontend:0446707 deploy:11d65d0 (2026-06-08)
 
 ## G1 [backend]: Schema extended
 
@@ -88,9 +88,9 @@
 
 ## G12 [deploy]: Config & deploy wiring
 
-- [ ] T12.1 [deploy]: docker-compose.yml worker block — add GRADING__* env vars alongside EXTRACTION__* (depends on T9.1)
-- [ ] T12.2 [deploy]: .env.example — default qwen3:14b local; commented cloud/premium opt-in lines with PII-egress note (depends on T12.1)
-- [ ] **G12: Deploy** — integration test: fresh stack; worker starts; essay grading loop shows in worker health page
+- [x] T12.1 [deploy]: docker-compose.yml worker block — add GRADING__* env vars alongside EXTRACTION__* (depends on T9.1) (2026-06-09)
+- [x] T12.2 [deploy]: .env.example — default qwen3:14b local; commented cloud/premium opt-in lines with PII-egress note (depends on T12.1) (2026-06-09)
+- [x] **G12: Deploy** — integration test: fresh stack; worker starts; essay grading loop shows in worker health page (2026-06-09)
 
 ## ROOT acceptance test (Essay AI Grading)
 
@@ -112,11 +112,12 @@
 **ROOT e2e [frontend] — requires G1–G5 passing:**
 - Playwright `tests/e2e/question-type-extension.spec.ts`: one_word_response answer flow, matching two-column shuffle + partial credit, problem_solving with working_text, essay with `essaySubtype='short'` guidance, submit → completed + results
 
-### New phase (AI Essay Grading) — ready to start [backend]:
+### New phase (AI Essay Grading) — G12 [deploy] DONE; backend tasks outstanding:
 
-All G7–G12 leaf tasks are ready in dependency order. Suggested start order:
-1. **G7** (T7.1 → T7.2) — schema first, all other goals depend on this
-2. **G8 + G9 in parallel** after G7 (T8.1/T8.2/T8.3 independent of T9.1/T9.2/T9.3)
-3. **G10** after G8 + G9 (worker loop needs provider + domain models)
-4. **G11** after G8 (API needs domain models; dispute/override after T10 complete)
-5. **G12** after G9.T9.1 (deploy config just needs GradingSettings to exist)
+G12 (deploy config) is complete. All remaining AI Essay Grading tasks are [backend]:
+- **G7** (T7.1 → T7.2): schema migration V29 + SQLAlchemy mappings
+- **G8** (T8.1/T8.2/T8.3): domain models — EssayGradingJob, Question rubric fields, grading_status
+- **G9** (T9.1/T9.2/T9.3): GradingSettings config, EssayGraderProvider, rubric resolver
+- **G10** (T10.1/T10.2/T10.3): worker essay grading loop + repository
+- **G11** (T11.1/T11.2/T11.3/T11.4): submit enqueue + grading results API endpoints
+- **ROOT [manual E2E]**: full essay AI grading end-to-end (requires G7–G11 complete)
