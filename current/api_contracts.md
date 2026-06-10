@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 6108c60 (doc/tooling only since 681d97a — no API changes, 2026-06-08) |
-| haisir-frontend | 8827aa3 (doc/tooling only since 0446707 — no UI changes, 2026-06-08) |
-| haisir-deploy | 11d65d0 (doc/tooling only since 0dfc6c0 — no infra changes, 2026-06-08) |
+| haisir-backend | 9fcf14d (essay AI grading backend complete, 2026-06-09) |
+| haisir-frontend | d0e9242 (grading_pending UI state + auto-grade checkbox, 2026-06-09) |
+| haisir-deploy | 4261909 (GRADING env vars wired into worker service, 2026-06-09) |
 
-> Next session: run `git diff 6108c60..HEAD` in haisir-backend, `git diff 8827aa3..HEAD` in haisir-frontend, and `git diff 11d65d0..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 9fcf14d..HEAD` in haisir-backend, `git diff d0e9242..HEAD` in haisir-frontend, and `git diff 4261909..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -467,16 +467,46 @@
 - Response: `{ message: "Answer recorded" }`
 
 ### POST /api/exam-sessions/session/{session_id}/submit
-- Purpose: Submit session; triggers auto-grading; sets status = 'completed'
-- Auth: student (session owner)
+- Purpose: Submit session; scores non-essay questions inline; enqueues `essay` questions (where `auto_grade_essay=true`) to `essay_grading_jobs`; sets `status = 'grading_pending'` if any jobs were enqueued, otherwise `'completed'`; calls `recompute_score()` atomically after all writes
+- Auth: student (session owner), CSRF required
 - Request: (no body)
-- Response: session with score, finished_at, and per-question results (correct answers + explanations)
-- WAF: protected by dedicated APISIX route `18-api-exam-session-submit.json` (PL2 Coraza); `text_answer` (matching questions submit JSON pair arrays) and `working_text` (may contain mathematical notation) have targeted CRS rule exclusions for RCE/SQLi/XSS false positives; session cookies exempt from rules 942440/932220 (SQL comment / RCE Unix pipe detection); all other CRS rules remain active
+- Response: session object including `sessionStatus: 'completed' | 'grading_pending'`; if `'completed'`, includes full per-question results and final score; if `'grading_pending'`, score reflects non-essay points only
+- Errors: 409 if session already `'completed'` or `'grading_pending'`
+- WAF: protected by dedicated APISIX route `18-api-exam-session-submit.json` (PL2 Coraza); `text_answer` (matching questions submit JSON pair arrays) and `working_text` (may contain mathematical notation) have targeted CRS rule exclusions for RCE/SQLi/XSS false positives; session cookies exempt from rules 942440/932220; all other CRS rules remain active
 
 ### GET /api/exam-sessions/session/{session_id}/review
-- Purpose: Get graded results for a completed session
-- Auth: student (session owner)
-- Response: same shape as submit response; matching question answers decoded from raw JSON pairs to `"left_text → right_text"` strings for display (falls back to IDs if option text is unavailable)
+- Purpose: Get graded results for a completed or grading_pending session
+- Auth: student (session owner); exam owner (parent who owns the template, or admin) additionally receives `ai_rationale` per essay question
+- Response: same shape as submit response; matching question answers decoded from raw JSON pairs to `"left_text → right_text"` strings for display (falls back to IDs if option text is unavailable); each answer also includes:
+  - `grading_status: str | null` — for essay questions: `pending | ai_graded | released | finalized | overridden | disputed | error`; null for non-essay
+  - `ai_feedback: str | null` — visible when `grading_status in ('released','finalized','overridden')`; null otherwise
+  - `ai_rationale: dict | null` — full LLM output; visible only to exam owner; always null for student callers
+
+### POST /api/exam-sessions/session/{session_id}/questions/{question_id}/dispute
+- Purpose: Student disputes a released AI grade on an essay question
+- Auth: student (session owner), CSRF required
+- Pre-condition: `grading_status == 'released'`
+- Effect: `grading_status → 'disputed'`
+- Response: 204 No Content
+- Errors: 403 if not session owner; 404 if session or question not found; 409 if `grading_status != 'released'`
+
+### POST /api/exam-sessions/session/{session_id}/questions/{question_id}/confirm-grade
+- Purpose: Exam owner confirms the AI-assigned grade as final without change
+- Auth: parent or admin, CSRF required; ownership check: parent → `caller.sub == template.owner_id`; admin → `X-Current-Role: admin`
+- Pre-condition: `grading_status in ('ai_graded', 'disputed')`
+- Effect: `earned_points = ai_score`; `is_correct = earned_points / points >= 0.5`; `grading_status → 'finalized'`; `recompute_score()` called on the session
+- Response: `{ grading_status, earned_points, is_correct }`
+- Errors: 403 if not exam owner; 404; 409 if precondition not met
+
+### PATCH /api/exam-sessions/session/{session_id}/questions/{question_id}/grade
+- Purpose: Exam owner overrides the AI-assigned grade with a manual score and feedback
+- Auth: parent or admin, CSRF required; same ownership check as confirm-grade
+- Pre-condition: `grading_status != 'pending'`
+- Request: `{ score: float, feedback: str }`
+- Validation: `0 <= score <= question.points`
+- Effect: `override_score`, `override_feedback`, and `earned_points` all set to `body.score`; `is_correct = score / points >= 0.5`; `grading_status → 'overridden'`; `graded_by = user.sub`; `graded_at = now()`; `recompute_score()` called
+- Response: `{ grading_status, earned_points, override_score, override_feedback }`
+- Errors: 403 if not exam owner; 400 if score out of range; 404; 409 if `grading_status == 'pending'`
 
 ### GET /api/exam-sessions/session/unfinished/{exam_template_id}
 - Purpose: Check for an existing unfinished session (resume support)

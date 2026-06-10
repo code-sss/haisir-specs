@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 6108c60 (doc/tooling only since 681d97a — no UI changes, 2026-06-08) |
-| haisir-frontend | 8827aa3 (doc/tooling only since 0446707 — no UI changes, 2026-06-08) |
-| haisir-deploy | 11d65d0 (doc/tooling only since 0dfc6c0 — no infra changes, 2026-06-08) |
+| haisir-backend | 9fcf14d (essay AI grading backend complete, 2026-06-09) |
+| haisir-frontend | d0e9242 (grading_pending UI state + auto-grade checkbox, 2026-06-09) |
+| haisir-deploy | 4261909 (GRADING env vars wired into worker service, 2026-06-09) |
 
-> Next session: run `git diff 6108c60..HEAD` in haisir-backend, `git diff 8827aa3..HEAD` in haisir-frontend, and `git diff 11d65d0..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 9fcf14d..HEAD` in haisir-backend, `git diff d0e9242..HEAD` in haisir-frontend, and `git diff 4261909..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -67,10 +67,12 @@
   - Key behaviour: `useCourseNavigation` waits for both `csrfToken` AND `currentRole` before fetching categories — prevents a role-header race on cold load where the JWT has refreshed but `buildApiHeaders` hasn't yet received the role.
   - API: `POST /api/exam-sessions/session/create`, `GET /api/exam-sessions/session/{id}/questions`, `POST /api/exam-sessions/session/{id}/answer`, `POST /api/exam-sessions/session/{id}/submit`
 
-- Screen: `/exam` (results) — Score, pass/fail badge, answer review with correct answers highlighted.
+- Screen: `/exam` (grading pending) — When session submit returns `sessionStatus='grading_pending'`, the exam page renders a "Grading Pending" interstitial banner instead of the results display. Banner title + explanatory text indicates AI grading is in progress. Two CTAs: "View Attempts" (opens attempts modal, clears banner) and "Back to Exams" (returns to list). `gradingPending` local state is set by `handleSubmitExam` when the API response indicates `grading_pending` status.
+
+- Screen: `/exam` (results) — Score, pass/fail badge, answer review with correct answers highlighted. For essay questions with released/finalized/overridden grades, `ai_feedback` is visible.
   - API: `GET /api/exams/session/{id}/answers`
 
-- Screen: `/exam` (attempts list) — All past sessions with scores. Drill in to review any attempt.
+- Screen: `/exam` (attempts list) — All past sessions with scores. Drill in to review any attempt. `grading_pending` sessions show status label "Grading…" (`.tagPending` CSS class); the "View" detail button is disabled for these attempts.
   - API: `GET /api/exams/session/all/{template_id}`
 
 - Key behaviour: Unfinished session resume supported via `GET /api/exams/session/unfinished/{template_id}` check on load.
@@ -88,7 +90,7 @@
 ## Exam Template Management (outside current target increment — retained)
 
 - Screen: `/exam` (instructor view) — Template list with Edit/Delete buttons. "+ Add Exam" button navigates to `/add-exam`.
-- Screen: `/add-exam` — Multi-field exam authoring form with question builder for MCQ and paragraph questions. Create or edit mode based on `template_id` query param.
+- Screen: `/add-exam` — Multi-field exam authoring form with question builder for MCQ and paragraph questions. Create or edit mode based on `template_id` query param. Essay questions now show an **"Auto-grade with AI" checkbox** (defaults to `true` on type switch to `essay`; serialised as `auto_grade_essay` in the question payload; when unchecked, the AI grading pipeline skips that question on submit).
   - Note: instructor persona deferred. Screens remain functional in codebase.
 
 ---

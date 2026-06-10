@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 6108c60 (doc/tooling only since 681d97a — no schema changes, 2026-06-08) |
-| haisir-frontend | 8827aa3 (doc/tooling only since 0446707 — no UI changes, 2026-06-08) |
-| haisir-deploy | 11d65d0 (doc/tooling only since 0dfc6c0 — no infra changes, 2026-06-08) |
+| haisir-backend | 9fcf14d (essay AI grading backend complete, 2026-06-09) |
+| haisir-frontend | d0e9242 (grading_pending UI state + auto-grade checkbox, 2026-06-09) |
+| haisir-deploy | 4261909 (GRADING env vars wired into worker service, 2026-06-09) |
 
-> Next session: run `git diff 6108c60..HEAD` in haisir-backend, `git diff 8827aa3..HEAD` in haisir-frontend, and `git diff 11d65d0..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 9fcf14d..HEAD` in haisir-backend, `git diff d0e9242..HEAD` in haisir-frontend, and `git diff 4261909..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -21,6 +21,8 @@
 | V26_extraction_tables | Installs `touch_updated_at()` trigger function. Adds `source_extraction_job_id` (UUID nullable) to `topic_contents`. Creates 6 new tables: `extraction_jobs`, `extraction_job_pages`, `extraction_job_audit`, `rag_indexing_outbox`, `worker_heartbeats`, `parent_quota_counters`, with all indexes. |
 | V27_add_new_question_types | Adds three values to the `questiontype` PostgreSQL enum (`matching`, `one_word_response`, `problem_solving`) via `ALTER TYPE … ADD VALUE IF NOT EXISTS` in AUTOCOMMIT block. Adds four columns: `questions.essay_subtype VARCHAR(10) NULL`, `questions.working_required BOOLEAN NOT NULL DEFAULT false`, `exam_session_questions.working_text TEXT NULL`, `exam_session_questions.shuffle_seed INTEGER NULL`. No downgrade path for enum values. |
 | V28_essay_subtype_constraint_and_penalty_matching | Widens `questions.essay_subtype` from `VARCHAR(10)` → `VARCHAR(50)`. Adds CHECK constraint `ck_questions_essay_subtype` enforcing valid values: `analytical`, `critical`, `extended`, `narrative`, `reflective`, `short`. Adds `questions.penalty_matching BOOLEAN NOT NULL DEFAULT false`. |
+| V29_essay_grading | Adds `rubric` (JSONB nullable), `model_answer` (TEXT nullable), `auto_grade_essay` (BOOLEAN NOT NULL DEFAULT true) to `questions`. Adds `essay_grading_mode` (VARCHAR NOT NULL DEFAULT 'auto_release', CHECK IN ('auto_release','review_first')) to `exam_templates`. Adds 9 grading-state columns to `exam_session_questions` (`grading_status`, `ai_score`, `ai_feedback`, `ai_rationale`, `grader_confidence`, `graded_by`, `graded_at`, `override_score`, `override_feedback`). Creates `essay_grading_jobs` table with partial index on queued status. |
+| V30_grading_pending_status | Adds `grading_pending` to the `examstatus` PostgreSQL enum via `ALTER TYPE … ADD VALUE IF NOT EXISTS` (run outside transaction). No downgrade path — PostgreSQL does not support removing enum values. |
 
 ---
 
@@ -135,6 +137,9 @@
 - `essay_subtype` (VARCHAR(50), nullable) — `essay` questions only; valid values: `analytical`, `critical`, `extended`, `narrative`, `reflective`, `short`; rendering hint only, no grading impact (V27+V28)
 - `working_required` (BOOLEAN, default false) — `problem_solving` only; when true, UI renders a free-text working area (V27)
 - `penalty_matching` (BOOLEAN, default false) — `matching` only; when true, wrong pairings reduce score: `max(0, (correct − wrong) / total) × points` (V28)
+- `rubric` (JSONB, nullable) — `essay` questions only; custom grading rubric: `{ scale_max: 3|4|5, criteria: [{name, weight, descriptors}] }`; 3–6 criteria; weights must sum to 1.0 (±0.01 tolerance); validated by Pydantic on create/update (V29)
+- `model_answer` (TEXT, nullable) — `essay` questions only; hint text passed to the LLM as grading context; not exposed to students (V29)
+- `auto_grade_essay` (BOOLEAN, NOT NULL, default true) — `essay` questions only; when false, the question is skipped by the AI grading pipeline on session submit (V29)
 
 ## paragraph_questions
 - `id` (UUID, PK)
@@ -202,6 +207,7 @@
 - `owner_id` (String, nullable) — added via V23 migration; parent's `idp_sub` for parent-owned templates, NULL for platform
 - `organization_id` (Integer, nullable)
 - `purpose` (String, default "exam") — "exam" or "quiz"
+- `essay_grading_mode` (VARCHAR, NOT NULL, default `'auto_release'`) — CHECK IN ('auto_release', 'review_first'); `auto_release`: AI score released to student immediately after grading; `review_first`: score held in `ai_graded` state until exam owner confirms or overrides (V29)
 
 > **Visibility enforced (as of V23 / commit aa5ddf7):** BR-DATA-003 / BR-SEC-005 enforced on all GET endpoints. Students see platform + linked-parent exam templates; admins see platform-only; instructors see all.
 
@@ -222,7 +228,7 @@
 - `ruleset` (JSON, nullable)
 - `created_at`, `started_at`, `finished_at` (DateTime TZ, nullable)
 - `score` (Float, nullable)
-- `status` (Enum: pending | ongoing | completed | failed)
+- `status` (Enum: pending | ongoing | completed | failed | grading_pending) — `grading_pending` added via V30; set when submit enqueues essay grading jobs; transitions to `completed` once all jobs finish (worker calls `_maybe_autocomplete_session`)
 
 ## exam_session_questions
 - `id` (UUID, PK)
@@ -235,6 +241,15 @@
 - `earned_points` (Float, nullable)
 - `working_text` (TEXT, nullable) — `problem_solving` only; student's working captured at submit time, unscored this phase (V27)
 - `shuffle_seed` (INTEGER, nullable) — `matching` only; generated at session creation via `secrets.randbelow(2**31)`; frontend uses this to replicate the same Fisher-Yates shuffle for right-column ordering (V27)
+- `grading_status` (VARCHAR, NOT NULL, default `'pending'`) — CHECK IN ('pending','ai_graded','released','finalized','overridden','disputed','error'); `essay` questions only; non-essay questions remain `'pending'` throughout (V29)
+- `ai_score` (FLOAT, nullable) — worker-computed: `sum(level / scale_max × weight) × points`; set when status reaches `ai_graded` or `released` (V29)
+- `ai_feedback` (TEXT, nullable) — student-facing feedback text from LLM; visible when `grading_status in ('released','finalized','overridden')` (V29)
+- `ai_rationale` (JSONB, nullable) — full LLM output including per-criterion breakdown; exposed only to exam owner (parent who owns the template, or admin) (V29)
+- `grader_confidence` (FLOAT, nullable) — LLM self-reported confidence score [0,1] (V29)
+- `graded_by` (VARCHAR, nullable) — model spec string (worker) or user sub (manual override) (V29)
+- `graded_at` (TIMESTAMP TZ, nullable) — when `grading_status` last changed to a terminal state (V29)
+- `override_score` (FLOAT, nullable) — manual score set by exam owner via `PATCH .../grade` (V29)
+- `override_feedback` (TEXT, nullable) — manual feedback set by exam owner via `PATCH .../grade` (V29)
 
 ## extraction_jobs
 - `id` (UUID, PK)
@@ -312,6 +327,20 @@ Index: `ix_rag_outbox_pending (status, created_at) WHERE status = 'pending'`
 - `daily_window_start` (DateTime TZ)
 - `updated_at` (DateTime TZ)
 
+## essay_grading_jobs
+- `id` (UUID, PK)
+- `exam_session_question_id` (UUID, FK → exam_session_questions.id, NOT NULL)
+- `status` (VARCHAR, default `'queued'`) — `queued` | `processing` | `done` | `error`
+- `attempts` (INTEGER, default 0)
+- `last_error` (TEXT, nullable)
+- `grading_model` (VARCHAR, nullable) — model spec string recorded by worker on pick-up
+- `locked_at` (TIMESTAMP TZ, nullable) — set when worker claims the row via `FOR UPDATE SKIP LOCKED`
+- `locked_by` (VARCHAR, nullable) — worker hostname
+- `created_at` (TIMESTAMP TZ, NOT NULL, default `NOW()`)
+- `updated_at` (TIMESTAMP TZ, auto-maintained via `touch_updated_at()` trigger)
+
+Indexes: `ix_essay_grading_jobs_queue (status, created_at) WHERE status='queued'` (partial), `ix_essay_grading_jobs_session_question (exam_session_question_id)`
+
 ---
 
 ## Read-only projections (not DB tables)
@@ -372,3 +401,22 @@ Query: single LEFT JOIN `categories → course_path_nodes (owner_type='platform'
 ### KeycloakSettings (introspection fields)
 - `introspection_enabled` (bool, default **`True`**) — feature flag for RFC 7662 introspection; env: `KEYCLOAK__INTROSPECTION_ENABLED`
 - `introspection_cache_ttl_seconds` (int, default `30`, min `1`) — per-token cache TTL in seconds; env: `KEYCLOAK__INTROSPECTION_CACHE_TTL_SECONDS`
+
+### EssayGraderProvider
+- Location: `src/infrastructure/grading/essay_grader_provider.py`
+- Backends (prefix-dispatch): `anthropic://model`, `openai://model`, `lmstudio://model@host/v1`, or plain Ollama model name
+- Key method: `grade(question, answer, rubric, max_points) → GradeResult` — synchronous; call via `asyncio.to_thread()` in the worker
+- Prompt: structured JSON with `<student_answer>` XML delimiters (prompt injection guard); strips `<think>…</think>` reasoning tokens (qwen3-family) before JSON parsing
+- Score formula: `sum(level / scale_max × weight) × max_points`, clamped to `[0, max_points]`; no LLM arithmetic
+- Retries up to 3 times with exponential backoff; permanent error after 3 attempts
+- Factory: `EssayGraderProvider.from_settings(GradingSettings)`
+
+### GradingSettings
+- Source: `src/shared/config.py`, nested under `settings.grading`
+- Env vars (`GRADING__*`): `MODEL_SPEC` (default: `qwen3:14b`), `OLLAMA_BASE_URL` (default: `http://localhost:11434`), `OLLAMA_API_KEY` (null), `LMSTUDIO_USE_HTTPS` (false), `MAX_TOKENS` (2048), `TEMPERATURE` (0.0)
+- `MODEL_SPEC` supports the same prefix-dispatch URIs as `ExtractionSettings`; `GRADING__*` vars are wired into the Docker Compose worker service
+
+### RubricResolver
+- Location: `src/domain/services/rubric_resolver.py`
+- `resolve_rubric(question)` → returns the question's custom `rubric` JSONB if present, or a built-in default keyed by `essay_subtype` (`analytical`, `critical`, `extended`, `narrative`, `reflective`, `short`, or generic fallback)
+- All built-in rubrics use `scale_max=4` with weighted criteria summing to 1.0

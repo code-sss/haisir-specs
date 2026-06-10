@@ -14,51 +14,94 @@ seeds your context so sub-agents know the baseline and can focus on what may hav
 For sibling repo paths and folder conventions, use the **Repository Purpose** section of `CLAUDE.md`
 as the authoritative source rather than hardcoded paths.
 
-## Incremental capture via git SHAs
+## Step 1 — Determine read mode per repo
 
-Check `current/snapshot_shas.md` for previously recorded commit SHAs. If a SHA exists for a sibling
-repo **and** the repo's `HEAD` matches that SHA, skip that repo entirely — its current/ file is
-already up to date. If the SHA exists but HEAD has moved, instruct the sub-agent to run
-`git diff <old-sha>..HEAD -- <relevant-paths>` to capture only what changed, then merge the diff
-into the existing current/ file rather than re-reading the whole repo.
+Run these two commands in parallel:
 
-If `snapshot_shas.md` does not exist or a repo has no recorded SHA, do a full read for that repo.
+```bash
+cat current/snapshot_shas.md 2>/dev/null || echo "NO_SNAPSHOT"
+```
+```bash
+git -C ../haisir-backend rev-parse HEAD && \
+git -C ../haisir-frontend rev-parse HEAD && \
+git -C ../haisir-deploy rev-parse HEAD
+```
 
-## Gather information
+For each sibling repo, decide the **read mode**:
 
-Launch **three parallel Agent tool calls** to read the sibling repos simultaneously:
+| Condition | Mode |
+|---|---|
+| No `snapshot_shas.md`, or repo has no recorded SHA | **full-read** — must use a sub-agent |
+| SHA recorded AND `HEAD == recorded SHA` | **skip** — already up to date |
+| SHA recorded AND `HEAD != recorded SHA` | **incremental** — run Bash diff in-context |
 
-**Agent 1 — Schema & API (backend):**
-- If doing a full read: find SQLAlchemy imperative mappings and domain models in `../haisir-backend` (`domain/models/`, `infrastructure/persistence/` or equivalent). List every table and column. Find route files (`routers/`, `api/`). List every endpoint: method, path, auth role, request/response shape.
-- If doing an incremental update: run `git diff <old-sha>..HEAD` in `../haisir-backend` scoped to model, persistence, and router paths. Report only additions, removals, and changes.
-- In both cases, also report the current `git rev-parse HEAD` output.
+## Step 2 — Gather information
 
-**Agent 2 — UI flows (frontend):**
-- If doing a full read: find page files in `../haisir-frontend` (`app/`, `pages/`). List every implemented screen and its purpose.
-- If doing an incremental update: run `git diff <old-sha>..HEAD` in `../haisir-frontend` scoped to page/component paths. Report only additions, removals, and changes.
-- In both cases, also report the current `git rev-parse HEAD` output.
+### Incremental repos (the common case after first run)
 
-**Agent 3 — Infrastructure:**
-- If doing a full read: read `../haisir-deploy/common` and `../haisir-deploy/dev` Docker Compose files and gateway config. Note which services are running, gateway routes, and DB migration tooling. Staging/prod overrides are out of scope.
-- If doing an incremental update: run `git diff <old-sha>..HEAD` in `../haisir-deploy` scoped to common/ and dev/ paths. Report only additions, removals, and changes.
-- In both cases, also report the current `git rev-parse HEAD` output.
+Run all incremental diffs **in parallel** with direct Bash tool calls — no sub-agents needed:
 
-Collect results from all three agents before proceeding.
+```bash
+# Backend
+git -C ../haisir-backend log <old-sha>..HEAD --oneline
+git -C ../haisir-backend diff <old-sha>..HEAD -- \
+  src/domain/models/ src/infrastructure/persistence/ \
+  src/routers/ src/api/ src/auth/ migrations/
+```
+```bash
+# Frontend
+git -C ../haisir-frontend log <old-sha>..HEAD --oneline
+git -C ../haisir-frontend diff <old-sha>..HEAD -- \
+  src/app/ src/features/ src/components/ src/hooks/
+```
+```bash
+# Deploy
+git -C ../haisir-deploy log <old-sha>..HEAD --oneline
+git -C ../haisir-deploy diff <old-sha>..HEAD -- common/ dev/
+```
+
+Analyse the diff output directly. Report only additions, removals, and changes.
+
+### Full-read repos (first run, or SHA was never recorded)
+
+Launch one sub-agent **per full-read repo** (skip repos that are incremental or unchanged):
+
+**Sub-agent — Schema & API (backend full read):**
+Find SQLAlchemy imperative mappings and domain models in `../haisir-backend`
+(`domain/models/`, `infrastructure/persistence/`). List every table and column.
+Find route files (`routers/`, `api/`). List every endpoint: method, path, auth role,
+request/response shape. Report `git rev-parse HEAD`.
+
+**Sub-agent — UI flows (frontend full read):**
+Find page files in `../haisir-frontend` (`app/`, `pages/`). List every implemented
+screen and its purpose. Report `git rev-parse HEAD`.
+
+**Sub-agent — Infrastructure (deploy full read):**
+Read `../haisir-deploy/common` and `../haisir-deploy/dev` Docker Compose files and
+gateway config. Note services, routes, and DB migration tooling. Staging/prod overrides
+are out of scope. Report `git rev-parse HEAD`.
 
 ---
 
-## Draft summaries
+## Step 3 — Draft summaries
 
-Draft (or update) three spec-level summaries of what is implemented **today** using these fixed formats:
+Draft (or update) three spec-level summaries of what is implemented **today**.
 
-### `current/schema.md`
+### For incremental repos
+Use targeted Edit calls on the existing `current/` files to splice in only the new/changed
+sections. Do NOT rewrite entire files when only a few sections changed.
+
+### For full-read repos
+Produce the full file content using these formats:
+
+#### `current/schema.md`
 ```
 ## <table_name>
 - `column_name` (type) — purpose / notes
 ```
 Only include tables/columns that actually exist in the codebase.
 
-### `current/api_contracts.md`
+#### `current/api_contracts.md`
 ```
 ## <METHOD> /path/to/endpoint
 - Purpose: what it does
@@ -68,7 +111,7 @@ Only include tables/columns that actually exist in the codebase.
 ```
 Only include endpoints that are actually implemented.
 
-### `current/ui_flows.md`
+#### `current/ui_flows.md`
 ```
 ## <Flow or persona name>
 - Screen: <screen-id or route> — <what the user sees / can do>
@@ -78,16 +121,20 @@ Only include screens/flows that are actually implemented.
 
 ---
 
-## Review and write
+## Step 4 — Review and write
 
-**Present all three drafted summaries to the user before writing any files.** Ask if anything looks wrong, missing, or needs adjustment.
+**Present the drafted changes to the user before writing any files.**
+For incremental updates, show only the additions/changes (not the full file).
+Ask if anything looks wrong, missing, or needs adjustment.
 
 Do NOT write any files during this review.
 
-Once the user confirms (e.g. "looks good", "write it", "update it", "done"), do the following in one pass:
+Once the user confirms (e.g. "looks good", "write it", "yes"), do the following in one pass:
 
-1. Write (overwrite) `current/schema.md`, `current/api_contracts.md`, and `current/ui_flows.md` with the agreed content. These are snapshots — overwriting on each run is correct.
-2. Write (overwrite) `current/snapshot_shas.md` recording the HEAD commit SHA of each sibling repo captured in this run, using this format:
+1. Apply the agreed changes:
+   - **Incremental:** use Edit (targeted edits) on `current/schema.md`, `current/api_contracts.md`, `current/ui_flows.md`
+   - **Full read:** use Write (overwrite) for the repos that needed a full read
+2. Write (overwrite) `current/snapshot_shas.md` with the current HEADs:
    ```
    ## Snapshot SHAs
    - haisir-backend: <sha>
@@ -95,13 +142,15 @@ Once the user confirms (e.g. "looks good", "write it", "update it", "done"), do 
    - haisir-deploy: <sha>
    - captured: <YYYY-MM-DD>
    ```
-3. Update the `## Current State` section in `Implementation_planning/progress.md` to a single clear paragraph summarising what the system can do today.
+3. Update the snapshot baseline and add an "Also complete" entry in `Implementation_planning/progress.md`.
 
 After writing, briefly summarise what was captured and whether each repo was a full read or incremental update.
 
-## SHA divergence check
+## Step 5 — SHA divergence check
 
-After writing `current/snapshot_shas.md`, check whether `Implementation_planning/PLAN.md` exists. If it does, extract the `<!-- plan-baseline: backend:<sha> frontend:<sha> deploy:<sha> -->` watermark from the bottom of that file. Compare those SHAs against the ones just written to `snapshot_shas.md`.
+Check whether `Implementation_planning/PLAN.md` exists. If it does, extract the
+`<!-- plan-baseline: backend:<sha> frontend:<sha> deploy:<sha> -->` watermark.
+Compare against the SHAs just written to `snapshot_shas.md`.
 
 If any SHA differs, warn the user:
 

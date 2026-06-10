@@ -53,37 +53,37 @@
 
 ## G7 [backend]: Schema extended (Essay AI Grading)
 
-- [ ] T7.1 [backend]: Alembic V29 migration — ADD COLUMN rubric/model_answer/auto_grade_essay on questions; essay_grading_mode on exam_templates; 9 AI grading columns on exam_session_questions; CREATE TABLE essay_grading_jobs with indexes + trigger
-- [ ] T7.2 [backend]: SQLAlchemy imperative table mappings — questions, exam_templates, exam_session_questions, new essay_grading_jobs table (depends on T7.1)
+- [x] T7.1 [backend]: Alembic V29 migration — ADD COLUMN rubric/model_answer/auto_grade_essay on questions; essay_grading_mode on exam_templates; 9 AI grading columns on exam_session_questions; CREATE TABLE essay_grading_jobs with indexes + trigger (2026-06-09)
+- [x] T7.2 [backend]: SQLAlchemy imperative table mappings — questions, exam_templates, exam_session_questions, new essay_grading_jobs table (depends on T7.1) (2026-06-09)
 - [ ] **G7: Schema** — integration test: insert essay question with rubric; exam template with review_first mode; grading job; assert all fields round-trip
 
 ## G8 [backend]: Domain layer (Essay AI Grading)
 
-- [ ] T8.1 [backend]: EssayGradingJob dataclass + EssayGradingStatus StrEnum + abstract repository
-- [ ] T8.2 [backend]: Question domain model gains rubric, model_answer, auto_grade_essay fields
-- [ ] T8.3 [backend]: ExamSessionQuestion gains 9 AI grading fields; ExamTemplate gains essay_grading_mode
+- [x] T8.1 [backend]: EssayGradingJob dataclass + EssayGradingStatus StrEnum + abstract repository (2026-06-09)
+- [x] T8.2 [backend]: Question domain model gains rubric, model_answer, auto_grade_essay fields (2026-06-09)
+- [x] T8.3 [backend]: ExamSessionQuestion gains 9 AI grading fields; ExamTemplate gains essay_grading_mode (2026-06-09)
 - [ ] **G8: Domain** — integration test: load Question with rubric from DB; instantiate + persist EssayGradingJob
 
 ## G9 [backend]: EssayGraderProvider + rubric resolver
 
-- [ ] T9.1 [backend]: GradingSettings in config.py — GRADING__MODEL_SPEC, OLLAMA_BASE_URL, OLLAMA_API_KEY, MAX_TOKENS, TEMPERATURE (depends on none)
-- [ ] T9.2 [backend]: EssayGraderProvider — prefix-dispatch (mirrors GlmOcrProvider), grade() method, JSON output, score-mapping formula, blank-answer guard, retry (depends on T9.1, T8.2)
-- [ ] T9.3 [backend]: RubricResolver — resolve_rubric(question) returns custom rubric or per-subtype default (depends on T8.2)
+- [x] T9.1 [backend]: GradingSettings in config.py — GRADING__MODEL_SPEC, OLLAMA_BASE_URL, OLLAMA_API_KEY, MAX_TOKENS, TEMPERATURE (depends on none) (2026-06-09)
+- [x] T9.2 [backend]: EssayGraderProvider — prefix-dispatch (mirrors GlmOcrProvider), grade() method, JSON output, score-mapping formula, blank-answer guard, retry (depends on T9.1, T8.2) (2026-06-09)
+- [x] T9.3 [backend]: RubricResolver — resolve_rubric(question) returns custom rubric or per-subtype default (depends on T8.2) (2026-06-09)
 - [ ] **G9: Provider** — unit tests: mock Ollama endpoint; score formula; retry on malformed output; blank guard; rubric resolver for all 7 subtypes
 
 ## G10 [backend]: Worker essay grading loop
 
-- [ ] T10.1 [backend]: EssayGradingJobRepository (infra) — get_next_queued() SKIP LOCKED, update_status, mark_done, mark_error (depends on T7.2, T8.1)
-- [ ] T10.2 [backend]: essay_grading_loop.py — poll, process, auto_release vs review_first transitions, retry backoff, error state (depends on T8.3, T9.2, T9.3, T10.1)
-- [ ] T10.3 [backend]: Register loop in worker __main__.py alongside extraction loop (depends on T9.1, T10.2)
+- [x] T10.1 [backend]: EssayGradingJobRepository (infra) — get_next_queued() SKIP LOCKED, update_status, mark_done, mark_error (depends on T7.2, T8.1) (2026-06-09)
+- [x] T10.2 [backend]: essay_grading_loop.py — poll, process, auto_release vs review_first transitions, retry backoff, error state (depends on T8.3, T9.2, T9.3, T10.1) (2026-06-09)
+- [x] T10.3 [backend]: Register loop in worker __main__.py alongside extraction loop (depends on T9.1, T10.2) (2026-06-09)
 - [ ] **G10: Worker** — integration test: seed queued job; run loop; assert grading_status='released' + session score updated
 
 ## G11 [backend]: Submit enqueue + grading results API
 
-- [ ] T11.1 [backend]: submit_exam() enqueues essay_grading_jobs per essay answer (blank guard; skip if auto_grade_essay=false) (depends on T7.2, T8.1, T8.2)
-- [ ] T11.2 [backend]: GET /answers surfaces grading_status, ai_feedback, ai_rationale (owner-only); updated pending_review_count (depends on T8.3)
-- [ ] T11.3 [backend]: POST .../dispute, POST .../confirm-grade, PATCH .../grade endpoints (CSRF, X-Current-Role, auth guards BR-SEC-011/012) (depends on T8.3, T11.2)
-- [ ] T11.4 [backend]: Question + ExamTemplate create/update Pydantic schemas accept rubric, model_answer, auto_grade_essay, essay_grading_mode (depends on T8.2)
+- [x] T11.1 [backend]: submit_exam() enqueues essay_grading_jobs per essay answer (blank guard; skip if auto_grade_essay=false) (depends on T7.2, T8.1, T8.2) (2026-06-09)
+- [x] T11.2 [backend]: GET /answers surfaces grading_status, ai_feedback, ai_rationale (owner-only); updated pending_review_count (depends on T8.3) (2026-06-09)
+- [x] T11.3 [backend]: POST .../dispute, POST .../confirm-grade, PATCH .../grade endpoints (CSRF, X-Current-Role, auth guards BR-SEC-011/012) (depends on T8.3, T11.2) (2026-06-09)
+- [x] T11.4 [backend]: Question + ExamTemplate create/update Pydantic schemas accept rubric, model_answer, auto_grade_essay, essay_grading_mode (depends on T8.2) (2026-06-09)
 - [ ] **G11: API** — integration test: full submit→grade→dispute→override flow; assert state machine + session score at each step
 
 ## G12 [deploy]: Config & deploy wiring
@@ -112,12 +112,9 @@
 **ROOT e2e [frontend] — requires G1–G5 passing:**
 - Playwright `tests/e2e/question-type-extension.spec.ts`: one_word_response answer flow, matching two-column shuffle + partial credit, problem_solving with working_text, essay with `essaySubtype='short'` guidance, submit → completed + results
 
-### New phase (AI Essay Grading) — G12 [deploy] DONE; backend tasks outstanding:
+### New phase (AI Essay Grading) — remaining tasks:
 
-G12 (deploy config) is complete. All remaining AI Essay Grading tasks are [backend]:
-- **G7** (T7.1 → T7.2): schema migration V29 + SQLAlchemy mappings
-- **G8** (T8.1/T8.2/T8.3): domain models — EssayGradingJob, Question rubric fields, grading_status
-- **G9** (T9.1/T9.2/T9.3): GradingSettings config, EssayGraderProvider, rubric resolver
-- **G10** (T10.1/T10.2/T10.3): worker essay grading loop + repository
-- **G11** (T11.1/T11.2/T11.3/T11.4): submit enqueue + grading results API endpoints
-- **ROOT [manual E2E]**: full essay AI grading end-to-end (requires G7–G11 complete)
+All G7–G11 leaf tasks are now complete (T7.1–T11.4 done 2026-06-09). G12 (deploy config) is also complete. Remaining:
+
+- **G7–G11 integration tests** — require live DB + worker; not yet written
+- **ROOT manual E2E**: qwen3:14b end-to-end essay grading flow
