@@ -1,120 +1,144 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:681d97a frontend:0446707 deploy:11d65d0 (2026-06-08)
+> Last baselined: backend:7c1b72d3e frontend:d0e9242c9 deploy:c407e7a05 (2026-06-12)
 
-## G1 [backend]: Schema extended
+---
 
-- [x] T1.1 [backend]: Alembic V27 non-transactional migration — AUTOCOMMIT enum extension + 4 new columns (2026-06-06)
-- [x] T1.2 [backend]: SQLAlchemy imperative table mappings updated (essay_subtype, working_required on questions; working_text, shuffle_seed on exam_session_questions) (depends on T1.1) (2026-06-06)
-- [x] T1.3 [backend]: Alembic V28 migration (unplanned) — widens essay_subtype VARCHAR(10)→VARCHAR(50), adds CHECK constraint (6 valid values), adds penalty_matching BOOLEAN NOT NULL DEFAULT false; domain/schemas/frontend extended accordingly (2026-06-06)
-- [ ] **G1: Schema extended** — integration test: insert rows with all 4 new fields + penalty_matching; assert round-trip via SQLAlchemy
+## G1 [deploy]: pgvector Database Image
 
-## G2 [backend]: Domain layer supports new types
+- [ ] T1.1 [deploy]: Wolfi pgvector Dockerfile (`common/images/postgres-pgvector/Dockerfile`)
+- [ ] T1.2 [deploy]: Update common/docker-compose.yml db services to custom image (depends on T1.1)
+- [ ] T1.3 [deploy]: Update dev/docker-compose.yml postgres to pgvector image (depends on T1.2)
+- [ ] T1.4 [deploy]: pgvector smoke test (depends on T1.2, T1.3)
+- [ ] **G1: pgvector Database Image** — integration test: `docker compose up db`; `SELECT extversion FROM pg_extension WHERE extname='vector'` returns `0.8.2`
 
-- [x] T2.1 [backend]: QuestionType enum + QuestionOption.side field (2026-06-06)
-- [x] T2.2 [backend]: Question.validate() for new types + canonical matching correct_answers format (depends on T2.1) (2026-06-06)
-- [x] T2.3 [backend]: ExamSessionQuestion domain model new fields (working_text, shuffle_seed) (2026-06-06)
-- [ ] **G2: Domain layer** — integration test: validate() for each new type; load from DB; confirm field persistence
+---
 
-## G3 [backend]: Grading handles new types
+## G2 [backend]: Vector Extension + Schema
 
-- [x] T3.1 [backend]: Grading cases for one_word_response + problem_solving in grading.py (depends on T2.1) (2026-06-06)
-- [x] T3.2 [backend]: _grade_matching helper — partial credit formula, JSON pair parsing (depends on T2.1, T2.2, T2.3) (2026-06-06)
-- [x] T3.3 [backend]: _resolve_answer_options updated for matching display in exam results (depends on T2.1, T3.2) (2026-06-06)
-- [ ] **G3: Grading** — integration test: full Question from DB, grade_question() end-to-end, assert partial credit
+- [ ] T2.1 [backend]: Alembic V31 — CREATE EXTENSION vector (depends on T1.1 [deploy])
+- [ ] T2.2 [backend]: Alembic V32 — shim for data_topic_content_chunks (depends on T2.1)
+- [ ] **G2: Vector Extension + Schema** — integration test: `alembic upgrade head` completes; `alembic current` = V32; `data_topic_content_chunks` has `embedding vector(1024)` column
 
-## G4 [backend]: Session creation seeds matching shuffle
+---
 
-- [x] T4.1 [backend]: shuffle_seed generation in POST /session/create + QuestionService injection + service method extension (depends on T1.2, T2.1, T2.3) (2026-06-06)
-- [x] T4.2 [backend]: working_text capture in POST /session/{id}/submit — AnswerCreate extension (depends on T2.1, T2.3) (2026-06-06)
-- [ ] **G4: Session seeding** — integration test: create session → shuffle_seed non-null for matching; submit problem_solving with working_text → assert persisted
+## G3 [backend+deploy]: RAG Drain Loop
 
-## G5 [backend]: API contracts expose new fields
+### G3.1 [backend]: Config + Dependencies
 
-- [x] T5.1a [backend]: Question Pydantic schemas — QuestionBase (essay_subtype, working_required), QuestionOptionBase (side) (depends on T2.1, T2.2) (2026-06-06)
-- [x] T5.1b [backend]: Session-question display schema + route wiring for shuffle_seed — shuffle_seed_map, working_required, essay_subtype in ExamSessionQuestionDisplay (depends on T2.1, T2.2, T2.3, T4.1, T5.1a) (2026-06-06)
-- [ ] **G5: API contracts** — integration test: GET /session/{id}/questions returns shuffle_seed, working_required, essay_subtype per question
+- [ ] T3.1 [backend]: LlamaIndex dependencies in pyproject.toml
+- [ ] T3.2 [backend]: EmbeddingSettings in shared/config.py
 
-## G6 [frontend]: Student exam UI renders new types
+### G3.2 [backend]: Loop Implementation
 
-- [x] T6.0 [frontend]: Extend frontend type system — QuestionType union, ExamQuestionType interface, QuestionAnswer variants, AnswerPayload (2026-06-06)
-- [x] T6.0b [frontend]: Update question-type-utils.ts + answer-transformer.ts for all 3 new types (depends on T6.0) (2026-06-06)
-- [x] T6.1 [frontend]: Seeded Fisher-Yates utility (LCG) — seeded-shuffle.ts (2026-06-06)
-- [x] T6.2 [frontend]: one_word_response question component (depends on T6.0, T6.0b) (2026-06-06)
-- [x] T6.3 [frontend]: matching question component — two-column dropdown + seeded shuffle (depends on T6.0, T6.0b, T6.1) (2026-06-06)
-- [x] T6.4 [frontend]: problem_solving question component — answer input + optional working textarea (depends on T6.0, T6.0b) (2026-06-06)
-- [x] T6.5 [frontend]: essay_subtype rendering hint in essay-input.tsx (depends on T6.0) (2026-06-06)
-- [x] **G6: Student exam UI** — integration test: render QuestionRenderer for all 8 types; assert components + payload shapes (2026-06-06)
+- [ ] T3.3 [backend]: Create worker/rag_outbox_loop.py (depends on T2.2, T3.1, T3.2)
+- [ ] T3.4 [backend]: Register rag_outbox_loop in worker/__main__.py (depends on T3.3)
+- [ ] T3.6 [backend]: Unit tests for rag_outbox_loop (depends on T3.3)
+- [ ] T3.7 [backend]: RAG loop integration test (depends on T3.4, T3.6)
 
-## ROOT acceptance test
+### G3.3 [deploy]: Deploy Config
 
-- [ ] **ROOT [e2e]: Full question type extension flow** — Playwright: one_word_response, matching (shuffled, partial credit), problem_solving (working captured), essay_subtype hint
+- [ ] T3.5 [deploy]: EMBEDDING env vars in common/docker-compose.yml worker (depends on T3.2 [backend])
 
-## G7 [backend]: Schema extended (Essay AI Grading)
+- [ ] **G3: RAG Drain Loop** — integration test: seed outbox row; start worker; wait 10s; assert `status='done'` and `data_topic_content_chunks` has rows
 
-- [x] T7.1 [backend]: Alembic V29 migration — ADD COLUMN rubric/model_answer/auto_grade_essay on questions; essay_grading_mode on exam_templates; 9 AI grading columns on exam_session_questions; CREATE TABLE essay_grading_jobs with indexes + trigger (2026-06-09)
-- [x] T7.2 [backend]: SQLAlchemy imperative table mappings — questions, exam_templates, exam_session_questions, new essay_grading_jobs table (depends on T7.1) (2026-06-09)
-- [ ] **G7: Schema** — integration test: insert essay question with rubric; exam template with review_first mode; grading job; assert all fields round-trip
+---
 
-## G8 [backend]: Domain layer (Essay AI Grading)
+## G4 [backend+deploy]: hAITU Settings Wired
 
-- [x] T8.1 [backend]: EssayGradingJob dataclass + EssayGradingStatus StrEnum + abstract repository (2026-06-09)
-- [x] T8.2 [backend]: Question domain model gains rubric, model_answer, auto_grade_essay fields (2026-06-09)
-- [x] T8.3 [backend]: ExamSessionQuestion gains 9 AI grading fields; ExamTemplate gains essay_grading_mode (2026-06-09)
-- [ ] **G8: Domain** — integration test: load Question with rubric from DB; instantiate + persist EssayGradingJob
+- [ ] T4.1 [backend]: HaituSettings in shared/config.py
+- [ ] T4.2 [deploy]: HAITU env vars in common/docker-compose.yml worker (depends on T4.1 [backend])
+- [ ] **G4: hAITU Settings Wired** — integration test: `Settings().haitu.model_spec` returns `""`; `HAITU__MODEL_SPEC=qwen3:14b` is respected; compose config shows HAITU vars
 
-## G9 [backend]: EssayGraderProvider + rubric resolver
+---
 
-- [x] T9.1 [backend]: GradingSettings in config.py — GRADING__MODEL_SPEC, OLLAMA_BASE_URL, OLLAMA_API_KEY, MAX_TOKENS, TEMPERATURE (depends on none) (2026-06-09)
-- [x] T9.2 [backend]: EssayGraderProvider — prefix-dispatch (mirrors GlmOcrProvider), grade() method, JSON output, score-mapping formula, blank-answer guard, retry (depends on T9.1, T8.2) (2026-06-09)
-- [x] T9.3 [backend]: RubricResolver — resolve_rubric(question) returns custom rubric or per-subtype default (depends on T8.2) (2026-06-09)
-- [ ] **G9: Provider** — unit tests: mock Ollama endpoint; score formula; retry on malformed output; blank guard; rubric resolver for all 7 subtypes
+## G5 [backend+deploy]: Text Restructuring Pass
 
-## G10 [backend]: Worker essay grading loop
+### G5.1 [backend]: Config
 
-- [x] T10.1 [backend]: EssayGradingJobRepository (infra) — get_next_queued() SKIP LOCKED, update_status, mark_done, mark_error (depends on T7.2, T8.1) (2026-06-09)
-- [x] T10.2 [backend]: essay_grading_loop.py — poll, process, auto_release vs review_first transitions, retry backoff, error state (depends on T8.3, T9.2, T9.3, T10.1) (2026-06-09)
-- [x] T10.3 [backend]: Register loop in worker __main__.py alongside extraction loop (depends on T9.1, T10.2) (2026-06-09)
-- [ ] **G10: Worker** — integration test: seed queued job; run loop; assert grading_status='released' + session score updated
+- [ ] T5.1 [backend]: Add restructure fields to ExtractionSettings (`restructure_text`, `restructure_model_spec`)
 
-## G11 [backend]: Submit enqueue + grading results API
+### G5.2 [backend]: Restructure Prompt
 
-- [x] T11.1 [backend]: submit_exam() enqueues essay_grading_jobs per essay answer (blank guard; skip if auto_grade_essay=false) (depends on T7.2, T8.1, T8.2) (2026-06-09)
-- [x] T11.2 [backend]: GET /answers surfaces grading_status, ai_feedback, ai_rationale (owner-only); updated pending_review_count (depends on T8.3) (2026-06-09)
-- [x] T11.3 [backend]: POST .../dispute, POST .../confirm-grade, PATCH .../grade endpoints (CSRF, X-Current-Role, auth guards BR-SEC-011/012) (depends on T8.3, T11.2) (2026-06-09)
-- [x] T11.4 [backend]: Question + ExamTemplate create/update Pydantic schemas accept rubric, model_answer, auto_grade_essay, essay_grading_mode (depends on T8.2) (2026-06-09)
-- [ ] **G11: API** — integration test: full submit→grade→dispute→override flow; assert state machine + session score at each step
+- [ ] T5.2 [backend]: Create prompts/restructure_prompt.md
 
-## G12 [deploy]: Config & deploy wiring
+### G5.3 [backend]: restructure_page() Method
 
-- [x] T12.1 [deploy]: docker-compose.yml worker block — add GRADING__* env vars alongside EXTRACTION__* (depends on T9.1) (2026-06-09)
-- [x] T12.2 [deploy]: .env.example — default qwen3:14b local; commented cloud/premium opt-in lines with PII-egress note (depends on T12.1) (2026-06-09)
-- [x] **G12: Deploy** — integration test: fresh stack; worker starts; essay grading loop shows in worker health page (2026-06-09)
+- [ ] T5.3 [backend]: Add text-only helpers + restructure_page() to GlmOcrProvider (depends on T5.2)
 
-## ROOT acceptance test (Essay AI Grading)
+### G5.4 [backend]: Extraction Loop Integration
 
-- [ ] **ROOT [manual E2E]: Essay AI grading end-to-end** — local qwen3:14b: create essay question (no rubric → default), auto_release exam, student submits, worker grades, GET answers shows released score + feedback; repeat with custom rubric, review_first mode, dispute→override flows, blank answer guard, 3-failure error state
+- [ ] T5.4 [backend]: Call restructure_page in extract_page() (depends on T5.1, T5.3)
+
+### G5.5 [deploy]: Deploy Config
+
+- [ ] T5.5 [deploy]: Add EXTRACTION__RESTRUCTURE_* to common/docker-compose.yml worker (depends on T5.1 [backend])
+
+### G5.6 [backend]: Tests
+
+- [ ] T5.6 [backend]: Unit tests for restructure_page() — TestRestructurePage (depends on T5.3)
+- [ ] T5.7 [backend]: Integration test for text restructuring pipeline (depends on T5.4, T5.6)
+
+- [ ] **G5: Text Restructuring Pass** — integration test: upload math PDF; assert `extraction_job_pages.markdown_text` has reassembled fractions
+
+---
+
+## G6 [backend]: Student Dashboard Backend APIs
+
+- [ ] T6.1 [backend]: Add get_active_links_for_child to ParentChildLinkRepository
+- [ ] T6.3 [backend]: Add get_platform_root_nodes to CoursePathNodeRepository
+- [ ] T6.4 [backend]: Create schemas/student_dashboard.py
+- [ ] T6.2 [backend]: Create StudentDashboardService (depends on T6.1, T6.3)
+- [ ] T6.5 [backend]: Create api/routes/student_dashboard.py (depends on T6.2, T6.4)
+- [ ] T6.6 [backend]: Register student_dashboard router in api/router.py (depends on T6.5)
+- [ ] T6.7 [backend]: Student dashboard API integration test (depends on T6.6)
+- [ ] **G6: Student Dashboard Backend APIs** — integration test: seed student + nodes + link; call all four endpoints; assert shapes, status codes, and permission boundaries
+
+---
+
+## G7 [frontend]: Student Dashboard Frontend
+
+### G7.1 [frontend]: Types + API Layer
+
+- [ ] T7.1 [frontend]: Student domain types (`src/features/student/types/student.types.ts`)
+- [ ] T7.2 [frontend]: student-api.ts (depends on T7.1)
+
+### G7.2 [frontend]: Hooks
+
+- [ ] T7.3 [frontend]: useStudentDashboard hook (depends on T7.2)
+- [ ] T7.4 [frontend]: useStudentNav hook (depends on T7.2)
+
+### G7.3 [frontend]: S-home Page
+
+- [ ] T7.5 [frontend]: PlatformBoardSection component (depends on T7.1)
+- [ ] T7.6 [frontend]: HomeStudySection component (depends on T7.1)
+- [ ] T7.7 [frontend]: Update app/home/page.tsx with student role branch (depends on T7.3, T7.5, T7.6, T6.6 [backend])
+
+### G7.4 [frontend]: S-nav Page
+
+- [ ] T7.8 [frontend]: app/courses page shell (depends on T7.4)
+- [ ] T7.9 [frontend]: NodeTreeSidebar component (depends on T7.1)
+- [ ] T7.10 [frontend]: TopicListPanel component (depends on T7.1)
+- [ ] T7.11 [frontend]: ContentViewer component (depends on T7.1)
+- [ ] T7.12 [frontend]: Wire S-nav in courses/page.tsx (depends on T7.8, T7.9, T7.10, T7.11, T6.6 [backend])
+- [ ] T7.13 [frontend]: Playwright E2E test — student dashboard (depends on T7.7, T7.12)
+
+- [ ] **G7: Student Dashboard Frontend** — integration test: render StudentHomePage with mocked hook; assert Platform Board + Home Study; render courses page; assert full tree→topic→content interaction cycle
 
 ---
 
 ## Ready now
 
-### From previous phase (Question Type Extension) — still outstanding:
+Tasks with no pending dependencies — can be started immediately:
 
-**G1–G5 integration tests — ready in parallel [backend]:**
-- **G1 integration test**: insert rows with all 4 new fields + `penalty_matching`; assert round-trip via SQLAlchemy
-- **G2 integration test**: `validate()` for each new type through service layer; load `Question` with `essay_subtype='extended'` from DB; confirm field; confirm `ExamSessionQuestion` with `shuffle_seed=99` persists and reloads
-- **G3 integration test**: full `Question` from DB, `grade_question()` end-to-end, assert partial credit (1 of 2 pairs = `points/2.0`); also assert `penalty_matching=True` reduces score on wrong pairs
-- **G4 integration test**: create session with `matching` question → assert `shuffle_seed` non-null; submit `problem_solving` with `working_text` → assert persisted in DB
-- **G5 integration test**: `GET /session/{id}/questions` via test client → assert JSON includes `shuffle_seed`, `working_required`, `essay_subtype`, `duration_minutes` per question
-
-**ROOT e2e [frontend] — requires G1–G5 passing:**
-- Playwright `tests/e2e/question-type-extension.spec.ts`: one_word_response answer flow, matching two-column shuffle + partial credit, problem_solving with working_text, essay with `essaySubtype='short'` guidance, submit → completed + results
-
-### New phase (AI Essay Grading) — remaining tasks:
-
-All G7–G11 leaf tasks are now complete (T7.1–T11.4 done 2026-06-09). G12 (deploy config) is also complete. Remaining:
-
-- **G7–G11 integration tests** — require live DB + worker; not yet written
-- **ROOT manual E2E**: qwen3:14b end-to-end essay grading flow
+- T1.1 [deploy]: Wolfi pgvector Dockerfile (no deps)
+- T3.1 [backend]: LlamaIndex dependencies in pyproject.toml (no deps)
+- T3.2 [backend]: EmbeddingSettings in shared/config.py (no deps)
+- T4.1 [backend]: HaituSettings in shared/config.py (no deps)
+- T5.1 [backend]: Add restructure fields to ExtractionSettings (no deps)
+- T5.2 [backend]: Create prompts/restructure_prompt.md (no deps)
+- T6.1 [backend]: Add get_active_links_for_child to ParentChildLinkRepository (no deps)
+- T6.3 [backend]: Add get_platform_root_nodes to CoursePathNodeRepository (no deps)
+- T6.4 [backend]: Create schemas/student_dashboard.py (no deps)
+- T7.1 [frontend]: Student domain types (no deps)

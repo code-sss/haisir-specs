@@ -4,6 +4,54 @@
 
 ---
 
+## 2026-06-12 — PDF text restructuring pass (adapted from anhad-final-exam)
+
+> Affects: `haisir-backend` — `GlmOcrProvider`, `ExtractionSettings`, `extraction_loop.py`, new `prompts/restructure_prompt.md`.
+
+### Problem
+Native PDF text extraction (pypdfium2) often produces garbled output for real educational content: fractions split across lines (numerator on one line, denominator on the next), words broken at layout boundaries, structural ordering lost. The current extraction pipeline returns this raw text as-is when `len(text) >= 50 and image_coverage < 0.95`, making the content hard to read and poor for embedding quality.
+
+### Decision
+Add an optional **text restructuring pass** (`restructure_page()`) triggered after native text extraction. Uses a text-only LLM call — no image — to fix fragmentation and output clean Markdown. Falls back to raw text if LLM returns empty. Adapted from `~/Workspace/anhad-final-exam/src/pdf_to_markdown/ocr.py`.
+
+- `EXTRACTION__RESTRUCTURE_TEXT=true` (default) — enables the pass
+- `EXTRACTION__RESTRUCTURE_MODEL_SPEC` — separate, lighter text model (e.g. `qwen3.5:9b`); defaults to same as vision model spec when unset
+- `GlmOcrProvider.restructure_page(raw_text: str) -> str` — new text-only method using all existing backend dispatch (Ollama / lmstudio / openai / anthropic)
+- Prompt stored in `haisir-backend/prompts/restructure_prompt.md`
+- No schema change; no new table; pure behaviour enhancement in the worker
+
+---
+
+## 2026-06-12 — RAG + hAITU infrastructure: architecture decisions
+
+> Status: all decisions locked; implementation plan pending (`/plan` not yet run).
+> Affects: `haisir-deploy` (new postgres image), `haisir-backend` (V31+V32 migrations, drain loop, hAITU endpoint, LlamaIndex dep), `haiguru` (2-line table rename).
+
+### Problem
+The `rag_indexing_outbox` table has been populated since Phase 1d-real but nothing drains it — no embeddings are generated, no vector table exists, and students cannot ask hAITU questions about topic content. pgvector is also absent from the Chainguard Postgres image.
+
+### Decisions
+
+- **pgvector in the same DB as the backend.** hAITU retrieval requires JOINing `data_topic_content_chunks` with `topic_contents` — impossible across two separate Postgres instances without FDW. The worker already writes everything to the main DB; splitting only vector tables would create split-brain with no atomicity.
+
+- **Custom Postgres image: Wolfi multi-stage build.** `cgr.dev/chainguard/wolfi-base` as compiler stage, `cgr.dev/chainguard/postgres:latest` as final stage. pgvector 0.8.2 compiled from source. Replaces the backend `db` and `db-init` services only. Keycloak DB stays on unmodified Chainguard image. Dev compose uses `pgvector/pgvector:pg18` (simpler, no hardening needed locally). Location: `haisir-deploy/common/images/postgres-pgvector/Dockerfile`. Versions: PostgreSQL 18.4, pgvector 0.8.2.
+
+- **LlamaIndex-managed table, renamed `topic_content_chunks`.** Keep LlamaIndex's `PGVectorStore` managing the table (as haiguru's `embed_pipeline` does today). Rename the `TABLE_NAME` constant in haiguru from `topic_content_vectors` → `topic_content_chunks` (2-line change: `embed_pipeline/__main__.py:22`, `rag/retriever.py:31`). Physical Postgres table = `data_topic_content_chunks` (LlamaIndex prepends `data_`). Schema: `id` BIGINT PK, `node_id` VARCHAR, `text` VARCHAR, `metadata_` JSONB (stores topic_id, content_id, topic_title, course hierarchy), `embedding vector(1024)`, `text_search_tsv` TSVECTOR. HNSW + GIN indexes. Hybrid dense+sparse search enabled. Backend hAITU queries use raw SQL with JSONB operator: `WHERE metadata_ ->> 'topic_id' = $1`.
+
+- **AI assistant feature is named hAITU (not hAIsir).** hAIsir is the product name; using it for the AI sub-feature creates confusion. hAITU is distinct, scoped ("AI Tutor"), and memorable. All code, routes, env vars, and UX copy use `haitu`.
+
+- **hAITU LLM uses same prefix-dispatch pattern as extraction/grading.** `lmstudio://host/model` for local dev, plain `model-name` via Ollama for production. New `HaituSettings` block in `shared/config.py` with `HAITU__MODEL_SPEC` + `HAITU__OLLAMA_BASE_URL`. `anthropic://` path available but not tested in current increment.
+
+- **T7.4 drain loop: 4th coroutine in the existing worker.** `run_rag_outbox_loop` added to `worker/__main__.py`'s `asyncio.gather`. Implemented as standalone `worker/rag_outbox_loop.py` (extractable to a separate service later via compose-only change — zero code rewrite). Same `FOR UPDATE SKIP LOCKED` polling pattern. Rate-limited via `EMBEDDING__BATCH_SIZE` config. Long-term risks (non-blocking): resource contention with extraction at bulk scale; mitigated by batch size config. Crash isolation: each loop requires its own try/except (existing worker pattern).
+
+- **Embedding model: BAAI/bge-m3, `vector(1024)`.** Multilingual support required. bge-m3 scores ~66–67 on MTEB multilingual, 335M params, MIT license, Ollama-native, 8192-token context window. Qwen3-Embedding-8B scores higher (#1, 70.58) but requires ~16GB VRAM — deferred until hardware budget is confirmed. Dimension 1024 is fixed in the V32 migration and cannot change without dropping + rebuilding the HNSW index. New `EmbeddingSettings` block: `EMBEDDING__MODEL_SPEC`, `EMBEDDING__OLLAMA_BASE_URL`.
+
+- **Drain loop writes via LlamaIndex in haisir-backend.** Add `llama-index-core`, `llama-index-vector-stores-postgres`, `llama-index-embeddings-ollama` to `haisir-backend/pyproject.toml`. Writing raw SQL into a LlamaIndex-managed table (with its `node_id`/`metadata_` conventions) would be fragile and couple to LlamaIndex internals.
+
+- **Chunking: LlamaIndex SentenceSplitter, `chunk_size=512, chunk_overlap=100`.** Consistent with haiguru's existing pipeline; no new dependency. Parameters map to vision spec's ~600-char intent in token terms, well within bge-m3's 8192-token window. Can be tuned later — chunk params are internal to the drain loop and don't affect any DB schema or external API.
+
+---
+
 ## 2026-06-08 — AI Essay Grading Engine: architecture decisions
 
 > Spec: `target/requirements/08_essay_ai_grading.md`. Schema deltas: `target/requirements/01_data_model.md` § "Schema Extensions (Essay AI Grading)". Auth: `02_auth_and_roles.md`. Persona updates: `03_student.md`, `04_teacher_tutor.md`, `05_parent.md`. Implementation tasks: PLAN.md G7–G12.

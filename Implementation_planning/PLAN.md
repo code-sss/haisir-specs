@@ -1,556 +1,533 @@
-# PLAN — Question Type Extension
+# PLAN — RAG Infrastructure + Text Restructuring + Student Dashboard
 
-> Written: 2026-06-05
-> Spec: `target/2026-06-05_question_types_extension.md`
-> Schema deltas: `target/requirements/01_data_model.md` § "Question Types Extension"
+> Written: 2026-06-12
+> Decisions: `Implementation_planning/decisions.md` (2026-06-12 RAG+hAITU entry; 2026-06-12 text restructuring entry)
+> Scope note: G4 wires hAITU config only. The `POST /api/haitu/topic-doubt` retrieval endpoint is out-of-scope — it requires vectors to be populated first and will be planned in the next cycle.
 
 ---
 
 ## Problem Statement
 
-The exam format requires three question types not yet in the `QuestionType` enum: `one_word_response`, `matching`, and `problem_solving`. The `essay` type also needs an `essay_subtype` distinction. This plan extends the schema, domain, grading, session creation, API contracts, and student exam UI to support all four new capabilities.
+Three independent gaps need closing in parallel:
+
+1. **RAG pipeline dead end** — `rag_indexing_outbox` rows have been accumulating since Phase 1d-real but nothing drains them. No pgvector extension is installed, no drain loop exists, no embeddings have been generated.
+2. **Garbled native text** — When pypdfium2 extracts text from educational PDFs, it often produces fragmented output (fractions split across lines, broken words). The extraction worker returns this raw text unchanged, degrading content quality and embedding quality.
+3. **Student UI missing** — The student dashboard (S-home) and content navigator (S-nav) are unbuilt. Backend APIs for these screens don't exist yet.
 
 ---
 
 ## Architecture Decisions
 
-1. **PostgreSQL enum extension**: `ALTER TYPE questiontype ADD VALUE` is non-transactional in PG 12+. Migration V27 must use `op.get_bind().execution_options(isolation_level="AUTOCOMMIT")` before each `ALTER TYPE` call, then switch back for the `ADD COLUMN` statements. Pattern differs from V25 which used bare `op.execute()` — V27 must be explicit.
-2. **Deployment order**: V27 migration MUST be applied to the database before deploying application code that references new `QuestionType` values.
-3. **No backend shuffle**: The backend generates a random `shuffle_seed` (uint31 int) at session creation time and stores it. The frontend reads that seed and applies an LCG-based Fisher-Yates shuffle to right-column matching options. The backend never shuffles.
-4. **LCG cross-stack contract**: Both sides use `next_state = (current_state * 1664525 + 1013904223) >>> 0` (uint32 via unsigned right shift). Fisher-Yates: iterate `i` from `len−1` down to `1`, swap `arr[i]` with `arr[lcgNext() % (i+1)]`. Python uses `>>> 0` semantics via `& 0xFFFFFFFF`; TypeScript uses `>>> 0`.
-5. **working_text at submit time**: There is no per-question answer endpoint; `working_text` is submitted alongside all answers at `POST /session/{id}/submit`. `AnswerCreate` schema gains an optional `working_text` field; only `problem_solving` question answers store it.
-6. **Canonical matching format**: `correct_answers` for `matching` questions is a list of `"Lx:Ry"` strings where `Lx`/`Ry` are option IDs with `side="left"`/`side="right"` respectively. User answers serialize as JSON: `[{"left_id": "L1", "right_id": "R1"}, ...]`.
-7. **essay_subtype is a rendering hint only**: No validation rule changes; `essay_subtype` controls UI guidance text. Existing essay questions are unaffected (`essay_subtype = null`).
+See `Implementation_planning/decisions.md` (2026-06-12 entries) for full rationale. Key:
+1. pgvector in the same DB as the backend — hAITU retrieval JOINs vectors with topic_contents; cross-DB JOINs impossible without FDW.
+2. Custom Wolfi multi-stage Dockerfile for prod (pgvector not in Wolfi package repo — compile from source); `pgvector/pgvector:pg18` for dev.
+3. LlamaIndex `PGVectorStore` manages `data_topic_content_chunks` — V32 migration is an Alembic shim only.
+4. BAAI/bge-m3, dimension 1024, SentenceSplitter(512/100) — multilingual, MIT, Ollama-native; dim is fixed at migration time.
+5. Text restructuring: optional text-only LLM pass after native extraction, using `EXTRACTION__RESTRUCTURE_MODEL_SPEC` (default: same as vision model). Adapted from `anhad-final-exam` project.
+6. Student dashboard: two-section S-home (Platform Board / Home Study), tabbed S-nav. All read-only; no new tables.
 
 ---
 
 ## Goal Tree
 
-### G1 — Schema Extended
-**Goal**: The PostgreSQL database gains three new enum values and four new nullable/defaulted columns so no existing data is broken and all new fields can be written by the application.
-**Goal test**: Run `alembic upgrade V27` against test DB; verify new columns (`essay_subtype`, `working_required` on `questions`; `working_text`, `shuffle_seed` on `exam_session_questions`) + 8 enum values; existing rows read without error.
-**Repos**: [backend]
+### G1 — pgvector Database Image
+**Goal**: The Docker infrastructure provides a PostgreSQL 18.4 + pgvector 0.8.2 image for production (Wolfi/Chainguard multi-stage) and a pgvector-enabled image for dev, so `CREATE EXTENSION vector` succeeds and Alembic V31 can run.
+**Goal test**: `docker compose up db` starts successfully; `psql -c "SELECT extversion FROM pg_extension WHERE extname='vector'"` returns `0.8.2`. Dev `docker compose up postgres` similarly starts without error.
+**Repos**: [deploy]
 
 ---
 
-##### T1.1 [backend] — Alembic V27 non-transactional migration
-- **Build**: Create `alembic/versions/V27_add_new_question_types.py` with `revision="V27"`, `down_revision="V26"`. In `upgrade()`:
-  1. Obtain `conn = op.get_bind()`.
-  2. Call `conn.execution_options(isolation_level="AUTOCOMMIT")` then execute three statements: `ALTER TYPE questiontype ADD VALUE IF NOT EXISTS 'matching'`, `ALTER TYPE questiontype ADD VALUE IF NOT EXISTS 'one_word_response'`, `ALTER TYPE questiontype ADD VALUE IF NOT EXISTS 'problem_solving'`. After all three, call `conn.execution_options(isolation_level="READ COMMITTED")` to restore normal isolation.
-  3. Inside a normal `op.batch_alter_table` or direct `op.add_column` block, add four columns: `essay_subtype VARCHAR(10) NULL` and `working_required BOOLEAN NOT NULL DEFAULT false` on `questions`; `working_text TEXT NULL` and `shuffle_seed INTEGER NULL` on `exam_session_questions`.
-  In `downgrade()`: drop the four columns with `op.drop_column`. Document in a comment that enum value removal is not supported without manual steps.
-- **Done when**: `alembic upgrade V27` completes without error; `alembic downgrade V26` drops all four columns without error; `SELECT enum_range(NULL::questiontype)` returns 8 values; rows inserted before migration read without error.
-- **Test**: `pytest tests/unit/migrations/test_v27.py` — imports the migration module and verifies `upgrade`/`downgrade` functions are callable; integration test (if DB available) runs upgrade/downgrade round-trip.
+##### T1.1 [deploy] — Wolfi pgvector Dockerfile
+- **Build**: Create `common/images/postgres-pgvector/Dockerfile`. Multi-stage build:
+  - Stage 1 (`builder`): `FROM cgr.dev/chainguard/wolfi-base`. Install build deps: `apk add --no-cache postgresql-18-dev git gcc make clang`. Clone pgvector 0.8.2: `git clone --branch v0.8.2 https://github.com/pgvector/pgvector.git /pgvector`. Run `cd /pgvector && make OPTFLAGS="" && make install` (uses `$(pg_config --pkglibdir)` and `$(pg_config --sharedir)/extension`).
+  - Stage 2 (`final`): `FROM cgr.dev/chainguard/postgres:latest`. Copy compiled `.so` from `$(pg_config --pkglibdir)/vector.so` and `$(pg_config --sharedir)/extension/vector*.sql` + `vector.control` from builder into the same paths in the final image.
+- **Done when**: `docker build -t haisir-postgres-pgvector ./common/images/postgres-pgvector` exits 0; `docker run --rm haisir-postgres-pgvector ls $(pg_config --pkglibdir) | grep vector` exits 0.
+- **Test**: Build the image; run `docker run --rm haisir-postgres-pgvector ls $(pg_config --pkglibdir) | grep -c vector` returns 1.
 - **Depends on**: None
 
-##### T1.2 [backend] — SQLAlchemy imperative table mappings updated
-- **Build**:
-  - In `src/infrastructure/models/question.py`, add inside the `questions` Table definition: `Column("essay_subtype", String(10), nullable=True)` and `Column("working_required", Boolean, nullable=False, server_default="false")`.
-  - In `src/infrastructure/models/exam_session.py`, add inside the **`exam_session_questions`** Table definition (NOT `exam_sessions`): `Column("working_text", Text, nullable=True)` and `Column("shuffle_seed", Integer, nullable=True)`. Import `Text` and `Integer` from sqlalchemy if not already present.
-  - The SQLAlchemy imperative mapper (`mapper_registry.map_imperatively(ExamSessionQuestion, exam_session_questions)`) automatically maps columns to dataclass fields by name — no additional mapper config needed once T2.3 adds the fields to the dataclass.
-- **Done when**: `alembic check` shows no autogenerate diff (requires T1.1 migration to have run); `from src.infrastructure.models.exam_session import exam_session_questions; assert "shuffle_seed" in [c.name for c in exam_session_questions.columns]`.
-- **Test**: Import both table objects; assert new column names exist and have correct types.
+##### T1.2 [deploy] — Update common/docker-compose.yml db services to custom image
+- **Build**: In `common/docker-compose.yml`, for the `db` and `db-init` services: replace `image: cgr.dev/chainguard/postgres:latest` with a `build:` block: `build: { context: ../../, dockerfile: common/images/postgres-pgvector/Dockerfile }`. Remove the bare `image:` line from both services. Keep all other service config (volumes, env, healthchecks) unchanged. Keycloak DB service is NOT modified.
+- **Done when**: `docker compose -f common/docker-compose.yml config` exits 0; output shows `build.context` for both `db` and `db-init`; Keycloak DB still shows the original `image:`.
+- **Test**: `grep -c "build:" common/docker-compose.yml` returns 2.
 - **Depends on**: T1.1
 
-**G1 integration test**: Against the test DB, insert a `questions` row with `essay_subtype='short'` and `working_required=True`, and an `exam_session_questions` row with `shuffle_seed=42` and `working_text="my work"`. Read back via SQLAlchemy and assert all four values round-trip correctly.
+##### T1.3 [deploy] — Update dev/docker-compose.yml postgres to pgvector image
+- **Build**: In `dev/docker-compose.yml`, replace `image: postgres:18` with `image: pgvector/pgvector:pg18` for the `postgres` service. No other changes.
+- **Done when**: `grep "pgvector/pgvector:pg18" dev/docker-compose.yml` exits 0; `docker compose -f dev/docker-compose.yml config` exits 0.
+- **Test**: `grep -c "pgvector/pgvector:pg18" dev/docker-compose.yml` returns 1.
+- **Depends on**: T1.2
+
+##### T1.4 [deploy] — pgvector smoke test
+- **Build**: After compose is up, verify the extension can be created. Add a note in `common/images/postgres-pgvector/README.md` (or inline in the Dockerfile as a `LABEL test=`) with the verification command: `psql -h localhost -U $POSTGRES_USER -c "CREATE EXTENSION IF NOT EXISTS vector; SELECT extversion FROM pg_extension WHERE extname='vector';"`.
+- **Done when**: Running the verification command against a started `db` or `postgres` container returns a row with `extversion = '0.8.2'`.
+- **Test**: `docker run --rm --entrypoint psql haisir-postgres-pgvector -c "SELECT 1;"` exits 0 (basic connectivity).
+- **Depends on**: T1.2, T1.3
+
+**G1 integration test**: Run `docker compose up db -d` using the custom image; connect via `psql`; execute `CREATE EXTENSION IF NOT EXISTS vector;`; assert no error and `pg_extension` row exists.
 
 ---
 
-### G2 — Domain Layer Supports New Types
-**Goal**: The Python domain model recognises all eight question types, validates each type's constraints, and carries the two new `ExamSessionQuestion` fields.
-**Goal test**: Call `Question.validate()` for each new type with valid and invalid data; load a `Question` with `essay_subtype='extended'` from the DB and confirm the field is accessible; instantiate `ExamSessionQuestion` with `working_text` and `shuffle_seed` and assert the fields are present.
+### G2 — Vector Extension + Schema
+**Goal**: Alembic migrations V31 and V32 run on the pgvector-enabled DB: the `vector` extension is installed, and LlamaIndex's `data_topic_content_chunks` table is registered in Alembic's migration history so autogenerate never diffs it.
+**Goal test**: `alembic upgrade head` completes without error; `SELECT extversion FROM pg_extension WHERE extname='vector'` returns a non-empty row; `\d data_topic_content_chunks` shows `embedding vector(1024)`; `alembic current` shows V32.
 **Repos**: [backend]
 
 ---
 
-##### T2.1 [backend] — QuestionType enum + QuestionOption.side field
-- **Build**: In `src/domain/models/question.py`:
-  - Add three values to `QuestionType(StrEnum)`: `matching = "matching"`, `one_word_response = "one_word_response"`, `problem_solving = "problem_solving"`.
-  - Add `side: str | None = None` as a new optional field on the `QuestionOption` dataclass (after `image_url`).
-  - Update `options_to_obj`: when constructing `QuestionOption(**opt)`, the `side` key in the dict will map automatically since the field now exists with a default.
-  - Update `obj_to_options`: include `side=option.side` in the output dict (so `side` is persisted to JSONB).
-  - Note: must be deployed in the same release as V27 migration (T1.1).
-- **Done when**: `QuestionType("matching")` doesn't raise; `QuestionOption(id="L1", side="left").side == "left"`; `options_to_obj([{"id": "L1", "text": "foo", "side": "left"}])` returns `QuestionOption` with `side="left"`; `obj_to_options` on a matching option includes `side` in the output dict.
-- **Test**: In `tests/unit/domain/test_models/test_question.py`, assert each new enum value and `QuestionOption` side field round-trip through `options_to_obj`/`obj_to_options`.
-- **Depends on**: None (but must deploy after T1.1)
+##### T2.1 [backend] — Alembic V31: CREATE EXTENSION vector
+- **Build**: Create `alembic/versions/V31_pgvector_extension.py`. Set `revision = "V31"`, `down_revision = "V30"`. In `upgrade()`: `op.execute("CREATE EXTENSION IF NOT EXISTS vector")`. In `downgrade()`: add a comment `# Intentional no-op: dropping vector extension may corrupt data_topic_content_chunks` and no action. Add module-level docstring explaining this migration enables the pgvector extension for embedding storage.
+- **Done when**: `alembic upgrade V31` against a pgvector-enabled DB exits 0; `SELECT COUNT(*) FROM pg_extension WHERE extname='vector'` returns 1.
+- **Test**: `tests/unit/migrations/test_v31.py` — import V31 module; assert `upgrade.__doc__` or the SQL string contains `CREATE EXTENSION`; assert `down_revision == "V30"`.
+- **Depends on**: T1.1 [deploy]
 
-##### T2.2 [backend] — Question.validate() for new types + canonical matching format
-- **Build**: In `src/domain/models/question.py`:
-  - Add `essay_subtype: str | None = None` and `working_required: bool = False` fields to the `Question` dataclass.
-  - Extend `validate()`: remove the `# pragma: no branch` annotation on the existing `elif` branch. Add explicit branches for:
-    - `QuestionType.one_word_response`: delegate to `_validate_text_question()`.
-    - `QuestionType.problem_solving`: delegate to `_validate_text_question()` (options must be empty, `correct_answers` must be non-empty).
-    - `QuestionType.matching`: call new private `_validate_matching_question()` (see below).
-  - Add a final `else: raise ValueError(f"Unhandled question type: {self.question_type}")` as a safety net.
-  - Add private method `_validate_matching_question()`: verify (a) `options` has at least 2 items with `side="left"` and 2 with `side="right"`; (b) each item in `correct_answers` matches the `"Lx:Ry"` pattern (colon-separated left and right IDs); (c) each referenced left ID exists in options with `side="left"` and each right ID exists with `side="right"`.
-  - **Canonical matching `correct_answers` format**: a list of strings `"<left_id>:<right_id>"` (e.g., `["L1:R2", "L2:R1"]`). This format is the contract between authoring, validation, grading (T3.2), and the frontend.
-- **Done when**: `matching` with valid pairs passes; matching with bad pair ID raises `ValueError`; `one_word_response` with empty options passes; `problem_solving` with options raises; `validate()` raises on unknown type; `# pragma: no branch` is removed.
-- **Test**: Add `TestNewQuestionTypes` class in `tests/unit/domain/test_models/test_question.py` with test cases for each new type: valid path, invalid options, invalid `correct_answers` format for matching.
+##### T2.2 [backend] — Alembic V32: shim for data_topic_content_chunks
+- **Build**: Create `alembic/versions/V32_rag_vector_table_shim.py`. Set `revision = "V32"`, `down_revision = "V31"`. Module-level comment: "LlamaIndex PGVectorStore manages this table. This migration is a registration shim only — do not autogenerate diffs against data_topic_content_chunks." In `upgrade()`: create the table exactly as LlamaIndex `PGVectorStore` creates it, so Alembic records the schema: `op.create_table("data_topic_content_chunks", sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True), sa.Column("text", sa.Text, nullable=True), sa.Column("metadata_", sa.JSON, nullable=True), sa.Column("node_id", sa.VARCHAR, nullable=True), sa.Column("embedding", Vector(1024), nullable=True))`. Import `Vector` from `pgvector.sqlalchemy`. Add table comment via `op.execute("COMMENT ON TABLE data_topic_content_chunks IS 'Managed by LlamaIndex PGVectorStore; this migration is a registration shim only.'")`. In `downgrade()`: `op.drop_table("data_topic_content_chunks")`.
+- **Done when**: `alembic upgrade V32` exits 0; `alembic current` shows V32; `\d data_topic_content_chunks` shows `embedding vector(1024)`.
+- **Test**: `tests/unit/migrations/test_v32.py` — import V32 module; assert `down_revision == "V31"`; assert upgrade creates `data_topic_content_chunks`; assert downgrade drops it.
 - **Depends on**: T2.1
 
-##### T2.3 [backend] — ExamSessionQuestion domain model new fields
-- **Build**: In `src/domain/models/exam_session.py`, add two fields to the `ExamSessionQuestion` dataclass with defaults at the end: `working_text: str | None = None` and `shuffle_seed: int | None = None`. Existing callers that construct `ExamSessionQuestion` without these args continue to work.
-- **Done when**: `ExamSessionQuestion(..., working_text="show work", shuffle_seed=12345)` instantiates without error; `ExamSessionQuestion(...)` without new args also works; `.working_text` and `.shuffle_seed` default to `None`.
-- **Test**: In `tests/unit/domain/test_models/test_exam_session.py`, assert instantiation with and without the new fields.
+**G2 integration test**: Run `alembic upgrade head` on pgvector-enabled test DB; query `pg_extension` for vector; describe `data_topic_content_chunks`; confirm `alembic current` = V32; run `alembic downgrade V31` then re-upgrade; assert idempotency.
+
+---
+
+### G3 — RAG Drain Loop
+**Goal**: The worker drains `rag_indexing_outbox` rows, loads the matching `topic_contents` text, chunks with SentenceSplitter(512/100), embeds with bge-m3 via Ollama, and upserts into `data_topic_content_chunks`. Processed rows are marked `done`; failures are retried up to 3 times then marked `failed`.
+**Goal test**: Seed one `rag_indexing_outbox` row + matching `topic_contents` row with text "Hello world". Start worker. After one poll cycle, `rag_indexing_outbox.status = 'done'`; `SELECT COUNT(*) FROM data_topic_content_chunks WHERE metadata_->>'content_id' = '<uuid>'` returns >= 1.
+**Repos**: [backend] [deploy]
+
+---
+
+#### G3.1 — Config + Dependencies [backend]
+
+##### T3.1 [backend] — LlamaIndex dependencies in pyproject.toml
+- **Build**: In `pyproject.toml` under `[project].dependencies`, add: `"llama-index-core>=0.12.0"`, `"llama-index-vector-stores-postgres>=0.4.0"`, `"llama-index-embeddings-ollama>=0.6.0"`. Run `uv sync` to verify resolution.
+- **Done when**: `uv sync` exits 0; `python -c "from llama_index.vector_stores.postgres import PGVectorStore; from llama_index.embeddings.ollama import OllamaEmbedding"` exits 0.
+- **Test**: `tests/unit/worker/test_rag_outbox_loop.py` imports `from llama_index.embeddings.ollama import OllamaEmbedding` at module level without raising `ImportError`.
 - **Depends on**: None
 
-**G2 integration test**: Call `Question.validate()` for each new type through the service layer against a real DB; load a `Question` with `essay_subtype='extended'` seeded in DB; confirm field value; confirm `ExamSessionQuestion` with `shuffle_seed=99` persists and reloads via SQLAlchemy session.
+##### T3.2 [backend] — EmbeddingSettings in shared/config.py
+- **Build**: In `src/shared/config.py`, add a new `EmbeddingSettings(BaseModel)` class immediately after `GradingSettings`: fields are `model_spec: str = Field(default="bge-m3")`, `ollama_base_url: str = Field(default="http://localhost:11434")`, `batch_size: int = Field(default=10)`. In `Settings`, add `embedding: EmbeddingSettings = EmbeddingSettings()` after the `grading` field.
+- **Done when**: `from shared.config import settings; settings.embedding.model_spec` returns `"bge-m3"`; `settings.embedding.batch_size` returns `10`.
+- **Test**: `tests/unit/shared/test_config.py` — assert `Settings().embedding.model_spec == "bge-m3"`, `Settings().embedding.batch_size == 10`; with env `EMBEDDING__BATCH_SIZE=5`, assert `Settings().embedding.batch_size == 5`.
+- **Depends on**: None
 
 ---
 
-### G3 — Grading Handles New Types
-**Goal**: `grade_question()` returns the correct `(is_correct, earned_points)` tuple for all three new auto-graded types, and exam results display correctly for `matching` answers.
-**Goal test**: Call `grade_question()` for `one_word_response`, `problem_solving`, and `matching` with correct, partially-correct, and incorrect inputs; verify returned tuples match the partial credit formula.
+#### G3.2 — Loop Implementation [backend]
+
+##### T3.3 [backend] — Create worker/rag_outbox_loop.py
+- **Build**: Create `src/worker/rag_outbox_loop.py`. The async function `async def run_rag_outbox_loop(session_maker, settings: Settings) -> None` loops forever with `await asyncio.sleep(settings.embedding.poll_interval_seconds if hasattr(settings.embedding, 'poll_interval_seconds') else 5)`. Each iteration:
+  1. Claims up to `settings.embedding.batch_size` outbox rows: `SELECT ... FROM rag_indexing_outbox WHERE status IN ('pending','retry') AND retry_count < 3 ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT :batch`. Sets `status='processing'`, `locked_at=now()`, `locked_by=socket.gethostname()`.
+  2. For each row, loads the `topic_contents` row by `content_id`. If `text` is null or empty: sets `status='failed'`, `last_error='empty text'`. Skips.
+  3. Chunks text: `from llama_index.core.node_parser import SentenceSplitter; splitter = SentenceSplitter(chunk_size=512, chunk_overlap=100); nodes = splitter.get_nodes_from_documents(...)`. Each node metadata dict includes `content_id`, `topic_id`, `title`, `content_type`.
+  4. Creates `OllamaEmbedding(model_name=settings.embedding.model_spec, base_url=settings.embedding.ollama_base_url)` and `PGVectorStore(table_name="topic_content_chunks", ...)` using the DB connection string.
+  5. Calls `await asyncio.to_thread(vector_store.add, nodes)` (LlamaIndex sync → thread).
+  6. On success: sets `status='done'`, clears `locked_at`, `locked_by`, `last_error=None`.
+  7. On exception: increments `retry_count`; if `retry_count >= 3` sets `status='failed'`; else sets `status='retry'`; sets `last_error=str(exc)[:500]`.
+  Wrap the whole loop body in `try/except Exception` so a crash doesn't kill the coroutine.
+- **Done when**: `tests/unit/worker/test_rag_outbox_loop.py` passes — all unit tests with mocked DB session and mocked LlamaIndex PGVectorStore.
+- **Test**: Mock `PGVectorStore.add` and `OllamaEmbedding`; mock DB returning one outbox row + one `topic_contents` row with `text="Test content"`; assert `status='done'` is written; assert `PGVectorStore.add` was called with at least 1 node.
+- **Depends on**: T2.2 [backend], T3.1, T3.2
+
+##### T3.4 [backend] — Register rag_outbox_loop in worker/__main__.py
+- **Build**: In `src/worker/__main__.py`:
+  - Add `from worker.rag_outbox_loop import run_rag_outbox_loop` import.
+  - Construct the coroutine and add it to the `asyncio.gather(...)` call alongside `extraction_loop`, `essay_grading_loop`, `purge_loop`, `heartbeat_loop`.
+  - In the startup validation block, if `settings.embedding.model_spec` is empty: log a `WARNING` message "EMBEDDING__MODEL_SPEC not set — rag_outbox_loop will process rows but embedding calls will fail" (non-fatal; extraction still starts).
+- **Done when**: Worker starts without error; `asyncio.gather` includes the RAG loop task; `tests/unit/worker/test_main.py` shows `run_rag_outbox_loop` is registered.
+- **Test**: Unit test mocks `run_rag_outbox_loop`; assert it is called as a coroutine argument to `asyncio.gather` at startup.
+- **Depends on**: T3.3
+
+##### T3.6 [backend] — Unit tests for rag_outbox_loop
+- **Build**: Create (or expand) `tests/unit/worker/test_rag_outbox_loop.py`. Test cases:
+  - Happy path: one outbox row + topic_contents text → `status='done'`, `PGVectorStore.add` called.
+  - Empty text: outbox row but topic_contents text is None → `status='failed'`, `last_error='empty text'`.
+  - Embed failure (first attempt): PGVectorStore.add raises → `retry_count=1`, `status='retry'`.
+  - Embed failure (third attempt, retry_count already 2): raises → `status='failed'`.
+  - Wrap-around: loop exception (outer try/except) does not kill the coroutine — continues on next iteration.
+- **Done when**: `uv run pytest tests/unit/worker/test_rag_outbox_loop.py -v` passes with 100% branch coverage for the file.
+- **Test**: Test suite self-verifying — `pytest --cov=src/worker/rag_outbox_loop` shows 100%.
+- **Depends on**: T3.3
+
+##### T3.7 [backend] — RAG loop integration test
+- **Build**: Add `tests/integration/worker/test_rag_loop_integration.py`. Against the test DB (pgvector-enabled): seed a `topic_contents` row with `text="Hello world. Testing RAG pipeline."`. Seed an `rag_indexing_outbox` row pointing to it with `status='pending'`. Run one iteration of `run_rag_outbox_loop` with a real (or mocked-but-real) `OllamaEmbedding` call (skip in CI if Ollama unavailable via `pytest.mark.skipif`). Assert outbox row `status='done'`; assert `SELECT COUNT(*) FROM data_topic_content_chunks WHERE metadata_->>'content_id' = '<uuid>'` >= 1.
+- **Done when**: Test passes against local stack with Ollama running `bge-m3`; CI skips gracefully when Ollama unavailable.
+- **Test**: The test itself is the integration assertion.
+- **Depends on**: T3.4, T3.6
+
+---
+
+#### G3.3 — Deploy Config [deploy]
+
+##### T3.5 [deploy] — EMBEDDING env vars in common/docker-compose.yml worker block
+- **Build**: In `common/docker-compose.yml`, under the `worker` service `environment:` block, append three lines:
+  ```yaml
+  EMBEDDING__MODEL_SPEC: ${EMBEDDING__MODEL_SPEC}
+  EMBEDDING__OLLAMA_BASE_URL: ${EMBEDDING__OLLAMA_BASE_URL:-http://ollama:11434}
+  EMBEDDING__BATCH_SIZE: ${EMBEDDING__BATCH_SIZE:-10}
+  ```
+- **Done when**: `docker compose -f common/docker-compose.yml config` exits 0; the `worker` environment section contains all three vars.
+- **Test**: `grep -c "EMBEDDING__" common/docker-compose.yml` returns >= 3.
+- **Depends on**: T3.2 [backend]
+
+**G3 integration test**: With pgvector DB + Ollama `bge-m3` running: insert `topic_contents` row; insert `rag_indexing_outbox` row; start worker; wait 10s; assert outbox row `status='done'`; assert `data_topic_content_chunks` has rows with matching `content_id` in metadata.
+
+---
+
+### G4 — hAITU Settings Wired
+**Goal**: `HaituSettings` exists in `shared/config.py` and its env vars are wired in the worker service, so the hAITU endpoint (next plan cycle) can read config without a separate settings migration.
+**Goal test**: `Settings().haitu.model_spec` returns `""` (empty default); `HAITU__MODEL_SPEC=qwen3:14b` env override is respected; docker-compose config shows HAITU vars in worker environment.
+**Repos**: [backend] [deploy]
+
+---
+
+##### T4.1 [backend] — HaituSettings in shared/config.py
+- **Build**: In `src/shared/config.py`, add `HaituSettings(BaseModel)` class after `EmbeddingSettings`: fields `model_spec: str = Field(default="")`, `ollama_base_url: str = Field(default="http://localhost:11434")`, `max_tokens: int = Field(default=2048)`. Add `haitu: HaituSettings = HaituSettings()` to `Settings` after `embedding`.
+- **Done when**: `Settings().haitu.max_tokens == 2048`; `Settings().haitu.model_spec == ""`; env `HAITU__MODEL_SPEC=test` sets `model_spec="test"`.
+- **Test**: `tests/unit/shared/test_config.py` — add assertions for `haitu` defaults and env override `HAITU__MODEL_SPEC=my_model`.
+- **Depends on**: None
+
+##### T4.2 [deploy] — HAITU env vars in common/docker-compose.yml worker block
+- **Build**: In `common/docker-compose.yml` worker `environment:`, append:
+  ```yaml
+  HAITU__MODEL_SPEC: ${HAITU__MODEL_SPEC:-}
+  HAITU__OLLAMA_BASE_URL: ${HAITU__OLLAMA_BASE_URL:-http://ollama:11434}
+  ```
+- **Done when**: `grep -c "HAITU__" common/docker-compose.yml` returns >= 2; `docker compose -f common/docker-compose.yml config` exits 0.
+- **Test**: `grep "HAITU__MODEL_SPEC" common/docker-compose.yml` exits 0.
+- **Depends on**: T4.1 [backend]
+
+**G4 integration test**: `docker compose -f common/docker-compose.yml config` resolves HAITU vars in worker environment without warnings; `Settings(HAITU__MODEL_SPEC="qwen3:14b")` returns `haitu.model_spec == "qwen3:14b"`.
+
+---
+
+### G5 — Text Restructuring Pass
+**Goal**: When native PDF extraction yields text (`len >= 50`, image coverage < 0.95) and `EXTRACTION__RESTRUCTURE_TEXT=true`, the worker passes raw text through a text-only LLM call (`restructure_page()`) that fixes fragmented fractions, broken line-breaks, and layout artefacts, returning clean Markdown; if the LLM returns empty, falls back to raw text.
+**Goal test**: Configure `EXTRACTION__RESTRUCTURE_TEXT=true`, `EXTRACTION__RESTRUCTURE_MODEL_SPEC=<model>`. Upload a PDF with fragmented native text (e.g., a maths worksheet). The `extraction_job_pages.markdown_text` stored after extraction contains reassembled content (e.g., `3/4` where raw had `3\n4`); no content is added or removed.
+**Repos**: [backend] [deploy]
+
+---
+
+#### G5.1 — Config [backend]
+
+##### T5.1 [backend] — Add restructure fields to ExtractionSettings
+- **Build**: In `src/shared/config.py` inside `ExtractionSettings`, add two new fields after `purge_interval_seconds`: `restructure_text: bool = Field(default=True)` and `restructure_model_spec: str = Field(default="")`. No other changes.
+- **Done when**: `Settings().extraction.restructure_text is True`; `Settings().extraction.restructure_model_spec == ""`; env `EXTRACTION__RESTRUCTURE_TEXT=false` makes it `False`.
+- **Test**: `tests/unit/shared/test_config.py` — assert defaults and env overrides for both new fields.
+- **Depends on**: None
+
+---
+
+#### G5.2 — Restructure Prompt [backend]
+
+##### T5.2 [backend] — Create prompts/restructure_prompt.md
+- **Build**: Determine where `worker/prompts.py` reads prompt files. Create `src/worker/prompts/restructure_prompt.md` (or wherever contents prompt lives). File content:
+  ```
+  The text below was extracted from a PDF page (educational content).
+  The extraction may be fragmented: fractions may be split across lines, words may be
+  broken, and spacing or layout context may be lost.
+
+  Rewrite the text as clean, readable Markdown following these rules:
+  - Reassemble fractions: if a number sits alone on a line and the next line is also a
+    lone number, they form a fraction — write them as numerator/denominator (e.g. 3
+    then 4 → 3/4).
+  - Use ## for the page/section title, ### for sub-sections.
+  - Use numbered lists (1. 2. 3.) for questions, lettered sub-lists (a. b. c.) for parts.
+  - Preserve every number, symbol (≡ = < > ± × ÷ →), and word exactly — do NOT
+    paraphrase, summarise, or add anything.
+  - Output ONLY the Markdown — no explanation, no code fences.
+
+  Extracted text:
+  ---
+  {raw_text}
+  ---
+  ```
+- **Done when**: File exists; `open("restructure_prompt.md").read().format(raw_text="abc")` executes without `KeyError`.
+- **Test**: `tests/unit/worker/test_prompts.py` — read the file, call `.format(raw_text="hello")`, assert result contains `"hello"` and does not contain `"{raw_text}"`.
+- **Depends on**: None
+
+---
+
+#### G5.3 — restructure_page() Method [backend]
+
+##### T5.3 [backend] — Add text-only helpers + restructure_page() to GlmOcrProvider
+- **Build**: In `src/infrastructure/extraction/glm_ocr_provider.py`:
+  1. Add `_text_stream_ollama(self, prompt: str) -> Generator[StreamEvent]`: same as `_stream_ollama` but the payload dict has no `"images"` key — text-only `/api/generate` call.
+  2. Add `_text_stream_openai_compat(self, prompt: str, *, model: str, api_key: str | None = None, base_url: str | None = None) -> Generator[StreamEvent]`: same as `_stream_openai_compat` but `content` is a single string message `{"role": "user", "content": prompt}` (no image).
+  3. Add `_text_stream_anthropic(self, prompt: str) -> Generator[StreamEvent]`: same as `_stream_anthropic` but `content_blocks` is `[{"type": "text", "text": prompt}]` only.
+  4. Add `restructure_page(self, raw_text: str) -> str` public method: (a) locate the prompt file relative to this module's `__file__`; (b) load and format with `{raw_text=raw_text}`; (c) dispatch to the correct text-only stream helper based on `self._scheme`; (d) collect chunks; (e) if result is empty after strip, return `raw_text`; else return result. Note: `ExtractionProvider` protocol is NOT changed — `restructure_page` is a concrete extension on `GlmOcrProvider` only; `extract_page` uses `hasattr(provider, "restructure_page")` guard.
+- **Done when**: `tests/unit/infrastructure/test_glm_ocr_provider.py` — new test class `TestRestructurePage` passes: (a) Ollama scheme: mock httpx, assert payload has no `"images"` key; (b) empty LLM response → returns raw_text fallback; (c) non-empty response → returns restructured text.
+- **Test**: Mock Ollama httpx call; assert `restructure_page("hello")` calls `/api/generate` without `"images"` in request body.
+- **Depends on**: T5.2
+
+---
+
+#### G5.4 — Extraction Loop Integration [backend]
+
+##### T5.4 [backend] — Call restructure_page in extract_page()
+- **Build**: In `src/worker/extraction_loop.py`, modify the `extract_page()` function. In the PDF branch, update the `if len(text) >= 50 and coverage < 0.95:` block:
+  ```python
+  if len(text) >= 50 and coverage < 0.95:
+      if (
+          settings.extraction.restructure_text
+          and settings.extraction.restructure_model_spec
+          and hasattr(provider, "restructure_page")
+      ):
+          restructured = await asyncio.to_thread(provider.restructure_page, text)
+          return restructured if restructured.strip() else text
+      return text
+  ```
+  The triple-condition guard (flag + non-empty model spec + method exists) ensures the raw path is unchanged when restructuring is disabled or model spec is unset.
+- **Done when**: `tests/unit/worker/test_extraction_loop.py` — parametrised tests: (1) `restructure_text=True, restructure_model_spec="m"` and text >= 50 chars → `restructure_page` called and result returned; (2) `restructure_text=False` → `restructure_page` NOT called; (3) `restructure_model_spec=""` → NOT called; (4) `restructure_page` returns empty string → original text returned.
+- **Test**: Mock `provider.restructure_page` returning `"cleaned"`. Assert page markdown is `"cleaned"` when all three conditions are true.
+- **Depends on**: T5.1, T5.3
+
+---
+
+#### G5.5 — Deploy Config [deploy]
+
+##### T5.5 [deploy] — Add EXTRACTION__RESTRUCTURE_* to common/docker-compose.yml worker
+- **Build**: In `common/docker-compose.yml` worker `environment:`, append:
+  ```yaml
+  EXTRACTION__RESTRUCTURE_TEXT: ${EXTRACTION__RESTRUCTURE_TEXT:-true}
+  EXTRACTION__RESTRUCTURE_MODEL_SPEC: ${EXTRACTION__RESTRUCTURE_MODEL_SPEC:-}
+  ```
+- **Done when**: `grep -c "EXTRACTION__RESTRUCTURE" common/docker-compose.yml` returns 2.
+- **Test**: `docker compose -f common/docker-compose.yml config` exits 0.
+- **Depends on**: T5.1 [backend]
+
+---
+
+#### G5.6 — Tests [backend]
+
+##### T5.6 [backend] — Unit tests for restructure_page()
+- **Build**: In `tests/unit/infrastructure/test_glm_ocr_provider.py`, add `TestRestructurePage` class with: (a) Ollama scheme mock — assert `/api/generate` called without `images` key, returns restructured text; (b) empty response → returns original `raw_text`; (c) lmstudio scheme mock; (d) openai scheme mock; (e) anthropic scheme mock.
+- **Done when**: All test cases in `TestRestructurePage` pass.
+- **Test**: Test suite self-verifying.
+- **Depends on**: T5.3
+
+##### T5.7 [backend] — Integration test for text restructuring pipeline
+- **Build**: In `tests/unit/worker/test_extraction_loop.py`, add an integration-style unit test `test_restructure_called_when_enabled`: configure mock `provider` with `restructure_page` method; call `extract_page()` with a PDF page mock returning text of 60 chars and image coverage 0.1; with `EXTRACTION__RESTRUCTURE_TEXT=true` and `EXTRACTION__RESTRUCTURE_MODEL_SPEC=m`; assert `restructure_page` was called exactly once; assert returned text equals the mock restructured output.
+- **Done when**: Test passes under `uv run pytest tests/unit/worker/test_extraction_loop.py::test_restructure_called_when_enabled`.
+- **Test**: Assert `provider.restructure_page.call_count == 1`.
+- **Depends on**: T5.4, T5.6
+
+**G5 integration test**: Upload a synthetic PDF with fragmented native text (fractions split) to the API; worker processes; query `extraction_job_pages`; assert `markdown_text` contains the reassembled fraction format.
+
+---
+
+### G6 — Student Dashboard Backend APIs
+**Goal**: Four GET endpoints under `/api/student/` return node trees, topic lists, and content for authenticated students. `X-Current-Role: student` required; wrong role → 403; missing role → 400. Parent-owned content gated behind active `parent_child_links`.
+**Goal test**: Student with `X-Current-Role: student` calls `GET /api/student/dashboard` → 200 with platform nodes. Student without student role → 403. Parent-linked student calls `GET /api/student/nodes?owner_type=parent&owner_id=<sub>` → includes parent nodes. Non-linked student calls same → 403.
 **Repos**: [backend]
 
 ---
 
-##### T3.1 [backend] — Grading cases for one_word_response and problem_solving
-- **Build**: In `src/shared/grading.py`, extend the `match` statement in `grade_question()`:
-  - Remove `# pragma: no branch` from the `essay` case.
-  - Add `case QuestionType.one_word_response | QuestionType.problem_solving:` before the essay case, both delegating to `_grade_fill_in_blank(user_question, question)`.
-  - Add `case _: raise ValueError(f"Unhandled question type: {question.question_type}")` as the final branch.
-  - `working_text` on `problem_solving` is not scored in this phase — the grade function only grades `user_answer`.
-- **Done when**: `grade_question(uq, q)` where `q.question_type == QuestionType.one_word_response` and `uq.user_answer == "photosynthesis"` returns `(True, points)` when `correct_answers == ["Photosynthesis"]` (normalized case-insensitive via `_grade_fill_in_blank`); `problem_solving` with correct answer returns full points; `essay` still returns `(None, 0.0)`; unknown type raises `ValueError`.
-- **Test**: Add `TestGradeOneWordResponse` and `TestGradeProblemSolving` classes to `tests/unit/shared/test_grading.py`, mirroring the structure of `TestGradeFillInBlank`.
-- **Depends on**: T2.1
+##### T6.1 [backend] — Add get_active_links_for_child to ParentChildLinkRepository
+- **Build**: In `src/domain/repositories/user_metadata_repository.py`, add abstract method `async def get_active_links_for_child(self, child_sub: str) -> list[ParentChildLink]` to `AbstractParentChildLinkRepository`. In `src/infrastructure/repositories/user_metadata_repository.py`, implement in `ParentChildLinkRepository`: `SELECT * FROM parent_child_links WHERE child_sub = :child_sub AND revoked_at IS NULL ORDER BY created_at`.
+- **Done when**: Calling `repo.get_active_links_for_child("sub-123")` returns a list (empty when no links, populated when links exist).
+- **Test**: `tests/unit/infrastructure/test_user_metadata_repository.py` — mock DB session; assert query filters `revoked_at IS NULL` and `child_sub = :child_sub`.
+- **Depends on**: None
 
-##### T3.2 [backend] — `_grade_matching` helper
-- **Build**: In `src/shared/grading.py`, add private function `_grade_matching(user_question: ExamSessionQuestion, question: Question) -> tuple[bool, float]`:
-  - Parse `question.correct_answers` as a set of `"Lx:Ry"` strings (per T2.2 canonical format).
-  - Parse `user_question.user_answer` using `json.loads()`; expected shape `[{"left_id": "L1", "right_id": "R1"}, ...]`; convert to set of `"L1:R1"` strings; on any JSON parse error or `None`, return `(False, 0.0)`.
-  - `total_pairs = len(correct_set)`; if `total_pairs == 0`, return `(True, 0.0)`.
-  - `correct_pairs = len(submitted_set & correct_set)`.
-  - `earned = correct_pairs / total_pairs * user_question.points`.
-  - `is_correct = (correct_pairs == total_pairs)`.
-  - Add `case QuestionType.matching: return _grade_matching(user_question, question)` in the match statement (before the `case _` safety net).
-- **Done when**: Full match returns `(True, points)`; one of two pairs correct returns `(False, points/2.0)`; empty/null answer returns `(False, 0.0)`; malformed JSON returns `(False, 0.0)`; zero total pairs returns `(True, 0.0)`.
-- **Test**: Add `TestGradeMatching` class in `tests/unit/shared/test_grading.py` covering all five cases.
-- **Depends on**: T2.1, T2.2, T2.3
+##### T6.2 [backend] — Create StudentDashboardService
+- **Build**: Create `src/domain/services/student_dashboard_service.py`. Class `StudentDashboardService` injected with `node_repo`, `topic_repo`, `topic_content_repo`, `link_repo`. Methods:
+  - `get_dashboard(student_sub: str) -> dict`: returns `{"platform_nodes": list[CoursePathNode], "has_parent_link": bool}`. Platform nodes via `node_repo.get_platform_root_nodes()`. has_parent_link = `len(await link_repo.get_active_links_for_child(student_sub)) > 0`.
+  - `get_node_tree(owner_type: str, owner_id: str | None, student_sub: str) -> list[CoursePathNode]`: if `owner_type == "parent"`, verify active link where `owner_id` matches a `parent_sub` for `child_sub == student_sub` — raise `PermissionError("No active parent link")` if none. Then return nodes for that owner.
+  - `get_live_topics_for_node(node_id: UUID, student_sub: str) -> list[Topic]`: returns topics via `topic_repo` filtered `status='live'`.
+  - `get_topic_content(topic_id: UUID, student_sub: str) -> list[TopicContent]`: verify topic is live and accessible; return content via `topic_content_repo`.
+- **Done when**: All four method unit tests pass.
+- **Test**: `tests/unit/domain/test_services/test_student_dashboard_service.py` — mock all repos; assert `get_node_tree(owner_type="parent", ...)` raises `PermissionError` when no active link; assert `get_dashboard` sets `has_parent_link=False` with empty link list.
+- **Depends on**: T6.1, T6.3
 
-##### T3.3 [backend] — `_resolve_answer_options` updated for matching display
-- **Build**: In `src/api/routes/exam_session.py`, extend `_resolve_answer_options` with a `matching` branch: if `question.question_type == QuestionType.matching`, deserialize `user_answer` as JSON pairs and produce display strings in the format `"<left_text> → <right_text>"` (look up text from `question.options` by ID; fall back to ID if text not found). Also add explicit guards to the existing `fill_in_the_blank / essay` text-wrapping block: `if question.question_type in (QuestionType.fill_in_the_blank, QuestionType.essay, QuestionType.one_word_response, QuestionType.problem_solving):` — so new text-style types render as text, not as broken option lookups.
-- **Done when**: `get_exam_answers` for a completed `matching` session returns human-readable pair display (e.g., "Mitochondria → Powerhouse of the cell"); `one_word_response` and `problem_solving` answers display as text; existing choice and FITB types are unaffected.
-- **Test**: Unit test for `_resolve_answer_options` with a `matching` question type: supply known options and pairs, assert display strings.
-- **Depends on**: T2.1, T3.2
+##### T6.3 [backend] — Add get_platform_root_nodes to CoursePathNodeRepository
+- **Build**: In `src/domain/repositories/course_path_node_repository.py` (abstract), add `async def get_platform_root_nodes(self) -> list[CoursePathNode]`. In `src/infrastructure/repositories/course_path_node_repository.py`, implement: `SELECT * FROM course_path_nodes WHERE owner_type='platform' AND parent_id IS NULL ORDER BY "order"`.
+- **Done when**: `repo.get_platform_root_nodes()` returns root platform nodes only.
+- **Test**: `tests/unit/infrastructure/test_course_path_node_repository.py` — mock session; assert query contains `owner_type='platform'` and `parent_id IS NULL`.
+- **Depends on**: None
 
-**G3 integration test**: Full `Question` domain object of type `matching` loaded from the test DB; call `grade_question()` end-to-end with a partially-correct user answer; assert partial credit score is `points/2.0` when one of two pairs is correct.
+##### T6.4 [backend] — Create schemas/student_dashboard.py
+- **Build**: Create `src/schemas/student_dashboard.py`. Pydantic models:
+  - `PlatformNodeCard`: `id: UUID`, `name: str`, `node_type: str`, `topic_count: int = 0`, `owner_type: str`.
+  - `StudentDashboardRead`: `platform_nodes: list[PlatformNodeCard]`, `has_parent_link: bool`.
+  - `StudentTopicRead`: `id: UUID`, `title: str`, `status: str`, `order: int | None = None`, `has_exam: bool = False`.
+  - `StudentTopicContentRead`: `id: UUID`, `content_type: str`, `title: str`, `text: str | None = None`, `url: str | None = None`.
+- **Done when**: `from schemas.student_dashboard import StudentDashboardRead; StudentDashboardRead(platform_nodes=[], has_parent_link=False)` instantiates without error.
+- **Test**: `tests/unit/schemas/test_student_dashboard.py` — assert `StudentDashboardRead(platform_nodes=[], has_parent_link=False).model_dump()` has keys `platform_nodes` and `has_parent_link`.
+- **Depends on**: None
 
----
+##### T6.5 [backend] — Create api/routes/student_dashboard.py
+- **Build**: Create `src/api/routes/student_dashboard.py`. `router = APIRouter()`. Four GET endpoints, all use `Depends(current_active_user)` with `X-Current-Role: student` enforcement (`current_role != "student"` → `HTTPException(403)`). No CSRF required (GET-only).
+  - `GET /dashboard` → `StudentDashboardService.get_dashboard(user.sub)` → `StudentDashboardRead`.
+  - `GET /nodes` query params `owner_type: str`, `owner_id: str | None = None` → `get_node_tree(...)`. Map `PermissionError` → `HTTPException(403)`.
+  - `GET /nodes/{node_id}/topics` → `get_live_topics_for_node(node_id, user.sub)` → `list[StudentTopicRead]`.
+  - `GET /topics/{topic_id}/content` → `get_topic_content(topic_id, user.sub)` → `list[StudentTopicContentRead]`. Map `PermissionError` → `HTTPException(403)`.
+  Inline `get_student_dashboard_service` dependency function wires `StudentDashboardService` from DB session.
+- **Done when**: All four routes return 200 for authorized student, 403 for wrong role, 400 for missing role header.
+- **Test**: `tests/unit/routes/test_student_dashboard.py` — student role → 200; `X-Current-Role: instructor` → 403; no `X-Current-Role` header → 400.
+- **Depends on**: T6.2, T6.4
 
-### G4 — Session Creation Seeds Matching Shuffle
-**Goal**: When a `matching` question is added to a session, a `shuffle_seed` is generated and stored; `working_text` is captured for `problem_solving` answers at submit time.
-**Goal test**: Call `POST /session/create` with a template containing a `matching` question; assert the resulting `exam_session_questions` row has a non-null integer `shuffle_seed`; submit a `problem_solving` answer with `working_text`; assert the value persists in the DB.
-**Repos**: [backend]
+##### T6.6 [backend] — Register student_dashboard router in api/router.py
+- **Build**: In `src/api/router.py`, add `from api.routes import student_dashboard` and `app.include_router(student_dashboard.router, prefix="/api/student", tags=["Student Dashboard"])`.
+- **Done when**: `GET /api/student/dashboard` appears in `/openapi.json`; existing routes are unaffected.
+- **Test**: `tests/unit/routes/test_student_dashboard.py` integration call — `GET /api/student/dashboard` returns 200 (mocked service) not 404.
+- **Depends on**: T6.5
 
----
+##### T6.7 [backend] — Student dashboard API integration test
+- **Build**: Create `tests/integration/routes/test_student_dashboard_integration.py`. Against test DB: seed platform `course_path_nodes` (owner_type='platform', parent_id=NULL); seed a `parent_child_links` row for a test student. Call `GET /api/student/dashboard` with `X-Current-Role: student` → assert 200 with `platform_nodes` non-empty and `has_parent_link=true`. Call `GET /api/student/nodes?owner_type=parent&owner_id=<parent_sub>` → 200. Call same with a different student (no link) → 403.
+- **Done when**: Integration test passes against test DB.
+- **Test**: The test file is the assertion.
+- **Depends on**: T6.6
 
-##### T4.1 [backend] — shuffle_seed generation in POST /session/create
-- **Build**: In `src/api/routes/exam_session.py` in `create_exam_session`:
-  1. Add `question_service: Annotated[QuestionService, Depends(get_question_service)]` to the function signature (`get_question_service` already exists in the file).
-  2. In the `for template_question in template_questions:` loop, fetch `question = await question_service.get_by_id(template_question.question_id)`.
-  3. If `question.question_type == QuestionType.matching`, generate `shuffle_seed = random.randint(0, 2**31 - 1)` (uint31 range); else `shuffle_seed = None`. Import `random` at the top of the file.
-  4. Extend `ExamSessionQuestionService.create()` (in `src/domain/services/exam_session_service.py`) to accept `shuffle_seed: int | None = None` and pass it when constructing `ExamSessionQuestion(...)`. Default to `None` to avoid breaking existing callers.
-  5. Pass `shuffle_seed=shuffle_seed` to `session_question_service.create(...)` in the route loop.
-  - **Contract note**: The seed is a random uint31 integer stored as-is. The frontend uses it as the initial LCG state to deterministically shuffle right-column options (see T6.1). The backend does NOT shuffle.
-- **Done when**: After session creation with a `matching` question, `exam_session_questions.shuffle_seed` is a non-null integer; for non-matching questions, `shuffle_seed` is `None`; `ExamSessionQuestionService.create()` accepts the new parameter without breaking existing callers.
-- **Test**: Mock `QuestionService.get_by_id` returning a `matching` question; assert `ExamSessionQuestionService.create` was called with a non-None `shuffle_seed`; mock returning a `single_choice` question; assert `shuffle_seed=None`.
-- **Depends on**: T1.2, T2.1, T2.3
-
-##### T4.2 [backend] — working_text capture in POST /session/{id}/submit
-- **Build**: In `src/schemas/answer.py`, add `working_text: str | None = None` to `AnswerCreate`. In `src/api/routes/exam_session.py` in `submit_exam`:
-  1. Build a `question_map = {q.id: q for q in questions}` from the already-loaded questions list (confirm `question_service` is already injected into `submit_exam`; if not, add it).
-  2. In the answer loop, after setting `uq.user_answer = answer.user_answer`, check: `if question_map[answer.question_id].question_type == QuestionType.problem_solving and answer.working_text is not None: uq.working_text = answer.working_text`.
-  3. For all other types, `working_text` on the payload is silently ignored.
-- **Done when**: Submitting a `problem_solving` answer with `working_text="my derivation"` stores the value in `exam_session_questions.working_text`; submitting a `single_choice` answer with `working_text` present leaves `working_text=None` in the DB.
-- **Test**: Mock `QuestionService`; mock `ExamSessionQuestionService.update`; assert `uq.working_text` is set for `problem_solving` and is `None` for `single_choice`.
-- **Depends on**: T2.1, T2.3
-
-**G4 integration test**: Against the test DB, create a session with a template containing a `matching` question and a `problem_solving` question; assert `shuffle_seed` is non-null for the matching row; submit all answers including `working_text` for the problem-solving question; assert `working_text` is persisted.
+**G6 integration test**: End-to-end via FastAPI test client: seed student + platform nodes + parent link; call all four endpoints; assert shape, status codes, and permission boundary.
 
 ---
 
-### G5 — API Contracts Expose New Fields
-**Goal**: Pydantic response schemas expose all new domain fields so the frontend receives them in JSON; the student exam questions endpoint delivers `shuffle_seed`, `working_required`, and `essay_subtype` per question.
-**Goal test**: Call `GET /session/{id}/questions` via FastAPI test client after creating a session with one question of each new type; assert JSON includes `shuffle_seed` (non-null int) for matching, `working_required: true` for a problem_solving question with `working_required` set, and `essay_subtype: "short"` for a short essay question.
-**Repos**: [backend]
-
----
-
-##### T5.1a [backend] — Question Pydantic schemas updated
-- **Build**: In `src/schemas/question.py`:
-  - Add `essay_subtype: str | None = None` and `working_required: bool = False` to `QuestionBase`.
-  - Add `side: str | None = None` to `QuestionOptionBase`.
-  - Update `QuestionOptionBase.from_question_option()` to include `side=option.side` in the constructor.
-  - Update `QuestionOptionBase.to_question_option()` to include `side=option.side`.
-  - Update `QuestionBase.from_domain()` to map `essay_subtype=question.essay_subtype` and `working_required=question.working_required` from the `Question` domain object.
-- **Done when**: `QuestionBase.from_domain(question)` serializes with `essay_subtype` and `working_required`; `QuestionOptionBase` round-trips `side`; TypeScript receives matching options with `side` field in JSON.
-- **Test**: Schema serialization tests for new fields in `tests/unit/schemas/test_question.py`.
-- **Depends on**: T2.1, T2.2
-
-##### T5.1b [backend] — Session-question display schema + route wiring for shuffle_seed
-- **Build**:
-  - In `src/schemas/exam_session.py`, add `shuffle_seed: int | None = None`, `working_required: bool = False`, and `essay_subtype: str | None = None` to `ExamSessionQuestionDisplay`. Add `shuffle_seed: int | None = None` and `working_text: str | None = None` to `ExamSessionQuestionRead`.
-  - In `get_questions_for_exam_session` route in `exam_session.py`, before `_build_display`, build `shuffle_seed_map = {uq.question_id: uq.shuffle_seed for uq in user_questions}`. Update `_build_display(q: Question)` closure to also accept/close over `shuffle_seed_map` and pass `shuffle_seed=shuffle_seed_map.get(q.id)`, `working_required=q.working_required`, `essay_subtype=q.essay_subtype` when constructing `ExamSessionQuestionDisplay`.
-- **Done when**: `GET /session/{id}/questions` response includes `shuffle_seed` (non-null for matching rows, null for others), `working_required`, and `essay_subtype` per question.
-- **Test**: In `tests/unit/schemas/test_exam_session.py`, assert `ExamSessionQuestionDisplay(shuffle_seed=42, ...).model_dump()` includes `"shuffle_seed": 42`; mock route test asserts JSON shape.
-- **Depends on**: T2.1, T2.2, T2.3, T4.1, T5.1a
-
-**G5 integration test**: Call `GET /session/{id}/questions` via FastAPI test client with a session containing one matching, one problem_solving, and one short essay question; assert the JSON for each includes the correct new field values.
-
----
-
-### G6 — Student Exam UI Renders New Types
-**Goal**: Students see appropriate input controls for all three new question types and the essay subtype hint; their answers serialize correctly to the submission payload.
-**Goal test**: Render `QuestionRenderer` for each of the 8 question types with realistic mock props; assert the correct input component is mounted and `answersToPayload` produces the expected `text_answer` / `selected_options` / `working_text` shape for each.
+### G7 — Student Dashboard Frontend
+**Goal**: Students see a working `/home` dashboard (S-home) with Platform Board (blue) + Home Study (green) sections, and a `/courses` content navigator (S-nav) with tree sidebar, topic list, and inline content viewer — all populated from the student API endpoints.
+**Goal test**: Log in as student role. `/home` shows "Platform Board" heading with blue subject cards. No parent link → Home Study shows placeholder. `/courses` shows Platform | Home Study tabs; selecting a node in the tree shows topic list; clicking a topic opens the content viewer.
 **Repos**: [frontend]
 
 ---
 
-##### T6.0 [frontend] — Extend frontend type system for new question types
-- **Build**: In `src/features/exam/types/exam.types.ts`:
-  - Add `'one_word_response' | 'matching' | 'problem_solving'` to the `QuestionType` union.
-  - Add `shuffle_seed?: number | null`, `working_required?: boolean`, `essay_subtype?: EssaySubtype | null` to `ExamQuestionType` interface, where `EssaySubtype = 'short' | 'extended' | 'critical' | 'narrative' | 'analytical' | 'reflective'` (backend-defined enum; original plan said `'short' | 'long'` but backend uses the six-value form).
-  - Add new discriminated union variants to `QuestionAnswer`: `| { type: 'one_word_response'; text: string } | { type: 'matching'; pairs: { left_id: string; right_id: string }[] } | { type: 'problem_solving'; text: string; working_text?: string }`.
-  - Add `working_text?: string | null` to `AnswerPayload` (optional; only populated for `problem_solving`).
-- **Done when**: TypeScript compiles with zero errors; `const t: QuestionType = 'matching'` compiles; `ExamQuestionType` accepts `shuffle_seed: 42`.
-- **Test**: Type-only compilation test — TypeScript strict mode with no errors is the test assertion.
+#### G7.1 — Types + API Layer [frontend]
+
+##### T7.1 [frontend] — Student domain types
+- **Build**: Create `src/features/student/types/student.types.ts`. Define interfaces: `StudentDashboardResponse { platform_nodes: PlatformNodeCard[]; has_parent_link: boolean }`, `PlatformNodeCard { id: string; name: string; node_type: string; topic_count: number; owner_type: string }`, `StudentNode { id: string; name: string; parent_id: string | null; children?: StudentNode[]; topic_count: number }`, `StudentTopic { id: string; title: string; status: string; has_exam: boolean }`, `StudentTopicContent { id: string; content_type: "video" | "pdf" | "text" | "question" | "question_answer"; title: string; text: string | null; url: string | null }`.
+- **Done when**: `tsc --noEmit` passes with no errors on the new file.
+- **Test**: `src/features/student/types/__tests__/student-types.test.ts` — construct a `StudentDashboardResponse` object and assert it `satisfies StudentDashboardResponse`.
 - **Depends on**: None
 
-##### T6.0b [frontend] — Update question-type-utils.ts and answer-transformer.ts for new types
-- **Build**:
-  - In `src/features/exam/domain/question-type-utils.ts`: add entries for all three new types in every `Record<QuestionType, ...>` map (`getTypeInstruction`, `getTypeShortLabel`, `isAutoGradable` — `matching` and `one_word_response` return true, `problem_solving` returns false; `requiresOptions` — `matching` returns true; `isTextInput` — `one_word_response` and `problem_solving` return true).
-  - In `src/features/exam/domain/answer-transformer.ts`: extend `answersToPayload`, `answerToDisplayString`, `defaultAnswer`, and `isAnswered` for all three new types:
-    - `one_word_response`: `text_answer: answer.text`, same as fill_in_the_blank.
-    - `matching`: `text_answer: JSON.stringify(answer.pairs)`, `selected_options: []`.
-    - `problem_solving`: `text_answer: answer.text`, `working_text: answer.working_text ?? null`.
-  - `defaultAnswer('matching')` returns `{ type: 'matching', pairs: [] }`.
-- **Done when**: No TypeScript exhaustiveness errors; `answersToPayload` produces correct shapes for all 8 types; `defaultAnswer('matching')` returns the correct shape.
-- **Test**: Unit tests for each new type in `tests/unit/features/exam/domain/answer-transformer.test.ts` and `question-type-utils.test.ts`.
-- **Depends on**: T6.0
+##### T7.2 [frontend] — student-api.ts
+- **Build**: Create `src/features/student/api/student-api.ts`. Export object `studentApi` with methods using raw `fetch` + `credentials: 'include'` + `buildApiHeaders(csrfToken, "student")` (X-Current-Role: student):
+  - `getDashboard(csrfToken: string): Promise<StudentDashboardResponse>` → `GET /api/student/dashboard`
+  - `getNodes(csrfToken: string, ownerType: string, ownerId?: string): Promise<StudentNode[]>` → `GET /api/student/nodes?owner_type=...`
+  - `getTopicsForNode(csrfToken: string, nodeId: string): Promise<StudentTopic[]>` → `GET /api/student/nodes/:nodeId/topics`
+  - `getTopicContent(csrfToken: string, topicId: string): Promise<StudentTopicContent[]>` → `GET /api/student/topics/:topicId/content`
+  All throw a typed `ApiError` on non-ok responses.
+- **Done when**: TypeScript compiles; unit tests pass.
+- **Test**: `src/features/student/api/__tests__/student-api.test.ts` — mock `fetch`; assert `getDashboard` sends `GET /api/student/dashboard` with `X-Current-Role: student`; assert error thrown on 403.
+- **Depends on**: T7.1
 
-##### T6.1 [frontend] — Seeded Fisher-Yates utility (LCG)
-- **Build**: Create `src/features/exam/domain/seeded-shuffle.ts`. Export `seededShuffle<T>(arr: T[], seed: number): T[]`:
-  - Makes a copy of `arr`.
-  - LCG: `let state = seed >>> 0; const next = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state; }`.
-  - Fisher-Yates: `for (let i = copy.length - 1; i > 0; i--) { const j = next() % (i + 1); [copy[i], copy[j]] = [copy[j], copy[i]]; }`.
-  - Returns the shuffled copy (original not mutated).
-  - **Backend contract**: seed is a uint31 integer from `ExamSessionQuestion.shuffle_seed` generated by Python's `random.randint(0, 2**31-1)`. Python shuffle equivalent: `state = seed & 0xFFFFFFFF; next() = (state * 1664525 + 1013904223) & 0xFFFFFFFF`.
-- **Done when**: `seededShuffle([1,2,3,4], 12345)` produces a known deterministic output (recorded as snapshot); same seed + same list always produces same result; empty array returns `[]`; single element returns `[element]`; original array not mutated.
-- **Test**: Snapshot test for `seed=12345` with `['R1','R2','R3','R4']`; immutability test; empty and single-element edge cases.
-- **Depends on**: None
+---
 
-##### T6.2 [frontend] — one_word_response question component
-- **Build**: Create `src/features/exam/components/exam-form/one-word-response-input.tsx`. Render a `<div>` with a `<label>` and `<input type="text" />` (single line, compact — narrower than a textarea). In `question-renderer.tsx`'s `renderInput` switch, add `case 'one_word_response':` passing `answer.text` and calling `onChange({ type: 'one_word_response', text: v })`.
-- **Done when**: Renders `<input type="text">`; `onChange` fires with `{ type: 'one_word_response', text: '...' }`; answer transformer produces `text_answer`.
-- **Test**: `one-word-response-input.test.tsx` — renders input; onChange fires; `answersToPayload` test for this type.
-- **Depends on**: T6.0, T6.0b
+#### G7.2 — Hooks [frontend]
 
-##### T6.3 [frontend] — matching question component (two-column dropdown + seeded shuffle)
-- **Build**: Create `src/features/exam/components/exam-form/matching-input.tsx`. Props: `question: ExamQuestionType`, `value: { left_id: string; right_id: string }[]`, `onChange: (pairs: { left_id: string; right_id: string }[]) => void`. Logic:
-  - `leftItems = question.options.filter(o => o.side === 'left')` in original order.
-  - `rightItems = seededShuffle(question.options.filter(o => o.side === 'right'), question.shuffle_seed ?? 0)`.
-  - Render a two-column layout: left column lists each left item's text; right column renders a `<select>` per left item whose options are the shuffled right items plus a blank "— select —" option.
-  - On dropdown change, update the pairs array and call `onChange`.
-  - In `question-renderer.tsx`, add `case 'matching':` passing `question` (which has `shuffle_seed` per T6.0) and current `pairs` from `answer.pairs`.
-- **Done when**: Right items render in seed-deterministic order for a given seed (matches `seededShuffle` snapshot); selecting a dropdown fires `onChange` with correct pairs; answer transformer produces `text_answer: JSON.stringify(pairs)`.
-- **Test**: `matching-input.test.tsx` — right items order matches known `seededShuffle` output for seed=42; onChange fires with updated pairs; answer transformer serializes correctly.
-- **Depends on**: T6.0, T6.0b, T6.1
+##### T7.3 [frontend] — useStudentDashboard hook
+- **Build**: Create `src/features/student/hooks/use-student-dashboard.ts`. Custom hook using `useState`/`useEffect` (no React Query). Fetches `studentApi.getDashboard()` on mount when `csrfToken` is available. Returns `{ platformNodes: PlatformNodeCard[], hasParentLink: boolean, isLoading: boolean, error: Error | null }`.
+- **Done when**: Hook returns `isLoading=false` and populated `platformNodes` after mocked fetch resolves.
+- **Test**: `src/features/student/hooks/__tests__/use-student-dashboard.test.ts` — mock `studentApi.getDashboard`; render hook; assert `platformNodes` populated after promise resolves.
+- **Depends on**: T7.2
 
-##### T6.4 [frontend] — problem_solving question component
-- **Build**: Create `src/features/exam/components/exam-form/problem-solving-input.tsx`. Props: `value: string`, `onChange: (v: string) => void`, `workingText: string`, `onWorkingTextChange: (wt: string) => void`, `workingRequired: boolean`. Render: (a) always render a standard `<input type="text" />` for the answer; (b) if `workingRequired === true`, render a `<textarea>` labelled "Show your working". In `question-renderer.tsx`, add `case 'problem_solving':` reading `question.working_required` (from T6.0 on `ExamQuestionType`). In `exam-api.ts`'s `submitAnswers`, include `working_text: answer.working_text ?? null` in the payload item only for `problem_solving` answers (omit for other types to keep payload clean).
-- **Done when**: `workingRequired=true` renders textarea; `workingRequired=false` does not render textarea; submitted payload includes `working_text` for problem-solving; other types do not include `working_text`.
-- **Test**: `problem-solving-input.test.tsx` — `workingRequired=true` shows textarea; `false` does not; payload shape test for both.
-- **Depends on**: T6.0, T6.0b
+##### T7.4 [frontend] — useStudentNav hook
+- **Build**: Create `src/features/student/hooks/use-student-nav.ts`. State: `selectedSource: "platform" | "parent"`, `nodeTree: StudentNode[]`, `selectedNodeId: string | null`, `topics: StudentTopic[]`, `selectedTopicContent: StudentTopicContent[] | null`, `isLoading: boolean`. Actions: `selectSource`, `selectNode`, `selectTopic`, `clearContent`. Uses `useEffect` to fetch node tree when source changes; fetch topics when `selectedNodeId` changes; fetch content when topic selected.
+- **Done when**: Calling `selectSource("platform")` triggers fetch and populates `nodeTree`.
+- **Test**: `src/features/student/hooks/__tests__/use-student-nav.test.ts` — mock `studentApi.getNodes`; call `selectSource("platform")`; assert `nodeTree` populated.
+- **Depends on**: T7.2
 
-##### T6.5 [frontend] — essay_subtype rendering hint
-- **Build**: In `src/features/exam/components/exam-form/essay-input.tsx`, add optional prop `essaySubtype?: EssaySubtype | null`. Render a guidance `<p>` for each subtype value using a lookup map (`ESSAY_GUIDANCE: Record<EssaySubtype, string>`): `short` → "Aim for 4–5 sentences.", `extended` → "Aim for 2–3 paragraphs.", `critical` → "Analyse the topic and support your view with evidence.", `narrative` → "Write a story with a clear beginning, middle, and end.", `analytical` → "Break down the topic and examine each part in detail.", `reflective` → "Describe your experience and what you learned from it." When `null`/`undefined`: render nothing. In `question-renderer.tsx`, update the essay case to pass `essaySubtype={question.essay_subtype}` to `<EssayInput>`.
-- **Done when**: Each of the 6 subtypes renders the correct guidance text; `null`/`undefined` shows nothing; existing essay tests pass.
-- **Test**: Test all 6 subtype values plus null/undefined in `essay-input.test.tsx`.
-- **Depends on**: T6.0
-- **Implementation note**: Original plan specified `'short' | 'long'`; backend uses the full 6-value enum. The `'long'` value is not valid — use `'extended'` instead.
+---
 
-**G6 integration test**: Render `QuestionRenderer` via React Testing Library for each of the 8 question types with appropriate mock props; assert correct child component is mounted (`getByRole('textbox')` for one_word_response, two `<select>` elements for a 2-pair matching question, `<textarea>` for problem_solving with `workingRequired=true`, guidance text for short essay); call `answersToPayload` on a mock answer for each type and assert shape.
+#### G7.3 — S-home Page [frontend]
+
+##### T7.5 [frontend] — PlatformBoardSection component
+- **Build**: Create `src/features/student/components/platform-board-section.tsx`. Accepts `nodes: PlatformNodeCard[]`. Renders section with heading "Platform Board" (blue `#185FA5`). Grid of cards: each card shows node name, topic count, "Start" CTA linking to `/courses?source=platform&nodeId=<id>`. CSS module `platform-board-section.module.css`.
+- **Done when**: Renders 2 cards when given 2 nodes; "Start" links to correct URL.
+- **Test**: `src/features/student/components/__tests__/platform-board-section.test.tsx` — render with 2 nodes; assert 2 cards with correct names appear.
+- **Depends on**: T7.1
+
+##### T7.6 [frontend] — HomeStudySection component
+- **Build**: Create `src/features/student/components/home-study-section.tsx`. Accepts `hasParentLink: boolean`, `nodes: PlatformNodeCard[]`. When `!hasParentLink`: render single placeholder card with text "No Home Study content yet — ask your parent to link their account." When `hasParentLink`: render card grid (green `#1D9E75`), linking to `/courses?source=parent&nodeId=<id>`. CSS module.
+- **Done when**: `hasParentLink=false` → placeholder text; `hasParentLink=true` → card grid.
+- **Test**: `src/features/student/components/__tests__/home-study-section.test.tsx` — render with `hasParentLink=false`, assert placeholder text; render with `hasParentLink=true` + 1 node, assert card.
+- **Depends on**: T7.1
+
+##### T7.7 [frontend] — Update app/home/page.tsx with student role branch
+- **Build**: In `src/app/home/page.tsx`, add conditional: if `currentRole === "student"`, render `<StudentHomePage />` (new component). Create `src/features/student/components/student-home-page.tsx`: uses `useStudentDashboard` hook, renders `<PlatformBoardSection nodes={platformNodes} />` and `<HomeStudySection hasParentLink={hasParentLink} nodes={[]} />`. Non-student roles render existing content unchanged.
+- **Done when**: `currentRole=student` → renders "Platform Board" and "Home Study" sections. `currentRole=instructor` → existing UI unchanged.
+- **Test**: `src/features/student/components/__tests__/student-home-page.test.tsx` — mock `useStudentDashboard` returning 2 platform nodes + `hasParentLink=false`; assert "Platform Board" heading; assert placeholder in Home Study section.
+- **Depends on**: T7.3, T7.5, T7.6, T6.6 [backend]
+
+---
+
+#### G7.4 — S-nav Page [frontend]
+
+##### T7.8 [frontend] — app/courses page shell
+- **Build**: Create `src/app/courses/page.tsx`. `export const dynamic = "force-dynamic"`. Uses `useStudentNav` hook. Renders two tabs: "Platform" (always enabled) and "Home Study" (disabled when `!hasParentLink`). Tab click calls `selectSource(...)`. Left sidebar placeholder (wired in T7.12); right panel placeholder. Uses existing `MainLayout`/`Header`.
+- **Done when**: `/courses` route renders; tabs visible; Home Study tab has disabled attribute when `hasParentLink=false`.
+- **Test**: `src/app/courses/__tests__/courses-page.test.tsx` — render, assert "Platform" and "Home Study" tabs; assert Home Study is disabled when `hasParentLink=false`.
+- **Depends on**: T7.4
+
+##### T7.9 [frontend] — NodeTreeSidebar component
+- **Build**: Create `src/features/student/components/node-tree-sidebar.tsx`. Props: `nodes: StudentNode[]`, `selectedNodeId: string | null`, `onSelectNode: (id: string) => void`. Each row: expand/collapse chevron (toggles children), node name, topic-count badge. Leaf nodes (no children) clickable — calls `onSelectNode`. CSS module for indentation levels.
+- **Done when**: Chevron toggles children visibility; clicking leaf calls `onSelectNode` with correct id.
+- **Test**: `src/features/student/components/__tests__/node-tree-sidebar.test.tsx` — render 2-level tree; click chevron → children appear; click leaf → `onSelectNode` called with leaf id.
+- **Depends on**: T7.1
+
+##### T7.10 [frontend] — TopicListPanel component
+- **Build**: Create `src/features/student/components/topic-list-panel.tsx`. Props: `topics: StudentTopic[]`, `onSelectTopic: (id: string) => void`. Each row: topic title, content-type icon badges (PDF/video/text), "Take Exam" button when `has_exam=true` (disabled for this increment — tooltip "Exam available"). Clicking row calls `onSelectTopic`.
+- **Done when**: Renders topic rows; "Take Exam" appears only for `has_exam=true`; row click fires `onSelectTopic`.
+- **Test**: `src/features/student/components/__tests__/topic-list-panel.test.tsx` — render 2 topics (one with `has_exam=true`); assert 1 "Take Exam" button; click row → `onSelectTopic` called.
+- **Depends on**: T7.1
+
+##### T7.11 [frontend] — ContentViewer component
+- **Build**: Create `src/features/student/components/content-viewer.tsx`. Props: `contents: StudentTopicContent[]`. For each item: `content_type='pdf'` → `<SecurePdfViewer url={url} />` (lazy import, existing component); `content_type='video'` → `<iframe src={url} allowFullScreen>`; `content_type='text'` → `<div dangerouslySetInnerHTML={{ __html: sanitizedHtml(text) }}>` (sanitise via `DOMPurify` or equivalent). Shows loading spinner while PDF lazy-chunk loads.
+- **Done when**: Text content renders as HTML; video renders as iframe with correct src; PDF renders via SecurePdfViewer.
+- **Test**: `src/features/student/components/__tests__/content-viewer.test.tsx` — render text content, assert text displayed; render video, assert `<iframe>` with correct src.
+- **Depends on**: T7.1
+
+##### T7.12 [frontend] — Wire S-nav in courses/page.tsx
+- **Build**: In `src/app/courses/page.tsx`, replace sidebar and panel placeholders with: `<NodeTreeSidebar nodes={nodeTree} selectedNodeId={selectedNodeId} onSelectNode={selectNode} />` and `<TopicListPanel topics={topics} onSelectTopic={selectTopic} />` and `<ContentViewer contents={selectedTopicContent ?? []} />`. Tab switch calls `selectSource`. Handle `isLoading` with skeleton states.
+- **Done when**: Full S-nav cycle works in unit test: switching tab → nodeTree loads; clicking node → topics load; clicking topic → content appears.
+- **Test**: `src/app/courses/__tests__/courses-page.test.tsx` — mock `useStudentNav`; assert that when `selectedNodeId` changes, `TopicListPanel` receives `topics`; when `selectedTopicContent` changes, `ContentViewer` receives content.
+- **Depends on**: T7.8, T7.9, T7.10, T7.11, T6.6 [backend]
+
+##### T7.13 [frontend] — Playwright E2E test: student dashboard
+- **Build**: Create `tests/e2e/student-dashboard.spec.ts`. Test steps:
+  1. Log in as student role.
+  2. Navigate to `/home`.
+  3. Assert "Platform Board" heading and at least 1 subject card.
+  4. When no parent link: assert Home Study placeholder text.
+  5. Click a subject card → navigate to `/courses`.
+  6. Assert "Platform" tab active; left sidebar shows nodes; click a node → right panel shows topics.
+  7. Click a topic → content viewer opens.
+- **Done when**: Playwright test passes against local stack with seeded data.
+- **Test**: The test file is the E2E assertion.
+- **Depends on**: T7.7, T7.12
+
+**G7 integration test**: Vitest with React Testing Library — render `StudentHomePage` with mocked `useStudentDashboard` (2 nodes, no parent link); assert Platform Board section + Home Study placeholder. Render `courses/page.tsx` with mocked `useStudentNav`; assert full tree→topic→content interaction cycle.
 
 ---
 
 ## ROOT Acceptance Test
 
-Playwright `tests/e2e/question-type-extension.spec.ts`:
-1. Student logs in, navigates to an exam session containing one question of each new type (mocked via MSW or seeded DB).
-2. `one_word_response` — student types a single word; answer appears in review.
-3. `matching` — student sees two columns; right column is in shuffled order derived from `shuffle_seed`; student selects all pairings; answer appears in review.
-4. `problem_solving` (with `workingRequired=true`) — student types final answer + working; both fields appear in submit payload.
-5. `essay` (with `essaySubtype='short'`) — "Aim for 4–5 sentences" guidance appears below textarea.
-6. Student submits; session status becomes `completed`; results show partial credit for matching (1 of 2 pairs correct).
-
----
-
-## Implementation Notes
-
-**Backend pattern references (existing code to follow):**
-- Grading: `src/shared/grading.py` — existing `_grade_fill_in_blank` helper is the pattern for new grading cases
-- Domain model: `src/domain/models/question.py` — `QuestionOption` dataclass + `options_to_obj`/`obj_to_options` static methods
-- Exam session route: `src/api/routes/exam_session.py` — `create_exam_session`, `submit_exam`, `get_questions_for_exam_session`
-- SQLAlchemy imperative mapping: `src/infrastructure/models/question.py` and `exam_session.py`
-
-**Frontend pattern references (existing code to follow):**
-- Question renderer: `src/features/exam/components/exam-form/question-renderer.tsx` — add new `case` branches
-- Answer transformer: `src/features/exam/domain/answer-transformer.ts` — extend all switch/map functions
-- Type utils: `src/features/exam/domain/question-type-utils.ts` — extend all `Record<QuestionType, ...>` maps
-- Existing component: `fill-in-blank-input.tsx` — pattern for `one_word_response`
-
-**Open Points (deferred, requires separate spec):**
-1. P-exam question creator UI for `matching`, `one_word_response`, `problem_solving` — not specced yet (`target/requirements/ui-mapping/ui_parent_institution_admin.md`)
-2. S-results rendering for `matching` — per-pair breakdown display format
-3. S-results rendering for `problem_solving` — whether `working_text` is shown in student results view
-4. Instructor scoring of `problem_solving.working_text` — deferred to when instructor scope is added
-
-## Implementation Deviations (recorded 2026-06-08)
-
-- **T4.1 — shuffle_seed generation**: Plan specified `random.randint(0, 2**31-1)`; implementation uses `secrets.randbelow(2**31)` — security improvement, no contract change.
-- **T4.2 — working_text capture**: Plan said captured at submit (`POST /submit`); implementation captures it at answer-recording time (`POST /answer` — `AnswerCreate.working_text`) then persists on `ExamSessionQuestion` when non-null. Semantically equivalent.
-- **V28 migration (unplanned)**: After V27 shipped, a V28 migration was added: widens `essay_subtype` from `VARCHAR(10)` → `VARCHAR(50)` (needed for 6-value enum values), adds CHECK constraint on valid subtype values (`analytical|critical|extended|narrative|reflective|short`), and adds `questions.penalty_matching BOOLEAN NOT NULL DEFAULT false` (enables score-reduction mode for matching: `max(0, (correct − wrong) / total) × points`). Grading, domain model, Pydantic schemas, and frontend types were extended accordingly. All V28 work is complete.
-- **duration_minutes in GET /questions response**: Not in original plan scope; the session-question display endpoint now also returns `duration_minutes: int | null` from the template. Done as part of T5.1b.
-
-<!-- plan-baseline: backend:681d97aa488fac2aaf8ab9b8215dbbcc9a4c7596 frontend:044670747b0641b03b490bc62bda41fcca8a0225 deploy:0dfc6c026336fb873137d2f1dd40f5f3b20ea59e -->
-
----
-
-# PLAN — AI Essay Grading Engine
-
-> Written: 2026-06-08
-> Spec: `target/requirements/08_essay_ai_grading.md`
-> Schema deltas: `target/requirements/01_data_model.md` § "Schema Extensions (Essay AI Grading)"
-> Auth updates: `target/requirements/02_auth_and_roles.md`
-> Persona updates: `03_student.md`, `04_teacher_tutor.md`, `05_parent.md`
-
----
-
-## Problem Statement
-
-`essay` questions return `(None, 0.0)` from `grade_question()` and sit ungraded forever. No rubric model, grading workflow, feedback storage, or owner-override path exists. This plan adds an async AI-grading pipeline that reuses the existing LLM provider pattern (same prefix-dispatch, config, worker infra as content extraction).
-
----
-
-## Architecture Decisions
-
-See `Implementation_planning/decisions.md` (2026-06-08) for full rationale. Key:
-1. Per-exam `essay_grading_mode` (`auto_release` default / `review_first` opt-in).
-2. Optional rubric on `questions`; default rubric by `essay_subtype` when NULL.
-3. LLM outputs per-criterion levels only; backend computes score. Temperature 0, JSON output.
-4. Local-first model (`qwen3:14b`); Ollama-cloud and Anthropic as opt-in config.
-5. Async worker loop (`essay_grading_loop`) + `essay_grading_jobs` table (same polling pattern as extraction).
-6. Grading owner = exam owner (parent for parent-owned, admin for platform); instructor deferred.
-
----
-
-## Goal Tree
-
-### G7 — Schema Extended (Essay AI Grading)
-**Goal:** V29 Alembic migration adds new columns to `questions`, `exam_templates`,
-`exam_session_questions` and creates `essay_grading_jobs`.
-**Goal test:** `alembic upgrade V29`; insert an essay question with `rubric` JSONB; create an
-exam template with `essay_grading_mode='review_first'`; submit an essay answer and verify
-`grading_status='pending'`; insert an `essay_grading_jobs` row; all round-trip via SQLAlchemy.
-**Repos:** [backend]
-
----
-
-##### T7.1 [backend] — Alembic V29 migration
-- **Build:** In `alembic/versions/V29_essay_ai_grading.py` with `revision="V29"`, `down_revision="V28"`. In `upgrade()`, use normal transaction (no AUTOCOMMIT needed — no `ALTER TYPE` calls, only `ADD COLUMN` and `CREATE TABLE`):
-  1. `ALTER TABLE questions ADD COLUMN rubric JSONB NULL, ADD COLUMN model_answer TEXT NULL, ADD COLUMN auto_grade_essay BOOLEAN NOT NULL DEFAULT true`.
-  2. `ALTER TABLE exam_templates ADD COLUMN essay_grading_mode VARCHAR NOT NULL DEFAULT 'auto_release'` with CHECK constraint.
-  3. `ALTER TABLE exam_session_questions ADD COLUMN ai_score FLOAT NULL, ai_feedback TEXT NULL, ai_rationale JSONB NULL, grader_confidence FLOAT NULL, grading_status VARCHAR NOT NULL DEFAULT 'pending', graded_by VARCHAR NULL, graded_at TIMESTAMPTZ NULL, override_score FLOAT NULL, override_feedback TEXT NULL`.
-  4. `CREATE TABLE essay_grading_jobs (id UUID PK, exam_session_question_id UUID NOT NULL, status VARCHAR NOT NULL DEFAULT 'queued', attempts INT NOT NULL DEFAULT 0, last_error TEXT NULL, grading_model VARCHAR NULL, locked_at TIMESTAMPTZ NULL, locked_by VARCHAR NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`.
-  5. Create indexes: `ix_essay_grading_jobs_queue` (status, created_at WHERE status='queued'), `ix_essay_grading_jobs_session_question` (exam_session_question_id).
-  6. Add trigger `trg_essay_grading_jobs_touch` (reuse existing `touch_updated_at()` function).
-  In `downgrade()`: drop all added columns and the `essay_grading_jobs` table.
-- **Done when:** `alembic upgrade V29` + `alembic downgrade V28` round-trip without error; `essay_grading_jobs` exists with all columns; `exam_session_questions` has `grading_status` defaulting to `'pending'`.
-- **Test:** Import migration module; integration test runs upgrade/downgrade round-trip.
-- **Depends on:** None (but must run after V28 is applied)
-
-##### T7.2 [backend] — SQLAlchemy imperative table mappings
-- **Build:** In `src/infrastructure/models/question.py`: add `Column("rubric", JSONB, nullable=True)`, `Column("model_answer", Text, nullable=True)`, `Column("auto_grade_essay", Boolean, nullable=False, server_default="true")`. In `src/infrastructure/models/exam.py`: add `Column("essay_grading_mode", String, nullable=False, server_default="auto_release")`. In `src/infrastructure/models/exam_session.py`: add 9 new columns to `exam_session_questions` table. Create new `src/infrastructure/models/essay_grading_job.py` with the `essay_grading_jobs` table definition.
-- **Done when:** `alembic check` shows no autogenerate diff.
-- **Test:** Assert new column names in each table's `.columns`.
-- **Depends on:** T7.1
-
-**G7 integration test:** Insert `Question(question_type='essay', rubric={...}, auto_grade_essay=True)`, `ExamTemplate(essay_grading_mode='review_first')`, `ExamSessionQuestion(grading_status='pending')`; assert all fields round-trip via SQLAlchemy.
-
----
-
-### G8 — Domain Layer: EssayGradingJob + Updated Models
-**Goal:** Domain model represents `EssayGradingJob` and `Question` carries rubric/model_answer/auto_grade_essay; grading_status values are typed.
-**Goal test:** Instantiate `EssayGradingJob`, `Question` with rubric, confirm field access.
-**Repos:** [backend]
-
----
-
-##### T8.1 [backend] — EssayGradingJob domain model
-- **Build:** Create `src/domain/models/essay_grading_job.py` with `@dataclass EssayGradingJob` fields: `id`, `exam_session_question_id`, `status: str`, `attempts: int`, `last_error: str | None`, `grading_model: str | None`, `locked_at`, `locked_by`, `created_at`, `updated_at`. Add `EssayGradingStatus` StrEnum: `queued`, `processing`, `done`, `error`. Create `EssayGradingJobRepository` abstract interface in `src/domain/repositories/`.
-- **Depends on:** None
-
-##### T8.2 [backend] — Question domain model: rubric + new fields
-- **Build:** In `src/domain/models/question.py`, add `rubric: dict | None = None`, `model_answer: str | None = None`, `auto_grade_essay: bool = True` to the `Question` dataclass.
-- **Depends on:** None
-
-##### T8.3 [backend] — ExamSession domain model: grading_status
-- **Build:** In `src/domain/models/exam_session.py`, add to `ExamSessionQuestion`: `ai_score: float | None = None`, `ai_feedback: str | None = None`, `ai_rationale: dict | None = None`, `grader_confidence: float | None = None`, `grading_status: str = 'pending'`, `graded_by: str | None = None`, `graded_at: datetime | None = None`, `override_score: float | None = None`, `override_feedback: str | None = None`. Add `EssayGradingStatus` import/reuse. In `src/domain/models/exam.py` (or exam template model), add `essay_grading_mode: str = 'auto_release'`.
-- **Depends on:** None
-
-**G8 integration test:** Load a seeded `Question` with `rubric` JSONB from DB; confirm `question.rubric` is a dict; instantiate `EssayGradingJob` and persist via repository; read back; assert fields.
-
----
-
-### G9 — Grader Provider
-**Goal:** `EssayGraderProvider` in `src/infrastructure/grading/` implements the same prefix-dispatch pattern as `GlmOcrProvider`; grades an essay text against a rubric and returns a structured `GradingResult`.
-**Goal test:** Mock an Ollama HTTP endpoint; call `provider.grade(...)` with a rubric; assert returned `GradingResult` has per-criterion levels and the backend computes the correct `ai_score` via the formula.
-**Repos:** [backend]
-
----
-
-##### T9.1 [backend] — GradingSettings + config wiring
-- **Build:** In `src/shared/config.py`, add `GradingSettings(BaseModel)` with fields `model_spec`, `ollama_base_url`, `ollama_api_key`, `lmstudio_use_https`, `max_tokens`, `temperature` (see `08_essay_ai_grading.md` § GradingSettings). Wire into `AppSettings` as `grading: GradingSettings`.
-- **Done when:** `Settings().grading.model_spec` accessible; `GRADING__MODEL_SPEC` env var overrides it.
-- **Depends on:** None
-
-##### T9.2 [backend] — EssayGraderProvider class
-- **Build:** Create `src/infrastructure/grading/essay_grader_provider.py`. Model on `GlmOcrProvider`:
-  - Reuse `_parse_spec()` for prefix-dispatch (local Ollama / `lmstudio://` / `openai://` / `anthropic://`).
-  - `from_settings(GradingSettings)` factory.
-  - Method `grade(*, question_text: str, answer_text: str, rubric: dict, model_answer: str | None, max_points: int, language: str | None = None) -> GradingResult`.
-  - `GradingResult` dataclass: `per_criterion: list[CriterionResult]`, `ai_score: float`, `ai_feedback: str`, `ai_rationale: dict`, `grader_confidence: float`.
-  - Prompt construction: system prompt with untrusted-data delimiters around `answer_text` (see `08_essay_ai_grading.md` § Prompt & Output Contract).
-  - Temperature 0; JSON output; parse → validate → clamp → retry (3 attempts).
-  - Score-mapping: `ai_score = Σ(level/scale_max × weight) × max_points`, clamped to `[0, max_points]`.
-  - Blank/short answer guard: if `not answer_text or len(answer_text.strip()) < 10`, return zero result immediately (no HTTP call).
-  - `_stream_ollama` for local; existing dispatch handles `openai://` and `anthropic://`.
-- **Done when:** `provider.grade(...)` returns a valid `GradingResult`; mock Ollama test passes; blank-answer guard works; score formula is correct for known inputs.
-- **Test:** Mirror `tests/unit/infrastructure/test_glm_ocr_provider.py` structure — mock HTTP, test local + cloud + anthropic paths, parse error retry, blank guard, score formula.
-- **Depends on:** T9.1
-
-##### T9.3 [backend] — Default rubric resolver
-- **Build:** Create `src/domain/services/rubric_resolver.py` with `resolve_rubric(question: Question) -> dict`: if `question.rubric` is not None → return it; else return the built-in default rubric for `question.essay_subtype` (or NULL fallback). Built-in rubrics are hardcoded from `08_essay_ai_grading.md` § Default Rubrics.
-- **Done when:** Each of the 7 subtype values (6 + NULL) returns the correct rubric dict.
-- **Test:** `test_rubric_resolver.py` — assert correct rubric for each subtype + custom override.
-- **Depends on:** T8.2
-
-**G9 integration test:** Against real local Ollama (if available) or mocked: call `provider.grade(...)` end-to-end; assert `ai_score ∈ [0, max_points]`; assert retry fires on first malformed response.
-
----
-
-### G10 — Worker Essay Grading Loop
-**Goal:** A new asyncio task in the worker polls `essay_grading_jobs`, grades essays, writes results, and recomputes session score. The loop handles retries, backoff, and error state.
-**Goal test:** Seed an `essay_grading_jobs` row with `status='queued'`; run one loop iteration; assert `exam_session_questions.grading_status` transitions correctly and `exam_sessions.score` is updated.
-**Repos:** [backend]
-
----
-
-##### T10.1 [backend] — EssayGradingJobRepository (infra)
-- **Build:** Create `src/infrastructure/repositories/essay_grading_job_repository.py`. Implement `EssayGradingJobRepository` abstract: `get_next_queued()` (FOR UPDATE SKIP LOCKED), `update_status()`, `mark_done()`, `mark_error()`. Also implement `EssaySessionQuestionGradingWriter` (or extend existing repo) for writing `ai_score`, `ai_feedback`, etc. and updating `earned_points`.
-- **Depends on:** T7.2, T8.1
-
-##### T10.2 [backend] — essay_grading_loop.py
-- **Build:** Create `src/worker/essay_grading_loop.py`. Mirrors `extraction_loop.py` structure:
-  - Poll `get_next_queued()` with SKIP LOCKED.
-  - Set `status='processing'`, `locked_at`, `locked_by`.
-  - Load `ExamSessionQuestion`, `Question`, `ExamTemplate` (for `essay_grading_mode`).
-  - Resolve rubric via `rubric_resolver.resolve_rubric(question)`.
-  - Call `await asyncio.to_thread(grader.grade, ...)`.
-  - Write results to `exam_session_questions` per `08_essay_ai_grading.md` § Worker Integration.
-  - If `auto_release`: set `earned_points = ai_score`, `is_correct`, `grading_status='released'`; recompute session score.
-  - If `review_first`: leave `earned_points=NULL`, `grading_status='ai_graded'`.
-  - On exception: increment `attempts`; if `>= 3` → `grading_status='error'`, job `status='error'`.
-  - Backoff: sleep `min(2 ** attempts, 30)` seconds on error before next poll.
-- **Done when:** One loop iteration processes a queued job; correct state transitions verified.
-- **Test:** Unit test with mocked repos + provider; assert state transitions for auto_release and review_first modes; assert error path on 3 consecutive failures.
-- **Depends on:** T8.3, T9.2, T9.3, T10.1
-
-##### T10.3 [backend] — Register loop in worker __main__.py
-- **Build:** In `src/worker/__main__.py`, import `essay_grading_loop` and register it alongside `extraction_loop` in `asyncio.gather(...)`. Add `EssayGraderProvider.from_settings(settings.grading)` construction next to the OCR provider.
-- **Done when:** Worker starts without error; new loop appears in heartbeat/health output.
-- **Depends on:** T9.1, T10.2
-
-**G10 integration test:** Against test DB: seed essay session question + job; run loop; assert `grading_status='released'`; assert session `score` updated.
-
----
-
-### G11 — Submit Enqueue + Grading Results API
-**Goal:** Submit endpoint enqueues grading jobs for essay answers; GET answers endpoint returns grading state and AI feedback.
-**Goal test:** POST submit with an essay answer → `essay_grading_jobs` row exists with `status='queued'`; GET answers after worker runs → response includes `grading_status`, `ai_feedback`, and correct `earned_points`.
-**Repos:** [backend]
-
----
-
-##### T11.1 [backend] — Submit endpoint enqueues grading jobs
-- **Build:** In `src/api/routes/exam_session.py`, `submit_exam()`: after persisting all answers, for each essay-type `ExamSessionQuestion` where `question.auto_grade_essay = True`:
-  - If `user_answer` is blank → set `grading_status='released'` (auto_release) or `'finalized'` (review_first), `earned_points=0`, `ai_feedback="No answer was submitted."`; recompute session score; skip enqueue.
-  - Else: insert `essay_grading_jobs` row with `status='queued'`.
-- **Depends on:** T7.2, T8.1, T8.2
-
-##### T11.2 [backend] — GET answers surfaces grading state
-- **Build:** In `_build_answer_results()`, extend `ExamSessionAnswer` Pydantic schema with `grading_status: str | None`, `ai_feedback: str | None`, `ai_rationale: dict | None` (owner-only). Update `pending_review_count` to count only `grading_status IN ('pending', 'ai_graded')`. Pass `ai_rationale` only when requester's `current_role` is `parent`/`admin` and is the exam owner.
-- **Depends on:** T8.3
-
-##### T11.3 [backend] — Dispute, confirm-grade, override endpoints
-- **Build:** In `src/api/routes/exam_session.py`:
-  - `POST .../dispute`: require `student` (own session) or `parent` (linked child, parent-owned exam). Pre-condition: `grading_status='released'`. Effect: `→ 'disputed'`. Response: 204.
-  - `POST .../confirm-grade`: require exam owner (parent or admin per ownership). Pre-condition: `grading_status IN ('ai_graded','review_required')`. Effect: write `earned_points=ai_score`, `is_correct`, `grading_status='finalized'`, recompute session score. Response: 200.
-  - `PATCH .../grade`: require exam owner. Body: `{score: float, feedback: str}`. Validate `score ∈ [0, points]`. Effect: write override fields, `earned_points=override_score`, `is_correct`, `grading_status='overridden'`, `graded_by=owner.idp_sub`, recompute session score. Response: 200.
-  - All three require CSRF + `X-Current-Role`. Auth guards per BR-SEC-011, BR-SEC-012.
-- **Depends on:** T8.3, T11.2
-
-##### T11.4 [backend] — Question + exam template create/update accept new fields
-- **Build:** Extend `QuestionCreate`/`QuestionUpdate` Pydantic schemas with `rubric`, `model_answer`, `auto_grade_essay`. Extend `ExamTemplateCreate`/`ExamTemplateUpdate` with `essay_grading_mode`. Validate rubric structure (criteria count, weight sum, scale_max range) in the schema or service layer.
-- **Depends on:** T8.2
-
-**G11 integration test:** Submit exam session with essay answer; assert `essay_grading_jobs` row created; run grading loop; call GET answers; assert full `grading_result` shape; call dispute; call confirm-grade; assert state transitions.
-
----
-
-### G12 — Config & Deploy
-**Goal:** `GRADING__*` env vars are wired in `docker-compose.yml` worker block; default `.env` uses local `qwen3:14b`; cloud/premium options documented as commented-out opt-in lines.
-**Goal test:** `docker-compose config` shows `GRADING__MODEL_SPEC` in worker environment; fresh deploy with default config starts worker without error.
-**Repos:** [deploy]
-
----
-
-##### T12.1 [deploy] — docker-compose.yml GRADING env vars
-- **Build:** In `common/docker-compose.yml` worker service block, add `GRADING__MODEL_SPEC`, `GRADING__OLLAMA_BASE_URL`, `GRADING__OLLAMA_API_KEY`, `GRADING__MAX_TOKENS`, `GRADING__TEMPERATURE` alongside the `EXTRACTION__*` vars.
-- **Depends on:** T9.1
-
-##### T12.2 [deploy] — .env examples / documentation
-- **Build:** In deploy `.env.example`: add `GRADING__MODEL_SPEC=qwen3:14b`, `GRADING__OLLAMA_BASE_URL=http://localhost:11434`, `GRADING__TEMPERATURE=0` as defaults. Add commented blocks for cloud and premium options with PII-egress warning.
-- **Depends on:** T12.1
-
-**G12 integration test:** Deploy fresh stack with defaults; worker heartbeat shows `essay_grading_loop` active; grading job created → job processed → `grading_status` transitions correctly.
-
----
-
-## ROOT Acceptance Test
-
-Manual E2E against local `qwen3:14b`:
-1. Create essay question (`essay_subtype='analytical'`, no custom rubric) + `auto_grade_essay=true`.
-2. Create exam template with `essay_grading_mode='auto_release'`.
-3. Student creates session, submits essay answer.
-4. Worker picks up job → `GET /answers` → `grading_status='released'`, `ai_score ∈ [0, points]`, `ai_feedback` non-empty.
-5. Repeat with custom rubric; assert `ai_rationale` has per-criterion entries matching rubric criteria.
-6. Repeat with `essay_grading_mode='review_first'`; assert student sees `grading_status='ai_graded'` (held); owner calls confirm-grade → `'finalized'`; student sees score.
-7. In auto_release mode: student calls dispute → `'disputed'`; owner calls PATCH grade with override score → `'overridden'`; session score recomputes.
-8. Submit blank essay → immediate `earned_points=0`, no grading job enqueued.
-9. Force 3 grading failures (malformed mock response) → `grading_status='error'`; `earned_points` remains NULL.
+**Manual + Playwright E2E:**
+1. Start local stack (pgvector-enabled db, Ollama with `bge-m3`, worker).
+2. Platform admin uploads a multi-page PDF with math content (fractions, lists).
+3. Worker extracts: native-text pages are restructured via `restructure_page()` — verify `extraction_job_pages.markdown_text` has reassembled fractions.
+4. `rag_indexing_outbox` row is created after finalize.
+5. Worker drain loop fires: row transitions to `done`; `data_topic_content_chunks` gains rows with correct `content_id` metadata.
+6. Student logs in: `/home` shows Platform Board with subject cards.
+7. Student navigates to `/courses`: tree sidebar loads; selecting a leaf node shows topics; clicking a topic opens content viewer.
 
 ---
 
 ## Implementation Notes
 
 **Backend pattern references:**
-- Provider: `src/infrastructure/extraction/glm_ocr_provider.py` — prefix-dispatch, streaming, from_settings factory.
-- Config: `src/shared/config.py` `ExtractionSettings` — copy structure for `GradingSettings`.
-- Worker loop: `src/worker/extraction_loop.py` — polling, FOR UPDATE SKIP LOCKED, backoff pattern.
-- Worker entry: `src/worker/__main__.py` — asyncio.gather, provider construction.
-- Grading hook: `src/shared/grading.py:36` — `case QuestionType.essay: return None, 0.0` → this case will remain for sync path; async grading happens via the worker/jobs table, not inline in `grade_question()`.
+- Config: `src/shared/config.py` `ExtractionSettings` / `GradingSettings` — copy pattern for `EmbeddingSettings`, `HaituSettings`
+- Provider: `src/infrastructure/extraction/glm_ocr_provider.py` — existing streaming helpers are patterns for text-only variants
+- Worker loop: `src/worker/extraction_loop.py`, `src/worker/essay_grading_loop.py` — SKIP LOCKED pattern
+- Worker entry: `src/worker/__main__.py` — asyncio.gather registration pattern
 
-**Deploy pattern reference:**
-- `common/docker-compose.yml` worker block `EXTRACTION__*` env vars → mirror for `GRADING__*`.
+**Frontend pattern references:**
+- Auth hook: `src/hooks/use-auth.ts` — `useState`/`useEffect` pattern (no React Query)
+- API calls: `src/lib/utils.ts` `buildApiHeaders()` — include `X-Current-Role`
+- Existing student screens: `src/app/exam/` — page shell pattern; `src/features/exam/` — feature module pattern
+- Content viewer: `SecurePdfViewer` is already implemented — lazy import for PDF pages
+
+**Open Points (deferred, requires separate spec):**
+1. hAITU retrieval endpoint (`POST /api/haitu/topic-doubt`) — next plan cycle, depends on vectors being populated
+2. "Take Exam" CTA in S-nav — `POST /api/student/exam-sessions` is already implemented (from Phase 1c-pre); wire up in a subsequent frontend task
+3. Parent Home Study nodes in S-nav — node API exists; parent nodes need to be fetched alongside platform nodes once `hasParentLink=true`
+4. S-results grading status display — API contract is specced in `03_student.md`; frontend rendering deferred to next phase
+
+<!-- plan-baseline: backend:7c1b72d3eb4dbc579981184abc86679e72dbed1d frontend:d0e9242c9c03580305725285f995180de3624952 deploy:c407e7a052adf331776b261596d53dbd6f0595e8 -->

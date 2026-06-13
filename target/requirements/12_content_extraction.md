@@ -234,7 +234,10 @@ if source_type == 'image':
 text = pypdfium2.extract_text(page_data)
 image_area_ratio = pypdfium2.image_coverage(page_data)
 if len(text) >= 50 and image_area_ratio < 0.95:
-    return text  # native — no LLM
+    if settings.extraction.restructure_text:
+        restructured = provider.restructure_page(text)  # text-only LLM — fix fragmentation
+        return restructured if restructured.strip() else text  # fallback to raw on empty
+    return text  # native — no LLM (EXTRACTION__RESTRUCTURE_TEXT=false)
 else:
     rendered = pypdfium2.render(page_data, scale=2)  # raster JPG
     return glm_ocr.process(image=rendered, prompt=prompt_for(job_type))
@@ -248,6 +251,44 @@ else:
 | `exercises` | `haisir-backend/prompts/exercises_prompt.md` | **Phase 1d-real-2.** Extract questions + answers as structured JSON. Out of scope for v1; column exists to avoid future migration. |
 
 Both prompt files are copied verbatim from `../haiguru/glm_ocr/`.
+
+---
+
+### `restructure_page(raw_text)` — text-only LLM pass
+
+Called on native-text PDF pages when `EXTRACTION__RESTRUCTURE_TEXT=true` (default). No image involved — this is a text-only LLM call using `EXTRACTION__RESTRUCTURE_MODEL_SPEC` (lighter model preferred over the vision model).
+
+**Prompt** (stored in `haisir-backend/prompts/restructure_prompt.md`):
+
+```
+The text below was extracted from a PDF page (educational content).
+The extraction may be fragmented: fractions may be split across lines, words may be
+broken, and spacing or layout context may be lost.
+
+Rewrite the text as clean, readable Markdown following these rules:
+- Reassemble fractions: if a number sits alone on a line and the next line is also a
+  lone number, they form a fraction — write them as numerator/denominator (e.g. 3
+  then 4 → 3/4).
+- Use ## for the page/section title, ### for sub-sections.
+- Use numbered lists (1. 2. 3.) for questions, lettered sub-lists (a. b. c.) for parts.
+- Preserve every number, symbol (≡ = < > ± × ÷ →), and word exactly — do NOT
+  paraphrase, summarise, or add anything.
+- Output ONLY the Markdown — no explanation, no code fences.
+
+Extracted text:
+---
+{raw_text}
+---
+```
+
+**Fallback**: if the LLM returns an empty response, `extract_page` returns the raw extracted text unchanged. This ensures native text extraction can never produce an empty page result.
+
+**Two-model config**: `GlmOcrProvider` accepts an optional `restructure_model_spec` parameter. When set, text-only calls (`restructure_page`) use this spec; vision calls (`process`) use the primary `model_spec`. In `ExtractionSettings`:
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `EXTRACTION__RESTRUCTURE_TEXT` | `true` | Enable/disable the restructure pass (set `false` to skip LLM entirely for native-text pages) |
+| `EXTRACTION__RESTRUCTURE_MODEL_SPEC` | `""` (falls back to `EXTRACTION__MODEL_SPEC`) | Separate, lighter text-only model for restructuring. E.g. `qwen3.5:9b`, `qwen3:8b`. |
 
 ### `finalize(job)` — single transaction
 
@@ -370,7 +411,9 @@ After materialization, every `topic_contents` row supports two edit affordances:
 
 - **BR-EXT-007** — Worker uses `FOR UPDATE SKIP LOCKED` to claim jobs. Lease is 5 minutes (refreshed via heartbeat per page). Expired leases are reclaimable by other workers.
 - **BR-EXT-008** — On worker death mid-extraction, another worker resumes from `MAX(page_no)+1` of staged pages. **No LLM-token waste from re-extraction.**
-- **BR-EXT-009** — Native PDF text extraction skips the LLM entirely (heuristic: text length ≥50 chars AND image area ratio <0.95). Scanned PDFs and all images go through the vision LLM.
+- **BR-EXT-009** — Native PDF text extraction skips the vision LLM (heuristic: text length ≥50 chars AND image area ratio <0.95). Scanned PDFs and all images go through the vision LLM. When `EXTRACTION__RESTRUCTURE_TEXT=true`, the text path still calls `restructure_page()` via a text-only LLM (BR-EXT-032).
+- **BR-EXT-032** — When native PDF text extraction returns ≥50 chars and image coverage <0.95, and `EXTRACTION__RESTRUCTURE_TEXT=true` (default `true`), the worker passes the raw text through `provider.restructure_page()` before staging it. This corrects fragmentation artefacts common in educational PDFs: fractions split across lines, broken words, and layout ordering lost during text extraction. The method uses a text-only LLM call (no image). If the LLM returns an empty response, the raw extracted text is used unchanged.
+- **BR-EXT-033** — `restructure_page()` uses `EXTRACTION__RESTRUCTURE_MODEL_SPEC` if set; falls back to `EXTRACTION__MODEL_SPEC` otherwise. A lighter text-only model (e.g. `qwen3.5:9b`) is preferred to reduce cost and latency, since no image is processed in this path.
 - **BR-EXT-010** — Worker re-validates ownership of the target topic in the finalize transaction. Mismatch → `extraction_failed` with `error='ownership_violation'`.
 - **BR-EXT-011** — Finalize is one TX: `topic_contents INSERT` + `rag_indexing_outbox INSERT` + `extraction_job_audit INSERT` + `extraction_job_pages DELETE` + `extraction_jobs UPDATE`. Atomic.
 - **BR-EXT-012** — RAG embedding is async via outbox. Failure to embed never rolls back content. Content is visible immediately; searchable when outbox row drains.
@@ -425,7 +468,10 @@ After materialization, every `topic_contents` row supports two edit affordances:
 |---|---|---|
 | PDF library | **`pypdfium2`** (Apache/BSD) | Fast, handles both native text extract and rasterize. **PyMuPDF BANNED** — AGPL §13 SaaS clause forbids closed-source SaaS use. |
 | Vision LLM provider | **`glm-ocr`** from `../haiguru/glm_ocr/` | Prefix-dispatch on model spec: `lmstudio://...`, `openai://...`, `anthropic://...`, plain → Ollama. Streaming tuple protocol (`__first_token__`, `chunk`, `__done__`). |
-| Default model spec | env `EXTRACTION_MODEL_SPEC` | v1 platform-wide default. Per-upload model selection is backlog. Audit row records the resolved spec. |
+| Default vision model spec | env `EXTRACTION__MODEL_SPEC` | v1 platform-wide default for vision OCR. Per-upload model selection is backlog. Audit row records the resolved spec. |
+| Restructure model spec | env `EXTRACTION__RESTRUCTURE_MODEL_SPEC` (default: same as vision spec) | Lighter text-only model for the text restructuring pass (BR-EXT-032). E.g. `qwen3.5:9b`. Defaults to `EXTRACTION__MODEL_SPEC` when unset. |
+| Restructure text flag | env `EXTRACTION__RESTRUCTURE_TEXT` (default: `true`) | Enable/disable the text restructuring pass for native-text PDF pages. Set `false` for raw extraction only. |
+| Text restructure method | `GlmOcrProvider.restructure_page(raw_text: str) -> str` | New text-only method on `GlmOcrProvider`. Uses `restructure_model_spec` if set. Falls back to raw text on empty LLM response. Adapted from `anhad-final-exam/src/pdf_to_markdown/ocr.py`. |
 | MIME sniffer | `python-magic` (libmagic) | First 8 KB. Reject mismatch between sniffed and declared MIME. |
 | Queue | Postgres `FOR UPDATE SKIP LOCKED` | No new infra. 5–10 admins / ~50–200 PDFs/week — no scale signal yet. SSE/Redis migration trigger documented as ">100 concurrent active jobs platform-wide". |
 | File storage | Local disk via existing `StorageBackend` | Same interface as `topic_contents` files. S3/GCS swappable later. |
@@ -441,6 +487,8 @@ After materialization, every `topic_contents` row supports two edit affordances:
 - **Pre-upload virus scan (ClamAV)** — admins are internal-trusted; documented accepted risk for v1. Parent-side may need this in v2.
 - **SSE / WebSocket progress** — polling sufficient for current scale.
 - **Bulk re-extract by model upgrade** — admin would re-upload manually with `X-Force-Reextract`.
+- **`.txt` file upload** — plain-text files handled by the `text` content type (direct `topic_contents` insert). No pipeline needed.
+- **LLM-derived filenames** — `anhad-final-exam` suggests snake_case filenames via LLM. haisir-backend derives titles from first H1 or `"Page N — {filename}"` (BR-EXT-023b). LLM filename suggestion is backlog.
 
 ---
 
