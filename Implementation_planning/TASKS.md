@@ -1,15 +1,15 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:5925a0ce9 frontend:ad0c923f8 deploy:f7d63b57c (2026-06-14)
+> Last baselined: backend:5925a0ce9 frontend:ad0c923f8 deploy:f12c465 (2026-06-14)
 
 ---
 
 ## G1 [deploy]: pgvector Database Image
 
 - [x] T1.1 [deploy]: Wolfi pgvector Dockerfile (`common/images/postgres-pgvector/Dockerfile`) (2026-06-12)
-- [ ] T1.2 [deploy]: Update common/docker-compose.yml db services to custom image (depends on T1.1)
-- [ ] T1.3 [deploy]: Update dev/docker-compose.yml postgres to pgvector image (depends on T1.2)
+- [x] T1.2 [deploy]: Update common/docker-compose.yml db services to custom image (depends on T1.1) (2026-06-14)
+- [x] T1.3 [deploy]: Update dev/docker-compose.yml postgres to pgvector image (depends on T1.2) (2026-06-14)
 - [ ] T1.4 [deploy]: pgvector smoke test (depends on T1.2, T1.3)
 - [ ] **G1: pgvector Database Image** — integration test: `docker compose up db`; `SELECT extversion FROM pg_extension WHERE extname='vector'` returns `0.8.2`
 
@@ -132,7 +132,7 @@
 
 Tasks with no pending dependencies — can be started immediately:
 
-- T1.2 [deploy]: Update common/docker-compose.yml db services to custom image (T1.1 done)
+- T1.4 [deploy]: pgvector smoke test (T1.2, T1.3 done)
 - T2.1 [backend]: Alembic V31 — CREATE EXTENSION vector (T1.1 [deploy] done)
 - T3.1 [backend]: LlamaIndex dependencies in pyproject.toml (no deps)
 - T3.2 [backend]: EmbeddingSettings in shared/config.py (no deps)
