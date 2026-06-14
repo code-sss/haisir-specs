@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 9fcf14d (essay AI grading backend complete, 2026-06-09) |
-| haisir-frontend | d0e9242 (grading_pending UI state + auto-grade checkbox, 2026-06-09) |
-| haisir-deploy | 4261909 (GRADING env vars wired into worker service, 2026-06-09) |
+| haisir-backend | 5925a0ce (hotfix v2026.3.5 — essay fields wired in create/update routes + SonarQube, 2026-06-13) |
+| haisir-frontend | ad0c923f (hotfix v2026.3.5 — released-grade results view + essay authoring UX, 2026-06-13) |
+| haisir-deploy | f7d63b57 (postgres-docker pgvector image + tailscale fix, 2026-06-13) |
 
-> Next session: run `git diff 9fcf14d..HEAD` in haisir-backend, `git diff d0e9242..HEAD` in haisir-frontend, and `git diff 4261909..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 5925a0ce..HEAD` in haisir-backend, `git diff ad0c923f..HEAD` in haisir-frontend, and `git diff f7d63b57..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -138,7 +138,7 @@
 - `working_required` (BOOLEAN, default false) — `problem_solving` only; when true, UI renders a free-text working area (V27)
 - `penalty_matching` (BOOLEAN, default false) — `matching` only; when true, wrong pairings reduce score: `max(0, (correct − wrong) / total) × points` (V28)
 - `rubric` (JSONB, nullable) — `essay` questions only; custom grading rubric: `{ scale_max: 3|4|5, criteria: [{name, weight, descriptors}] }`; 3–6 criteria; weights must sum to 1.0 (±0.01 tolerance); validated by Pydantic on create/update (V29)
-- `model_answer` (TEXT, nullable) — `essay` questions only; hint text passed to the LLM as grading context; not exposed to students (V29)
+- `model_answer` (TEXT, nullable) — `essay` questions only; hint text passed to the LLM as grading context; returned to students via the review endpoint when `grading_status` is `released`, `finalized`, or `overridden` (V29; visibility gated in hotfix v2026.3.5)
 - `auto_grade_essay` (BOOLEAN, NOT NULL, default true) — `essay` questions only; when false, the question is skipped by the AI grading pipeline on session submit (V29)
 
 ## paragraph_questions

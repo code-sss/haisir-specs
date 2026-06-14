@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:7c1b72d3e frontend:d0e9242c9 deploy:c407e7a05 (2026-06-12)
+> Last baselined: backend:5925a0ce9 frontend:ad0c923f8 deploy:f7d63b57c (2026-06-14)
 
 ---
 

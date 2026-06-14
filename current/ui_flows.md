@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 9fcf14d (essay AI grading backend complete, 2026-06-09) |
-| haisir-frontend | d0e9242 (grading_pending UI state + auto-grade checkbox, 2026-06-09) |
-| haisir-deploy | 4261909 (GRADING env vars wired into worker service, 2026-06-09) |
+| haisir-backend | 5925a0ce (hotfix v2026.3.5 — essay fields wired in create/update routes + SonarQube, 2026-06-13) |
+| haisir-frontend | ad0c923f (hotfix v2026.3.5 — released-grade results view + essay authoring UX, 2026-06-13) |
+| haisir-deploy | f7d63b57 (postgres-docker pgvector image + tailscale fix, 2026-06-13) |
 
-> Next session: run `git diff 9fcf14d..HEAD` in haisir-backend, `git diff d0e9242..HEAD` in haisir-frontend, and `git diff 4261909..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 5925a0ce..HEAD` in haisir-backend, `git diff ad0c923f..HEAD` in haisir-frontend, and `git diff f7d63b57..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -69,10 +69,10 @@
 
 - Screen: `/exam` (grading pending) — When session submit returns `sessionStatus='grading_pending'`, the exam page renders a "Grading Pending" interstitial banner instead of the results display. Banner title + explanatory text indicates AI grading is in progress. Two CTAs: "View Attempts" (opens attempts modal, clears banner) and "Back to Exams" (returns to list). `gradingPending` local state is set by `handleSubmitExam` when the API response indicates `grading_pending` status.
 
-- Screen: `/exam` (results) — Score, pass/fail badge, answer review with correct answers highlighted. For essay questions with released/finalized/overridden grades, `ai_feedback` is visible.
+- Screen: `/exam` (results) — Score, pass/fail badge, answer review with correct answers highlighted. For essay questions, released-grade content is surfaced via the attempts modal (see below).
   - API: `GET /api/exams/session/{id}/answers`
 
-- Screen: `/exam` (attempts list) — All past sessions with scores. Drill in to review any attempt. `grading_pending` sessions show status label "Grading…" (`.tagPending` CSS class); the "View" detail button is disabled for these attempts.
+- Screen: `/exam` (attempts list / AttemptsModal) — All past sessions with scores. Drill in to review any attempt. `grading_pending` sessions show status label "Grading…" (`.tagPending` CSS class); the "View" detail button is disabled for these attempts. When viewing a completed attempt, results are sorted by question type (`single_choice → multiple_choice → true_false → fill_in_the_blank → one_word_response → matching → problem_solving → essay`) and include a `#` row counter. Essay questions use a dedicated expanded layout (`renderEssayRows`): main row shows the full submitted essay text spanning the "Your Answer"/"Correct Answer" columns and earned/total points. A second expanded row is shown below (only when `grading_status` is `released`, `finalized`, or `overridden`) containing: AI Feedback (blue-tinted box), Model Answer (teal-tinted box, prose answer set by exam author), and Mark Scheme (standard explanation box for grading criteria). Non-essay questions use the compact `renderResultRow` layout. Points formatted to 2 decimal places where fractional.
   - API: `GET /api/exams/session/all/{template_id}`
 
 - Key behaviour: Unfinished session resume supported via `GET /api/exams/session/unfinished/{template_id}` check on load.
@@ -90,7 +90,7 @@
 ## Exam Template Management (outside current target increment — retained)
 
 - Screen: `/exam` (instructor view) — Template list with Edit/Delete buttons. "+ Add Exam" button navigates to `/add-exam`.
-- Screen: `/add-exam` — Multi-field exam authoring form with question builder for MCQ and paragraph questions. Create or edit mode based on `template_id` query param. Essay questions now show an **"Auto-grade with AI" checkbox** (defaults to `true` on type switch to `essay`; serialised as `auto_grade_essay` in the question payload; when unchecked, the AI grading pipeline skips that question on submit).
+- Screen: `/add-exam` — Multi-field exam authoring form with question builder for MCQ and paragraph questions. Create or edit mode based on `template_id` query param. Exam settings include an **"Essay grading mode"** dropdown (`auto_release` = grades published to students immediately after AI grades; `manual_release` = instructor approves before publishing); defaults to `auto_release`. Essay questions show: **"Auto-grade with AI" checkbox** (defaults to `true`; when unchecked, AI grading pipeline skips the question on submit); **"Model answer" textarea** (prose answer shown to students after grade release, stored as `model_answer`); **"Mark scheme / Rubric" textarea** (grading criteria for reference, stored as `explanation`). Both model answer and mark scheme are optional. JSON import/export also serialises `model_answer` per essay question.
   - Note: instructor persona deferred. Screens remain functional in codebase.
 
 ---

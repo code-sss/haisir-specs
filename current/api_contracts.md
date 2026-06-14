@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 9fcf14d (essay AI grading backend complete, 2026-06-09) |
-| haisir-frontend | d0e9242 (grading_pending UI state + auto-grade checkbox, 2026-06-09) |
-| haisir-deploy | 4261909 (GRADING env vars wired into worker service, 2026-06-09) |
+| haisir-backend | 5925a0ce (hotfix v2026.3.5 — essay fields wired in create/update routes + SonarQube, 2026-06-13) |
+| haisir-frontend | ad0c923f (hotfix v2026.3.5 — released-grade results view + essay authoring UX, 2026-06-13) |
+| haisir-deploy | f7d63b57 (postgres-docker pgvector image + tailscale fix, 2026-06-13) |
 
-> Next session: run `git diff 9fcf14d..HEAD` in haisir-backend, `git diff d0e9242..HEAD` in haisir-frontend, and `git diff 4261909..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 5925a0ce..HEAD` in haisir-backend, `git diff ad0c923f..HEAD` in haisir-frontend, and `git diff f7d63b57..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -325,7 +325,7 @@
 - Purpose: List questions by tags
 - Auth: student, instructor (instructor outside current increment)
 - Query: tags[] (required)
-- Response: array of question objects
+- Response: array of `QuestionReadStudent` objects — `rubric` and `model_answer` are intentionally excluded (internal AI-grading fields; not safe to expose in public question bank)
 
 ### GET /api/questions/assessment/{assessment_id}
 - Purpose: Get questions for a deprecated assessment
@@ -429,13 +429,13 @@
 ### POST /api/exams/{node_id}/static
 - Purpose: Create a static exam template with questions in one call
 - Auth: instructor (outside current target increment)
-- Request: title, description, mode, duration_minutes, passing_score, items[] — each item supports: `working_required: bool` (problem_solving), `essay_subtype: string | null` (essay), `penalty_matching: bool` (matching)
+- Request: title, description, mode, duration_minutes, passing_score, `essay_grading_mode?: 'auto_release' | 'review_first'` (template-level, defaults to `'auto_release'`), items[] — each item supports: `working_required: bool` (problem_solving), `essay_subtype: string | null` (essay), `penalty_matching: bool` (matching), `model_answer: str | null` (essay only — prose shown to students after grade release), `rubric: object | null` (essay only — custom grading rubric JSONB), `auto_grade_essay: bool` (essay only)
 - Response: template object
 
 ### PATCH /api/exams/{node_id}/static
 - Purpose: Upsert questions on a static template
 - Auth: instructor (outside current target increment)
-- Request: template_id, questions[], duration_minutes?, passing_score? — each question supports: `working_required: bool`, `essay_subtype: string | null`, `penalty_matching: bool`, `clear_essay_subtype: bool` (explicit null-clear for essay_subtype)
+- Request: template_id, questions[], duration_minutes?, passing_score? — each question supports: `working_required: bool`, `essay_subtype: string | null`, `penalty_matching: bool`, `clear_essay_subtype: bool` (explicit null-clear for essay_subtype), `model_answer: str | null`, `clear_model_answer: bool` (explicit null-clear), `rubric: object | null`, `clear_rubric: bool` (explicit null-clear), `auto_grade_essay: bool`
 - Response: updated template with questions
 
 ---
@@ -477,9 +477,11 @@
 ### GET /api/exam-sessions/session/{session_id}/review
 - Purpose: Get graded results for a completed or grading_pending session
 - Auth: student (session owner); exam owner (parent who owns the template, or admin) additionally receives `ai_rationale` per essay question
-- Response: same shape as submit response; matching question answers decoded from raw JSON pairs to `"left_text → right_text"` strings for display (falls back to IDs if option text is unavailable); each answer also includes:
+- Response: same shape as submit response; matching question answers decoded from raw JSON pairs to `"left_text → right_text"` strings for display (falls back to IDs if option text is unavailable); `earned_points` and `earned_marks` are rounded to 2 decimal places; each answer also includes:
   - `grading_status: str | null` — for essay questions: `pending | ai_graded | released | finalized | overridden | disputed | error`; null for non-essay
   - `ai_feedback: str | null` — visible when `grading_status in ('released','finalized','overridden')`; null otherwise
+  - `model_answer: str | null` — the prose model answer set by the exam author; visible to students only when `grading_status in ('released','finalized','overridden')`; null otherwise
+  - `explanation: str | null` — the mark scheme/rubric notes set by the exam author; for essay questions gated to same released grade statuses; for non-essay questions always returned
   - `ai_rationale: dict | null` — full LLM output; visible only to exam owner; always null for student callers
 
 ### POST /api/exam-sessions/session/{session_id}/questions/{question_id}/dispute
