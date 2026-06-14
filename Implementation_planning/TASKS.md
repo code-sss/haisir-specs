@@ -7,7 +7,7 @@
 
 ## G1 [deploy]: pgvector Database Image
 
-- [ ] T1.1 [deploy]: Wolfi pgvector Dockerfile (`common/images/postgres-pgvector/Dockerfile`)
+- [x] T1.1 [deploy]: Wolfi pgvector Dockerfile (`common/images/postgres-pgvector/Dockerfile`) (2026-06-12)
 - [ ] T1.2 [deploy]: Update common/docker-compose.yml db services to custom image (depends on T1.1)
 - [ ] T1.3 [deploy]: Update dev/docker-compose.yml postgres to pgvector image (depends on T1.2)
 - [ ] T1.4 [deploy]: pgvector smoke test (depends on T1.2, T1.3)
@@ -132,7 +132,8 @@
 
 Tasks with no pending dependencies — can be started immediately:
 
-- T1.1 [deploy]: Wolfi pgvector Dockerfile (no deps)
+- T1.2 [deploy]: Update common/docker-compose.yml db services to custom image (T1.1 done)
+- T2.1 [backend]: Alembic V31 — CREATE EXTENSION vector (T1.1 [deploy] done)
 - T3.1 [backend]: LlamaIndex dependencies in pyproject.toml (no deps)
 - T3.2 [backend]: EmbeddingSettings in shared/config.py (no deps)
 - T4.1 [backend]: HaituSettings in shared/config.py (no deps)
