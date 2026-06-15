@@ -101,7 +101,7 @@
 
 ### G7.1 [frontend]: Types + API Layer
 
-- [ ] T7.1 [frontend]: Student domain types (`src/features/student/types/student.types.ts`)
+- [x] T7.1 [frontend]: Student domain types (`src/features/student/types/student.types.ts`) (2026-06-15)
 - [ ] T7.2 [frontend]: student-api.ts (depends on T7.1)
 
 ### G7.2 [frontend]: Hooks
@@ -132,11 +132,11 @@
 
 Tasks with no pending dependencies — can be started immediately:
 
-- T7.1 [frontend]: Student domain types (no deps)
-- T7.2 [frontend]: student-api.ts (depends on T7.1 — start after T7.1)
+- T7.2 [frontend]: student-api.ts (T7.1 done)
 - T7.3 [frontend]: useStudentDashboard hook (depends on T7.2)
 - T7.4 [frontend]: useStudentNav hook (depends on T7.2)
-- T7.5 [frontend]: PlatformBoardSection component (depends on T7.1)
-- T7.6 [frontend]: HomeStudySection component (depends on T7.1)
-- T7.9 [frontend]: NodeTreeSidebar component (depends on T7.1)
-- T7.10 [frontend]: TopicListPanel component (depends on T7.1)
+- T7.5 [frontend]: PlatformBoardSection component (T7.1 done)
+- T7.6 [frontend]: HomeStudySection component (T7.1 done)
+- T7.9 [frontend]: NodeTreeSidebar component (T7.1 done)
+- T7.10 [frontend]: TopicListPanel component (T7.1 done)
+- T7.11 [frontend]: ContentViewer component (T7.1 done)
