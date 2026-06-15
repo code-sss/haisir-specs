@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 5925a0ce (hotfix v2026.3.5 — essay fields wired in create/update routes + SonarQube, 2026-06-13) |
-| haisir-frontend | ad0c923f (hotfix v2026.3.5 — released-grade results view + essay authoring UX, 2026-06-13) |
-| haisir-deploy | f7d63b57 (postgres-docker pgvector image + tailscale fix, 2026-06-13) |
+| haisir-backend | 90b5601 (feature/rag — RAG pipeline + student dashboard APIs + text restructuring + dep bumps, 2026-06-15) |
+| haisir-frontend | d9532b7 (feature/rag — student domain types T7.1 + dep bumps, 2026-06-15) |
+| haisir-deploy | e57c56b (feature/rag — EMBEDDING/HAITU/RESTRUCTURE env vars wired, 2026-06-15) |
 
-> Next session: run `git diff 5925a0ce..HEAD` in haisir-backend, `git diff ad0c923f..HEAD` in haisir-frontend, and `git diff f7d63b57..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 90b5601..HEAD` in haisir-backend, `git diff d9532b7..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -181,3 +181,11 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 - Screen: `/health` — `GET` returns 204. No UI.
 - Screen: `/csp-report` — `POST` accepts CSP violation reports; returns 204. No UI.
 - Screen: `/*` (not-found) — 404 fallback page.
+
+---
+
+## Student: Feature Module (T7.1 done — no UI screens yet)
+
+- `src/features/student/types/student.types.ts` — 5 TypeScript interfaces: `PlatformNodeCard`, `StudentDashboardResponse`, `StudentNode`, `StudentTopic`, `StudentTopicContent`
+- `src/features/student/index.ts` — barrel re-exports all 5 types
+- No screens implemented yet. Next: T7.2 (`student-api.ts`), T7.3/T7.4 (hooks), T7.5–T7.7 (S-home page), T7.8–T7.12 (S-nav page).

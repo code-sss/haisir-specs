@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 5925a0ce (hotfix v2026.3.5 — essay fields wired in create/update routes + SonarQube, 2026-06-13) |
-| haisir-frontend | ad0c923f (hotfix v2026.3.5 — released-grade results view + essay authoring UX, 2026-06-13) |
-| haisir-deploy | f7d63b57 (postgres-docker pgvector image + tailscale fix, 2026-06-13) |
+| haisir-backend | 90b5601 (feature/rag — RAG pipeline + student dashboard APIs + text restructuring + dep bumps, 2026-06-15) |
+| haisir-frontend | d9532b7 (feature/rag — student domain types T7.1 + dep bumps, 2026-06-15) |
+| haisir-deploy | e57c56b (feature/rag — EMBEDDING/HAITU/RESTRUCTURE env vars wired, 2026-06-15) |
 
-> Next session: run `git diff 5925a0ce..HEAD` in haisir-backend, `git diff ad0c923f..HEAD` in haisir-frontend, and `git diff f7d63b57..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 90b5601..HEAD` in haisir-backend, `git diff d9532b7..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -538,6 +538,35 @@
 - Auth: admin only (CSRF not required — GET)
 - Response: `{ boards: [{ id, name, live_topics, draft_topics, total_topics }], platform_totals: { live_topics, draft_topics, total_topics } }`
 - Note: single LEFT JOIN query `categories → course_path_nodes (owner_type='platform') → topics (owner_type='platform')`, grouped by category. Categories with zero topics appear with zero counts. Frontend maps response to `AdminDashboardStats` shape (board_id/board_name aliases, overview.platform_boards = boards.length). `response_model` removed from FastAPI decorator (dd7da7f) — output shape unchanged.
+
+---
+
+## Student Dashboard
+
+### GET /api/student/dashboard
+- Purpose: Return platform root nodes and parent-link status for the logged-in student
+- Auth: student (`X-Current-Role: student`; wrong role → 403; missing header → 400)
+- Note: uses `Depends(validate_csrf)` — `X-CSRF-Token` required despite being a GET (deviation from spec which said GET-only needs no CSRF)
+- Response: `StudentDashboardRead { platform_nodes: PlatformNodeCard[], has_parent_link: bool }`
+  - `PlatformNodeCard { id: UUID, name: str, node_type: str, topic_count: int (always 0 this phase), owner_type: str }`
+
+### GET /api/student/nodes
+- Purpose: Return the node tree for a given owner (platform or parent), enforcing parent-link access
+- Auth: student
+- Query params: `owner_type: str` (required), `owner_id: str` (required when `owner_type=parent`)
+- Response: `list[PlatformNodeCard]`
+- Errors: 400 if `owner_type=parent` and `owner_id` absent; 403 if no active `parent_child_links` row for the requested parent
+
+### GET /api/student/nodes/{node_id}/topics
+- Purpose: Return live topics for a course-path node filtered to student visibility
+- Auth: student
+- Response: `list[StudentTopicRead { id, title, status, order, has_exam (always false this phase) }]`
+- Only `status='live'` topics returned; draft topics silently excluded
+
+### GET /api/student/topics/{topic_id}/content
+- Purpose: Return content items for a live topic; empty list if topic missing or not live
+- Auth: student
+- Response: `list[StudentTopicContentRead { id, content_type, title, text, url }]`
 
 ---
 

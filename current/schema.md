@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 5925a0ce (hotfix v2026.3.5 — essay fields wired in create/update routes + SonarQube, 2026-06-13) |
-| haisir-frontend | ad0c923f (hotfix v2026.3.5 — released-grade results view + essay authoring UX, 2026-06-13) |
-| haisir-deploy | f7d63b57 (postgres-docker pgvector image + tailscale fix, 2026-06-13) |
+| haisir-backend | 90b5601 (feature/rag — RAG pipeline + student dashboard APIs + text restructuring + dep bumps, 2026-06-15) |
+| haisir-frontend | d9532b7 (feature/rag — student domain types T7.1 + dep bumps, 2026-06-15) |
+| haisir-deploy | e57c56b (feature/rag — EMBEDDING/HAITU/RESTRUCTURE env vars wired, 2026-06-15) |
 
-> Next session: run `git diff 5925a0ce..HEAD` in haisir-backend, `git diff ad0c923f..HEAD` in haisir-frontend, and `git diff f7d63b57..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 90b5601..HEAD` in haisir-backend, `git diff d9532b7..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -23,6 +23,8 @@
 | V28_essay_subtype_constraint_and_penalty_matching | Widens `questions.essay_subtype` from `VARCHAR(10)` → `VARCHAR(50)`. Adds CHECK constraint `ck_questions_essay_subtype` enforcing valid values: `analytical`, `critical`, `extended`, `narrative`, `reflective`, `short`. Adds `questions.penalty_matching BOOLEAN NOT NULL DEFAULT false`. |
 | V29_essay_grading | Adds `rubric` (JSONB nullable), `model_answer` (TEXT nullable), `auto_grade_essay` (BOOLEAN NOT NULL DEFAULT true) to `questions`. Adds `essay_grading_mode` (VARCHAR NOT NULL DEFAULT 'auto_release', CHECK IN ('auto_release','review_first')) to `exam_templates`. Adds 9 grading-state columns to `exam_session_questions` (`grading_status`, `ai_score`, `ai_feedback`, `ai_rationale`, `grader_confidence`, `graded_by`, `graded_at`, `override_score`, `override_feedback`). Creates `essay_grading_jobs` table with partial index on queued status. |
 | V30_grading_pending_status | Adds `grading_pending` to the `examstatus` PostgreSQL enum via `ALTER TYPE … ADD VALUE IF NOT EXISTS` (run outside transaction). No downgrade path — PostgreSQL does not support removing enum values. |
+| V31_pgvector_extension | `CREATE EXTENSION IF NOT EXISTS vector` — enables pgvector column type and ANN index operators. Downgrade: intentional no-op (dropping may corrupt chunk table). |
+| V32_rag_vector_table_shim | Creates `data_topic_content_chunks` (BigInteger PK, text, metadata_ JSON, node_id VARCHAR, embedding vector(1024)). Registration shim only — LlamaIndex PGVectorStore owns this table; autogenerate diffs are suppressed. Downgrade: `DROP TABLE data_topic_content_chunks`. |
 
 ---
 
@@ -341,6 +343,16 @@ Index: `ix_rag_outbox_pending (status, created_at) WHERE status = 'pending'`
 
 Indexes: `ix_essay_grading_jobs_queue (status, created_at) WHERE status='queued'` (partial), `ix_essay_grading_jobs_session_question (exam_session_question_id)`
 
+## data_topic_content_chunks
+- `id` (BigInteger, PK autoincrement) — LlamaIndex-managed row ID
+- `text` (Text, nullable) — chunked text content (SentenceSplitter chunk_size=512, chunk_overlap=100)
+- `metadata_` (JSON, nullable) — chunk metadata: `content_id`, `topic_id`, `topic_title`, `node_name`, `parent_name`, `grandparent_name`, `page_order`; used by hAITU retriever for `MetadataFilters`
+- `embedding` (vector(1024), nullable) — bge-m3 dense embedding via OllamaEmbedding; HNSW index (m=16, ef_construction=64, ef_search=40, `vector_cosine_ops`)
+- `node_id` (VARCHAR, nullable) — LlamaIndex internal node UUID
+- `text_search_tsv` (tsvector) — full-text search column created by LlamaIndex when `hybrid_search=True, text_search_config="english"`; enables sparse leg of hybrid retrieval
+
+Managed by LlamaIndex `PGVectorStore`; V32 migration is a registration shim only — do not add this table to Alembic autogenerate targets. First creation with `hybrid_search=True` bakes the tsvector column into the table; changing to `False` later requires table recreation.
+
 ---
 
 ## Read-only projections (not DB tables)
@@ -415,6 +427,18 @@ Query: single LEFT JOIN `categories → course_path_nodes (owner_type='platform'
 - Source: `src/shared/config.py`, nested under `settings.grading`
 - Env vars (`GRADING__*`): `MODEL_SPEC` (default: `qwen3:14b`), `OLLAMA_BASE_URL` (default: `http://localhost:11434`), `OLLAMA_API_KEY` (null), `LMSTUDIO_USE_HTTPS` (false), `MAX_TOKENS` (2048), `TEMPERATURE` (0.0)
 - `MODEL_SPEC` supports the same prefix-dispatch URIs as `ExtractionSettings`; `GRADING__*` vars are wired into the Docker Compose worker service
+
+### EmbeddingSettings
+- Source: `src/shared/config.py`, nested under `settings.embedding`
+- Env vars (`EMBEDDING__*`): `MODEL_SPEC` (default: `bge-m3`), `OLLAMA_BASE_URL` (default: `http://localhost:11434`), `BATCH_SIZE` (default: 10), `EMBED_DIM` (default: 1024), `POLL_INTERVAL_SECONDS` (default: 5)
+- `EMBED_DIM` must stay `1024` to match the `vector(1024)` column in V32 — changing without recreating the HNSW index causes query errors
+- Used by `rag_outbox_loop.py`; all vars wired as bare `${EMBEDDING__*}` in the Docker Compose worker service (defaults live in `Settings`)
+
+### HaituSettings
+- Source: `src/shared/config.py`, nested under `settings.haitu`
+- Env vars (`HAITU__*`): `MODEL_SPEC` (default: ""), `OLLAMA_BASE_URL` (default: `http://localhost:11434`), `MAX_TOKENS` (default: 2048), `TOP_K` (default: 5), `RERANK_MODEL` (default: ""), `LLM_CONTEXT_WINDOW` (default: 4096), `LLM_REQUEST_TIMEOUT` (default: 360.0), `LLM_THINKING` (default: false)
+- Config-only in this phase; retrieval endpoint (`POST /api/haitu/topic-doubt`) not yet implemented — planned for next cycle once vectors are populated
+- All 8 vars wired as bare `${HAITU__*}` in the Docker Compose worker service
 
 ### RubricResolver
 - Location: `src/domain/services/rubric_resolver.py`
