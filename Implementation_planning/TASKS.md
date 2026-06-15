@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:5925a0ce9 frontend:ad0c923f8 deploy:f12c465 (2026-06-14)
+> Last baselined: backend:09aace9 frontend:ad0c923f8 deploy:f12c465 (2026-06-15)
 
 ---
 
@@ -17,8 +17,8 @@
 
 ## G2 [backend]: Vector Extension + Schema
 
-- [ ] T2.1 [backend]: Alembic V31 — CREATE EXTENSION vector (depends on T1.1 [deploy])
-- [ ] T2.2 [backend]: Alembic V32 — shim for data_topic_content_chunks (depends on T2.1)
+- [x] T2.1 [backend]: Alembic V31 — CREATE EXTENSION vector (depends on T1.1 [deploy]) (2026-06-15)
+- [x] T2.2 [backend]: Alembic V32 — shim for data_topic_content_chunks (depends on T2.1) (2026-06-15)
 - [ ] **G2: Vector Extension + Schema** — integration test: `alembic upgrade head` completes; `alembic current` = V32; `data_topic_content_chunks` has `embedding vector(1024)` column
 
 ---
@@ -27,15 +27,15 @@
 
 ### G3.1 [backend]: Config + Dependencies
 
-- [ ] T3.1 [backend]: LlamaIndex dependencies in pyproject.toml
-- [ ] T3.2 [backend]: EmbeddingSettings in shared/config.py (now includes `embed_dim` field — see updated spec)
+- [x] T3.1 [backend]: LlamaIndex dependencies in pyproject.toml (2026-06-15)
+- [x] T3.2 [backend]: EmbeddingSettings in shared/config.py (now includes `embed_dim` field) (2026-06-15)
 
 ### G3.2 [backend]: Loop Implementation
 
-- [ ] T3.3 [backend]: Create worker/rag_outbox_loop.py — **REDO** (spec updated: hybrid_search + HNSW params + hierarchy metadata JOIN + insert_nodes pattern) (depends on T2.2, T3.1, T3.2)
-- [x] T3.4 [backend]: Register rag_outbox_loop in worker/__main__.py (depends on T3.3) (2026-06-15) — no redo needed; T3.3 redo does not change the registration interface
-- [ ] T3.6 [backend]: Unit tests for rag_outbox_loop (depends on T3.3) — **REDO** after T3.3 (mock assertions must verify `hybrid_search=True`, HNSW params, hierarchy metadata)
-- [ ] T3.7 [backend]: RAG loop integration test — **REDO** after T3.3 (seed full hierarchy; assert metadata fields + text_search_tsv column) (depends on T3.4, T3.6)
+- [x] T3.3 [backend]: Create worker/rag_outbox_loop.py — REDO with hybrid_search + HNSW + hierarchy metadata JOIN + insert_nodes (2026-06-15)
+- [x] T3.4 [backend]: Register rag_outbox_loop in worker/__main__.py (depends on T3.3) (2026-06-15)
+- [x] T3.6 [backend]: Unit tests for rag_outbox_loop — REDO with hybrid_search + HNSW + hierarchy metadata assertions (2026-06-15)
+- [x] T3.7 [backend]: RAG loop integration test — REDO with full hierarchy + metadata + text_search_tsv assertions (2026-06-15)
 
 ### G3.3 [deploy]: Deploy Config
 
@@ -47,7 +47,7 @@
 
 ## G4 [backend+deploy]: hAITU Settings Wired
 
-- [ ] T4.1 [backend]: HaituSettings in shared/config.py — **REDO** (spec updated: add `top_k`, `rerank_model`, `llm_context_window`, `llm_request_timeout`, `llm_thinking` fields)
+- [x] T4.1 [backend]: HaituSettings in shared/config.py — REDO with all 8 fields (top_k, rerank_model, llm_context_window, llm_request_timeout, llm_thinking added) (2026-06-15)
 - [ ] T4.2 [deploy]: HAITU env vars in common/docker-compose.yml worker (now includes all 8 vars) (depends on T4.1 [backend])
 - [ ] **G4: hAITU Settings Wired** — integration test: all 8 `Settings().haitu.*` fields return correct defaults; env overrides work; compose config shows all HAITU vars
 
@@ -69,7 +69,7 @@
 
 ### G5.4 [backend]: Extraction Loop Integration
 
-- [ ] T5.4 [backend]: Call restructure_page in extract_page() (depends on T5.1, T5.3)
+- [x] T5.4 [backend]: Call restructure_page in extract_page() (depends on T5.1, T5.3) (2026-06-15)
 
 ### G5.5 [deploy]: Deploy Config
 
@@ -77,8 +77,8 @@
 
 ### G5.6 [backend]: Tests
 
-- [ ] T5.6 [backend]: Unit tests for restructure_page() — TestRestructurePage (depends on T5.3)
-- [ ] T5.7 [backend]: Integration test for text restructuring pipeline (depends on T5.4, T5.6)
+- [x] T5.6 [backend]: Unit tests for restructure_page() — TestRestructurePage (depends on T5.3) (2026-06-15)
+- [x] T5.7 [backend]: Integration test for text restructuring pipeline (depends on T5.4, T5.6) (2026-06-15)
 
 - [ ] **G5: Text Restructuring Pass** — integration test: upload math PDF; assert `extraction_job_pages.markdown_text` has reassembled fractions
 
@@ -91,8 +91,8 @@
 - [x] T6.4 [backend]: Create schemas/student_dashboard.py (2026-06-15)
 - [x] T6.2 [backend]: Create StudentDashboardService (depends on T6.1, T6.3) (2026-06-15)
 - [x] T6.5 [backend]: Create api/routes/student_dashboard.py (depends on T6.2, T6.4) (2026-06-15)
-- [ ] T6.6 [backend]: Register student_dashboard router in api/router.py (depends on T6.5)
-- [ ] T6.7 [backend]: Student dashboard API integration test (depends on T6.6)
+- [x] T6.6 [backend]: Register student_dashboard router in api/router.py (depends on T6.5) (2026-06-15)
+- [x] T6.7 [backend]: Student dashboard API integration test (depends on T6.6) (2026-06-15)
 - [ ] **G6: Student Dashboard Backend APIs** — integration test: seed student + nodes + link; call all four endpoints; assert shapes, status codes, and permission boundaries
 
 ---
@@ -133,12 +133,7 @@
 Tasks with no pending dependencies — can be started immediately:
 
 - T1.4 [deploy]: pgvector smoke test (T1.2, T1.3 done)
-- T2.1 [backend]: Alembic V31 — CREATE EXTENSION vector (T1.1 [deploy] done)
-- T3.1 [backend]: LlamaIndex dependencies in pyproject.toml (no deps)
-- T3.2 [backend]: EmbeddingSettings — include `embed_dim` field (no deps)
-- **T3.3 [backend]: REDO — rag_outbox_loop.py with hybrid_search + HNSW + hierarchy metadata** (after T3.1, T3.2, T2.2)
-- **T4.1 [backend]: REDO — HaituSettings with all 8 fields** (no deps)
-- T5.4 [backend]: Call restructure_page in extract_page() (T5.1, T5.3 done)
-- T5.6 [backend]: Unit tests for restructure_page() (T5.3 done)
-- T6.6 [backend]: Register student_dashboard router (T6.5 done)
+- T3.5 [deploy]: EMBEDDING env vars in common/docker-compose.yml worker (T3.2 done)
+- T4.2 [deploy]: HAITU env vars in common/docker-compose.yml worker (all 8 vars) (T4.1 done)
+- T5.5 [deploy]: Add EXTRACTION__RESTRUCTURE_* to common/docker-compose.yml worker (T5.1 done)
 - T7.1 [frontend]: Student domain types (no deps)
