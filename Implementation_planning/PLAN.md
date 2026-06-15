@@ -106,9 +106,9 @@ See `Implementation_planning/decisions.md` (2026-06-12 entries) for full rationa
 - **Depends on**: None
 
 ##### T3.2 [backend] — EmbeddingSettings in shared/config.py
-- **Build**: In `src/shared/config.py`, add a new `EmbeddingSettings(BaseModel)` class immediately after `GradingSettings`: fields are `model_spec: str = Field(default="bge-m3")`, `ollama_base_url: str = Field(default="http://localhost:11434")`, `batch_size: int = Field(default=10)`. In `Settings`, add `embedding: EmbeddingSettings = EmbeddingSettings()` after the `grading` field.
-- **Done when**: `from shared.config import settings; settings.embedding.model_spec` returns `"bge-m3"`; `settings.embedding.batch_size` returns `10`.
-- **Test**: `tests/unit/shared/test_config.py` — assert `Settings().embedding.model_spec == "bge-m3"`, `Settings().embedding.batch_size == 10`; with env `EMBEDDING__BATCH_SIZE=5`, assert `Settings().embedding.batch_size == 5`.
+- **Build**: In `src/shared/config.py`, add a new `EmbeddingSettings(BaseModel)` class immediately after `GradingSettings`: fields are `model_spec: str = Field(default="bge-m3")`, `ollama_base_url: str = Field(default="http://localhost:11434")`, `batch_size: int = Field(default=10)`, `embed_dim: int = Field(default=1024)`. The `embed_dim` default must stay `1024` to match the `vector(1024)` column created by the V32 migration — changing it without rebuilding the HNSW index will cause query errors. In `Settings`, add `embedding: EmbeddingSettings = EmbeddingSettings()` after the `grading` field.
+- **Done when**: `from shared.config import settings; settings.embedding.model_spec` returns `"bge-m3"`; `settings.embedding.batch_size` returns `10`; `settings.embedding.embed_dim` returns `1024`.
+- **Test**: `tests/unit/shared/test_config.py` — assert `Settings().embedding.model_spec == "bge-m3"`, `Settings().embedding.batch_size == 10`, `Settings().embedding.embed_dim == 1024`; with env `EMBEDDING__BATCH_SIZE=5`, assert `Settings().embedding.batch_size == 5`.
 - **Depends on**: None
 
 ---
@@ -116,17 +116,47 @@ See `Implementation_planning/decisions.md` (2026-06-12 entries) for full rationa
 #### G3.2 — Loop Implementation [backend]
 
 ##### T3.3 [backend] — Create worker/rag_outbox_loop.py
-- **Build**: Create `src/worker/rag_outbox_loop.py`. The async function `async def run_rag_outbox_loop(session_maker, settings: Settings) -> None` loops forever with `await asyncio.sleep(settings.embedding.poll_interval_seconds if hasattr(settings.embedding, 'poll_interval_seconds') else 5)`. Each iteration:
+- **Build**: Create `src/worker/rag_outbox_loop.py`. The async function `async def run_rag_outbox_loop(session_maker, settings: Settings) -> None` loops forever with `await asyncio.sleep(5)`. Each iteration:
   1. Claims up to `settings.embedding.batch_size` outbox rows: `SELECT ... FROM rag_indexing_outbox WHERE status IN ('pending','retry') AND retry_count < 3 ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT :batch`. Sets `status='processing'`, `locked_at=now()`, `locked_by=socket.gethostname()`.
-  2. For each row, loads the `topic_contents` row by `content_id`. If `text` is null or empty: sets `status='failed'`, `last_error='empty text'`. Skips.
-  3. Chunks text: `from llama_index.core.node_parser import SentenceSplitter; splitter = SentenceSplitter(chunk_size=512, chunk_overlap=100); nodes = splitter.get_nodes_from_documents(...)`. Each node metadata dict includes `content_id`, `topic_id`, `title`, `content_type`.
-  4. Creates `OllamaEmbedding(model_name=settings.embedding.model_spec, base_url=settings.embedding.ollama_base_url)` and `PGVectorStore(table_name="topic_content_chunks", ...)` using the DB connection string.
-  5. Calls `await asyncio.to_thread(vector_store.add, nodes)` (LlamaIndex sync → thread).
-  6. On success: sets `status='done'`, clears `locked_at`, `locked_by`, `last_error=None`.
-  7. On exception: increments `retry_count`; if `retry_count >= 3` sets `status='failed'`; else sets `status='retry'`; sets `last_error=str(exc)[:500]`.
+  2. For each outbox row, load the content **with hierarchy** via a raw SQL JOIN (adapt from haiguru's embed_pipeline CONTENT_QUERY):
+     ```sql
+     SELECT tc.id AS content_id, tc.topic_id, tc.title AS content_title,
+            tc.text, tc."order" AS page_order,
+            t.title AS topic_title,
+            n1.name AS node_name,
+            n2.name AS parent_name,
+            n3.name AS grandparent_name
+     FROM topic_contents tc
+     JOIN topics t ON t.id = tc.topic_id
+     JOIN course_path_nodes n1 ON n1.id = t.course_path_node_id
+     LEFT JOIN course_path_nodes n2 ON n2.id = n1.parent_id
+     LEFT JOIN course_path_nodes n3 ON n3.id = n2.parent_id
+     WHERE tc.id = :content_id AND tc.text IS NOT NULL AND tc.text != ''
+     ```
+     If no row returned (text null/empty): set `status='failed'`, `last_error='empty text'`. Skip.
+  3. Chunk text: `SentenceSplitter(chunk_size=512, chunk_overlap=100)`. Build `TextNode` objects with metadata dict: `{"content_id": str, "topic_id": str, "topic_title": str, "node_name": str, "parent_name": str | None, "grandparent_name": str | None, "page_order": int}`. These metadata keys are used by the hAITU retriever for `MetadataFilters` — do not rename them.
+  4. Construct `PGVectorStore` with **all** required params for hybrid search and HNSW indexing — this determines the table structure and index on first call and cannot be changed without recreating the table:
+     ```python
+     PGVectorStore.from_params(
+         database=..., host=..., port=..., user=..., password=...,
+         table_name="topic_content_chunks",
+         embed_dim=settings.embedding.embed_dim,   # must match V32 vector(1024)
+         hybrid_search=True,                        # creates text_search_tsv column
+         text_search_config="english",
+         hnsw_kwargs={
+             "hnsw_m": 16,
+             "hnsw_ef_construction": 64,
+             "hnsw_ef_search": 40,
+             "hnsw_dist_method": "vector_cosine_ops",
+         },
+     )
+     ```
+  5. Set the embedding model on `llama_index.core.Settings`: `Settings.embed_model = OllamaEmbedding(model_name=settings.embedding.model_spec, base_url=settings.embedding.ollama_base_url)`. Then use `VectorStoreIndex.from_vector_store(vector_store)` and call `await asyncio.to_thread(index.insert_nodes, nodes)` — **do not call `vector_store.add(nodes)` directly**; `insert_nodes` triggers the embed model pipeline automatically whereas `add` expects pre-embedded nodes and silently inserts null vectors if embeddings are missing.
+  6. On success: set `status='done'`, clear `locked_at`, `locked_by`, `last_error=None`.
+  7. On exception: increment `retry_count`; if `retry_count >= 3` set `status='failed'`; else set `status='retry'`; set `last_error=str(exc)[:500]`.
   Wrap the whole loop body in `try/except Exception` so a crash doesn't kill the coroutine.
-- **Done when**: `tests/unit/worker/test_rag_outbox_loop.py` passes — all unit tests with mocked DB session and mocked LlamaIndex PGVectorStore.
-- **Test**: Mock `PGVectorStore.add` and `OllamaEmbedding`; mock DB returning one outbox row + one `topic_contents` row with `text="Test content"`; assert `status='done'` is written; assert `PGVectorStore.add` was called with at least 1 node.
+- **Done when**: `tests/unit/worker/test_rag_outbox_loop.py` passes — all unit tests with mocked DB session and mocked LlamaIndex.
+- **Test**: Mock `VectorStoreIndex.from_vector_store` and `OllamaEmbedding`; mock DB returning one outbox row + one hierarchy JOIN result row; assert `status='done'` is written; assert `index.insert_nodes` was called with nodes whose metadata contains `topic_id`, `topic_title`, `node_name`, `page_order`; assert `PGVectorStore.from_params` was called with `hybrid_search=True` and `hnsw_kwargs` containing `hnsw_m=16`.
 - **Depends on**: T2.2 [backend], T3.1, T3.2
 
 ##### T3.4 [backend] — Register rag_outbox_loop in worker/__main__.py
@@ -139,19 +169,23 @@ See `Implementation_planning/decisions.md` (2026-06-12 entries) for full rationa
 - **Depends on**: T3.3
 
 ##### T3.6 [backend] — Unit tests for rag_outbox_loop
-- **Build**: Create (or expand) `tests/unit/worker/test_rag_outbox_loop.py`. Test cases:
-  - Happy path: one outbox row + topic_contents text → `status='done'`, `PGVectorStore.add` called.
-  - Empty text: outbox row but topic_contents text is None → `status='failed'`, `last_error='empty text'`.
-  - Embed failure (first attempt): PGVectorStore.add raises → `retry_count=1`, `status='retry'`.
+- **Build**: Create (or expand) `tests/unit/worker/test_rag_outbox_loop.py`. Mock `VectorStoreIndex.from_vector_store`, `OllamaEmbedding`, and `PGVectorStore.from_params`. Mock DB to return a hierarchy JOIN result row (not a bare `topic_contents` row). Test cases:
+  - Happy path: one outbox row + hierarchy JOIN result with text → `status='done'`; `index.insert_nodes` called with nodes whose metadata contains `topic_id`, `topic_title`, `node_name`, `page_order`; `PGVectorStore.from_params` called with `hybrid_search=True` and `hnsw_kwargs` containing `hnsw_m=16`.
+  - Empty text: hierarchy JOIN returns no row (text null/empty) → `status='failed'`, `last_error='empty text'`.
+  - Embed failure (first attempt): `index.insert_nodes` raises → `retry_count=1`, `status='retry'`.
   - Embed failure (third attempt, retry_count already 2): raises → `status='failed'`.
-  - Wrap-around: loop exception (outer try/except) does not kill the coroutine — continues on next iteration.
+  - Wrap-around: loop body exception does not kill the coroutine — continues on next iteration.
 - **Done when**: `uv run pytest tests/unit/worker/test_rag_outbox_loop.py -v` passes with 100% branch coverage for the file.
 - **Test**: Test suite self-verifying — `pytest --cov=src/worker/rag_outbox_loop` shows 100%.
 - **Depends on**: T3.3
 
 ##### T3.7 [backend] — RAG loop integration test
-- **Build**: Add `tests/integration/worker/test_rag_loop_integration.py`. Against the test DB (pgvector-enabled): seed a `topic_contents` row with `text="Hello world. Testing RAG pipeline."`. Seed an `rag_indexing_outbox` row pointing to it with `status='pending'`. Run one iteration of `run_rag_outbox_loop` with a real (or mocked-but-real) `OllamaEmbedding` call (skip in CI if Ollama unavailable via `pytest.mark.skipif`). Assert outbox row `status='done'`; assert `SELECT COUNT(*) FROM data_topic_content_chunks WHERE metadata_->>'content_id' = '<uuid>'` >= 1.
-- **Done when**: Test passes against local stack with Ollama running `bge-m3`; CI skips gracefully when Ollama unavailable.
+- **Build**: Add `tests/integration/worker/test_rag_loop_integration.py`. Against the test DB (pgvector-enabled): seed a **full hierarchy** — insert a category, a grade `course_path_node` (parent_id=NULL), a subject node (parent_id=grade), a course node (parent_id=subject), a topic (course_path_node_id=course node), and a `topic_contents` row on that topic with `text="Hello world. Testing RAG pipeline."`. Seed a `rag_indexing_outbox` row pointing to the content with `status='pending'`. Run one iteration of `run_rag_outbox_loop` with a real `OllamaEmbedding` call (skip in CI if Ollama unavailable via `pytest.mark.skipif(os.getenv("OLLAMA_AVAILABLE") != "1")`). Assertions:
+  - Outbox row `status='done'`.
+  - `SELECT COUNT(*) FROM data_topic_content_chunks WHERE metadata_->>'content_id' = '<uuid>'` >= 1.
+  - The retrieved chunk's `metadata_` JSON contains `topic_id`, `topic_title`, `node_name`, `page_order`.
+  - `SELECT COUNT(*) FROM information_schema.columns WHERE table_name='data_topic_content_chunks' AND column_name='text_search_tsv'` = 1 (confirms `hybrid_search=True` took effect).
+- **Done when**: Test passes against local stack with Ollama running `bge-m3` and pgvector DB; CI skips gracefully when Ollama unavailable.
 - **Test**: The test itself is the integration assertion.
 - **Depends on**: T3.4, T3.6
 
@@ -160,17 +194,19 @@ See `Implementation_planning/decisions.md` (2026-06-12 entries) for full rationa
 #### G3.3 — Deploy Config [deploy]
 
 ##### T3.5 [deploy] — EMBEDDING env vars in common/docker-compose.yml worker block
-- **Build**: In `common/docker-compose.yml`, under the `worker` service `environment:` block, append three lines:
+- **Build**: In `common/docker-compose.yml`, under the `worker` service `environment:` block, append four lines:
   ```yaml
   EMBEDDING__MODEL_SPEC: ${EMBEDDING__MODEL_SPEC}
   EMBEDDING__OLLAMA_BASE_URL: ${EMBEDDING__OLLAMA_BASE_URL:-http://ollama:11434}
   EMBEDDING__BATCH_SIZE: ${EMBEDDING__BATCH_SIZE:-10}
+  EMBEDDING__EMBED_DIM: ${EMBEDDING__EMBED_DIM:-1024}
   ```
-- **Done when**: `docker compose -f common/docker-compose.yml config` exits 0; the `worker` environment section contains all three vars.
-- **Test**: `grep -c "EMBEDDING__" common/docker-compose.yml` returns >= 3.
+  `EMBEDDING__EMBED_DIM` must match the `vector(1024)` column in V32 — default is `1024` and should only be changed if V32 is redone with a different dimension.
+- **Done when**: `docker compose -f common/docker-compose.yml config` exits 0; the `worker` environment section contains all four vars.
+- **Test**: `grep -c "EMBEDDING__" common/docker-compose.yml` returns >= 4.
 - **Depends on**: T3.2 [backend]
 
-**G3 integration test**: With pgvector DB + Ollama `bge-m3` running: insert `topic_contents` row; insert `rag_indexing_outbox` row; start worker; wait 10s; assert outbox row `status='done'`; assert `data_topic_content_chunks` has rows with matching `content_id` in metadata.
+**G3 integration test**: With pgvector DB + Ollama `bge-m3` running: seed full hierarchy (category → grade node → subject node → course node → topic → topic_contents with text); insert `rag_indexing_outbox` row; start worker; wait 10s; assert outbox row `status='done'`; assert `data_topic_content_chunks` has rows with `content_id` in metadata; assert `metadata_` contains `topic_id`, `topic_title`, `node_name`, `page_order`; assert `text_search_tsv` column exists (hybrid search enabled).
 
 ---
 
@@ -182,22 +218,40 @@ See `Implementation_planning/decisions.md` (2026-06-12 entries) for full rationa
 ---
 
 ##### T4.1 [backend] — HaituSettings in shared/config.py
-- **Build**: In `src/shared/config.py`, add `HaituSettings(BaseModel)` class after `EmbeddingSettings`: fields `model_spec: str = Field(default="")`, `ollama_base_url: str = Field(default="http://localhost:11434")`, `max_tokens: int = Field(default=2048)`. Add `haitu: HaituSettings = HaituSettings()` to `Settings` after `embedding`.
-- **Done when**: `Settings().haitu.max_tokens == 2048`; `Settings().haitu.model_spec == ""`; env `HAITU__MODEL_SPEC=test` sets `model_spec="test"`.
-- **Test**: `tests/unit/shared/test_config.py` — add assertions for `haitu` defaults and env override `HAITU__MODEL_SPEC=my_model`.
+- **Build**: In `src/shared/config.py`, add `HaituSettings(BaseModel)` class after `EmbeddingSettings`. All fields needed for the hAITU retrieval endpoint (planned next cycle) must be wired now so no settings migration is required then:
+  ```python
+  class HaituSettings(BaseModel):
+      model_spec: str = Field(default="")           # plain = Ollama; anthropic://; openai://
+      ollama_base_url: str = Field(default="http://localhost:11434")
+      max_tokens: int = Field(default=2048)
+      top_k: int = Field(default=5)                 # results per retriever leg (dense + sparse each)
+      rerank_model: str = Field(default="")         # empty = reranker disabled; else cross-encoder name or cohere://... / jina://...
+      llm_context_window: int = Field(default=4096)
+      llm_request_timeout: float = Field(default=360.0)
+      llm_thinking: bool = Field(default=False)     # enable extended thinking for models that support it (e.g. qwen3)
+  ```
+  Add `haitu: HaituSettings = HaituSettings()` to `Settings` after `embedding`.
+- **Done when**: All eight fields accessible via `Settings().haitu.*` with correct defaults; env overrides work for all fields.
+- **Test**: `tests/unit/shared/test_config.py` — assert all eight defaults; assert env overrides for `HAITU__MODEL_SPEC`, `HAITU__TOP_K`, `HAITU__RERANK_MODEL`, `HAITU__LLM_THINKING`.
 - **Depends on**: None
 
 ##### T4.2 [deploy] — HAITU env vars in common/docker-compose.yml worker block
-- **Build**: In `common/docker-compose.yml` worker `environment:`, append:
+- **Build**: In `common/docker-compose.yml` worker `environment:`, append all eight vars (mirrors T4.1 fields):
   ```yaml
   HAITU__MODEL_SPEC: ${HAITU__MODEL_SPEC:-}
   HAITU__OLLAMA_BASE_URL: ${HAITU__OLLAMA_BASE_URL:-http://ollama:11434}
+  HAITU__MAX_TOKENS: ${HAITU__MAX_TOKENS:-2048}
+  HAITU__TOP_K: ${HAITU__TOP_K:-5}
+  HAITU__RERANK_MODEL: ${HAITU__RERANK_MODEL:-}
+  HAITU__LLM_CONTEXT_WINDOW: ${HAITU__LLM_CONTEXT_WINDOW:-4096}
+  HAITU__LLM_REQUEST_TIMEOUT: ${HAITU__LLM_REQUEST_TIMEOUT:-360}
+  HAITU__LLM_THINKING: ${HAITU__LLM_THINKING:-false}
   ```
-- **Done when**: `grep -c "HAITU__" common/docker-compose.yml` returns >= 2; `docker compose -f common/docker-compose.yml config` exits 0.
-- **Test**: `grep "HAITU__MODEL_SPEC" common/docker-compose.yml` exits 0.
+- **Done when**: `grep -c "HAITU__" common/docker-compose.yml` returns >= 8; `docker compose -f common/docker-compose.yml config` exits 0.
+- **Test**: `grep "HAITU__RERANK_MODEL" common/docker-compose.yml` exits 0.
 - **Depends on**: T4.1 [backend]
 
-**G4 integration test**: `docker compose -f common/docker-compose.yml config` resolves HAITU vars in worker environment without warnings; `Settings(HAITU__MODEL_SPEC="qwen3:14b")` returns `haitu.model_spec == "qwen3:14b"`.
+**G4 integration test**: `docker compose -f common/docker-compose.yml config` resolves all HAITU vars in worker environment without warnings; `Settings(HAITU__MODEL_SPEC="qwen3:14b")` returns `haitu.model_spec == "qwen3:14b"`; `Settings(HAITU__TOP_K="10")` returns `haitu.top_k == 10`.
 
 ---
 
