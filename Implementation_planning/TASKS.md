@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:09aace9 frontend:ad0c923f8 deploy:f12c465 (2026-06-15)
+> Last baselined: backend:09aace9 frontend:ad0c923f8 deploy:88cbe5d (2026-06-15)
 
 ---
 
@@ -10,7 +10,7 @@
 - [x] T1.1 [deploy]: Wolfi pgvector Dockerfile (`common/images/postgres-pgvector/Dockerfile`) (2026-06-12)
 - [x] T1.2 [deploy]: Update common/docker-compose.yml db services to custom image (depends on T1.1) (2026-06-14)
 - [x] T1.3 [deploy]: Update dev/docker-compose.yml postgres to pgvector image (depends on T1.2) (2026-06-14)
-- [ ] T1.4 [deploy]: pgvector smoke test (depends on T1.2, T1.3)
+- [x] T1.4 [deploy]: pgvector smoke test (depends on T1.2, T1.3) (2026-06-15)
 - [ ] **G1: pgvector Database Image** — integration test: `docker compose up db`; `SELECT extversion FROM pg_extension WHERE extname='vector'` returns `0.8.2`
 
 ---
@@ -39,7 +39,7 @@
 
 ### G3.3 [deploy]: Deploy Config
 
-- [ ] T3.5 [deploy]: EMBEDDING env vars in common/docker-compose.yml worker (now includes `EMBEDDING__EMBED_DIM`) (depends on T3.2 [backend])
+- [x] T3.5 [deploy]: EMBEDDING env vars in common/docker-compose.yml worker (now includes `EMBEDDING__EMBED_DIM`) (depends on T3.2 [backend]) (2026-06-15)
 
 - [ ] **G3: RAG Drain Loop** — integration test: seed full hierarchy + outbox row; start worker; wait 10s; assert `status='done'`; assert `data_topic_content_chunks` has rows with `topic_id`/`topic_title`/`node_name` in metadata; assert `text_search_tsv` column exists
 
@@ -48,7 +48,7 @@
 ## G4 [backend+deploy]: hAITU Settings Wired
 
 - [x] T4.1 [backend]: HaituSettings in shared/config.py — REDO with all 8 fields (top_k, rerank_model, llm_context_window, llm_request_timeout, llm_thinking added) (2026-06-15)
-- [ ] T4.2 [deploy]: HAITU env vars in common/docker-compose.yml worker (now includes all 8 vars) (depends on T4.1 [backend])
+- [x] T4.2 [deploy]: HAITU env vars in common/docker-compose.yml worker (now includes all 8 vars) (depends on T4.1 [backend]) (2026-06-15)
 - [ ] **G4: hAITU Settings Wired** — integration test: all 8 `Settings().haitu.*` fields return correct defaults; env overrides work; compose config shows all HAITU vars
 
 ---
@@ -73,7 +73,7 @@
 
 ### G5.5 [deploy]: Deploy Config
 
-- [ ] T5.5 [deploy]: Add EXTRACTION__RESTRUCTURE_* to common/docker-compose.yml worker (depends on T5.1 [backend])
+- [x] T5.5 [deploy]: Add EXTRACTION__RESTRUCTURE_* to common/docker-compose.yml worker (depends on T5.1 [backend]) (2026-06-15)
 
 ### G5.6 [backend]: Tests
 
@@ -132,8 +132,11 @@
 
 Tasks with no pending dependencies — can be started immediately:
 
-- T1.4 [deploy]: pgvector smoke test (T1.2, T1.3 done)
-- T3.5 [deploy]: EMBEDDING env vars in common/docker-compose.yml worker (T3.2 done)
-- T4.2 [deploy]: HAITU env vars in common/docker-compose.yml worker (all 8 vars) (T4.1 done)
-- T5.5 [deploy]: Add EXTRACTION__RESTRUCTURE_* to common/docker-compose.yml worker (T5.1 done)
 - T7.1 [frontend]: Student domain types (no deps)
+- T7.2 [frontend]: student-api.ts (depends on T7.1 — start after T7.1)
+- T7.3 [frontend]: useStudentDashboard hook (depends on T7.2)
+- T7.4 [frontend]: useStudentNav hook (depends on T7.2)
+- T7.5 [frontend]: PlatformBoardSection component (depends on T7.1)
+- T7.6 [frontend]: HomeStudySection component (depends on T7.1)
+- T7.9 [frontend]: NodeTreeSidebar component (depends on T7.1)
+- T7.10 [frontend]: TopicListPanel component (depends on T7.1)
