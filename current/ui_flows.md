@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 90b5601 (feature/rag — RAG pipeline + student dashboard APIs + text restructuring + dep bumps, 2026-06-15) |
-| haisir-frontend | d9532b7 (feature/rag — student domain types T7.1 + dep bumps, 2026-06-15) |
+| haisir-backend | cb602a9 (feature/rag — _LmStudioEmbedding tests + mypy fix, 2026-06-16) |
+| haisir-frontend | 656b825e (feature/rag — G7 student dashboard + SonarQube fixes, 2026-06-16) |
 | haisir-deploy | e57c56b (feature/rag — EMBEDDING/HAITU/RESTRUCTURE env vars wired, 2026-06-15) |
 
-> Next session: run `git diff 90b5601..HEAD` in haisir-backend, `git diff d9532b7..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff cb602a9..HEAD` in haisir-backend, `git diff 656b825e..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -184,8 +184,22 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 
 ---
 
-## Student: Feature Module (T7.1 done — no UI screens yet)
+## Student Dashboard (G7 complete — G8 tree fix pending)
 
-- `src/features/student/types/student.types.ts` — 5 TypeScript interfaces: `PlatformNodeCard`, `StudentDashboardResponse`, `StudentNode`, `StudentTopic`, `StudentTopicContent`
-- `src/features/student/index.ts` — barrel re-exports all 5 types
-- No screens implemented yet. Next: T7.2 (`student-api.ts`), T7.3/T7.4 (hooks), T7.5–T7.7 (S-home page), T7.8–T7.12 (S-nav page).
+### Screen: `/home` (StudentHomePage — student role only)
+`app/home/page.tsx` branches on `currentRole === "student"` → renders `StudentHomePage` instead of the instructor/admin content grid.
+
+Two sections, data from `useStudentDashboard` (`GET /api/student/dashboard`):
+- **Platform Board** — grid of root platform node cards (name, topic_count badge, "Start" → `/courses?source=platform&nodeId=…`). `topic_count` is always 0 pending G9 fix.
+- **Home Study** — if `has_parent_link=true`, grid of parent-owned root node cards with "Start" CTAs; else dashed-border placeholder "No Home Study content yet — ask your parent to link their account."
+
+### Screen: `/courses` (StudentCoursesPage — student role)
+Full-page three-panel layout. Data managed by `useStudentNav`.
+
+- **Tab bar** — "Platform" (always enabled) / "Home Study" (disabled when `has_parent_link=false`). ArrowLeft/ArrowRight keyboard navigation; switching source resets node/topic/content selection.
+- **NodeTreeSidebar** (left `<aside>`) — renders `StudentNode[]` from `GET /api/student/nodes?owner_type={source}`. Each `NodeRow` shows a chevron + expand/collapse for non-leaf nodes (nodes with `children`), or fires `selectNode(id)` for leaf nodes. ⚠ **G8 gap:** API currently returns flat root nodes only — all nodes appear as leaves; hierarchy not navigable until G8 is fixed.
+- **TopicListPanel** (centre `<section>`) — `StudentTopic[]` from `GET /api/student/nodes/{id}/topics` (live topics only; draft silently excluded). Fires `selectTopic(id)` on click.
+- **ContentViewer** (right) — `StudentTopicContent[]` from `GET /api/student/topics/{id}/content`. Empty state: "No content available".
+- Shared `loadingCount` counter across all three fetch operations; shows "Loading…" skeleton while any fetch is in-flight.
+
+Unit test suite: 11 test files covering all components, hooks, and api layer (100% coverage). Playwright E2E deferred — Playwright not installed.

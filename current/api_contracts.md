@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 90b5601 (feature/rag — RAG pipeline + student dashboard APIs + text restructuring + dep bumps, 2026-06-15) |
-| haisir-frontend | d9532b7 (feature/rag — student domain types T7.1 + dep bumps, 2026-06-15) |
+| haisir-backend | cb602a9 (feature/rag — _LmStudioEmbedding tests + mypy fix, 2026-06-16) |
+| haisir-frontend | 656b825e (feature/rag — G7 student dashboard + SonarQube fixes, 2026-06-16) |
 | haisir-deploy | e57c56b (feature/rag — EMBEDDING/HAITU/RESTRUCTURE env vars wired, 2026-06-15) |
 
-> Next session: run `git diff 90b5601..HEAD` in haisir-backend, `git diff d9532b7..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff cb602a9..HEAD` in haisir-backend, `git diff 656b825e..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -556,6 +556,7 @@
 - Query params: `owner_type: str` (required), `owner_id: str` (required when `owner_type=parent`)
 - Response: `list[PlatformNodeCard]`
 - Errors: 400 if `owner_type=parent` and `owner_id` absent; 403 if no active `parent_child_links` row for the requested parent
+- **⚠ Known gap (G8):** currently returns flat root nodes only (`get_platform_root_nodes()`); `children` not populated and `topic_count` always 0. Fix tracked in TASKS.md G8+G9.
 
 ### GET /api/student/nodes/{node_id}/topics
 - Purpose: Return live topics for a course-path node filtered to student visibility

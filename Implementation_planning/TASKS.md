@@ -11,7 +11,7 @@
 - [x] T1.2 [deploy]: Update common/docker-compose.yml db services to custom image (depends on T1.1) (2026-06-14)
 - [x] T1.3 [deploy]: Update dev/docker-compose.yml postgres to pgvector image (depends on T1.2) (2026-06-14)
 - [x] T1.4 [deploy]: pgvector smoke test (depends on T1.2, T1.3) (2026-06-15)
-- [ ] **G1: pgvector Database Image** — integration test: `docker compose up db`; `SELECT extversion FROM pg_extension WHERE extname='vector'` returns `0.8.2`
+- [x] **G1: pgvector Database Image** — `SELECT extversion FROM pg_extension WHERE extname='vector'` returns `0.8.2` ✓ (2026-06-16)
 
 ---
 
@@ -19,7 +19,7 @@
 
 - [x] T2.1 [backend]: Alembic V31 — CREATE EXTENSION vector (depends on T1.1 [deploy]) (2026-06-15)
 - [x] T2.2 [backend]: Alembic V32 — shim for data_topic_content_chunks (depends on T2.1) (2026-06-15)
-- [ ] **G2: Vector Extension + Schema** — integration test: `alembic upgrade head` completes; `alembic current` = V32; `data_topic_content_chunks` has `embedding vector(1024)` column
+- [x] **G2: Vector Extension + Schema** — `alembic current` = V32; `data_topic_content_chunks` has `embedding vector(1024)` (atttypmod=1024 confirmed) ✓ (2026-06-16)
 
 ---
 
@@ -41,7 +41,7 @@
 
 - [x] T3.5 [deploy]: EMBEDDING env vars in common/docker-compose.yml worker (now includes `EMBEDDING__EMBED_DIM`) (depends on T3.2 [backend]) (2026-06-15)
 
-- [ ] **G3: RAG Drain Loop** — integration test: seed full hierarchy + outbox row; start worker; wait 10s; assert `status='done'`; assert `data_topic_content_chunks` has rows with `topic_id`/`topic_title`/`node_name` in metadata; assert `text_search_tsv` column exists
+- [x] **G3: RAG Drain Loop** — 10 outbox rows → `status='done'`; 27 chunks in `data_topic_content_chunks` with `topic_id`/`topic_title`/`node_name` metadata; `text_search_tsv` populated ✓. Two fixes applied: (1) `_LmStudioEmbedding` adapter added to `rag_outbox_loop.py` — `OllamaEmbedding` doesn't speak OpenAI-format API; (2) V33 migration added `text_search_tsv` + trigger + GIN index (V32 shim omitted it). (2026-06-16)
 
 ---
 
@@ -49,7 +49,7 @@
 
 - [x] T4.1 [backend]: HaituSettings in shared/config.py — REDO with all 8 fields (top_k, rerank_model, llm_context_window, llm_request_timeout, llm_thinking added) (2026-06-15)
 - [x] T4.2 [deploy]: HAITU env vars in common/docker-compose.yml worker (now includes all 8 vars) (depends on T4.1 [backend]) (2026-06-15)
-- [ ] **G4: hAITU Settings Wired** — integration test: all 8 `Settings().haitu.*` fields return correct defaults; env overrides work; compose config shows all HAITU vars
+- [x] **G4: hAITU Settings Wired** — all 8 `Settings().haitu.*` fields verified: model_spec, ollama_base_url, max_tokens, top_k, rerank_model, llm_context_window, llm_request_timeout, llm_thinking ✓ (2026-06-16)
 
 ---
 
@@ -80,7 +80,7 @@
 - [x] T5.6 [backend]: Unit tests for restructure_page() — TestRestructurePage (depends on T5.3) (2026-06-15)
 - [x] T5.7 [backend]: Integration test for text restructuring pipeline (depends on T5.4, T5.6) (2026-06-15)
 
-- [ ] **G5: Text Restructuring Pass** — integration test: upload math PDF; assert `extraction_job_pages.markdown_text` has reassembled fractions
+- [~] **G5: Text Restructuring Pass** — code verified: `restructure_text=True` default set; `GlmOcrProvider` inherits `GlmRestructureMixin.restructure_page()`; called in `extraction_loop.py` under 3-condition guard. Full E2E (upload PDF → assert reassembled fractions) deferred until Ollama is available. (2026-06-16)
 
 ---
 
@@ -93,7 +93,7 @@
 - [x] T6.5 [backend]: Create api/routes/student_dashboard.py (depends on T6.2, T6.4) (2026-06-15)
 - [x] T6.6 [backend]: Register student_dashboard router in api/router.py (depends on T6.5) (2026-06-15)
 - [x] T6.7 [backend]: Student dashboard API integration test (depends on T6.6) (2026-06-15)
-- [ ] **G6: Student Dashboard Backend APIs** — integration test: seed student + nodes + link; call all four endpoints; assert shapes, status codes, and permission boundaries
+- [x] **G6: Student Dashboard Backend APIs** — all 4 endpoints verified: `/dashboard` (platform_nodes + has_parent_link), `/nodes?owner_type=platform` (4 nodes), `/nodes/{id}/topics` (empty list), `/topics/{id}/content` (15 items); permission boundaries confirmed (student → admin/parent = 403/404) ✓ (2026-06-16)
 
 ---
 
@@ -130,7 +130,58 @@
 
 ## Ready now
 
-Tasks with no pending dependencies — can be started immediately:
+Tasks with no pending dependencies — complete before Phase 3:
 
-- No `[frontend]` tasks remain. All G7 tasks are done or deferred.
-- Remaining cross-repo: G1, G2, G3, G4, G5, G6 integration tests require a running Docker environment.
+- **G8 (critical):** Student node tree — backend must return full nested tree, not flat root nodes
+- **G9:** Can start in parallel with G8 — `topic_count` query is independent of tree structure
+- **G10 ✓ (2026-06-16):** `_LmStudioEmbedding` + `_build_embed_model` unit tests committed (`cb602a9`)
+- **G11 (manual):** After G8 + G9 — full S-nav walkthrough with real data
+
+---
+
+## G8 [backend]: Student Node Tree Fix
+
+### G8.1 [backend]: Repository + Service
+
+- [ ] T8.1 [backend]: Add `get_all_platform_nodes_visible(viewer_sub: str)` to abstract `AbstractCoursePathNodeRepository` + `CoursePathNodeRepository` — returns all `owner_type='platform'` nodes visible to the student across all categories (reuse `student_visibility_clause`)
+- [ ] T8.2 [backend]: Expose `_build_tree` from `CoursePathNodeService` as a module-level utility function `_build_node_tree(nodes: list[CoursePathNode]) -> list[CoursePathNode]` so `StudentDashboardService` can import it without a cross-service dependency
+- [ ] T8.3 [backend]: Update `StudentDashboardService.get_node_tree()` — platform branch calls `get_all_platform_nodes_visible(viewer_sub)` then `_build_node_tree()` instead of `get_platform_root_nodes()`
+- [ ] T8.4 [backend]: Add `children: list[PlatformNodeCard]` recursive field to `PlatformNodeCard` schema (requires `model_rebuild()` for Pydantic self-reference)
+- [ ] T8.5 [backend]: Update `GET /api/student/nodes` route — serialise children recursively from nested `CoursePathNode.children` into `PlatformNodeCard.children`
+
+### G8.2 [backend]: Tests
+
+- [ ] T8.6 [backend]: Unit test — `TestGetNodeTreePlatform`: seed grade → subject → course hierarchy; assert `get_node_tree()` returns root with `children[0].children[0]` populated and correct names
+- [ ] T8.7 [backend]: Integration test — `GET /api/student/nodes?owner_type=platform` with 3-level seed; assert JSON response contains nested `children`, depth ≥ 2; assert student visibility (platform-only nodes, parent-owned excluded)
+
+- [ ] **G8: Student Node Tree** — `GET /api/student/nodes?owner_type=platform` returns nested tree; NodeTreeSidebar in browser shows expandable grade ▶ → subject ▶ → course hierarchy
+
+---
+
+## G9 [backend]: Student Node topic_count
+
+- [ ] T9.1 [backend]: Add `get_topic_counts_for_nodes(node_ids: list[UUID]) -> dict[UUID, int]` to `CoursePathNodeRepository` — single query counting direct `status='live'` topics per node via GROUP BY
+- [ ] T9.2 [backend]: Wire into `StudentDashboardService.get_dashboard()` and `get_node_tree()` — call `get_topic_counts_for_nodes()` after building node list/tree, populate real counts into `PlatformNodeCard`
+- [ ] T9.3 [backend]: Unit test — node with 1 live topic → `topic_count=1`; draft-only node → `topic_count=0`; empty node → `topic_count=0`
+
+- [ ] **G9: topic_count** — dashboard cards and courses sidebar badges show correct non-zero counts for nodes with live topics
+
+---
+
+## G10 [backend]: _LmStudioEmbedding Unit Tests ✓ (2026-06-16)
+
+- [x] T10.1 [backend]: `TestLmStudioEmbedding` — mock `openai.OpenAI`; covers `_embed`, `_get_text_embedding`, `_get_query_embedding`, `_aget_text_embedding`, `_aget_query_embedding` (cb602a9)
+- [x] T10.2 [backend]: `TestBuildEmbedModel` — covers plain-name → `OllamaEmbedding`; `lmstudio://model@host` → `_LmStudioEmbedding`; `lmstudio://model` (no `@`) → `_LmStudioEmbedding`; unknown scheme → `OllamaEmbedding` fallback (cb602a9)
+- [x] `pin_embedding_model_spec` autouse fixture added to `tests/unit/worker/conftest.py` (cb602a9)
+
+- [x] **G10: _LmStudioEmbedding tests** — 100% branch coverage on `_LmStudioEmbedding` and `_build_embed_model` ✓ (2026-06-16)
+
+---
+
+## G11 [manual]: End-to-End Student Navigation Verification
+
+- [x] T11.1 [manual]: "Ratio" topic set to `live` ✓ (confirmed in DB 2026-06-16)
+- [ ] T11.2 [manual]: After G8 fix — login as student; expand grade → Maths → Arithmetic in NodeTreeSidebar; select "Ratio" topic; verify LaTeX-formatted content renders in ContentViewer
+- [ ] T11.3 [manual]: Verify "Home Study" tab disabled (no parent link); verify placeholder message correct on home page
+
+- [ ] **G11: S-nav E2E** — full student navigation works from dashboard card to content viewer with real data

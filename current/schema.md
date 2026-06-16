@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 90b5601 (feature/rag — RAG pipeline + student dashboard APIs + text restructuring + dep bumps, 2026-06-15) |
-| haisir-frontend | d9532b7 (feature/rag — student domain types T7.1 + dep bumps, 2026-06-15) |
+| haisir-backend | cb602a9 (feature/rag — _LmStudioEmbedding tests + mypy fix, 2026-06-16) |
+| haisir-frontend | 656b825e (feature/rag — G7 student dashboard + SonarQube fixes, 2026-06-16) |
 | haisir-deploy | e57c56b (feature/rag — EMBEDDING/HAITU/RESTRUCTURE env vars wired, 2026-06-15) |
 
-> Next session: run `git diff 90b5601..HEAD` in haisir-backend, `git diff d9532b7..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff cb602a9..HEAD` in haisir-backend, `git diff 656b825e..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -25,6 +25,7 @@
 | V30_grading_pending_status | Adds `grading_pending` to the `examstatus` PostgreSQL enum via `ALTER TYPE … ADD VALUE IF NOT EXISTS` (run outside transaction). No downgrade path — PostgreSQL does not support removing enum values. |
 | V31_pgvector_extension | `CREATE EXTENSION IF NOT EXISTS vector` — enables pgvector column type and ANN index operators. Downgrade: intentional no-op (dropping may corrupt chunk table). |
 | V32_rag_vector_table_shim | Creates `data_topic_content_chunks` (BigInteger PK, text, metadata_ JSON, node_id VARCHAR, embedding vector(1024)). Registration shim only — LlamaIndex PGVectorStore owns this table; autogenerate diffs are suppressed. Downgrade: `DROP TABLE data_topic_content_chunks`. |
+| V33_add_text_search_tsv_to_chunks | Adds `text_search_tsv TSVECTOR` to `data_topic_content_chunks`; creates `fn_chunks_tsv_update()` BEFORE INSERT/UPDATE trigger that populates it via `to_tsvector('english', ...)`; backfills existing rows; creates GIN index `ix_chunks_text_search_tsv`. Required because V32 shim omitted this column which LlamaIndex `hybrid_search=True` expects to already exist. Downgrade: drops index, trigger, function, column. |
 
 ---
 
@@ -347,11 +348,11 @@ Indexes: `ix_essay_grading_jobs_queue (status, created_at) WHERE status='queued'
 - `id` (BigInteger, PK autoincrement) — LlamaIndex-managed row ID
 - `text` (Text, nullable) — chunked text content (SentenceSplitter chunk_size=512, chunk_overlap=100)
 - `metadata_` (JSON, nullable) — chunk metadata: `content_id`, `topic_id`, `topic_title`, `node_name`, `parent_name`, `grandparent_name`, `page_order`; used by hAITU retriever for `MetadataFilters`
-- `embedding` (vector(1024), nullable) — bge-m3 dense embedding via OllamaEmbedding; HNSW index (m=16, ef_construction=64, ef_search=40, `vector_cosine_ops`)
+- `embedding` (vector(1024), nullable) — bge-m3 dense embedding via `_LmStudioEmbedding` (openai SDK, `lmstudio://model@host:port/path` spec) or `OllamaEmbedding` for plain Ollama specs; dispatch via `_build_embed_model()`; HNSW index (m=16, ef_construction=64, ef_search=40, `vector_cosine_ops`)
 - `node_id` (VARCHAR, nullable) — LlamaIndex internal node UUID
-- `text_search_tsv` (tsvector) — full-text search column created by LlamaIndex when `hybrid_search=True, text_search_config="english"`; enables sparse leg of hybrid retrieval
+- `text_search_tsv` (tsvector) — added by **V33 migration** via `fn_chunks_tsv_update()` BEFORE INSERT/UPDATE trigger (`to_tsvector('english', ...)`); GIN index `ix_chunks_text_search_tsv`; enables sparse leg of hybrid retrieval
 
-Managed by LlamaIndex `PGVectorStore`; V32 migration is a registration shim only — do not add this table to Alembic autogenerate targets. First creation with `hybrid_search=True` bakes the tsvector column into the table; changing to `False` later requires table recreation.
+Managed by LlamaIndex `PGVectorStore`; V32 is the registration shim, V33 adds the tsvector column the store requires. Do not add this table to Alembic autogenerate targets.
 
 ---
 
