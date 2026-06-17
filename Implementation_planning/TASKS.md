@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:09aace9 frontend:d9532b7 deploy:88cbe5d (2026-06-16)
+> Last baselined: backend:04a96f1 frontend:d9532b7 deploy:88cbe5d (2026-06-16)
 
 ---
 
@@ -132,10 +132,8 @@
 
 Tasks with no pending dependencies — complete before Phase 3:
 
-- **G8 (critical):** Student node tree — backend must return full nested tree, not flat root nodes
-- **G9:** Can start in parallel with G8 — `topic_count` query is independent of tree structure
 - **G10 ✓ (2026-06-16):** `_LmStudioEmbedding` + `_build_embed_model` unit tests committed (`cb602a9`)
-- **G11 (manual):** After G8 + G9 — full S-nav walkthrough with real data
+- **G11 (manual):** G8 + G9 backend complete (2026-06-16) — full S-nav walkthrough with real data now unblocked; T11.2 and T11.3 pending manual execution
 
 ---
 
@@ -143,16 +141,16 @@ Tasks with no pending dependencies — complete before Phase 3:
 
 ### G8.1 [backend]: Repository + Service
 
-- [ ] T8.1 [backend]: Add `get_all_platform_nodes_visible(viewer_sub: str)` to abstract `AbstractCoursePathNodeRepository` + `CoursePathNodeRepository` — returns all `owner_type='platform'` nodes visible to the student across all categories (reuse `student_visibility_clause`)
-- [ ] T8.2 [backend]: Expose `_build_tree` from `CoursePathNodeService` as a module-level utility function `_build_node_tree(nodes: list[CoursePathNode]) -> list[CoursePathNode]` so `StudentDashboardService` can import it without a cross-service dependency
-- [ ] T8.3 [backend]: Update `StudentDashboardService.get_node_tree()` — platform branch calls `get_all_platform_nodes_visible(viewer_sub)` then `_build_node_tree()` instead of `get_platform_root_nodes()`
-- [ ] T8.4 [backend]: Add `children: list[PlatformNodeCard]` recursive field to `PlatformNodeCard` schema (requires `model_rebuild()` for Pydantic self-reference)
-- [ ] T8.5 [backend]: Update `GET /api/student/nodes` route — serialise children recursively from nested `CoursePathNode.children` into `PlatformNodeCard.children`
+- [x] T8.1 [backend]: Add `get_all_platform_nodes_visible(viewer_sub: str)` to abstract `AbstractCoursePathNodeRepository` + `CoursePathNodeRepository` — returns all `owner_type='platform'` nodes visible to the student across all categories (reuse `student_visibility_clause`) (2026-06-16)
+- [x] T8.2 [backend]: Expose `_build_tree` from `CoursePathNodeService` as a module-level utility function `_build_node_tree(nodes: list[CoursePathNode]) -> list[CoursePathNode]` so `StudentDashboardService` can import it without a cross-service dependency (2026-06-16)
+- [x] T8.3 [backend]: Update `StudentDashboardService.get_node_tree()` — platform branch calls `get_all_platform_nodes_visible(viewer_sub)` then `_build_node_tree()` instead of `get_platform_root_nodes()` (2026-06-16)
+- [x] T8.4 [backend]: Add `children: list[PlatformNodeCard]` recursive field to `PlatformNodeCard` schema (requires `model_rebuild()` for Pydantic self-reference) (2026-06-16)
+- [x] T8.5 [backend]: Update `GET /api/student/nodes` route — serialise children recursively from nested `CoursePathNode.children` into `PlatformNodeCard.children` (2026-06-16)
 
 ### G8.2 [backend]: Tests
 
-- [ ] T8.6 [backend]: Unit test — `TestGetNodeTreePlatform`: seed grade → subject → course hierarchy; assert `get_node_tree()` returns root with `children[0].children[0]` populated and correct names
-- [ ] T8.7 [backend]: Integration test — `GET /api/student/nodes?owner_type=platform` with 3-level seed; assert JSON response contains nested `children`, depth ≥ 2; assert student visibility (platform-only nodes, parent-owned excluded)
+- [x] T8.6 [backend]: Unit test — `TestGetNodeTreePlatform`: seed grade → subject → course hierarchy; assert `get_node_tree()` returns root with `children[0].children[0]` populated and correct names (2026-06-16)
+- [x] T8.7 [backend]: Integration test — `GET /api/student/nodes?owner_type=platform` with 3-level seed; assert JSON response contains nested `children`, depth ≥ 2; assert student visibility (platform-only nodes, parent-owned excluded) (2026-06-16)
 
 - [ ] **G8: Student Node Tree** — `GET /api/student/nodes?owner_type=platform` returns nested tree; NodeTreeSidebar in browser shows expandable grade ▶ → subject ▶ → course hierarchy
 
@@ -160,9 +158,9 @@ Tasks with no pending dependencies — complete before Phase 3:
 
 ## G9 [backend]: Student Node topic_count
 
-- [ ] T9.1 [backend]: Add `get_topic_counts_for_nodes(node_ids: list[UUID]) -> dict[UUID, int]` to `CoursePathNodeRepository` — single query counting direct `status='live'` topics per node via GROUP BY
-- [ ] T9.2 [backend]: Wire into `StudentDashboardService.get_dashboard()` and `get_node_tree()` — call `get_topic_counts_for_nodes()` after building node list/tree, populate real counts into `PlatformNodeCard`
-- [ ] T9.3 [backend]: Unit test — node with 1 live topic → `topic_count=1`; draft-only node → `topic_count=0`; empty node → `topic_count=0`
+- [x] T9.1 [backend]: Add `get_topic_counts_for_nodes(node_ids: list[UUID]) -> dict[UUID, int]` to `CoursePathNodeRepository` — single query counting direct `status='live'` topics per node via GROUP BY (2026-06-16)
+- [x] T9.2 [backend]: Wire into `StudentDashboardService.get_dashboard()` and `get_node_tree()` — call `get_topic_counts_for_nodes()` after building node list/tree, populate real counts into `PlatformNodeCard` (2026-06-16)
+- [x] T9.3 [backend]: Unit test — node with 1 live topic → `topic_count=1`; draft-only node → `topic_count=0`; empty node → `topic_count=0` (2026-06-16)
 
 - [ ] **G9: topic_count** — dashboard cards and courses sidebar badges show correct non-zero counts for nodes with live topics
 
