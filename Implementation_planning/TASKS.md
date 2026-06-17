@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:04a96f1 frontend:31062ab deploy:88cbe5d (2026-06-17)
+> Last baselined: backend:2686279 frontend:31062ab deploy:88cbe5d (2026-06-17)
 
 ---
 
@@ -133,7 +133,7 @@
 Tasks with no pending dependencies — complete before Phase 3:
 
 - **G10 ✓ (2026-06-16):** `_LmStudioEmbedding` + `_build_embed_model` unit tests committed (`cb602a9`)
-- **G11 ✓ (2026-06-17):** S-nav walkthrough complete — LaTeX content renders; Home Study placeholder confirmed. G9 topic_count fix pending sign-off.
+- **G11 ✓ (2026-06-17):** S-nav walkthrough complete — LaTeX content renders; Home Study placeholder confirmed.
 
 ---
 
@@ -162,7 +162,7 @@ Tasks with no pending dependencies — complete before Phase 3:
 - [x] T9.2 [backend]: Wire into `StudentDashboardService.get_dashboard()` and `get_node_tree()` — call `get_topic_counts_for_nodes()` after building node list/tree, populate real counts into `PlatformNodeCard` (2026-06-16)
 - [x] T9.3 [backend]: Unit test — node with 1 live topic → `topic_count=1`; draft-only node → `topic_count=0`; empty node → `topic_count=0` (2026-06-16)
 
-- [ ] **G9: topic_count** — dashboard cards and courses sidebar badges show correct non-zero counts for nodes with live topics — bug fix in progress: `get_topic_counts_for_nodes` switched to recursive CTE (subtree sum) so parent nodes show non-zero counts
+- [x] **G9: topic_count** — dashboard cards and courses sidebar badges show correct non-zero counts for nodes with live topics ✓ (2026-06-17)
 
 ---
 
