@@ -29,7 +29,7 @@ Split into sub-phases to keep each deployable unit small:
 
 ---
 
-## Phase 2 — RAG Infrastructure + Text Restructuring + Student Dashboard (active)
+## Phase 2 — RAG Infrastructure + Text Restructuring + Student Dashboard ✓ (completed 2026-06-17)
 
 | Sub-phase | Scope | Depends on |
 |---|---|---|

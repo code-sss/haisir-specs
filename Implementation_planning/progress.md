@@ -84,6 +84,33 @@ The platform admin board content manager is fully implemented end-to-end. The Ad
 
 ## Completed Phases
 
+### Phase 2 — RAG Infrastructure + Text Restructuring + Student Dashboard ✓
+
+**Completed:** 2026-06-17
+**Commits:** haisir-backend `2686279` (feature/rag), haisir-frontend `31062ab` (feature/rag), haisir-deploy `e57c56b` (feature/rag)
+**Archived plan:** `Implementation_planning/archive/PLAN_Phase2-RAG-student_2026-06-17.md`
+
+**What was done:**
+- pgvector 0.8.2 added to Postgres via Wolfi multi-stage Dockerfile; wired in common and dev compose
+- V31 enables `vector` extension; V32 shims `data_topic_content_chunks (embedding vector(1024))`; V33 adds `text_search_tsv` + trigger + GIN index for hybrid search
+- `EmbeddingSettings` (bge-m3, dim=1024) + LlamaIndex deps wired in backend and deploy
+- `rag_outbox_loop.py`: drains outbox → PGVectorStore with hybrid search + HNSW; 3-level hierarchy metadata stored per chunk; `_LmStudioEmbedding` adapter added for LM Studio API compatibility
+- `HaituSettings` (8 fields) pre-wired for next cycle's hAITU endpoint
+- Text restructuring: `GlmRestructureMixin.restructure_page()` on `GlmOcrProvider`; called in `extract_page()` under 3-condition guard
+- Student dashboard backend: 4 GET endpoints at `/api/student/`; node tree returns fully nested hierarchy via `_build_node_tree()`; `topic_count` computed via recursive CTE subtree sum
+- Student dashboard frontend: `StudentHomePage` + `StudentCoursesPage` (expandable `NodeTreeSidebar` + `TopicListPanel` + `ContentViewer`); 2 hooks; 11 unit test files at 100% coverage
+- G8/G9 gap fixes: flat root-only tree replaced with recursive children; hardcoded `topic_count=0` replaced with recursive CTE
+- G11 manual walkthrough: LaTeX content renders in ContentViewer; Home Study placeholder confirmed
+
+**Deviations:**
+- `GET /api/student/nodes` initially returned flat root nodes only (G8 found post-code-review); fixed mid-cycle
+- `topic_count` initially used flat GROUP BY (G9); upgraded to recursive CTE
+- Playwright E2E tests deferred (Playwright not installed across all phases)
+
+**Note:** All work on `feature/rag` branch — not yet merged to main in any sibling repo.
+
+---
+
 ### Phase 1d — Topic Content Management (A1–A6 backend + B1–B8 frontend) ✓
 
 **Completed:** 2026-04-20
