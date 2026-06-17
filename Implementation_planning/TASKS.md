@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:04a96f1 frontend:d9532b7 deploy:88cbe5d (2026-06-16)
+> Last baselined: backend:04a96f1 frontend:31062ab deploy:88cbe5d (2026-06-17)
 
 ---
 
@@ -133,7 +133,7 @@
 Tasks with no pending dependencies — complete before Phase 3:
 
 - **G10 ✓ (2026-06-16):** `_LmStudioEmbedding` + `_build_embed_model` unit tests committed (`cb602a9`)
-- **G11 (manual):** G8 + G9 backend complete (2026-06-16) — full S-nav walkthrough with real data now unblocked; T11.2 and T11.3 pending manual execution
+- **G11 ✓ (2026-06-17):** S-nav walkthrough complete — LaTeX content renders; Home Study placeholder confirmed. G9 topic_count fix pending sign-off.
 
 ---
 
@@ -152,7 +152,7 @@ Tasks with no pending dependencies — complete before Phase 3:
 - [x] T8.6 [backend]: Unit test — `TestGetNodeTreePlatform`: seed grade → subject → course hierarchy; assert `get_node_tree()` returns root with `children[0].children[0]` populated and correct names (2026-06-16)
 - [x] T8.7 [backend]: Integration test — `GET /api/student/nodes?owner_type=platform` with 3-level seed; assert JSON response contains nested `children`, depth ≥ 2; assert student visibility (platform-only nodes, parent-owned excluded) (2026-06-16)
 
-- [ ] **G8: Student Node Tree** — `GET /api/student/nodes?owner_type=platform` returns nested tree; NodeTreeSidebar in browser shows expandable grade ▶ → subject ▶ → course hierarchy
+- [x] **G8: Student Node Tree** — `GET /api/student/nodes?owner_type=platform` returns nested tree; NodeTreeSidebar in browser shows expandable grade ▶ → subject ▶ → course hierarchy ✓ (2026-06-17)
 
 ---
 
@@ -162,7 +162,7 @@ Tasks with no pending dependencies — complete before Phase 3:
 - [x] T9.2 [backend]: Wire into `StudentDashboardService.get_dashboard()` and `get_node_tree()` — call `get_topic_counts_for_nodes()` after building node list/tree, populate real counts into `PlatformNodeCard` (2026-06-16)
 - [x] T9.3 [backend]: Unit test — node with 1 live topic → `topic_count=1`; draft-only node → `topic_count=0`; empty node → `topic_count=0` (2026-06-16)
 
-- [ ] **G9: topic_count** — dashboard cards and courses sidebar badges show correct non-zero counts for nodes with live topics
+- [ ] **G9: topic_count** — dashboard cards and courses sidebar badges show correct non-zero counts for nodes with live topics — bug fix in progress: `get_topic_counts_for_nodes` switched to recursive CTE (subtree sum) so parent nodes show non-zero counts
 
 ---
 
@@ -179,7 +179,7 @@ Tasks with no pending dependencies — complete before Phase 3:
 ## G11 [manual]: End-to-End Student Navigation Verification
 
 - [x] T11.1 [manual]: "Ratio" topic set to `live` ✓ (confirmed in DB 2026-06-16)
-- [ ] T11.2 [manual]: After G8 fix — login as student; expand grade → Maths → Arithmetic in NodeTreeSidebar; select "Ratio" topic; verify LaTeX-formatted content renders in ContentViewer
-- [ ] T11.3 [manual]: Verify "Home Study" tab disabled (no parent link); verify placeholder message correct on home page
+- [x] T11.2 [manual]: After G8 fix — login as student; expand grade → Maths → Arithmetic in NodeTreeSidebar; select "Ratio" topic; verify LaTeX-formatted content renders in ContentViewer (2026-06-17)
+- [x] T11.3 [manual]: Verify "Home Study" tab disabled (no parent link); verify placeholder message correct on home page (2026-06-17)
 
-- [ ] **G11: S-nav E2E** — full student navigation works from dashboard card to content viewer with real data
+- [x] **G11: S-nav E2E** — full student navigation works from dashboard card to content viewer with real data ✓ (2026-06-17)
