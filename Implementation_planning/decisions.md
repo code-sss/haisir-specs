@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-06-17 — Phase 3 plan review: fixes applied
+
+> Post-`/plan` review of PLAN.md against the actual `feature/rag` state of all three repos. Findings and fixes:
+
+- **`HaituDoubtService` missing a topic repository (bug).** T5.3/T5.4 fetch the topic's `course_path_node_id` (subtree check + ancestry for `topic_context`) but never injected a topic repo. Added `topic_repo: AbstractTopicRepository` to the constructor and the route factory; `topic_repo.get(topic_id)` already exists (the dashboard service uses it).
+- **Shared LlamaIndex helpers extracted (code reuse + DDD).** `_parse_db_url`, `_build_embed_model`, `_LmStudioEmbedding` move from `worker/rag_outbox_loop.py` into `src/infrastructure/embedding.py` as public `parse_db_url` / `build_embed_model` / `LmStudioEmbedding`; `build_embed_model` refactored to take `EmbeddingSettings` (not full `Settings`). New task **T4.0** gates G4. Rationale: `HaituService` (domain layer) must not import from the `worker/` entrypoint, and Stage-2 dense retrieval needs the bge-m3 / LM-Studio embed model wired explicitly into `VectorStoreIndex` — LlamaIndex's global default resolves to an OpenAI model and fails in dev.
+- **Deploy route templating (no change to T6.1's intent).** `common/routes/.templated/{dev,staging}/` is gitignored and generated at deploy time by `create_route_config.sh` (falls back to `common/routes/` when no env template exists). T6.1 reworded to author only `common/routes/19-api-haitu.json` (modeled on `17-api-actions.json`); do not hand-create `.templated/` copies.
+- **T6.2 confirmed necessary.** The `backend` service in `common/docker-compose.yml` uses an explicit `environment:` mapping (no `env_file`) and lists no `HAITU__`/`EMBEDDING__` vars. Dev verification (vars in the backend repo `.env`, loaded by Pydantic) proves the code reads them, but staging/prod still need the explicit compose entries — T6.2 stays.
+- **`recommended` depends on `student_profiles.grade`, which onboarding never collects.** Documented in T2.8: grade is `None` for most students, so recommendations are absent until set via the profile endpoint; `get_catalog` degrades gracefully.
+- **Plan-baseline updated** backend `2686279` → `0dbec56` (current HEAD; one continuation fix).
+
+---
+
 ## 2026-06-17 — Phase 3: Student Enrollment + hAITU topic-doubt
 
 - **Enrollment is a prerequisite for hAITU.** Students must enroll before seeing any platform content. The dashboard and S-nav now filter to enrolled subtrees; unenrolled students see an empty state with a Browse Courses CTA. No enrollments = no platform content visible.

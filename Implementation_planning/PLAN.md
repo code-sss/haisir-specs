@@ -111,7 +111,7 @@
 ##### T2.8 [backend] — Enrollment Route Module
 
 - **Build**: Create `src/api/routes/student_enrollment.py`. `router = APIRouter()`. Factory `get_enrollment_service(session)` wires `EnrollmentService(EnrollmentRepository(session), CoursePathNodeRepository(session))`. All three routes include `csrf_protected: Annotated[None, Depends(validate_csrf)]` per codebase pattern. Implement:
-  - `GET /catalog` — calls `service.get_catalog(user.sub, grade)`; returns `list[CatalogNodeCard]`. Fetches grade from `StudentProfileRepository(session)` lookup (or passes `None` if no profile).
+  - `GET /catalog` — calls `service.get_catalog(user.sub, grade)`; returns `list[CatalogNodeCard]`. Fetches grade via `StudentProfileRepository(session).get_by_sub(user.sub)` → `profile.grade` (pass `None` if no profile or `grade` unset). NOTE: onboarding does not collect a grade (Phase 0 made the student-ready step CTA-only), so `grade` is `None` for most students and `recommended` will be `false` across the catalog until a grade is set via the student profile endpoint — this is acceptable for Phase 3 and `get_catalog` already degrades gracefully on `None`.
   - `POST /enrollments` body `StudentEnrollmentCreate` → calls `service.enroll()`; returns 201 with `StudentEnrollmentRead`. Catches `AlreadyEnrolledError` → 409. Catches `ValueError` → 404.
   - `DELETE /enrollments/{enrollment_id}` → calls `service.drop()`; returns 204. Catches `EnrollmentNotFoundError` → 404.
 - **Done when**: `from api.routes.student_enrollment import router` succeeds; three routes registered on router.
@@ -201,6 +201,21 @@
 
 ---
 
+### G4.0 — Shared LlamaIndex Helper Extraction (Refactor)
+
+**Goal**: The embed-model builder, DB-URL parser, and LM Studio embedding adapter live in a neutral shared module that both the worker drain loop and `HaituService` import — avoiding a domain service importing from the `worker/` entrypoint layer (DDD).
+
+**Integration test**: The existing `rag_outbox_loop` integration test still drains the outbox after the helpers are relocated; a unit test imports all three names from the new module.
+
+##### T4.0 [backend] — Extract parse_db_url / build_embed_model / LmStudioEmbedding to a shared module
+
+- **Build**: Create `src/infrastructure/embedding.py`. Move `_parse_db_url`, `_build_embed_model`, and `_LmStudioEmbedding` out of `src/worker/rag_outbox_loop.py` into it as public names: `parse_db_url`, `build_embed_model`, `LmStudioEmbedding`. **Refactor `build_embed_model` to accept `EmbeddingSettings` (not the full `Settings`)** so `HaituService` — which only holds `EmbeddingSettings` — can reuse it. Update `rag_outbox_loop.py` to import from `infrastructure.embedding` and call `build_embed_model(settings.embedding)`. No behaviour change to the worker.
+- **Done when**: `from infrastructure.embedding import parse_db_url, build_embed_model, LmStudioEmbedding` succeeds; the worker still drains the outbox (existing integration test passes); `rag_outbox_loop.py` no longer defines the three helpers.
+- **Test**: Existing `rag_outbox_loop` unit/integration tests pass against the relocated helpers (update their import paths). New unit test: `build_embed_model(EmbeddingSettings(model_spec="lmstudio://m@h:1/v1"))` returns an `LmStudioEmbedding`.
+- **Depends on**: None (pure refactor of existing Phase 2 code).
+
+---
+
 ### G4.1 — Stage 1: Query Rewrite + Intent + Safety
 
 **Goal**: LLM is called once to return a structured `{rewritten_query, intent, safe, reject_reason}`.
@@ -209,10 +224,10 @@
 
 ##### T4.1 [backend] — HaituService Skeleton + Stage 1
 
-- **Build**: Create `src/domain/services/haitu_service.py`. Define `@dataclass class HaituRewriteResult` with `rewritten_query: str`, `intent: Literal["definition","computation","explanation"]`, `safe: bool`, `reject_reason: str | None`. Define `@dataclass class HaituResponse` with `response: str`, `escalation_ready: bool`. Define `class HaituService(__init__(settings: HaituSettings, embedding_settings: EmbeddingSettings, database_url: str))`. Implement `async def _stage1_rewrite(self, query: str) -> HaituRewriteResult` using `asyncio.to_thread()` to call the LLM (build from `settings.model_spec` following the same model-spec parsing pattern as `rag_outbox_loop.py`). Parse JSON response; on parse failure default to `safe=True, intent="explanation", rewritten_query=query`.
+- **Build**: Create `src/domain/services/haitu_service.py`. Define `@dataclass class HaituRewriteResult` with `rewritten_query: str`, `intent: Literal["definition","computation","explanation"]`, `safe: bool`, `reject_reason: str | None`. Define `@dataclass class HaituResponse` with `response: str`, `escalation_ready: bool`. Define `class HaituService(__init__(settings: HaituSettings, embedding_settings: EmbeddingSettings, database_url: str))`. Implement `async def _stage1_rewrite(self, query: str) -> HaituRewriteResult` using `asyncio.to_thread()` to call the LLM (build a LlamaIndex chat LLM from `settings.model_spec` using the same `lmstudio://`-prefix dispatch the shared `infrastructure.embedding` module uses — this is the chat LLM, distinct from the embed model). Parse JSON response; on parse failure default to `safe=True, intent="explanation", rewritten_query=query`.
 - **Done when**: `HaituService` imports without error; `_stage1_rewrite` is callable in a unit test with a mocked LLM call.
 - **Test**: Unit test: mock LLM returning `'{"rewritten_query":"Q","intent":"definition","safe":true,"reject_reason":null}'` → assert `_stage1_rewrite()` returns `HaituRewriteResult(rewritten_query="Q", intent="definition", safe=True, reject_reason=None)`.
-- **Depends on**: None
+- **Depends on**: T4.0 [backend]
 
 ---
 
@@ -224,10 +239,10 @@
 
 ##### T4.2 [backend] — Stage 2 Hybrid Retrieval
 
-- **Build**: In `haitu_service.py`, implement `async def _stage2_retrieve(self, query: str, topic_id: UUID, *, with_rerank: bool) -> list` using `asyncio.to_thread()`. Build `PGVectorStore.from_params(hybrid_search=True, text_search_config="english")` using `_parse_db_url(self._database_url)` (reuse or import the helper from `rag_outbox_loop.py`). Build `VectorStoreIndex.from_vector_store(vector_store)`. Compose `QueryFusionRetriever(retrievers=[dense, sparse], mode="relative_score", num_queries=1)` with `topic_id` metadata filter. Retrieve `top_k * 3` if `with_rerank` else `top_k`.
+- **Build**: In `haitu_service.py`, implement `async def _stage2_retrieve(self, query: str, topic_id: UUID, *, with_rerank: bool) -> list` using `asyncio.to_thread()`. Build `PGVectorStore.from_params(hybrid_search=True, text_search_config="english")` using `parse_db_url(self._database_url)` from the shared `infrastructure.embedding` module (T4.0). **Build the bge-m3 query embed model via `build_embed_model(self._embedding_settings)` from the same shared module (includes the `LmStudioEmbedding` adapter required for LM Studio in dev). Pass this embed model explicitly to `VectorStoreIndex.from_vector_store(vector_store, embed_model=...)` and the dense retriever — do not rely on LlamaIndex's global default, which resolves to an OpenAI model and fails.** Compose `QueryFusionRetriever(retrievers=[dense, sparse], mode="relative_score", num_queries=1)` with `topic_id` metadata filter (the drain loop stores `metadata_->>'topic_id'` per chunk — confirmed in `rag_outbox_loop._build_nodes`). Retrieve `top_k * 3` if `with_rerank` else `top_k`.
 - **Done when**: Unit test with mocked `QueryFusionRetriever` confirms method returns mock results.
 - **Test**: Unit test: mock `QueryFusionRetriever.retrieve()` returning 3 `NodeWithScore` → assert 3 results returned.
-- **Depends on**: T4.1 [backend]
+- **Depends on**: T4.1 [backend], T4.0 [backend]
 
 ---
 
@@ -299,10 +314,10 @@
 
 ##### T5.3 [backend] — HaituDoubtService (Orchestration, No DB Writes)
 
-- **Build**: Create `src/domain/services/haitu_doubt_service.py`. `class HaituDoubtService(__init__(self, enrollment_repo: AbstractEnrollmentRepository, node_repo: AbstractCoursePathNodeRepository, haitu_service: HaituService, rate_limiter: HaituRateLimiter))`. Implement `async def handle(self, user_sub: str, topic_id: UUID, enrollment_id: UUID, message: str, history: list[dict]) -> HaituDoubtResponse`:
+- **Build**: Create `src/domain/services/haitu_doubt_service.py`. `class HaituDoubtService(__init__(self, enrollment_repo: AbstractEnrollmentRepository, node_repo: AbstractCoursePathNodeRepository, topic_repo: AbstractTopicRepository, haitu_service: HaituService, rate_limiter: HaituRateLimiter))`. (`topic_repo` is required — steps 3 and 5 both need the topic's `course_path_node_id`.) Implement `async def handle(self, user_sub: str, topic_id: UUID, enrollment_id: UUID, message: str, history: list[dict]) -> HaituDoubtResponse`:
   1. Fetch `enrollment = await enrollment_repo.get_by_id(enrollment_id)` → raise `PermissionError` if None or `enrollment.student_sub != user_sub`.
   2. Compute enrolled subtree via `node_repo.get_subtree_node_ids([enrollment.course_path_node_id])`.
-  3. Fetch topic; verify `topic.course_path_node_id in subtree` → raise `PermissionError` if not.
+  3. Fetch `topic = await topic_repo.get(topic_id)` → raise `PermissionError` if None; verify `topic.course_path_node_id in subtree` → raise `PermissionError` if not.
   4. Call `rate_limiter.check_and_increment(user_sub)` → raise `RateLimitExceededError` if True. (Add `class RateLimitExceededError(Exception)` to `domain/exceptions.py` in this task.)
   5. Build `topic_context = {title, grade, subject}` from node ancestry (`node_repo.get_path_to_root(topic.course_path_node_id)`).
   6. Call `await haitu_service.answer(topic_id, message, history, topic_context)` → return `HaituDoubtResponse(response=result.response, escalation_ready=result.escalation_ready)`.
@@ -312,7 +327,7 @@
 
 ##### T5.4 [backend] — haitu Route Module (Thin Handler)
 
-- **Build**: Create `src/api/routes/haitu.py`. `router = APIRouter()`. Factory `get_haitu_doubt_service(session)` wires `HaituDoubtService(EnrollmentRepository(session), CoursePathNodeRepository(session), HaituService(settings.haitu, settings.embedding, settings.database_url), haitu_rate_limiter)`. Implement `POST /topic-doubt` with `user: CurrentUser = Depends(require_student())`, `csrf_protected: Annotated[None, Depends(validate_csrf)]`. Calls `service.handle(user.sub, body.topic_id, body.enrollment_id, body.message, body.history)`. Maps `PermissionError → 403`, `RateLimitExceededError → 429`. Returns `HaituDoubtResponse`.
+- **Build**: Create `src/api/routes/haitu.py`. `router = APIRouter()`. Factory `get_haitu_doubt_service(session)` wires `HaituDoubtService(EnrollmentRepository(session), CoursePathNodeRepository(session), TopicRepository(session), HaituService(settings.haitu, settings.embedding, settings.database_url), haitu_rate_limiter)`. Implement `POST /topic-doubt` with `user: CurrentUser = Depends(require_student())`, `csrf_protected: Annotated[None, Depends(validate_csrf)]`. Calls `service.handle(user.sub, body.topic_id, body.enrollment_id, body.message, body.history)`. Maps `PermissionError → 403`, `RateLimitExceededError → 429`. Returns `HaituDoubtResponse`.
 - **Done when**: Route imports without error; unit test with mocked service: `PermissionError` → 403; `RateLimitExceededError` → 429.
 - **Test**: Unit test with `TestClient` + mocked `HaituDoubtService.handle()` raising `PermissionError` → response status 403.
 - **Depends on**: T5.3 [backend], T5.2 [backend]
@@ -336,7 +351,7 @@
 
 ##### T6.1 [deploy] — 19-api-haitu.json Route Config
 
-- **Build**: Create `common/routes/19-api-haitu.json`. Model after existing route configs: `id: "api-haitu"`, `uris: ["/api/haitu/*"]`, `methods: ["POST"]`, `priority: 20`, `plugin_config_id: "secured-api"`, upstream `backend:8000` with `timeout: {connect: 10, send: 360, read: 360}` (matches `llm_request_timeout` default). Also create `.templated/dev/19-api-haitu.json` and `.templated/staging/19-api-haitu.json` following the templating convention used by existing routes.
+- **Build**: Create `common/routes/19-api-haitu.json`. Model after `17-api-actions.json` (a `secured-api` POST route): `id: "api-haitu"`, `uris: ["/api/haitu/*"]`, `methods: ["POST"]`, `priority: 20`, `plugin_config_id: "secured-api"`, upstream `backend:8000` with `timeout: {connect: 10, send: 360, read: 360}` (matches `llm_request_timeout` default — long send/read because hAITU runs a multi-stage LLM pipeline). Do **not** hand-create `.templated/dev/` or `.templated/staging/` copies — `common/routes/.templated/` is gitignored and regenerated at deploy time by `create_route_config.sh`, which falls back to `common/routes/` when no env-specific template exists. Like `17-api-actions.json`, this route has no env-specific WAF tuning, so the single `common/routes/` file is sufficient.
 - **Done when**: `python -m json.tool common/routes/19-api-haitu.json` exits 0.
 - **Test**: `python -m json.tool common/routes/19-api-haitu.json` exits 0. Integration test: APISIX Admin API accepts the route config.
 - **Depends on**: T5.5 [backend]
@@ -506,7 +521,7 @@
 
 ##### T9.4b [frontend] — StudentCoursesPage Doubt State Wiring
 
-- **Build**: In `src/features/student/components/student-courses-page.tsx` (or the equivalent page component), add `selectedTopicId: string | null` and `selectedEnrollmentId: string | null` to local state. When a topic is selected, set `selectedTopicId`. Derive `selectedEnrollmentId` from `useStudentCatalog` state (look up enrollment for the current platform node). Pass `topicId={selectedTopicId}` and `enrollmentId={selectedEnrollmentId}` down to `<ContentViewer>`.
+- **Build**: In `src/features/student/components/student-courses-page.tsx` (or the equivalent page component), add `selectedTopicId: string | null` and the id of the enrolled **root** node the selection sits under (`selectedRootNodeId: string | null`) to local state. The node tree from `GET /api/student/nodes` is already the enrolled subtree, so each top-level node in that tree is an enrolled grade whose `id` matches a `CatalogNode.id`. When a topic is selected, set `selectedTopicId` and `selectedRootNodeId` (the top-level ancestor in the sidebar tree). Derive `selectedEnrollmentId = catalogNodes.find(n => n.id === selectedRootNodeId)?.enrollment_id ?? null` from `useStudentCatalog`. Pass `topicId={selectedTopicId}` and `enrollmentId={selectedEnrollmentId}` down to `<ContentViewer>`.
 - **Done when**: Integration render test — selecting a topic sets `selectedTopicId` and `ContentViewer` receives a non-null `topicId` prop.
 - **Test**: Render test: simulate topic selection → assert `ContentViewer` prop `topicId` is non-null.
 - **Depends on**: T9.4a [frontend], T7.3 [frontend]
@@ -534,4 +549,4 @@
 
 ---
 
-<!-- plan-baseline: backend:268627910dbece13dbc22a87f82c8a062a668668 frontend:31062ab9ed6026d682046c177f7ee219327af477 deploy:e57c56bdc5dc04a5eb3d37ac63fedf5c5007eb40 -->
+<!-- plan-baseline: backend:0dbec5694697941ee0ede822e3b37b2790d0769e frontend:31062ab9ed6026d682046c177f7ee219327af477 deploy:e57c56bdc5dc04a5eb3d37ac63fedf5c5007eb40 -->
