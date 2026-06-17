@@ -124,8 +124,7 @@ Claude must return all `topic-doubt` and `escalation-attempt` responses as a JSO
 - `escalation_ready: true` when Claude cannot fully resolve the doubt.
 - `escalation_ready: false` in all other cases.
 - The system prompt must instruct Claude to always return valid JSON in this exact format with no prose outside the JSON structure.
-- The backend sets `doubt.haitu_attempted = true` and enables the "Request teacher help" button when `escalation_ready: true` is returned.
-- The student can also explicitly click "Request teacher help" at any time after `haitu_attempted = true`.
+- **Phase 3:** `escalation_ready=true` enables the "Ask your teacher" button client-side only — no backend persistence (doubts table deferred to Phase 4).
 - Remove all phrase-match logic from escalation detection — `escalation_ready` flag is the only trigger.
 
 ---
@@ -190,7 +189,7 @@ Always respond with a JSON object in this exact format:
 Do not include any text outside this JSON object.
 ```
 
-**After this response:** The backend parses the `escalation_ready` flag from the JSON response. Set `doubt.haitu_attempted = true`. If `escalation_ready: true` or student still requests teacher help, create the escalation.
+**After this response:** The backend parses the `escalation_ready` flag from the JSON response. **Phase 3:** flag is returned to client only — no backend persistence. Phase 4 will add `doubt.haitu_attempted = true` and escalation creation once the doubts table exists.
 
 The following diagram shows the full doubt lifecycle — from initial hAITU response through escalation, teacher reply, and student notification:
 
@@ -214,10 +213,10 @@ sequenceDiagram
     FE->>BE: POST /api/haitu/topic-doubt (escalation-attempt type)
     BE->>AI: escalation-attempt prompt (one shot, different approach)
     AI-->>BE: {response, escalation_ready: true}
-    BE->>BE: SET doubt.haitu_attempted = true
     BE-->>FE: {response, escalation_ready: true}
-    FE-->>S: Final hAITU attempt shown + "Ask teacher" button enabled
+    FE-->>S: Final hAITU attempt shown + "Ask teacher" button enabled (Phase 3: disabled placeholder)
 
+    Note over S,T: Phase 4 — requires doubts table + teacher role in Keycloak
     S->>FE: Confirm escalation
     FE->>BE: POST /api/doubts/{id}/escalate
     BE->>N: Emit new_doubt_escalated event
@@ -393,11 +392,10 @@ POST /api/haitu/topic-doubt
     message: str,             // the student's question (max 1000 chars)
     history: [{role: "user"|"assistant", content: str}]  // last 5 turns (client-managed rolling window)
   }
-→ Returns: {response: str, escalation_ready: bool, doubt_id: uuid}
-→ Persistence side effects:
-    1. Find or create an open `doubts` record for (student_sub, topic_id, enrollment_id).
-    2. Save the AI response as a `doubt_messages` row with sender_type='ai'.
-    3. If escalation_ready=true: set doubts.haitu_attempted=true.
+→ Returns: {response: str, escalation_ready: bool}
+→ Persistence: none in Phase 3 — chat history is session-only (client-side).
+    Phase 4 will add: find/create doubts record; save AI response to doubt_messages;
+    set haitu_attempted=true if escalation_ready.
 → Rate limit: 20 calls/student/hour (BR-AI-003). Returns 429 if exceeded.
 
 POST /api/haitu/exam-review-chat
@@ -485,7 +483,7 @@ Configurable by SuperAdmin in platform settings. Defaults:
 
 > **Phase 2+ consideration:** More granular rate limiting (per-interaction-type limits, burst rate controls, daily/monthly cost-based quotas, per-institution quotas for managed deployments) is deferred to a later phase. The current flat per-role hourly limits are sufficient for v1 launch. Revisit when usage data is available.
 
-**BR-AI-004:** hAITU interactions are not logged to persistent storage (privacy). Only `doubt_messages` with `sender_type = 'ai'` are stored — these are the messages that appear in the student's doubt thread. All other hAITU chat history is ephemeral (client-side session only).
+**BR-AI-004:** hAITU chat history is fully ephemeral in Phase 3 — nothing is written to the database. The client holds the rolling message window in memory and sends the last 5 turns with each request. Phase 4 will introduce the `doubts` + `doubt_messages` tables for persistent threads and teacher escalation.
 
 ---
 

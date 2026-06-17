@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-06-17 — Phase 3: Student Enrollment + hAITU topic-doubt
+
+- **Enrollment is a prerequisite for hAITU.** Students must enroll before seeing any platform content. The dashboard and S-nav now filter to enrolled subtrees; unenrolled students see an empty state with a Browse Courses CTA. No enrollments = no platform content visible.
+- **Student self-enrollment only (Phase 3).** Students browse the catalog and self-enroll. Grade-based recommendations (string match on `student_profiles.grade`) are shown as badges — no ML. Platform-admin and parent-initiated enrollment deferred.
+- **Enrollment scoped at any node level.** Enrolling at grade level grants access to all descendant subjects, courses, and topics. The server enforces via recursive CTE subtree query.
+- **hAITU chat is fully stateless in Phase 3.** No chat history is written to the database. The client holds the rolling 5-turn window in memory and sends it with each request. Teacher escalation and the `doubts` + `doubt_messages` tables are deferred to Phase 4 (requires teacher role in Keycloak).
+- **V35 (doubts + doubt_messages) deferred to Phase 4.** Schema design is documented but not migrated. `POST /api/haitu/topic-doubt` returns `{response, escalation_ready}` only — no `doubt_id`.
+- **Rate limiting is in-memory per worker (no Redis).** 20 calls/student/hour using a module-level `HaituRateLimiter` with `threading.Lock`. Acceptable for Phase 3; revisit if multi-worker scaling requires cross-process coordination.
+- **Business logic in HaituDoubtService, not in the route.** The route handler maps exceptions to HTTP codes only. All validation (enrollment ownership, subtree check, rate limit) lives in the domain service, per project DDD rules.
+- **Mastery score always "N/A" in Phase 3.** The system prompt template includes the mastery_score slot (for future use) but the value is always "N/A" until mastery tracking is implemented.
+- **bge-m3 (BAAI/bge-m3, 1024-dim) is the fixed embedding model.** Changing the model requires full re-indexing of `data_topic_content_chunks`. Do not change without planning a reindex cycle.
+
+---
+
 ## 2026-06-12 — PDF text restructuring pass (adapted from anhad-final-exam)
 
 > Affects: `haisir-backend` — `GlmOcrProvider`, `ExtractionSettings`, `extraction_loop.py`, new `prompts/restructure_prompt.md`.

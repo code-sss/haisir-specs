@@ -658,9 +658,11 @@ If `ai_rationale` is NULL at override time (e.g., blank-answer path), initialise
 
 ---
 
-## Schema Extensions (Phase 3 — Student Enrollment + hAITU Doubt System)
+## Schema Extensions (Phase 3 — Student Enrollment)
 
-Migrations V34–V35. All columns and tables are additive — nothing is dropped or renamed.
+Migration V34. All columns and tables are additive — nothing is dropped or renamed.
+
+> **V35 (doubts + doubt_messages) deferred to Phase 4.** Phase 3 hAITU chat is session-only (client-side); nothing is written to the database. The doubts schema will be introduced alongside teacher escalation endpoints once the teacher role is active in Keycloak.
 
 ### New table — `student_enrollments` (V34)
 
@@ -698,11 +700,12 @@ When a student has no enrollments, `GET /api/student/catalog` returns all availa
 
 ---
 
-### New tables — `doubts` + `doubt_messages` (V35)
+### New tables — `doubts` + `doubt_messages` (V35 — deferred to Phase 4)
 
-Tracks student AI-tutor doubt sessions. Schema is designed to support teacher escalation in a future phase; the teacher reply endpoints are deferred.
+> **Deferred.** Phase 3 hAITU is fully stateless — no doubt records are written. The schema below is the intended design for Phase 4 when teacher escalation is introduced (requires teacher role in Keycloak).
 
 ```sql
+-- Phase 4 only — do not create in Phase 3 migrations
 CREATE TABLE doubts (
     id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     student_sub      TEXT        NOT NULL,
@@ -719,7 +722,7 @@ CREATE INDEX idx_doubts_student_topic ON doubts(student_sub, topic_id, status);
 CREATE TABLE doubt_messages (
     id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     doubt_id     UUID        NOT NULL REFERENCES doubts(id) ON DELETE CASCADE,
-    sender_type  VARCHAR(10) NOT NULL,
+    sender_type  VARCHAR(10) NOT NULL,  -- 'student' | 'ai' | 'teacher'
     content      TEXT        NOT NULL,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -727,34 +730,10 @@ CREATE TABLE doubt_messages (
 CREATE INDEX idx_doubt_messages_doubt_id ON doubt_messages(doubt_id);
 ```
 
-**`doubts` columns:**
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | UUID | PK |
-| `student_sub` | TEXT | Keycloak sub of the student |
-| `topic_id` | UUID | The topic the doubt is about |
-| `enrollment_id` | UUID | The enrollment that scopes this doubt |
-| `haitu_attempted` | BOOLEAN | Set `true` when hAITU returns `escalation_ready=true` |
-| `status` | VARCHAR(20) | `'open'` \| `'escalated'` \| `'resolved'` — escalation and resolve deferred to Phase 4 |
-| `created_at` | TIMESTAMPTZ | When the doubt session started |
-| `updated_at` | TIMESTAMPTZ | Updated on each new message |
-
-**`doubt_messages` columns:**
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | UUID | PK |
-| `doubt_id` | UUID | FK → doubts.id |
-| `sender_type` | VARCHAR(10) | `'student'` \| `'ai'` \| `'teacher'` (teacher reserved for Phase 4) |
-| `content` | TEXT | The message text |
-| `created_at` | TIMESTAMPTZ | Message timestamp |
-
-**Phase 3 behaviour (AI side only):**
-- Each call to `POST /api/haitu/topic-doubt` finds or creates a `doubts` record for `(student_sub, topic_id, enrollment_id)` with `status='open'`.
-- The AI response is saved as a `doubt_messages` row with `sender_type='ai'`.
-- Student-turn messages are NOT stored server-side (client manages the rolling 5-turn history per BR-AI-004). `sender_type='student'` rows are deferred.
+**Phase 4 behaviour (when introduced):**
+- Find or create a `doubts` record per `(student_sub, topic_id, enrollment_id)`.
+- AI responses saved as `doubt_messages(sender_type='ai')`.
 - `escalation_ready=true` sets `doubts.haitu_attempted=true`.
-- Teacher reply (`sender_type='teacher'`), escalation (`POST /api/doubts/{id}/escalate`), and notification triggers are **deferred to Phase 4** (requires teacher role in Keycloak).
+- Teacher reply, escalation endpoint `POST /api/doubts/{id}/escalate`, and notification triggers introduced in Phase 4 alongside teacher Keycloak role.
 
-**BR-DATA-008 — Doubt privacy:** Only the student who created a `doubts` row may read its messages. Teachers may read only escalated doubts assigned to them (Phase 4). No cross-student doubt access.
+**BR-DATA-008 — Doubt privacy (Phase 4):** Only the student who created a `doubts` row may read its messages. Teachers may read only escalated doubts assigned to them. No cross-student doubt access.
