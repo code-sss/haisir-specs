@@ -548,15 +548,15 @@
 - Auth: student (`X-Current-Role: student`; wrong role → 403; missing header → 400)
 - Note: uses `Depends(validate_csrf)` — `X-CSRF-Token` required despite being a GET (deviation from spec which said GET-only needs no CSRF)
 - Response: `StudentDashboardRead { platform_nodes: PlatformNodeCard[], has_parent_link: bool }`
-  - `PlatformNodeCard { id: UUID, name: str, node_type: str, topic_count: int (always 0 this phase), owner_type: str }`
+  - `PlatformNodeCard { id: UUID, name: str, node_type: str, topic_count: int, owner_type: str, children: list[PlatformNodeCard] }`
 
 ### GET /api/student/nodes
 - Purpose: Return the node tree for a given owner (platform or parent), enforcing parent-link access
 - Auth: student
 - Query params: `owner_type: str` (required), `owner_id: str` (required when `owner_type=parent`)
-- Response: `list[PlatformNodeCard]`
+- Response: `list[PlatformNodeCard]` — fully nested tree; each card carries `children: list[PlatformNodeCard]` recursively (G8 complete, 2026-06-16)
 - Errors: 400 if `owner_type=parent` and `owner_id` absent; 403 if no active `parent_child_links` row for the requested parent
-- **⚠ Known gap (G8):** currently returns flat root nodes only (`get_platform_root_nodes()`); `children` not populated and `topic_count` always 0. Fix tracked in TASKS.md G8+G9.
+- `topic_count` populated via single GROUP BY query on `status='live'` topics per node (G9 complete, 2026-06-16)
 
 ### GET /api/student/nodes/{node_id}/topics
 - Purpose: Return live topics for a course-path node filtered to student visibility
