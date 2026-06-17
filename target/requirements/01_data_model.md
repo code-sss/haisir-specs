@@ -57,7 +57,7 @@ All 21 tables live in production. See `current/schema.md` for the authoritative 
 - `categories` → `course_path_nodes` (self-referential tree, arbitrary depth)
 - `course_path_nodes` → `topics` (leaf nodes only)
 - `topics` → `topic_contents` (one per type: pdf, video, text)
-- `topic_contents` → ~~`topic_content_chunks`~~ **superseded** — the RAG service's `rag_chunks` table covers this and more (multi-source, BM25, metadata JSONB, ownership). `topic_content_chunks` will not be created.
+- `topic_contents` → `data_topic_content_chunks` (managed by LlamaIndex PGVectorStore, seeded by `rag_indexing_outbox`; V32 Alembic shim registers it; do not drop or rename)
 
 **Questions & Exams:**
 - `questions`, `paragraph_questions`
@@ -161,7 +161,7 @@ Parent API endpoints filter `owner_id = current_user.idp_sub` for all write oper
 When a parent adopts a platform board subtree:
 - Deep copy of `course_path_nodes` rows (the selected subtree) with `owner_type = 'parent'`, `owner_id = parent.idp_sub`.
 - Deep copy of attached `topics` rows with `owner_type = 'parent'`, `owner_id = parent.idp_sub`, `status = 'draft'`.
-- **Not cloned:** `topic_contents`, `topic_content_chunks`, `questions`, `exam_templates`, `exam_template_questions`. Parent populates their own content and exams after adoption.
+- **Not cloned:** `topic_contents`, `data_topic_content_chunks`, `questions`, `exam_templates`, `exam_template_questions`. Parent populates their own content and exams after adoption.
 - Platform updates to the original board do **not** propagate to parent copies. Each parent copy is independent.
 
 **BR-DATA-006 — Adopt is idempotent per grade-subject:**
@@ -655,3 +655,106 @@ Each owner override appends to `overrides`:
 
 Append using `jsonb_set(ai_rationale, '{overrides}', (ai_rationale->'overrides') || new_entry)`.
 If `ai_rationale` is NULL at override time (e.g., blank-answer path), initialise to `{"overrides": [new_entry]}`.
+
+---
+
+## Schema Extensions (Phase 3 — Student Enrollment + hAITU Doubt System)
+
+Migrations V34–V35. All columns and tables are additive — nothing is dropped or renamed.
+
+### New table — `student_enrollments` (V34)
+
+Students self-enroll in platform course nodes. The enrollment record scopes what the student can access and is required for hAITU.
+
+```sql
+CREATE TABLE student_enrollments (
+    id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_sub         TEXT        NOT NULL,
+    course_path_node_id UUID        NOT NULL REFERENCES course_path_nodes(id) ON DELETE CASCADE,
+    enrolled_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    enrollment_source   VARCHAR(20) NOT NULL DEFAULT 'self',
+    UNIQUE (student_sub, course_path_node_id)
+);
+
+CREATE INDEX idx_student_enrollments_student_sub ON student_enrollments(student_sub);
+```
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID | PK |
+| `student_sub` | TEXT | Keycloak `sub` (no FK — identity is IdP-managed) |
+| `course_path_node_id` | UUID | The node the student enrolled in. Any node level (grade, subject, course). Access extends to all descendant topics. |
+| `enrolled_at` | TIMESTAMPTZ | Enrollment timestamp |
+| `enrollment_source` | VARCHAR(20) | `'self'` (student self-enrolled), `'platform_admin'` (admin enrolled), `'parent'` (parent enrolled on behalf) |
+
+**Access rules:**
+- A student has access to all topics whose `course_path_node_id` is a descendant-or-equal of any enrolled `course_path_node_id`.
+- Enrollment at grade level grants access to all subjects and courses under that grade.
+- Enrollment does not expire — currently no `revoked_at` column. Unenroll = DELETE the row.
+- hAITU `enrollment_id` field references this table. BR-AI-005 verifies the topic is within the enrolled subtree.
+
+**Recommendation algorithm (Phase 3):**
+When a student has no enrollments, `GET /api/student/catalog` returns all available platform nodes with a `recommended: true` flag on nodes whose ancestor grade node matches `student_profiles.grade`. No ML — grade string match only. Students browse the catalog and self-enroll.
+
+---
+
+### New tables — `doubts` + `doubt_messages` (V35)
+
+Tracks student AI-tutor doubt sessions. Schema is designed to support teacher escalation in a future phase; the teacher reply endpoints are deferred.
+
+```sql
+CREATE TABLE doubts (
+    id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_sub      TEXT        NOT NULL,
+    topic_id         UUID        NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+    enrollment_id    UUID        NOT NULL REFERENCES student_enrollments(id) ON DELETE CASCADE,
+    haitu_attempted  BOOLEAN     NOT NULL DEFAULT FALSE,
+    status           VARCHAR(20) NOT NULL DEFAULT 'open',
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_doubts_student_topic ON doubts(student_sub, topic_id, status);
+
+CREATE TABLE doubt_messages (
+    id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    doubt_id     UUID        NOT NULL REFERENCES doubts(id) ON DELETE CASCADE,
+    sender_type  VARCHAR(10) NOT NULL,
+    content      TEXT        NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_doubt_messages_doubt_id ON doubt_messages(doubt_id);
+```
+
+**`doubts` columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID | PK |
+| `student_sub` | TEXT | Keycloak sub of the student |
+| `topic_id` | UUID | The topic the doubt is about |
+| `enrollment_id` | UUID | The enrollment that scopes this doubt |
+| `haitu_attempted` | BOOLEAN | Set `true` when hAITU returns `escalation_ready=true` |
+| `status` | VARCHAR(20) | `'open'` \| `'escalated'` \| `'resolved'` — escalation and resolve deferred to Phase 4 |
+| `created_at` | TIMESTAMPTZ | When the doubt session started |
+| `updated_at` | TIMESTAMPTZ | Updated on each new message |
+
+**`doubt_messages` columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID | PK |
+| `doubt_id` | UUID | FK → doubts.id |
+| `sender_type` | VARCHAR(10) | `'student'` \| `'ai'` \| `'teacher'` (teacher reserved for Phase 4) |
+| `content` | TEXT | The message text |
+| `created_at` | TIMESTAMPTZ | Message timestamp |
+
+**Phase 3 behaviour (AI side only):**
+- Each call to `POST /api/haitu/topic-doubt` finds or creates a `doubts` record for `(student_sub, topic_id, enrollment_id)` with `status='open'`.
+- The AI response is saved as a `doubt_messages` row with `sender_type='ai'`.
+- Student-turn messages are NOT stored server-side (client manages the rolling 5-turn history per BR-AI-004). `sender_type='student'` rows are deferred.
+- `escalation_ready=true` sets `doubts.haitu_attempted=true`.
+- Teacher reply (`sender_type='teacher'`), escalation (`POST /api/doubts/{id}/escalate`), and notification triggers are **deferred to Phase 4** (requires teacher role in Keycloak).
+
+**BR-DATA-008 — Doubt privacy:** Only the student who created a `doubts` row may read its messages. Teachers may read only escalated doubts assigned to them (Phase 4). No cross-student doubt access.

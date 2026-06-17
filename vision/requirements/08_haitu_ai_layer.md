@@ -45,36 +45,55 @@ Each interaction type has a fixed system prompt and a defined input/output contr
 
 **Context assembled server-side:**
 - Topic title, level, subject, board
-- Top-5 relevant chunks from `topic_content_chunks` — retrieved via pgvector (see retrieval pipeline below)
-- Student's mastery score for this topic
+- Top-5 relevant chunks from `data_topic_content_chunks` — retrieved via the 4-stage pipeline below
+- Student's mastery score for this topic (Phase 3: always "N/A" — mastery tracking is deferred; placeholder kept in system prompt for future use)
 - Last 5 messages from this topic's hAITU session (rolling window)
 
 **RAG retrieval pipeline for `{content_summary}`:**
-1. Embed the student's message using `all-MiniLM-L6-v2`.
-2. Query `topic_content_chunks`:
-   ```sql
-   SELECT content FROM topic_content_chunks
-   WHERE topic_id = :topic_id
-   ORDER BY embedding <=> :query_embedding
-   LIMIT 5;
-   ```
-3. Assemble the top-5 chunks (up to ~3000 chars total) as `{content_summary}` for the system prompt.
 
-**Video-only fallback:** If `topic_content_chunks` is empty for the topic (e.g. video-only content with no PDF/text), fall back to `topic_contents.text_extracted` truncated to 4000 characters (BR-AI-010 behaviour preserved).
+The retrieval follows haiguru's 4-stage pipeline adapted for hAIsir's HTTP context:
 
-**Content ingestion pipeline (LlamaIndex):**
-- On `topic_contents` create or update, an async background job is triggered.
-- Extracted text is stored in `topic_contents.text_extracted` (see `01_data_model.md` section 6a) and chunked/embedded into `topic_content_chunks` (see section 6b).
-- Chunks: 600-char pieces, 100-char overlap, sentence-aware split. Embedded with `all-MiniLM-L6-v2`.
-- If a student asks a hAITU doubt before ingestion is complete, the backend returns a fallback response: "hAITU is still reviewing the materials for this topic — please try again in a moment." (HTTP 202 with `retry_after: 30` header).
-- Extraction status is tracked via `topic_contents.extraction_status` (`'pending'` | `'complete'` | `'failed'`). No notification is sent to the student when extraction completes — the student simply retries and it works.
-- Invalidation: any update to a `topic_contents` row resets `extraction_status = 'pending'` and re-triggers extraction + re-chunking.
+**Stage 1 — Query rewrite + intent + safety:**
+- LLM call (lightweight — uses same model as synthesis) returns `{rewritten_query, intent, safe, reject_reason}`.
+- `intent` ∈ `{"definition", "computation", "explanation"}` — selects the matching QA + refine prompt pair for Stage 4.
+- Safety check: blocks profanity, prompt injection, adult content, illegal instructions. Off-topic benign queries pass through (`safe=True`). Parse errors fail safe (reject, not pass-through).
+- If `safe=False`: return a graceful refusal without calling the retriever or synthesizer.
+
+**Stage 2 — Hybrid retrieval:**
+- Embed the rewritten query using `BAAI/bge-m3` (1024-dim, matching the indexed chunks — do not change this model without re-indexing).
+- Two retrieval legs in parallel:
+  - Dense: HNSW cosine similarity (`vector_cosine_ops`) via pgvector on `data_topic_content_chunks`.
+  - Sparse: PostgreSQL `tsvector` full-text search (`text_search_config="english"`) on the same table.
+- Fusion: `QueryFusionRetriever` with `mode="relative_score"`, `num_queries=1` (verbatim rewritten query, no LLM query expansion).
+- Metadata filter: `topic_id = :topic_id` applied to both legs.
+- If reranking is enabled (`haitu_settings.rerank_model != ""`): fetch `top_k × 3` candidates. Otherwise fetch `top_k` (default 5).
+
+**Stage 3 — Reranking (optional):**
+- If `HAITU__RERANK_MODEL` is set: cross-encoder reranks against the **original** query (not the rewritten one — intentional, preserves the student's phrasing for relevance scoring).
+- Local option: `cross-encoder/ms-marco-MiniLM-L-6-v2` (sentence-transformers CrossEncoder).
+- Remote options: `cohere://rerank-english-v3.0`, `jina://jina-reranker-v2-base-en`.
+- If `HAITU__RERANK_MODEL` is empty: Stage 3 is skipped.
+
+**Stage 4 — Synthesis:**
+- `CompactAndRefine` with intent-specific QA + refine prompt pair selected by `intent` from Stage 1.
+- Synthesis receives `[{intent}] {original_query}` (NOT rewritten query — intentional for tone preservation).
+- LLM receives the top-K chunks and the system prompt from section 3.1.
+- Returns: `{response: str, escalation_ready: bool}` (max tokens: see section 5).
+
+**Video-only fallback:** If `data_topic_content_chunks` is empty for the topic, fall back to `topic_contents.text` (stored markdown) truncated to 4000 chars. Skip Stages 1–3; pass raw text directly to Stage 4.
+
+**Content ingestion pipeline (LlamaIndex — Phase 2 RAG drain loop):**
+- Chunking and embedding happen asynchronously via `rag_outbox_loop` in the worker process.
+- When a `topic_contents` row is finalized, a row is inserted into `rag_indexing_outbox` with `status='pending'`. The worker picks it up, chunks the `text` column (512/100 SentenceSplitter), embeds with `bge-m3`, and upserts into `data_topic_content_chunks`. Status transitions: `pending` → `processing` → `done` (or `retry` / `failed` after 3 attempts).
+- Chunks: 512-token pieces, 100-token overlap, sentence-aware split. Embedded with `BAAI/bge-m3` (1024-dim). Do not change these without re-indexing all content.
+- If a student asks before ingestion completes: backend checks `rag_indexing_outbox` — if any row for this topic's content is `status IN ('pending','processing','retry')`, return HTTP 202 with `retry_after: 30`.
+- Invalidation: currently no automatic re-chunking on `topic_contents` update — updating content does not re-trigger the outbox. This is a known limitation; re-indexing on update is deferred to a later phase.
 
 **System prompt template:**
 ```
 You are hAITU, an AI tutor for {subject} at {grade} level on the {board} curriculum.
 The student is studying: "{topic_title}".
-Their current mastery score is {mastery_score}% — {"they are struggling" if <60, "they are progressing" if 60-75, "they are doing well" if >75}.
+Their current mastery score is {mastery_score} — {"they are struggling" if <60, "they are progressing" if 60-75, "they are doing well" if >75}. (Phase 3: {mastery_score} = "N/A" — mastery tracking deferred)
 
 Available topic content:
 {content_summary}
@@ -364,15 +383,22 @@ All hAITU calls go through `/api/haitu/*`. The backend assembles the full prompt
 
 ```
 POST /api/haitu/topic-doubt
-→ Auth: student
+→ Auth: student (X-Current-Role: student)
 → Body: {
-    topic_id: uuid,
-    enrollment_id: uuid,
-    message: str,
-    history: [{role: "user"|"assistant", content: str}]  // last 5 turns
+    topic_id: uuid,           // the topic the student is viewing
+    enrollment_id: uuid,      // student_enrollments.id — must be an active enrollment of this student
+                              // for a node that is an ancestor-or-equal of the topic's course_path_node_id.
+                              // Returns 403 if not enrolled. Returns 400 if enrollment_id does not belong
+                              // to the requesting student.
+    message: str,             // the student's question (max 1000 chars)
+    history: [{role: "user"|"assistant", content: str}]  // last 5 turns (client-managed rolling window)
   }
-→ Returns: {response: str, escalation_ready: bool}
-→ Side effect: if escalation_ready, sets doubt.haitu_attempted = true on any open doubt for this topic
+→ Returns: {response: str, escalation_ready: bool, doubt_id: uuid}
+→ Persistence side effects:
+    1. Find or create an open `doubts` record for (student_sub, topic_id, enrollment_id).
+    2. Save the AI response as a `doubt_messages` row with sender_type='ai'.
+    3. If escalation_ready=true: set doubts.haitu_attempted=true.
+→ Rate limit: 20 calls/student/hour (BR-AI-003). Returns 429 if exceeded.
 
 POST /api/haitu/exam-review-chat
 → Auth: student
@@ -467,7 +493,10 @@ Configurable by SuperAdmin in platform settings. Defaults:
 
 These rules are enforced server-side regardless of what the client sends.
 
-**BR-AI-005:** hAITU cannot access data outside the specified `enrollment_id` + `topic_id` context. The server enforces this by only fetching content items and enrollment data for those specific IDs.
+**BR-AI-005:** hAITU cannot access data outside the specified `enrollment_id` + `topic_id` context. The server enforces this by:
+1. Verifying `student_enrollments.student_sub = requesting_student.sub` (enrollment belongs to this student).
+2. Verifying the topic's `course_path_node_id` is an ancestor-or-equal of the enrolled `course_path_node_id` (topic is within the enrolled subtree).
+3. Only fetching `data_topic_content_chunks` rows where `metadata_->>'topic_id' = topic_id`. No cross-topic data is ever included in the retrieval context.
 
 **BR-AI-006:** hAITU responses for parent interactions must never contain raw scores, percentages, or data fields. The backend post-processes responses to ensure plain language before returning to parent clients.
 
@@ -478,5 +507,5 @@ These rules are enforced server-side regardless of what the client sends.
 **BR-AI-009:** The model used for hAITU is determined by the `platform_settings.model` value at request time. Changing the model in settings takes effect on the next API call — no restart required.
 
 **BR-AI-010:** Content ingestion is async. The hAITU `topic-doubt` interaction gracefully degrades:
-- If `topic_content_chunks` is empty AND `extraction_status != 'complete'` for all topic content items: return HTTP 202 with `retry_after: 30` and the message "hAITU is still reviewing the materials for this topic — please try again in a moment."
-- If `topic_content_chunks` is empty but `extraction_status = 'complete'` (video-only topic with no extractable text): fall back to `text_extracted` truncated to 4000 chars if available, otherwise use topic title only. No retry hint — this is the steady-state for video-only topics.
+- If `data_topic_content_chunks` is empty for the topic AND any `rag_indexing_outbox` row for a content item in this topic has `status IN ('pending', 'processing', 'retry')`: return HTTP 202 with `retry_after: 30` and the message "hAITU is still reviewing the materials for this topic — please try again in a moment."
+- If `data_topic_content_chunks` is empty but all outbox rows are `status = 'done'` or `status = 'failed'` (video-only topic with no extractable text, or extraction failed): fall back to `topic_contents.text` truncated to 4000 chars if any row has text, otherwise use topic title only. No retry hint — this is the steady-state for video-only topics.
