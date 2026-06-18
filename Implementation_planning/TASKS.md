@@ -15,9 +15,9 @@
 ## G2 [backend]: Enrollment APIs
 
 ### G2.1 — Enrollment Domain Layer
-- [ ] T2.1 [backend]: StudentEnrollment domain model (plain dataclass, no Base)
-- [ ] T2.2 [backend]: Enrollment infra table + SQLAlchemy imperative mapping (depends on T2.1)
-- [ ] T2.3 [backend]: AbstractEnrollmentRepository protocol — 5 abstract methods (depends on T2.1)
+- [x] T2.1 [backend]: StudentEnrollment domain model (plain dataclass, no Base) (2026-06-18)
+- [x] T2.2 [backend]: Enrollment infra table + SQLAlchemy imperative mapping (depends on T2.1) (2026-06-18)
+- [x] T2.3 [backend]: AbstractEnrollmentRepository protocol — 5 abstract methods (depends on T2.1) (2026-06-18)
 - [ ] T2.4 [backend]: Concrete EnrollmentRepository implementation (depends on T2.2, T2.3)
 - [ ] **G2.1: Enrollment Domain Layer** — integration test: create/get/delete/get_enrolled_node_ids via real DB session
 
@@ -62,12 +62,12 @@
 - [ ] **G4.1: Stage 1** — integration test: _stage1_rewrite with live Ollama returns rewritten_query + intent + safe (skipped if Ollama absent)
 
 ### G4.2 — Stage 2
-- [ ] T4.2 [backend]: _stage2_retrieve — QueryFusionRetriever (relative_score, topic_id filter, hybrid pgvector) (depends on T4.1)
+- [x] T4.2 [backend]: _stage2_retrieve — QueryFusionRetriever (relative_score, topic_id filter, hybrid pgvector) (depends on T4.1) (2026-06-18)
 - [ ] **G4.2: Stage 2** — integration test: seeded chunks; retrieve returns ≥1 NodeWithScore (skipped if Ollama absent)
 
 ### G4.3 — Stage 3
-- [ ] T4.3 [backend]: _stage3_rerank — passthrough when rerank_model=""; cross-encoder rerank otherwise (depends on T4.2)
-- [ ] **G4.3: Stage 3** — integration test: rerank_model="" → same nodes returned unchanged
+- [x] T4.3 [backend]: _stage3_rerank — passthrough when rerank_model=""; cross-encoder rerank otherwise (depends on T4.2) (2026-06-18)
+- [x] **G4.3: Stage 3** — integration test: rerank_model="" → same nodes returned unchanged (2026-06-18)
 
 ### G4.4 — Stage 4
 - [ ] T4.4 [backend]: _stage4_synthesize (CompactAndRefine, intent-specific prompts, escalation detection) + public answer() with safe=False early exit (depends on T4.3)
@@ -156,6 +156,6 @@
 
 Tasks with no pending dependencies — can start immediately across all three repos:
 
-- T2.1 [backend]: StudentEnrollment domain model (no dependencies — starts the enrollment domain chain)
-- T4.2 [backend]: _stage2_retrieve — hybrid retrieval stage (depends on T4.1 ✓)
+- T2.4 [backend]: Concrete EnrollmentRepository implementation (depends on T2.2 ✓, T2.3 ✓)
+- T4.4 [backend]: _stage4_synthesize + public answer() pipeline (depends on T4.3 ✓)
 - T6.2 [deploy]: HAITU + EMBEDDING env vars in backend service
