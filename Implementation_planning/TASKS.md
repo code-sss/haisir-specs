@@ -50,7 +50,7 @@
 - [x] T3.4 [backend]: Wire EnrollmentRepository into dashboard route + map PermissionError → 403 (depends on T3.3) (2026-06-18)
 - [ ] **G3.2: Enrollment-Aware Service** — integration test: unenrolled student → platform_nodes=[]; wrong node → 403
 
-- [ ] **G3: Enrolled-Only Content Filter** — E2E: enrolled student sees subtree only; unenrolled sees empty dashboard
+- [x] **G3: Enrolled-Only Content Filter** — E2E: enrolled student sees subtree only; unenrolled sees empty dashboard (2026-06-18)
 
 ---
 
@@ -116,7 +116,7 @@
 - [x] T7.6 [frontend]: Browse Courses persistent nav link in student header (depends on T7.5) (2026-06-17)
 - [x] **G7.2: Catalog UI** — integration test: 1 enrolled + 1 unenrolled → 1 Drop + 1 Enroll button; Enroll click triggers API (2026-06-17)
 
-- [ ] **G7: Browse Courses Screen** — E2E: enroll via card → button changes to Drop → navigate to /home → enrolled node appears → drop → reverts
+- [x] **G7: Browse Courses Screen** — E2E: enroll via card → button changes to Drop → navigate to /home → enrolled node appears → drop → reverts (2026-06-18)
 
 ---
 
@@ -130,7 +130,7 @@
 - [x] T8.2 [frontend]: NodeTreeSidebar empty state + "Browse Courses" CTA (depends on T7.5) (2026-06-17)
 - [x] **G8.2: S-nav Empty State** — integration test: nodes=[] → "Browse Courses" link in sidebar DOM (2026-06-17)
 
-- [ ] **G8: Enrolled-Only Dashboard** — E2E: unenrolled → empty state + CTA; after enroll + return → enrolled node shown
+- [x] **G8: Enrolled-Only Dashboard** — E2E: unenrolled → empty state + CTA; after enroll + return → enrolled node shown (2026-06-18)
 
 ---
 
@@ -148,7 +148,30 @@
 - [x] T9.5 [frontend]: Export HaituDoubtPanel, useHaituDoubt, useStudentCatalog + types from feature index (depends on T9.4b, T7.6) (2026-06-17)
 - [x] **G9.2: Doubt Panel** — integration test: select topic → doubt panel renders; send → AI response in chat (2026-06-17)
 
-- [ ] **G9: hAITU Doubt Panel** — E2E: select topic → panel appears; send question → AI response; 21st call → rate limit error
+- [x] **G9: hAITU Doubt Panel** — E2E: select topic → panel appears; send question → AI response; 21st call → rate limit error (2026-06-18)
+
+---
+
+## E2E [frontend]: Playwright Integration Tests (G3/G7/G8/G9)
+
+**Status: E2E suite + CI integration shipped** | Commit `54e198c` 2026-06-18 | 14 files, 16 Playwright specs, all gates green
+
+- [x] E2E.1 [frontend]: Playwright setup — `playwright.config.ts` (webServer auto-starts dev on :3001, pins `NEXT_PUBLIC_BACKEND_URL=localhost:9080`), `@playwright/test` devDep, `test:e2e` scripts (2026-06-18)
+- [x] E2E.2 [frontend]: `tests/e2e/helpers/` — `auth.ts` (mocked CSRF + `/api/users/me`, onboarding cookie, `currentRole` localStorage) and `mock-api.ts` (typed factories + `page.route()` for all student endpoints) (2026-06-18)
+- [x] E2E.3 [frontend]: G3 content-filter specs (3) — enrolled subtree shown; unenrolled empty state + CTA; CTA → /enroll (depends on G3) (2026-06-18)
+- [x] E2E.4 [frontend]: G7 browse-courses specs (4) — catalog display; enroll → Drop + toast; drop → Enroll; enrolled node in /courses (depends on G7) (2026-06-18)
+- [x] E2E.5 [frontend]: G8 empty-state specs (5) — sidebar + home empty states; full enroll → return flow (depends on G8) (2026-06-18)
+- [x] E2E.6 [frontend]: G9 hAITU panel specs (4) — panel render; question → AI response; unenrolled notice; 429 rate-limit (depends on G9) (2026-06-18)
+- [x] E2E.7 [frontend]: Shared env-backed `BACKEND` constant (`tests/e2e/helpers/backend.ts`); fix brittle `waitForPageReady` spinner wait (2026-06-18)
+- [x] E2E.8 [frontend]: Jenkinsfile E2E Tests stage — chromium install, `CI=true` run, JUnit + HTML report, pinned backend URL (2026-06-18)
+- [x] E2E.9 [frontend]: `knip.config.ts` playwright entry; gitignore `playwright-report/`, `test-results/`, `reports/` (2026-06-18)
+- [x] E2E.10 [frontend]: Gate `/commit-frontend` on E2E suite as peer to 100% coverage check (2026-06-18)
+
+---
+
+## G10 — Next (TBD)
+
+- [ ] Placeholder — add next gate tasks here before starting implementation
 
 ---
 
@@ -156,4 +179,4 @@
 
 Tasks with no pending dependencies — can start immediately across all three repos:
 
-All individual T-tasks across all repos are complete. Remaining items are integration and E2E tests at the goal level (G1–G9), which require running infrastructure or test suites.
+All individual T-tasks across all repos are complete, and the frontend E2E Playwright suite (G3/G7/G8/G9) is green. Remaining items are backend integration and E2E tests at the goal level (G1, G2, G4, G5), which require running infrastructure or test suites.
