@@ -156,13 +156,6 @@
 
 Tasks with no pending dependencies — can start immediately across all three repos:
 
-- T1.1 [backend]: V34 Alembic migration
-- T2.5 [backend]: AlreadyEnrolledError + EnrollmentNotFoundError
-- T2.6 [backend]: CatalogNodeCard schema
-- T2.10 [backend]: StudentEnrollmentRead + StudentEnrollmentCreate schemas
-- T3.2 [backend]: is_topic_in_enrolled_subtree
-- T4.1 [backend]: HaituService skeleton + Stage 1
-- T5.1 [backend]: HaituRateLimiter utility
-- T5.2 [backend]: HaituDoubt request/response schemas
+- T2.1 [backend]: StudentEnrollment domain model (no dependencies — starts the enrollment domain chain)
+- T4.2 [backend]: _stage2_retrieve — hybrid retrieval stage (depends on T4.1 ✓)
 - T6.2 [deploy]: HAITU + EMBEDDING env vars in backend service
-- T8.2 [frontend]: NodeTreeSidebar empty state + "Browse Courses" CTA (depends on T7.5 ✓)
