@@ -122,12 +122,12 @@
 ## G8 [frontend]: Enrolled-Only Dashboard + Empty State
 
 ### G8.1 — Dashboard Empty State
-- [ ] T8.1 [frontend]: PlatformBoardSection empty state + "Browse Courses" CTA (depends on T7.5, T3.4 [backend])
-- [ ] **G8.1: Dashboard Empty State** — integration test: nodes=[] → CTA link href="/enroll" in DOM
+- [x] T8.1 [frontend]: PlatformBoardSection empty state + "Browse Courses" CTA (depends on T7.5, T3.4 [backend]) (2026-06-17)
+- [x] **G8.1: Dashboard Empty State** — integration test: nodes=[] → CTA link href="/enroll" in DOM (2026-06-17)
 
 ### G8.2 — S-nav Empty Node Tree
-- [ ] T8.2 [frontend]: NodeTreeSidebar empty state + "Browse Courses" CTA (depends on T7.5)
-- [ ] **G8.2: S-nav Empty State** — integration test: nodes=[] → "Browse Courses" link in sidebar DOM
+- [x] T8.2 [frontend]: NodeTreeSidebar empty state + "Browse Courses" CTA (depends on T7.5) (2026-06-17)
+- [x] **G8.2: S-nav Empty State** — integration test: nodes=[] → "Browse Courses" link in sidebar DOM (2026-06-17)
 
 - [ ] **G8: Enrolled-Only Dashboard** — E2E: unenrolled → empty state + CTA; after enroll + return → enrolled node shown
 
@@ -136,16 +136,16 @@
 ## G9 [frontend]: hAITU Doubt Panel
 
 ### G9.1 — hAITU API + Hook
-- [ ] T9.1 [frontend]: HaituMessage + HaituDoubtResponse types; askHaitu API function (POST /api/haitu/topic-doubt) (depends on T7.1, T5.5 [backend])
-- [ ] T9.2 [frontend]: useHaituDoubt hook — client-side message history, loading/error state, send() (depends on T9.1)
-- [ ] **G9.1: hAITU API + Hook** — integration test: mocked send() → messages.length=2, isLoading=false
+- [x] T9.1 [frontend]: HaituMessage + HaituDoubtResponse types; askHaitu API function (POST /api/haitu/topic-doubt) (depends on T7.1, T5.5 [backend]) (2026-06-17)
+- [x] T9.2 [frontend]: useHaituDoubt hook — client-side message history, loading/error state, send() (depends on T9.1) (2026-06-17)
+- [x] **G9.1: hAITU API + Hook** — integration test: mocked send() → messages.length=2, isLoading=false (2026-06-17)
 
 ### G9.2 — Doubt Panel Component
-- [ ] T9.3 [frontend]: HaituDoubtPanel component — chat bubbles, error banner, escalation button (disabled placeholder), enrollment guard (depends on T9.2)
-- [ ] T9.4a [frontend]: ContentViewer — add topicId/enrollmentId props, conditional HaituDoubtPanel render (depends on T9.3)
-- [ ] T9.4b [frontend]: StudentCoursesPage — selectedTopicId/selectedEnrollmentId state, pass to ContentViewer (depends on T9.4a, T7.3)
-- [ ] T9.5 [frontend]: Export HaituDoubtPanel, useHaituDoubt, useStudentCatalog + types from feature index (depends on T9.4b, T7.6)
-- [ ] **G9.2: Doubt Panel** — integration test: select topic → doubt panel renders; send → AI response in chat
+- [x] T9.3 [frontend]: HaituDoubtPanel component — chat bubbles, error banner, escalation button (disabled placeholder), enrollment guard (depends on T9.2) (2026-06-17)
+- [x] T9.4a [frontend]: ContentViewer — add topicId/enrollmentId props, conditional HaituDoubtPanel render (depends on T9.3) (2026-06-17)
+- [x] T9.4b [frontend]: StudentCoursesPage — selectedTopicId/selectedEnrollmentId state, pass to ContentViewer (depends on T9.4a, T7.3) (2026-06-17)
+- [x] T9.5 [frontend]: Export HaituDoubtPanel, useHaituDoubt, useStudentCatalog + types from feature index (depends on T9.4b, T7.6) (2026-06-17)
+- [x] **G9.2: Doubt Panel** — integration test: select topic → doubt panel renders; send → AI response in chat (2026-06-17)
 
 - [ ] **G9: hAITU Doubt Panel** — E2E: select topic → panel appears; send question → AI response; 21st call → rate limit error
 
