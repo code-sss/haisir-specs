@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 0d5305d (feature/rag — enrollment domain layer, HaituService stages 1–3, 2026-06-18) |
-| haisir-frontend | ab2c3a7 (feature/rag — browse-courses + hAITU panel SonarQube fix, 2026-06-18) |
+| haisir-backend | 9379bb7 (feature/rag — enrollment APIs + enrolled-only filter + hAITU stages 2–4 + bug fix, 2026-06-18) |
+| haisir-frontend | 54e198c (feature/rag — Playwright E2E suite for G3/G7/G8/G9 + CI integration, 2026-06-18) |
 | haisir-deploy | e57c56b (feature/rag — EMBEDDING/HAITU/RESTRUCTURE env vars wired, 2026-06-15) |
 
-> Next session: run `git diff 0d5305d..HEAD` in haisir-backend, `git diff ab2c3a7..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 9379bb7..HEAD` in haisir-backend, `git diff 54e198c..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -184,7 +184,7 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 
 ---
 
-## Student: Browse Courses + Enrollment (G7/G8 complete)
+## Student: Browse Courses + Enrollment (G7/G8/G9 + E2E complete)
 
 ### Screen: `/enroll` (BrowseCoursesPage — student role)
 "Browse Courses" nav link appears in the site header for students (`currentRole === "student"`). Renders a responsive grid of `CatalogCard`s populated by `useStudentCatalog` (calls `GET /api/student/catalog`).
@@ -193,11 +193,11 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 - Loading, error, and empty states shown; toast auto-dismisses after 3 s.
 - `useStudentCatalog` hook — fetch on mount, enroll/drop with catalog re-fetch; exposes `{ catalogNodes, isLoading, error, enroll, drop }`.
 
-> **Backend note:** `GET /api/student/catalog`, `POST /api/student/enrollments`, `DELETE /api/student/enrollments/{id}` are called by the frontend but **not yet wired in the backend** (T2.8/T2.9 open). Frontend will receive 404 until those tasks land.
+> **Backend note:** `GET /api/student/catalog`, `POST /api/student/enrollments`, `DELETE /api/student/enrollments/{id}` are now wired in the backend (T2.8/T2.9 done at backend `9379bb7`, 2026-06-18). Enroll → 201 + re-fetch; already enrolled → 409; drop → 204.
 
 ---
 
-## Student Dashboard (Phase 2 complete — enrollment filtering pending T3)
+## Student Dashboard (Phase 2 complete — enrollment filtering live, G3 done)
 
 ### Screen: `/home` (StudentHomePage — student role only)
 `app/home/page.tsx` branches on `currentRole === "student"` → renders `StudentHomePage`.
@@ -224,6 +224,6 @@ Rendered at the bottom of `ContentViewer` whenever a topic is selected.
 - **Escalation** — "Ask your teacher" button shown when `escalation_ready=true` from API; disabled with `title="Coming soon"` (instructor persona deferred).
 - `useHaituDoubt(topicId, enrollmentId)` hook — client-side message history (last 5 sent as `history` to API), loading/error state, 429 detection. Resets on `topicId` change. Calls `POST /api/haitu/topic-doubt`.
 
-> **Backend note:** `POST /api/haitu/topic-doubt` not yet wired (T5.4/T5.5 open). Panel renders but API calls will fail until route is registered.
+> **Backend note:** `POST /api/haitu/topic-doubt` is now wired (T5.4/T5.5 done at backend `9379bb7`, 2026-06-18). Valid request → 200 + `HaituDoubtResponse`; wrong enrollment / out-of-subtree topic → 403; 21st call in the hour → 429. No DB rows written.
 
-Unit test suite: 11 test files covering all components, hooks, and api layer (100% coverage). Playwright E2E deferred — Playwright not installed.
+Unit test suite: 11 test files covering all components, hooks, and api layer (100% coverage). **Playwright E2E suite shipped (commit `54e198c`, 2026-06-18):** 16 specs across G3 content-filter, G7 browse-courses, G8 empty-state, and G9 hAITU panel, all green; gated in `/commit-frontend` as a peer to the 100% coverage check.

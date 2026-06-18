@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 0d5305d (feature/rag — enrollment domain layer, HaituService stages 1–3, 2026-06-18) |
-| haisir-frontend | ab2c3a7 (feature/rag — browse-courses + hAITU panel SonarQube fix, 2026-06-18) |
+| haisir-backend | 9379bb7 (feature/rag — enrollment APIs + enrolled-only filter + hAITU stages 2–4 + bug fix, 2026-06-18) |
+| haisir-frontend | 54e198c (feature/rag — Playwright E2E suite for G3/G7/G8/G9 + CI integration, 2026-06-18) |
 | haisir-deploy | e57c56b (feature/rag — EMBEDDING/HAITU/RESTRUCTURE env vars wired, 2026-06-15) |
 
-> Next session: run `git diff 0d5305d..HEAD` in haisir-backend, `git diff ab2c3a7..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 9379bb7..HEAD` in haisir-backend, `git diff 54e198c..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -568,6 +568,44 @@
 - Purpose: Return content items for a live topic; empty list if topic missing or not live
 - Auth: student
 - Response: `list[StudentTopicContentRead { id, content_type, title, text, url }]`
+
+> **Enrolled-only filter (G3, backend 9379bb7):** `GET /api/student/dashboard` and `GET /api/student/nodes` now filter platform nodes to the student's enrolled subtrees. An `EnrollmentRepository` is injected into `StudentDashboardService`; unenrolled students see `platform_nodes=[]`, and requests for nodes/topics outside an enrolled subtree raise `PermissionError` → 403.
+
+---
+
+## Student Enrollment (G7)
+
+### GET /api/student/catalog
+- Purpose: Return the platform course-path node catalog with per-student enrollment state and a recommended flag
+- Auth: student (`X-Current-Role: student`; wrong role → 403; missing header → 400); CSRF required (validate_csrf applied even on GET)
+- Response: `list[CatalogNodeCard { id: UUID, name: str, node_type: str, owner_type: str, enrolled: bool, recommended: bool, topic_count: int (default 0), enrollment_id: UUID | null }]`
+- `recommended=true` when the node's grade matches the student's profile grade (most students have `grade=null` → none recommended)
+
+### POST /api/student/enrollments
+- Purpose: Self-enroll the authenticated student in a platform course-path node
+- Auth: student; CSRF required
+- Request: `StudentEnrollmentCreate { course_path_node_id: UUID }`
+- Response: 201 `StudentEnrollmentRead { id: UUID, student_sub: str, course_path_node_id: UUID, enrolled_at: datetime, enrollment_source: str (default 'self') }`
+- Errors: 409 `"Already enrolled in this node"` (AlreadyEnrolledError); 404 if node not found or not platform-owned (ValueError)
+
+### DELETE /api/student/enrollments/{enrollment_id}
+- Purpose: Drop (delete) one of the student's own enrollments
+- Auth: student; CSRF required
+- Response: 204 No Content
+- Errors: 404 `"Enrollment not found"` (no matching enrollment for this student — oracle-protected, non-owned IDs look identical to missing)
+
+---
+
+## hAITU Doubt Resolution (G9)
+
+### POST /api/haitu/topic-doubt
+- Purpose: Run a student's doubt question through the 4-stage RAG pipeline (rewrite → retrieve → rerank → synthesize) scoped to an enrolled topic's subtree
+- Auth: student; CSRF required
+- Request: `HaituDoubtRequest { topic_id: UUID, enrollment_id: UUID, message: str, history: list[HaituDoubtMessage { role: "user"|"assistant"|"system", content: str }] (default []) }`
+- Response: `HaituDoubtResponse { response: str, escalation_ready: bool }`
+- Pipeline: stage 1 rewrites the query (LLM → JSON, safe fallback); stage 2 retrieves via QueryFusionRetriever (hybrid pgvector, topic_id filter); stage 3 reranks (passthrough when `rerank_model=""`, else cross-encoder); stage 4 synthesizes (CompactAndRefine, intent-specific prompts, escalation detection). `safe=False` from stage 1 short-circuits before retrieval.
+- Errors: 403 (PermissionError — enrollment invalid or topic outside enrolled subtree); 429 `"Rate limit exceeded"` (HaituRateLimiter: 20 calls/student/hour, in-process)
+- No DB writes — the endpoint is read-only with respect to persistent state
 
 ---
 
