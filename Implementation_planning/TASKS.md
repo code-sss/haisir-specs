@@ -104,16 +104,16 @@
 ## G7 [frontend]: Browse Courses Enrollment Screen
 
 ### G7.1 — Catalog API Layer
-- [ ] T7.1 [frontend]: CatalogNode + StudentEnrollment TypeScript interfaces
-- [ ] T7.2 [frontend]: getCatalog / enroll / dropEnrollment API functions in student-api.ts (depends on T7.1, T2.9 [backend])
-- [ ] T7.3 [frontend]: useStudentCatalog hook — fetch on mount, enroll/drop with re-fetch (depends on T7.2)
-- [ ] **G7.1: Catalog API Layer** — integration test: mocked fetch → catalogNodes populated; enroll() calls POST
+- [x] T7.1 [frontend]: CatalogNode + StudentEnrollment TypeScript interfaces (2026-06-17)
+- [x] T7.2 [frontend]: getCatalog / enroll / dropEnrollment API functions in student-api.ts (depends on T7.1, T2.9 [backend]) (2026-06-17)
+- [x] T7.3 [frontend]: useStudentCatalog hook — fetch on mount, enroll/drop with re-fetch (depends on T7.2) (2026-06-17)
+- [x] **G7.1: Catalog API Layer** — integration test: mocked fetch → catalogNodes populated; enroll() calls POST (2026-06-17)
 
 ### G7.2 — Catalog UI
-- [ ] T7.4 [frontend]: CatalogCard component — Enroll/Drop buttons, Recommended badge (depends on T7.3)
-- [ ] T7.5 [frontend]: BrowseCoursesPage at /enroll — grid, loading, empty state, toast (depends on T7.4)
-- [ ] T7.6 [frontend]: Browse Courses persistent nav link in student header (depends on T7.5)
-- [ ] **G7.2: Catalog UI** — integration test: 1 enrolled + 1 unenrolled → 1 Drop + 1 Enroll button; Enroll click triggers API
+- [x] T7.4 [frontend]: CatalogCard component — Enroll/Drop buttons, Recommended badge (depends on T7.3) (2026-06-17)
+- [x] T7.5 [frontend]: BrowseCoursesPage at /enroll — grid, loading, empty state, toast (depends on T7.4) (2026-06-17)
+- [x] T7.6 [frontend]: Browse Courses persistent nav link in student header (depends on T7.5) (2026-06-17)
+- [x] **G7.2: Catalog UI** — integration test: 1 enrolled + 1 unenrolled → 1 Drop + 1 Enroll button; Enroll click triggers API (2026-06-17)
 
 - [ ] **G7: Browse Courses Screen** — E2E: enroll via card → button changes to Drop → navigate to /home → enrolled node appears → drop → reverts
 
@@ -164,4 +164,4 @@ Tasks with no pending dependencies — can start immediately across all three re
 - T5.1 [backend]: HaituRateLimiter utility
 - T5.2 [backend]: HaituDoubt request/response schemas
 - T6.2 [deploy]: HAITU + EMBEDDING env vars in backend service
-- T7.1 [frontend]: CatalogNode + StudentEnrollment types
+- T8.2 [frontend]: NodeTreeSidebar empty state + "Browse Courses" CTA (depends on T7.5 ✓)
