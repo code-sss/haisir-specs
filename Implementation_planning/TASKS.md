@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:0dbec56 frontend:31062ab deploy:e57c56b (2026-06-17)
+> Last baselined: backend:0d5305d frontend:31062ab deploy:e57c56b (2026-06-18)
 
 ---
 
@@ -18,19 +18,19 @@
 - [x] T2.1 [backend]: StudentEnrollment domain model (plain dataclass, no Base) (2026-06-18)
 - [x] T2.2 [backend]: Enrollment infra table + SQLAlchemy imperative mapping (depends on T2.1) (2026-06-18)
 - [x] T2.3 [backend]: AbstractEnrollmentRepository protocol — 5 abstract methods (depends on T2.1) (2026-06-18)
-- [ ] T2.4 [backend]: Concrete EnrollmentRepository implementation (depends on T2.2, T2.3)
+- [x] T2.4 [backend]: Concrete EnrollmentRepository implementation (depends on T2.2, T2.3) (2026-06-18)
 - [ ] **G2.1: Enrollment Domain Layer** — integration test: create/get/delete/get_enrolled_node_ids via real DB session
 
 ### G2.2 — Catalog + Enrollment Service
 - [x] T2.5 [backend]: AlreadyEnrolledError + EnrollmentNotFoundError in domain/exceptions.py (2026-06-17)
 - [x] T2.6 [backend]: CatalogNodeCard schema with enrollment_id: UUID | None field (2026-06-17)
 - [x] T2.10 [backend]: StudentEnrollmentRead + StudentEnrollmentCreate schemas (2026-06-17)
-- [ ] T2.7 [backend]: EnrollmentService — enroll / drop / get_catalog (depends on T2.4, T2.5, T2.6)
+- [x] T2.7 [backend]: EnrollmentService — enroll / drop / get_catalog (depends on T2.4, T2.5, T2.6) (2026-06-18)
 - [ ] **G2.2: Catalog + Enrollment Service** — integration test: enroll → enrolled=true in catalog; second enroll → 409; drop → enrolled=false
 
 ### G2.3 — Enrollment HTTP Endpoints
-- [ ] T2.8 [backend]: Enrollment route module — GET /catalog, POST /enrollments, DELETE /enrollments/{id} (depends on T2.7, T2.10)
-- [ ] T2.9 [backend]: Register enrollment router in api/router.py (depends on T2.8)
+- [x] T2.8 [backend]: Enrollment route module — GET /catalog, POST /enrollments, DELETE /enrollments/{id} (depends on T2.7, T2.10) (2026-06-18)
+- [x] T2.9 [backend]: Register enrollment router in api/router.py (depends on T2.8) (2026-06-18)
 - [ ] **G2.3: Enrollment Endpoints** — integration test: full CRUD cycle returns 200/201/409/204/404
 
 - [ ] **G2: Enrollment APIs** — E2E: enroll → catalog shows enrolled=true → drop → enrolled=false
@@ -40,14 +40,14 @@
 ## G3 [backend]: Enrolled-Only Content Filter
 
 ### G3.1 — Enrollment-Aware Query Methods
-- [ ] T3.1a [backend]: get_subtree_node_ids — recursive CTE on CoursePathNodeRepository (depends on T2.4)
-- [ ] T3.1b [backend]: get_enrolled_root_nodes — filter root nodes to enrolled set (depends on T3.1a)
+- [x] T3.1a [backend]: get_subtree_node_ids — recursive CTE on CoursePathNodeRepository (depends on T2.4) (2026-06-18)
+- [x] T3.1b [backend]: get_enrolled_root_nodes — filter root nodes to enrolled set (depends on T3.1a) (2026-06-18)
 - [x] T3.2 [backend]: is_topic_in_enrolled_subtree on TopicRepository (2026-06-17)
 - [ ] **G3.1: Enrollment-Aware Queries** — integration test: seeded 3-level tree; subtree query returns all 3 IDs
 
 ### G3.2 — Enrollment-Aware Dashboard Service
-- [ ] T3.3 [backend]: StudentDashboardService enrollment injection — filter platform_nodes + PermissionError guards (depends on T2.4, T3.1b, T3.2)
-- [ ] T3.4 [backend]: Wire EnrollmentRepository into dashboard route + map PermissionError → 403 (depends on T3.3)
+- [x] T3.3 [backend]: StudentDashboardService enrollment injection — filter platform_nodes + PermissionError guards (depends on T2.4, T3.1b, T3.2) (2026-06-18)
+- [x] T3.4 [backend]: Wire EnrollmentRepository into dashboard route + map PermissionError → 403 (depends on T3.3) (2026-06-18)
 - [ ] **G3.2: Enrollment-Aware Service** — integration test: unenrolled student → platform_nodes=[]; wrong node → 403
 
 - [ ] **G3: Enrolled-Only Content Filter** — E2E: enrolled student sees subtree only; unenrolled sees empty dashboard
@@ -70,8 +70,8 @@
 - [x] **G4.3: Stage 3** — integration test: rerank_model="" → same nodes returned unchanged (2026-06-18)
 
 ### G4.4 — Stage 4
-- [ ] T4.4 [backend]: _stage4_synthesize (CompactAndRefine, intent-specific prompts, escalation detection) + public answer() with safe=False early exit (depends on T4.3)
-- [ ] **G4.4: Stage 4** — integration test: mocked retrieval → HaituResponse with non-empty response and bool escalation_ready
+- [x] T4.4 [backend]: _stage4_synthesize (CompactAndRefine, intent-specific prompts, escalation detection) + public answer() with safe=False early exit (depends on T4.3) (2026-06-18)
+- [x] **G4.4: Stage 4** — integration test: mocked retrieval → HaituResponse with non-empty response and bool escalation_ready (2026-06-18)
 
 - [ ] **G4: hAITU Retrieval Service** — E2E: answer() short-circuits on safe=False; full pipeline runs on safe=True
 
@@ -85,9 +85,9 @@
 
 ### G5.2 — hAITU Endpoint
 - [x] T5.2 [backend]: HaituDoubtMessageSchema + HaituDoubtRequest + HaituDoubtResponse schemas (no doubt_id) (2026-06-17)
-- [ ] T5.3 [backend]: HaituDoubtService — validate enrollment ownership + subtree + rate limit → run pipeline → return (no DB writes) (depends on T4.4, T5.1, T2.4, T3.1a)
-- [ ] T5.4 [backend]: haitu route module — thin handler, maps PermissionError→403 / RateLimitExceededError→429 (depends on T5.3, T5.2)
-- [ ] T5.5 [backend]: Register hAITU router in api/router.py (depends on T5.4)
+- [x] T5.3 [backend]: HaituDoubtService — validate enrollment ownership + subtree + rate limit → run pipeline → return (no DB writes) (depends on T4.4, T5.1, T2.4, T3.1a) (2026-06-18)
+- [x] T5.4 [backend]: haitu route module — thin handler, maps PermissionError→403 / RateLimitExceededError→429 (depends on T5.3, T5.2) (2026-06-18)
+- [x] T5.5 [backend]: Register hAITU router in api/router.py (depends on T5.4) (2026-06-18)
 - [ ] **G5.2: hAITU Endpoint** — integration test: valid request→200; wrong enrollment→403; rate exceeded→429
 
 - [ ] **G5: hAITU Topic-Doubt Endpoint** — E2E: student asks question; AI response returned; no DB rows written; 21st call → 429
@@ -156,6 +156,5 @@
 
 Tasks with no pending dependencies — can start immediately across all three repos:
 
-- T2.4 [backend]: Concrete EnrollmentRepository implementation (depends on T2.2 ✓, T2.3 ✓)
-- T4.4 [backend]: _stage4_synthesize + public answer() pipeline (depends on T4.3 ✓)
-- T6.2 [deploy]: HAITU + EMBEDDING env vars in backend service
+- T6.1 [deploy]: 19-api-haitu.json APISIX route config (depends on T5.5 ✓)
+- T6.2 [deploy]: HAITU + EMBEDDING env vars in backend service (no deps)
