@@ -96,9 +96,9 @@
 
 ## G6 [deploy]: APISIX Route + Backend Env Vars
 
-- [ ] T6.2 [deploy]: Add HAITU__ + EMBEDDING__ env vars to backend service in docker-compose.yml
-- [ ] T6.1 [deploy]: 19-api-haitu.json route config + templated variants (360s timeout) (depends on T5.5 [backend])
-- [ ] **G6: APISIX Route** — E2E: POST /api/haitu/topic-doubt through APISIX → 422 (not 404); GET /api/health → healthy
+- [x] T6.2 [deploy]: Add HAITU__ + EMBEDDING__ env vars to backend service in docker-compose.yml (2026-06-18)
+- [x] T6.1 [deploy]: 19-api-haitu.json route config + templated variants (360s timeout) (depends on T5.5 [backend]) (2026-06-18)
+- [x] **G6: APISIX Route** — E2E: POST /api/haitu/topic-doubt through APISIX → 422 (not 404); GET /api/health → healthy (2026-06-18)
 
 ---
 
@@ -156,5 +156,4 @@
 
 Tasks with no pending dependencies — can start immediately across all three repos:
 
-- T6.1 [deploy]: 19-api-haitu.json APISIX route config (depends on T5.5 ✓)
-- T6.2 [deploy]: HAITU + EMBEDDING env vars in backend service (no deps)
+All individual T-tasks across all repos are complete. Remaining items are integration and E2E tests at the goal level (G1–G9), which require running infrastructure or test suites.
