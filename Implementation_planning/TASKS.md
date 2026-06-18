@@ -1,13 +1,13 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:2686279 frontend:31062ab deploy:e57c56b (2026-06-17)
+> Last baselined: backend:0dbec56 frontend:31062ab deploy:e57c56b (2026-06-17)
 
 ---
 
 ## G1 [backend]: Schema Foundation
 
-- [ ] T1.1 [backend]: V34 Alembic migration (student_enrollments + UNIQUE constraint + index)
+- [x] T1.1 [backend]: V34 Alembic migration (student_enrollments + UNIQUE constraint + index) (2026-06-17)
 - [ ] **G1 / G1.1: Schema Foundation** — integration test: after upgrade V34, duplicate (student_sub, node_id) insert → UNIQUE violation; index exists
 
 ---
@@ -22,9 +22,9 @@
 - [ ] **G2.1: Enrollment Domain Layer** — integration test: create/get/delete/get_enrolled_node_ids via real DB session
 
 ### G2.2 — Catalog + Enrollment Service
-- [ ] T2.5 [backend]: AlreadyEnrolledError + EnrollmentNotFoundError in domain/exceptions.py
-- [ ] T2.6 [backend]: CatalogNodeCard schema with enrollment_id: UUID | None field
-- [ ] T2.10 [backend]: StudentEnrollmentRead + StudentEnrollmentCreate schemas
+- [x] T2.5 [backend]: AlreadyEnrolledError + EnrollmentNotFoundError in domain/exceptions.py (2026-06-17)
+- [x] T2.6 [backend]: CatalogNodeCard schema with enrollment_id: UUID | None field (2026-06-17)
+- [x] T2.10 [backend]: StudentEnrollmentRead + StudentEnrollmentCreate schemas (2026-06-17)
 - [ ] T2.7 [backend]: EnrollmentService — enroll / drop / get_catalog (depends on T2.4, T2.5, T2.6)
 - [ ] **G2.2: Catalog + Enrollment Service** — integration test: enroll → enrolled=true in catalog; second enroll → 409; drop → enrolled=false
 
@@ -42,7 +42,7 @@
 ### G3.1 — Enrollment-Aware Query Methods
 - [ ] T3.1a [backend]: get_subtree_node_ids — recursive CTE on CoursePathNodeRepository (depends on T2.4)
 - [ ] T3.1b [backend]: get_enrolled_root_nodes — filter root nodes to enrolled set (depends on T3.1a)
-- [ ] T3.2 [backend]: is_topic_in_enrolled_subtree on TopicRepository
+- [x] T3.2 [backend]: is_topic_in_enrolled_subtree on TopicRepository (2026-06-17)
 - [ ] **G3.1: Enrollment-Aware Queries** — integration test: seeded 3-level tree; subtree query returns all 3 IDs
 
 ### G3.2 — Enrollment-Aware Dashboard Service
@@ -57,7 +57,8 @@
 ## G4 [backend]: hAITU Retrieval Service
 
 ### G4.1 — Stage 1
-- [ ] T4.1 [backend]: HaituService skeleton + _stage1_rewrite (LLM call → HaituRewriteResult; JSON parse with fallback)
+- [x] T4.0 [backend]: Extract parse_db_url / build_embed_model / LmStudioEmbedding to shared infrastructure.embedding module (2026-06-17)
+- [x] T4.1 [backend]: HaituService skeleton + _stage1_rewrite (LLM call → HaituRewriteResult; JSON parse with fallback) (2026-06-17)
 - [ ] **G4.1: Stage 1** — integration test: _stage1_rewrite with live Ollama returns rewritten_query + intent + safe (skipped if Ollama absent)
 
 ### G4.2 — Stage 2
@@ -79,11 +80,11 @@
 ## G5 [backend]: hAITU Topic-Doubt Endpoint
 
 ### G5.1 — In-Memory Rate Limiter
-- [ ] T5.1 [backend]: HaituRateLimiter — 20 calls/student/hour, threading.Lock, module-level instance
-- [ ] **G5.1: Rate Limiter** — unit test: 20 calls → False; 21st → True
+- [x] T5.1 [backend]: HaituRateLimiter — 20 calls/student/hour, threading.Lock, module-level instance (2026-06-17)
+- [x] **G5.1: Rate Limiter** — unit test: 20 calls → False; 21st → True (2026-06-17)
 
 ### G5.2 — hAITU Endpoint
-- [ ] T5.2 [backend]: HaituDoubtMessageSchema + HaituDoubtRequest + HaituDoubtResponse schemas (no doubt_id)
+- [x] T5.2 [backend]: HaituDoubtMessageSchema + HaituDoubtRequest + HaituDoubtResponse schemas (no doubt_id) (2026-06-17)
 - [ ] T5.3 [backend]: HaituDoubtService — validate enrollment ownership + subtree + rate limit → run pipeline → return (no DB writes) (depends on T4.4, T5.1, T2.4, T3.1a)
 - [ ] T5.4 [backend]: haitu route module — thin handler, maps PermissionError→403 / RateLimitExceededError→429 (depends on T5.3, T5.2)
 - [ ] T5.5 [backend]: Register hAITU router in api/router.py (depends on T5.4)
