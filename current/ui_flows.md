@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | cb602a9 (feature/rag — _LmStudioEmbedding tests + mypy fix, 2026-06-16) |
-| haisir-frontend | 656b825e (feature/rag — G7 student dashboard + SonarQube fixes, 2026-06-16) |
+| haisir-backend | 0d5305d (feature/rag — enrollment domain layer, HaituService stages 1–3, 2026-06-18) |
+| haisir-frontend | ab2c3a7 (feature/rag — browse-courses + hAITU panel SonarQube fix, 2026-06-18) |
 | haisir-deploy | e57c56b (feature/rag — EMBEDDING/HAITU/RESTRUCTURE env vars wired, 2026-06-15) |
 
-> Next session: run `git diff cb602a9..HEAD` in haisir-backend, `git diff 656b825e..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 0d5305d..HEAD` in haisir-backend, `git diff ab2c3a7..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -184,22 +184,46 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 
 ---
 
-## Student Dashboard (G7 complete — G8 tree fix pending)
+## Student: Browse Courses + Enrollment (G7/G8 complete)
+
+### Screen: `/enroll` (BrowseCoursesPage — student role)
+"Browse Courses" nav link appears in the site header for students (`currentRole === "student"`). Renders a responsive grid of `CatalogCard`s populated by `useStudentCatalog` (calls `GET /api/student/catalog`).
+
+- **CatalogCard** — node name, node_type chip, topic count, "Recommended" green badge (when `recommended=true`). **Enroll** button (blue) calls `POST /api/student/enrollments`; **Drop** button (red) calls `DELETE /api/student/enrollments/{id}`. Both re-fetch the catalog on success and show a transient toast ("Enrolled!" / "Dropped.").
+- Loading, error, and empty states shown; toast auto-dismisses after 3 s.
+- `useStudentCatalog` hook — fetch on mount, enroll/drop with catalog re-fetch; exposes `{ catalogNodes, isLoading, error, enroll, drop }`.
+
+> **Backend note:** `GET /api/student/catalog`, `POST /api/student/enrollments`, `DELETE /api/student/enrollments/{id}` are called by the frontend but **not yet wired in the backend** (T2.8/T2.9 open). Frontend will receive 404 until those tasks land.
+
+---
+
+## Student Dashboard (Phase 2 complete — enrollment filtering pending T3)
 
 ### Screen: `/home` (StudentHomePage — student role only)
-`app/home/page.tsx` branches on `currentRole === "student"` → renders `StudentHomePage` instead of the instructor/admin content grid.
+`app/home/page.tsx` branches on `currentRole === "student"` → renders `StudentHomePage`.
 
 Two sections, data from `useStudentDashboard` (`GET /api/student/dashboard`):
-- **Platform Board** — grid of root platform node cards (name, topic_count badge, "Start" → `/courses?source=platform&nodeId=…`). `topic_count` is always 0 pending G9 fix.
+- **Platform Board** — grid of root platform node cards (name, topic_count badge, "Start" → `/courses?source=platform&nodeId=…`). When no nodes returned (unenrolled — pending T3 enrollment filter): **empty state** with dashed border — "You haven't enrolled in any courses yet." + "Browse Courses" CTA → `/enroll`.
 - **Home Study** — if `has_parent_link=true`, grid of parent-owned root node cards with "Start" CTAs; else dashed-border placeholder "No Home Study content yet — ask your parent to link their account."
 
 ### Screen: `/courses` (StudentCoursesPage — student role)
-Full-page three-panel layout. Data managed by `useStudentNav`.
+Full-page three-panel layout. Data managed by `useStudentNav` + `useStudentCatalog`.
 
-- **Tab bar** — "Platform" (always enabled) / "Home Study" (disabled when `has_parent_link=false`). ArrowLeft/ArrowRight keyboard navigation; switching source resets node/topic/content selection.
-- **NodeTreeSidebar** (left `<aside>`) — renders `StudentNode[]` from `GET /api/student/nodes?owner_type={source}`. Each `NodeRow` shows a chevron + expand/collapse for non-leaf nodes (nodes with `children`), or fires `selectNode(id)` for leaf nodes. ⚠ **G8 gap:** API currently returns flat root nodes only — all nodes appear as leaves; hierarchy not navigable until G8 is fixed.
-- **TopicListPanel** (centre `<section>`) — `StudentTopic[]` from `GET /api/student/nodes/{id}/topics` (live topics only; draft silently excluded). Fires `selectTopic(id)` on click.
-- **ContentViewer** (right) — `StudentTopicContent[]` from `GET /api/student/topics/{id}/content`. Empty state: "No content available".
-- Shared `loadingCount` counter across all three fetch operations; shows "Loading…" skeleton while any fetch is in-flight.
+- **Tab bar** — "Platform" (always enabled) / "Home Study" (disabled when `has_parent_link=false`). ArrowLeft/ArrowRight keyboard navigation; switching source resets node/topic/content + `selectedTopicId`/`selectedRootNodeId`.
+- **NodeTreeSidebar** (left `<aside>`) — renders `StudentNode[]` from `GET /api/student/nodes?owner_type={source}`. Each `NodeRow` shows a chevron + expand/collapse for nodes with `children`; leaf nodes fire `selectNode(id)`. **Empty state** (when tree is empty — unenrolled): "No courses enrolled." + "Browse Courses" link → `/enroll`.
+- **TopicListPanel** (centre `<section>`) — `StudentTopic[]` from `GET /api/student/nodes/{id}/topics`. Fires `selectTopic(id)` on click; sets `selectedTopicId` state.
+- **ContentViewer** (right) — `StudentTopicContent[]` from `GET /api/student/topics/{id}/content`. Shows "No content available" when `contents` is empty. When a topic is selected (`topicId != null`), renders **HaituDoubtPanel** below the content.
+- `selectedRootNodeId` is resolved via `findRootNodeId(nodeTree, nodeId)` on node selection; `selectedEnrollmentId` is looked up in the catalog (`catalogNodes.find(n => n.id === selectedRootNodeId)?.enrollment_id`).
+
+### Component: HaituDoubtPanel
+Rendered at the bottom of `ContentViewer` whenever a topic is selected.
+
+- **Enrollment guard** — if `enrollmentId === null`, shows grey italic "Enroll in this course to ask hAITU questions." (no chat UI).
+- **Chat UI** — scrollable bubble list (`role="log" aria-live="polite"`): student messages right-aligned (blue), AI messages left-aligned (grey). Spinner bubble while `isLoading`. Input textarea (Enter = send, Shift+Enter = newline), disabled while loading. Send button disabled when input empty or loading.
+- **Error banner** — 429 rate-limit → "You've reached the AI limit for this hour. Try again later."; other errors → "Something went wrong. Please try again."
+- **Escalation** — "Ask your teacher" button shown when `escalation_ready=true` from API; disabled with `title="Coming soon"` (instructor persona deferred).
+- `useHaituDoubt(topicId, enrollmentId)` hook — client-side message history (last 5 sent as `history` to API), loading/error state, 429 detection. Resets on `topicId` change. Calls `POST /api/haitu/topic-doubt`.
+
+> **Backend note:** `POST /api/haitu/topic-doubt` not yet wired (T5.4/T5.5 open). Panel renders but API calls will fail until route is registered.
 
 Unit test suite: 11 test files covering all components, hooks, and api layer (100% coverage). Playwright E2E deferred — Playwright not installed.

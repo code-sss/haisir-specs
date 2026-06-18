@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | cb602a9 (feature/rag — _LmStudioEmbedding tests + mypy fix, 2026-06-16) |
-| haisir-frontend | 656b825e (feature/rag — G7 student dashboard + SonarQube fixes, 2026-06-16) |
+| haisir-backend | 0d5305d (feature/rag — enrollment domain layer, HaituService stages 1–3, 2026-06-18) |
+| haisir-frontend | ab2c3a7 (feature/rag — browse-courses + hAITU panel SonarQube fix, 2026-06-18) |
 | haisir-deploy | e57c56b (feature/rag — EMBEDDING/HAITU/RESTRUCTURE env vars wired, 2026-06-15) |
 
-> Next session: run `git diff cb602a9..HEAD` in haisir-backend, `git diff 656b825e..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 0d5305d..HEAD` in haisir-backend, `git diff ab2c3a7..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -26,6 +26,7 @@
 | V31_pgvector_extension | `CREATE EXTENSION IF NOT EXISTS vector` — enables pgvector column type and ANN index operators. Downgrade: intentional no-op (dropping may corrupt chunk table). |
 | V32_rag_vector_table_shim | Creates `data_topic_content_chunks` (BigInteger PK, text, metadata_ JSON, node_id VARCHAR, embedding vector(1024)). Registration shim only — LlamaIndex PGVectorStore owns this table; autogenerate diffs are suppressed. Downgrade: `DROP TABLE data_topic_content_chunks`. |
 | V33_add_text_search_tsv_to_chunks | Adds `text_search_tsv TSVECTOR` to `data_topic_content_chunks`; creates `fn_chunks_tsv_update()` BEFORE INSERT/UPDATE trigger that populates it via `to_tsvector('english', ...)`; backfills existing rows; creates GIN index `ix_chunks_text_search_tsv`. Required because V32 shim omitted this column which LlamaIndex `hybrid_search=True` expects to already exist. Downgrade: drops index, trigger, function, column. |
+| V34_student_enrollments | Creates `student_enrollments` table (UUID PK, `student_sub TEXT`, `course_path_node_id UUID FK→course_path_nodes ON DELETE CASCADE`, `enrolled_at TIMESTAMPTZ DEFAULT now()`, `enrollment_source VARCHAR(20) DEFAULT 'self'`). UNIQUE constraint `uq_student_enrollments_sub_node` on `(student_sub, course_path_node_id)`; index `idx_student_enrollments_student_sub` on `student_sub`. |
 
 ---
 
@@ -343,6 +344,18 @@ Index: `ix_rag_outbox_pending (status, created_at) WHERE status = 'pending'`
 - `updated_at` (TIMESTAMP TZ, auto-maintained via `touch_updated_at()` trigger)
 
 Indexes: `ix_essay_grading_jobs_queue (status, created_at) WHERE status='queued'` (partial), `ix_essay_grading_jobs_session_question (exam_session_question_id)`
+
+## student_enrollments
+> Created by V34. Records a student's self-enrollment in a course-path node.
+
+- `id` (UUID, PK)
+- `student_sub` (Text) — Keycloak subject; no FK (no local users table)
+- `course_path_node_id` (UUID, FK → course_path_nodes.id, ON DELETE CASCADE)
+- `enrolled_at` (TIMESTAMPTZ, default `now()`)
+- `enrollment_source` (VARCHAR 20, default `'self'`) — origin of enrolment; `'self'` is the only value this phase
+
+Constraints: UNIQUE `(student_sub, course_path_node_id)` — duplicate enroll attempt → 409.
+Index: `idx_student_enrollments_student_sub` on `student_sub` for per-student lookups.
 
 ## data_topic_content_chunks
 - `id` (BigInteger, PK autoincrement) — LlamaIndex-managed row ID
