@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:17533c1 frontend:54e198c deploy:e57c56b (2026-06-19)
+> Last baselined: backend:45e243b frontend:54e198c deploy:e57c56b (2026-06-19)
 
 ---
 
@@ -198,7 +198,7 @@
 - [x] T10.3.3b [backend]: G4 E2E — safe=True full pipeline  [Ollama-gated] (depends on T10.1.1, T10.1.2, T10.1.3) (2026-06-19)
 - [x] T10.3.4a [backend]: G5 E2E — AI response + no DB writes  [Ollama-gated] (depends on T10.1.1, T10.1.2, T10.1.3) (2026-06-19)
 - [x] T10.3.4b [backend]: G5 E2E — 21st call→429 (mocked)  [DB-only] (depends on T10.1.1, T10.1.2) (2026-06-19)
-- [ ] T10.3.5 [backend]: Aggregate-gate — ollama-gated suite exits 0 with skip-count line present (depends on T10.3.1–T10.3.4b)
+- [x] T10.3.5 [backend]: Aggregate-gate — ollama-gated suite exits 0 with skip-count line present (depends on T10.3.1–T10.3.4b) (2026-06-19)
 - [ ] **G10.3: Ollama-Gated Verification** — subgoal test: Ollama up → suite passes, skip-count line present; down → gated tests skip, skip-count line present (awaits CI run — 6 tests implemented with per-test @OLLAMA_GATED_MARK/@OLLAMA_GATED_SKIP_MARK; 2 DB-only sub-cases (T10.3.3a, T10.3.4b) run with no Ollama, 4 gated skip when the probe fails. NOTE: @pytest.mark.anyio runs each gated test under both asyncio+trio, and rag_loop is also ollama_gated-marked, so the suite collects ~10 ollama_gated items (not 6) and CI RAG time is ~2x a single-backend run; this is the intended project pattern, not a defect. T10.3.5 only asserts the suite exits 0 with the skip-count line present, so the dual-backend count does not affect the gate.)
 
 ### G10.4 — Manual End-to-End Walkthrough
@@ -219,6 +219,4 @@
 
 Tasks with no pending dependencies — can start immediately:
 
-- T10.3.5 [backend]: Aggregate-gate — ollama-gated suite exits 0 with skip-count line present (depends on T10.3.1 ✓, T10.3.2 ✓, T10.3.3a ✓, T10.3.3b ✓, T10.3.4a ✓, T10.3.4b ✓) — verification-only; run in CI (postgres:18 + migrations + pytest --cov-fail-under=100) to confirm the ollama-gated skip/pass count line
-
-The 15 Phase 3 backend test-infrastructure + verification tasks (T10.1.2b, T10.2.1–T10.2.8, T10.3.1, T10.3.2, T10.3.3a, T10.3.3b, T10.3.4a, T10.3.4b) are implemented and pass local gates (ruff, mypy src/, collect-only, unit suite 100%). The G10.1/G10.2/G10.3 subgoal tests and T10.3.5 require a CI/DB run to confirm the enforced pass/skip counts and are therefore left unchecked. T10.4.1 (manual walkthrough) is gated on G10.2 + G10.3 subgoal tests being green; T10.5.x is gated on T10.4.x. All G1–G9 implementation and the frontend Playwright E2E suite are already complete.
+*None. T10.3.5 [backend] is now done. The remaining Phase 3 work (manual walkthrough and sign-off/archive) is gated on G10.2/G10.3 CI runs and manual stack verification; those tasks belong to T10.4.x/T10.5.x and cannot start until their prerequisites are green.*
