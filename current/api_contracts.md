@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 9379bb7 (feature/rag — enrollment APIs + enrolled-only filter + hAITU stages 2–4 + bug fix, 2026-06-18) |
-| haisir-frontend | 54e198c (feature/rag — Playwright E2E suite for G3/G7/G8/G9 + CI integration, 2026-06-18) |
-| haisir-deploy | e57c56b (feature/rag — EMBEDDING/HAITU/RESTRUCTURE env vars wired, 2026-06-15) |
+| haisir-backend | 17533c1 (feature/rag — enrollment integration test gates G1–G3 + CI wiring, 2026-06-19) |
+| haisir-frontend | 7fc8811 (feature/rag — chore: remove TASKS.md from tracking, 2026-06-19) |
+| haisir-deploy | 59e42f3 (feature/rag — hAITU APISIX route + backend HAITU/EMBEDDING env vars, 2026-06-19) |
 
-> Next session: run `git diff 9379bb7..HEAD` in haisir-backend, `git diff 54e198c..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 17533c1..HEAD` in haisir-backend, `git diff 7fc8811..HEAD` in haisir-frontend, and `git diff 59e42f3..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -606,6 +606,7 @@
 - Pipeline: stage 1 rewrites the query (LLM → JSON, safe fallback); stage 2 retrieves via QueryFusionRetriever (hybrid pgvector, topic_id filter); stage 3 reranks (passthrough when `rerank_model=""`, else cross-encoder); stage 4 synthesizes (CompactAndRefine, intent-specific prompts, escalation detection). `safe=False` from stage 1 short-circuits before retrieval.
 - Errors: 403 (PermissionError — enrollment invalid or topic outside enrolled subtree); 429 `"Rate limit exceeded"` (HaituRateLimiter: 20 calls/student/hour, in-process)
 - No DB writes — the endpoint is read-only with respect to persistent state
+- APISIX gateway (`19-api-haitu.json`): 360s send/read timeout; `limit-count` plugin (20 req/min per IP → 429, separate from the in-process per-student/hour limiter); `limit-conn` (20 concurrent connections/IP → 503); `request-validation` (requires `Content-Type: application/json` → 400 if absent); `secured-api` plugin config (OIDC deny on unauthenticated). Backend service has `HAITU__*` + `EMBEDDING__*` env vars wired in `common/docker-compose.yml` (T6.2).
 
 ---
 
