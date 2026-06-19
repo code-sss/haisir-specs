@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-06-18 — Deferred: monitoring stack (Prometheus + Grafana) and WAF body exclusions
+
+> Work done during `feature/rag` for hAITU RAG pipeline deploy tasks. Two areas explicitly deferred — needs follow-up before Phase 4.
+
+**Monitoring stack (Prometheus + Grafana):**
+- Full service definitions were designed and validated (Prometheus with `--storage.tsdb.retention.time=30d --storage.tsdb.retention.size=8GB`, Grafana OSS hardened with `read_only`, `cap_drop: ALL`, no anonymous access). Alert rules written for `HAITUPipelineLatencyHigh` (P95 > 60s) and `HAITUHighErrorRate` (5xx > 10%) using APISIX `apisix_http_latency_bucket` / `apisix_http_requests_total` metrics with `prefer_name: true`.
+- **Blocker**: `cgr.dev/chainguard/prometheus` and `cgr.dev/chainguard/grafana` are not in the free Chainguard public tier (unlike `cgr.dev/chainguard/postgres:latest` already in use). `grafana/grafana-oss` is AGPL v3 — free for self-hosting. Options when revisiting: (1) subscribe to Chainguard paid tier, (2) digest-pin official images and re-pin on each update cycle, (3) collapse to VictoriaMetrics (Apache 2.0) with built-in vmui and check Chainguard free tier availability.
+- **Not committed** — `env-setup.sh` guards requiring `PROMETHEUS_IMAGE_TAG`/`GRAFANA_IMAGE_TAG`/`GRAFANA_ADMIN_*` in `.env` would break existing staging/prod deploys if those vars are absent. Add to `.env` files first, then re-apply the stack.
+
+**WAF body exclusions for `/api/haitu/*`:**
+- Run the endpoint under load first to collect which CRS rule IDs actually fire on academic/LLM input.
+- Pattern is established in `common/plugin_configs/03-secured-api.json` at rule `199100` (see `/api/topics-contents/` exclusion). Add a new chain at `id:199200,phase:1` using `ctl:ruleRemoveTargetById=<rule_id>;REQUEST_BODY` for each firing rule (likely candidates: 942100, 942200, 942260, 942440 for SQLi; 941100, 941110 for XSS; 932100, 932150, 932160, 932220 for RCE).
+- Include JUSTIFICATION comment per existing convention before committing any exclusion.
+
+---
+
 ## 2026-06-18 — Phase 3 closeout plan: verify, manually test, then sign off (G10)
 
 > `/plan` cycle reconciling the existing Phase 3 PLAN.md (G1–G9) against current HEADs (backend `9379bb7`, frontend `54e198c`, deploy `e57c56b`). All G1–G9 implementation + the frontend Playwright E2E suite are done; the only unchecked items are 12 backend goal-level integration/E2E tests. User intent: **finish everything in Phase 3, test it all manually, then sign off — no deferral, no premature archiving.** New goal **G10** appended to PLAN.md (G1–G9 preserved as the implementation record).
