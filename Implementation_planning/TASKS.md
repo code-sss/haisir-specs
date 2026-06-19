@@ -1,14 +1,14 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:9379bb7 frontend:54e198c deploy:e57c56b (2026-06-18)
+> Last baselined: backend:17533c1 frontend:54e198c deploy:e57c56b (2026-06-19)
 
 ---
 
 ## G1 [backend]: Schema Foundation
 
 - [x] T1.1 [backend]: V34 Alembic migration (student_enrollments + UNIQUE constraint + index) (2026-06-17)
-- [ ] **G1 / G1.1: Schema Foundation** — integration test: after upgrade V34, duplicate (student_sub, node_id) insert → UNIQUE violation; index exists
+- [x] **G1 / G1.1: Schema Foundation** — integration test: after upgrade V34, duplicate (student_sub, node_id) insert → UNIQUE violation; index exists (2026-06-18)
 
 ---
 
@@ -19,21 +19,21 @@
 - [x] T2.2 [backend]: Enrollment infra table + SQLAlchemy imperative mapping (depends on T2.1) (2026-06-18)
 - [x] T2.3 [backend]: AbstractEnrollmentRepository protocol — 5 abstract methods (depends on T2.1) (2026-06-18)
 - [x] T2.4 [backend]: Concrete EnrollmentRepository implementation (depends on T2.2, T2.3) (2026-06-18)
-- [ ] **G2.1: Enrollment Domain Layer** — integration test: create/get/delete/get_enrolled_node_ids via real DB session
+- [x] **G2.1: Enrollment Domain Layer** — integration test: create/get/delete/get_enrolled_node_ids via real DB session (2026-06-18)
 
 ### G2.2 — Catalog + Enrollment Service
 - [x] T2.5 [backend]: AlreadyEnrolledError + EnrollmentNotFoundError in domain/exceptions.py (2026-06-17)
 - [x] T2.6 [backend]: CatalogNodeCard schema with enrollment_id: UUID | None field (2026-06-17)
 - [x] T2.10 [backend]: StudentEnrollmentRead + StudentEnrollmentCreate schemas (2026-06-17)
 - [x] T2.7 [backend]: EnrollmentService — enroll / drop / get_catalog (depends on T2.4, T2.5, T2.6) (2026-06-18)
-- [ ] **G2.2: Catalog + Enrollment Service** — integration test: enroll → enrolled=true in catalog; second enroll → 409; drop → enrolled=false
+- [x] **G2.2: Catalog + Enrollment Service** — integration test: enroll → enrolled=true in catalog; second enroll → 409; drop → enrolled=false (2026-06-18)
 
 ### G2.3 — Enrollment HTTP Endpoints
 - [x] T2.8 [backend]: Enrollment route module — GET /catalog, POST /enrollments, DELETE /enrollments/{id} (depends on T2.7, T2.10) (2026-06-18)
 - [x] T2.9 [backend]: Register enrollment router in api/router.py (depends on T2.8) (2026-06-18)
-- [ ] **G2.3: Enrollment Endpoints** — integration test: full CRUD cycle returns 200/201/409/204/404
+- [x] **G2.3: Enrollment Endpoints** — integration test: full CRUD cycle returns 200/201/409/204/404 (2026-06-18)
 
-- [ ] **G2: Enrollment APIs** — E2E: enroll → catalog shows enrolled=true → drop → enrolled=false
+- [x] **G2: Enrollment APIs** — E2E: enroll → catalog shows enrolled=true → drop → enrolled=false (2026-06-18)
 
 ---
 
@@ -43,12 +43,12 @@
 - [x] T3.1a [backend]: get_subtree_node_ids — recursive CTE on CoursePathNodeRepository (depends on T2.4) (2026-06-18)
 - [x] T3.1b [backend]: get_enrolled_root_nodes — filter root nodes to enrolled set (depends on T3.1a) (2026-06-18)
 - [x] T3.2 [backend]: is_topic_in_enrolled_subtree on TopicRepository (2026-06-17)
-- [ ] **G3.1: Enrollment-Aware Queries** — integration test: seeded 3-level tree; subtree query returns all 3 IDs
+- [x] **G3.1: Enrollment-Aware Queries** — integration test: seeded 3-level tree; subtree query returns all 3 IDs (2026-06-18)
 
 ### G3.2 — Enrollment-Aware Dashboard Service
 - [x] T3.3 [backend]: StudentDashboardService enrollment injection — filter platform_nodes + PermissionError guards (depends on T2.4, T3.1b, T3.2) (2026-06-18)
 - [x] T3.4 [backend]: Wire EnrollmentRepository into dashboard route + map PermissionError → 403 (depends on T3.3) (2026-06-18)
-- [ ] **G3.2: Enrollment-Aware Service** — integration test: unenrolled student → platform_nodes=[]; wrong node → 403
+- [x] **G3.2: Enrollment-Aware Service** — integration test: unenrolled student → platform_nodes=[]; wrong node → 403 (2026-06-18)
 
 - [x] **G3: Enrolled-Only Content Filter** — E2E: enrolled student sees subtree only; unenrolled sees empty dashboard (2026-06-18)
 
