@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 17533c1 (feature/rag — enrollment integration test gates G1–G3 + CI wiring, 2026-06-19) |
+| haisir-backend | f55c40c (feature/rag — Phase 3 verification test suite + Ollama-gated aggregate gate, 2026-06-19) |
 | haisir-frontend | 7fc8811 (feature/rag — chore: remove TASKS.md from tracking, 2026-06-19) |
 | haisir-deploy | 59e42f3 (feature/rag — hAITU APISIX route + backend HAITU/EMBEDDING env vars, 2026-06-19) |
 
-> Next session: run `git diff 17533c1..HEAD` in haisir-backend, `git diff 7fc8811..HEAD` in haisir-frontend, and `git diff 59e42f3..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff f55c40c..HEAD` in haisir-backend, `git diff 7fc8811..HEAD` in haisir-frontend, and `git diff 59e42f3..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 

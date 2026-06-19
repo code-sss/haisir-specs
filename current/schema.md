@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 9379bb7 (feature/rag — enrollment APIs + enrolled-only filter + hAITU stages 2–4 + bug fix, 2026-06-18) |
-| haisir-frontend | 54e198c (feature/rag — Playwright E2E suite for G3/G7/G8/G9 + CI integration, 2026-06-18) |
-| haisir-deploy | e57c56b (feature/rag — EMBEDDING/HAITU/RESTRUCTURE env vars wired, 2026-06-15) |
+| haisir-backend | f55c40c (feature/rag — Phase 3 verification test suite + Ollama-gated aggregate gate, 2026-06-19) |
+| haisir-frontend | 7fc8811 (feature/rag — chore-only, no UI changes, 2026-06-19) |
+| haisir-deploy | 59e42f3 (feature/rag — hAITU APISIX route + backend HAITU/EMBEDDING env vars, 2026-06-19) |
 
-> Next session: run `git diff 9379bb7..HEAD` in haisir-backend, `git diff 54e198c..HEAD` in haisir-frontend, and `git diff e57c56b..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff f55c40c..HEAD` in haisir-backend, `git diff 7fc8811..HEAD` in haisir-frontend, and `git diff 59e42f3..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
