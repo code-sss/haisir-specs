@@ -549,4 +549,237 @@
 
 ---
 
-<!-- plan-baseline: backend:0dbec5694697941ee0ede822e3b37b2790d0769e frontend:31062ab9ed6026d682046c177f7ee219327af477 deploy:e57c56bdc5dc04a5eb3d37ac63fedf5c5007eb40 -->
+## G10 — Phase 3 Verification, Manual Walkthrough & Sign-off
+
+> **Scope note (2026-06-18):** Implementation across backend/frontend/deploy (G1–G9) is DONE and the frontend Playwright E2E suite (G3/G7/G8/G9) is shipped. The backend has extensive UNIT tests, but the goal-level backend INTEGRATION and E2E entries under G1–G9 are NOT yet written. G10 closes Phase 3: it writes and runs all 12 remaining backend verification items (8 DB-only + 4 Ollama-gated), performs a full MANUAL end-to-end walkthrough of the ROOT Acceptance Test above against the running stack, fixes any defects found, then signs off and archives Phase 3. **Nothing is deferred or dropped.**
+
+**Goal**: Finish Phase 3 completely — all 12 backend verification items green (Ollama-gated items green-or-skip-with-reported-count), the 7-step ROOT Acceptance Test executed manually and recorded as passing, defects fixed, Phase 3 archived.
+**Goal test (ROOT acceptance for G10)**: (1) the 12 verification items (G1.1, G2.1, G2.2, G2.3, G2 E2E, G3.1, G3.2, G5.2, G4.1, G4.2, G4 E2E, G5 E2E) all report green; Ollama-gated items report a skip count when Ollama is absent and a green run is distinguishable from an all-skipped run; (2) the 7-step ROOT Acceptance Test is executed manually and recorded as passing (with defects fixed); (3) `PLAN.md` and `TASKS.md` are archived to `Implementation_planning/archive/` and `progress.md` "Completed Phases" gains a Phase 3 entry.
+**Repos**: [backend] [frontend] [deploy] [specs]
+
+---
+
+### G10.1 — Shared Integration Fixtures & Scaffolding
+
+**Goal**: A reusable fixtures layer ensures the integration DB is at `alembic head` (V34), every new integration test file gets the dependency-override wiring without copy-paste, the process-global `haitu_rate_limiter` is resettable per test, enrollment rows cannot leak across tests, and the Ollama skip guard probes the actual model endpoint and reports its skip count.
+**Subgoal test**: `tests/integration/shared_fixtures.py` imports clean (no ImportError); `reset_haitu_rate_limiter`, `rolled_back_session`, and `seed_3level_tree` are usable; a canary asserts the integration DB revision is `V34`; the refactored dashboard integration test still passes.
+**Repos**: [backend]
+
+##### T10.1.1 [backend] — Integration conftest: assert/ensure migration head is V34
+
+- **Build**: Extend `tests/integration/conftest.py`. Add a session-scoped autouse fixture `integration_db_head` that, after the integration engine is created, runs `SELECT version_num FROM alembic_version` via `text()` and asserts the result equals `"V34"` (the head creating `student_enrollments`). On mismatch, `pytest.fail("integration DB head is <found>, expected V34 — run alembic upgrade head against INTEGRATION_DB_URL")`. Document the prerequisite (V31/V32/V33/V34 all present) in the module docstring.
+- **Done when**: `uv run pytest tests/integration -q` against a DB migrated only to V33 fails with the clear V34 message; against a V34 DB the suite proceeds.
+- **Test**: Canary `test_integration_db_at_v34` asserts `version_num == "V34"`.
+- **Depends on**: None (verifies existing V34 migration from T1.1 [backend]).
+
+##### T10.1.2 [backend] — Shared integration fixtures module
+
+- **Build**: Create `tests/integration/shared_fixtures.py` centralising the wiring currently duplicated in `tests/integration/routes/test_student_dashboard_integration.py`. Provide:
+  - `make_student_client(app, session_maker, student_sub, roles=("student",))` — contextmanager building an `httpx.AsyncClient` via `ASGITransport(app=app)` with `app.dependency_overrides` set for `get_async_session`, `current_active_user` (returns `CurrentUser(sub=student_sub, roles=list(roles), current_role=UserRole.student)`), and `validate_csrf` (returns `None`); client sends `X-Current-Role: student`; tears down overrides on exit.
+  - `reset_haitu_rate_limiter` — **autouse, function-scope** for any test module under `tests/integration/` that imports `shared_fixtures`: before each test, swap `src.domain.services.haitu_rate_limiter.haitu_rate_limiter` with a fresh `HaituRateLimiter()` and restore afterward. Include `hour_bucket_override(bucket_str)` to pin `_current_bucket()` to a fixed string so the 21st-call test is hour-bucket- and order-independent.
+  - `unique_student_sub()` — returns a fresh `str(uuid.uuid4())` per call.
+  - `rolled_back_session(session_maker)` — fixture yielding a session inside a transaction that rolls back at teardown, for repository-level integration tests.
+  - `seed_3level_tree(session)` — seeds grade→subject→course platform nodes; returns `(grade_id, subject_id, course_id)`.
+- **Done when**: `grep -r "dependency_overrides\[get_async_session\]" tests/integration` hits only `shared_fixtures.py`; canary using `make_student_client` twice with `reset_haitu_rate_limiter` between shows an empty rate-limiter dict at the start of the second call.
+- **Test**: Canary `test_shared_fixtures_rate_limiter_reset` asserts the limiter dict is empty at the start of the second client's first call.
+- **Depends on**: T10.1.1 [backend].
+
+##### T10.1.2b [backend] — Refactor existing dashboard integration test to import shared_fixtures
+
+- **Build**: Refactor `tests/integration/routes/test_student_dashboard_integration.py` to import `make_student_client`/fixtures from `shared_fixtures.py` instead of inlining the override wiring. No behaviour change — the existing parent-403 assertion must still hold.
+- **Done when**: `grep -r "dependency_overrides\[get_async_session\]" tests/integration` returns only `shared_fixtures.py`; the refactored dashboard integration test still passes.
+- **Test**: `uv run pytest tests/integration/routes/test_student_dashboard_integration.py -q` exits 0.
+- **Depends on**: T10.1.2 [backend].
+
+##### T10.1.3 [backend] — Ollama probe-based skip guard + skip-count reporter
+
+- **Build**: Create `tests/integration/ollama_probe.py`:
+  - `ollama_model_available(model_spec: str, base_url: str | None) -> bool` — GETs `{base_url}/api/tags` (Ollama) or `/v1/models` (LM Studio, dispatched by the same `lmstudio://` vs `ollama://` prefix the embedding module uses); returns True only if BOTH the configured chat model AND the bge-m3 embed model are present and loaded. Update `tests/integration/worker/test_rag_loop_integration.py` to use this probe instead of the `OLLAMA_AVAILABLE` env-only check.
+  - A session-scoped `report_ollama_skip_count` fixture wired via a `pytest_terminal_summary` hook in `tests/integration/conftest.py`, printing a single line `Ollama-gated: N skipped, M passed` so a green all-skipped run is visibly distinct from a green all-run run.
+  - Expose a `pytestmark = pytest.mark.skipif(not ollama_model_available(...), reason="...")` import for the four Ollama-gated test files (G10.3) to apply.
+- **Done when**: With Ollama down, `uv run pytest tests/integration -q` prints `Ollama-gated: 4 skipped, 0 passed`; with Ollama up and models loaded, it prints `Ollama-gated: 0 skipped, 4 passed`.
+- **Test**: Unit-scale `test_ollama_probe_closed_port` asserts `ollama_model_available(...)` returns False against a closed port.
+- **Depends on**: None.
+
+---
+
+### G10.2 — DB-Only Verification Tests
+
+**Goal**: The 8 DB-only goal-level integration/E2E entries (G1.1, G2.1, G2.2, G2.3, G2 E2E, G3.1, G3.2, G5.2) are written and green against a Postgres DB at V34. No Ollama required.
+**Subgoal test**: `uv run pytest tests/integration/phase3_db_only -q` exits 0 with 8 collected items passing and 0 skipped.
+**Repos**: [backend]
+
+##### T10.2.1 [backend] — G1.1: V34 UNIQUE violation + index exists
+
+- **Build**: Create `tests/integration/phase3_db_only/test_g1_1_enrollment_schema.py`. INSERT one `student_enrollments` row with `(student_sub=S, course_path_node_id=N)`; INSERT a second row with the same pair and assert `IntegrityError` (UNIQUE). Query `pg_indexes` and assert `idx_student_enrollments_student_sub` present. Use `unique_student_sub()` and a freshly seeded platform node from `seed_3level_tree`; wrap writes in a rolled-back transaction.
+- **Done when**: Test passes against a V34 DB; it fails (no IntegrityError) against a DB missing the UNIQUE constraint.
+- **Test**: `assert pytest.raises(IntegrityError)` on duplicate INSERT; `assert "idx_student_enrollments_student_sub" in indexnames`.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend]. (covers G1.1)
+
+##### T10.2.2 [backend] — G2.1: EnrollmentRepository CRUD via real DB
+
+- **Build**: Create `tests/integration/phase3_db_only/test_g2_1_enrollment_repository.py`. With `EnrollmentRepository(session)` from `rolled_back_session` and a seeded platform node: `create()` → `get_by_student(sub)` returns 1; `get_by_id(id)` returns same; `get_enrolled_node_ids(sub)` returns `{node_id}`; `delete_by_id_and_student(id, sub)` returns True; re-`get_by_id` returns None; `delete_by_id_and_student` again returns False. Use `unique_student_sub()`.
+- **Done when**: All five repository methods execute SQL without error and return the asserted values.
+- **Test**: `assert enrolled_node_ids == {grade_id}` after create; `assert result is None` after delete.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend]. (covers G2.1)
+
+##### T10.2.3 [backend] — G2.2: EnrollmentService enroll/drop/catalog
+
+- **Build**: Create `tests/integration/phase3_db_only/test_g2_2_enrollment_service.py`. With `EnrollmentService(EnrollmentRepository(session), CoursePathNodeRepository(session))` against a real session and a seeded grade node: `enroll(sub, grade_id)` → `StudentEnrollment`; `get_catalog(sub, "Grade 8")` → card `enrolled=True`, `enrollment_id` set, `recommended=False`; `enroll` again → `AlreadyEnrolledError`; `drop(id, sub)` → passes; `get_catalog` again → `enrolled=False`, `enrollment_id=None`. Use `unique_student_sub()`.
+- **Done when**: The four-step sequence completes with the asserted states and the second `enroll` raises `AlreadyEnrolledError`.
+- **Test**: `assert pytest.raises(AlreadyEnrolledError)` on second enroll; `assert card.enrolled is False` after drop.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend]. (covers G2.2)
+
+##### T10.2.4 [backend] — G2.3: route CRUD cycle 200/201/409/204/404
+
+- **Build**: Create `tests/integration/phase3_db_only/test_g2_3_enrollment_routes.py`. With `make_student_client` and a seeded platform grade node: `GET /api/student/catalog` → 200; `POST /api/student/enrollments` `{course_path_node_id}` → 201 with `id`; `POST` again → 409; `DELETE /api/student/enrollments/{id}` → 204; `DELETE` again → 404. Use a fresh `unique_student_sub()` per test.
+- **Done when**: The five-request sequence yields 200, 201, 409, 204, 404 in order.
+- **Test**: `assert [r.status_code for r in responses] == [200, 201, 409, 204, 404]`.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend]. (covers G2.3)
+
+##### T10.2.5 [backend] — G2 E2E: enroll → catalog enrolled=true → drop → enrolled=false
+
+- **Build**: Create `tests/integration/phase3_db_only/test_g2_e2e_enrollment_lifecycle.py`. With `make_student_client`: `POST /api/student/enrollments` → 201; `GET /api/student/catalog` → enrolled node card `enrolled=True`; `DELETE /api/student/enrollments/{id}` → 204; `GET /api/student/catalog` → same card `enrolled=False`. No service mocking — exercises the route layer end-to-end.
+- **Done when**: Both catalog fetches reflect the post-mutation enrolled state.
+- **Test**: `assert first_catalog_card.enrolled is True` and `assert second_catalog_card.enrolled is False`.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend]. (covers G2 E2E)
+
+##### T10.2.6 [backend] — G3.1: seeded 3-level tree; subtree + enrolled-root queries
+
+- **Build**: Create `tests/integration/phase3_db_only/test_g3_1_subtree_queries.py`. With `seed_3level_tree(session)`: `CoursePathNodeRepository(session).get_subtree_node_ids([grade_id])` → `{grade_id, subject_id, course_id} ⊆ result`; `get_enrolled_root_nodes({grade_id})` → list containing the grade `CoursePathNode`; `get_enrolled_root_nodes(set())` → `[]`.
+- **Done when**: Both queries return the asserted sets/lists against the seeded tree.
+- **Test**: `assert {grade_id, subject_id, course_id}.issubset(subtree_ids)`; `assert len(enrolled_roots) == 1 and enrolled_roots[0].id == grade_id`.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend]. (covers G3.1)
+
+##### T10.2.7 [backend] — G3.2: unenrolled → platform_nodes=[]; wrong node → 403
+
+- **Build**: Create `tests/integration/phase3_db_only/test_g3_2_enrollment_filter.py`. With `make_student_client` and a `unique_student_sub()` (no enrollments seeded): `GET /api/student/dashboard` → 200, `platform_nodes == []`. Seed a platform grade node the student is NOT enrolled in; `GET /api/student/nodes/{unenrolled_node_id}/topics` → 403.
+- **Done when**: Both assertions hold against the real DB + route layer.
+- **Test**: `assert response.json()["platform_nodes"] == []`; `assert topics_response.status_code == 403`.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend]. (covers G3.2)
+
+##### T10.2.8 [backend] — G5.2: valid → 200; wrong enrollment → 403; rate exceeded → 429
+
+- **Build**: Create `tests/integration/phase3_db_only/test_g5_2_haitu_endpoint_paths.py`. With `make_student_client` and `reset_haitu_rate_limiter` (autouse) + `hour_bucket_override` pinned: seed an enrollment + live topic for the student; mock `HaituService.answer` at the integration layer (override the `HaituDoubtService` factory dependency, or monkeypatch `HaituService.answer` to return `HaituResponse(response="ok", escalation_ready=False)`). Valid `{topic_id, enrollment_id, message:"x", history:[]}` → 200. Wrong `enrollment_id` (seed a second enrollment for `other_student_sub`, POST that id) → 403. Rate exceeded: pre-fill the pinned bucket with 20 calls for this `student_sub`, then POST → 429. No Ollama required.
+- **Done when**: All three paths return the asserted status codes with `HaituService.answer` mocked.
+- **Test**: `assert [r.status_code for r in [valid, wrong, exceeded]] == [200, 403, 429]`.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend]. (covers G5.2)
+
+---
+
+### G10.3 — Ollama-Gated Verification Tests
+
+**Goal**: The 4 Ollama-gated goal-level integration/E2E entries (G4.1, G4.2, G4 E2E, G5 E2E) are written and green when Ollama + the configured chat model and bge-m3 embed model are available; they skip with a reported count otherwise. The two DB-only sub-cases (G4 E2E short-circuit, G5 E2E 429) run even when Ollama is absent.
+**Subgoal test**: With Ollama up — `uv run pytest tests/integration/phase3_ollama_gated -q` exits 0, terminal summary `Ollama-gated: 0 skipped, 6 passed` (4 Ollama-gated + 2 DB-only sub-cases). With Ollama down — exits 0, summary `Ollama-gated: 4 skipped, 2 passed`, and T10.3.5 asserts the skip-count line is present.
+**Repos**: [backend]
+
+##### T10.3.1 [backend] — G4.1: _stage1_rewrite with live Ollama  [Ollama-gated]
+
+- **Build**: Create `tests/integration/phase3_ollama_gated/test_g4_1_stage1_rewrite.py`. Apply the `ollama_model_available` skip mark from T10.1.3. Instantiate `HaituService(settings.haitu, settings.embedding, settings.database_url)`; `await service._stage1_rewrite("What is photosynthesis?")` → assert returned `HaituRewriteResult` has non-empty `rewritten_query`, `intent in {"definition","computation","explanation"}`, and `safe` is a bool.
+- **Done when**: With Ollama up + chat model loaded, the test passes; with Ollama down, it skips and is counted in the summary line.
+- **Test**: `assert result.rewritten_query and result.intent in {...} and isinstance(result.safe, bool)`.
+- **Depends on**: T10.1.3 [backend]. (covers G4.1)
+
+##### T10.3.2 [backend] — G4.2: seeded chunks; _stage2_retrieve ≥1 NodeWithScore  [Ollama-gated]
+
+- **Build**: Create `tests/integration/phase3_ollama_gated/test_g4_2_stage2_retrieve.py`. Apply the skip mark. Seed the full hierarchy (category→grade→subject→course→topic→topic_content) and insert a `data_topic_content_chunks` row with a bge-m3 embedding produced via `build_embed_model(settings.embedding)` (or run `_process_row` once via a `rag_indexing_outbox` row). Call `await service._stage2_retrieve("photosynthesis", topic_id, with_rerank=False)` → assert `len(result) >= 1` and each item is a `NodeWithScore`.
+- **Done when**: With Ollama up, ≥1 `NodeWithScore` returned; with Ollama down, skips and is counted.
+- **Test**: `assert len(nodes) >= 1`.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend], T10.1.3 [backend]. (covers G4.2)
+
+##### T10.3.3a [backend] — G4 E2E: safe=False short-circuit (no _stage2 call)  [DB-only]
+
+- **Build**: Create `tests/integration/phase3_ollama_gated/test_g4_e2e_answer_pipeline.py::test_answer_short_circuits_on_safe_false`. No skip mark. Monkeypatch `HaituService._stage1_rewrite` to return `HaituRewriteResult(rewritten_query="x", intent="explanation", safe=False, reject_reason="Off topic")`; spy on `_stage2_retrieve`; call `await service.answer(topic_id, "x", [], {})`; assert `result.response == "Off topic"`, `result.escalation_ready is False`, and `_stage2_retrieve` was not called.
+- **Done when**: The short-circuit test passes always (no Ollama).
+- **Test**: `assert result.response == "Off topic" and not stage2_called`.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend]. (covers G4 E2E — short-circuit half)
+
+##### T10.3.3b [backend] — G4 E2E: safe=True full pipeline  [Ollama-gated]
+
+- **Build**: `test_g4_e2e_answer_pipeline.py::test_answer_full_pipeline_safe_true`. Apply the skip mark. Seed chunks as in T10.3.2; call `await service.answer(topic_id, "What is photosynthesis?", [], topic_context)` with a real `topic_context`; assert `result.response` is a non-empty string and `result.escalation_ready` is a bool.
+- **Done when**: Passes with Ollama up; skips (counted) with Ollama down.
+- **Test**: `assert isinstance(result.response, str) and result.response`.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend], T10.1.3 [backend]. (covers G4 E2E — full-pipeline half)
+
+##### T10.3.4a [backend] — G5 E2E: AI response + no DB writes  [Ollama-gated]
+
+- **Build**: Create `tests/integration/phase3_ollama_gated/test_g5_e2e_haitu_topic_doubt.py::test_haitu_topic_doubt_ai_response_no_db_writes`. Apply the skip mark. With `make_student_client`, seed an enrollment + live topic; `POST /api/haitu/topic-doubt` valid body → 200, `response` non-empty, `escalation_ready` bool. Before/after, `SELECT count(*) FROM student_enrollments WHERE student_sub=?` → unchanged (hAITU path is stateless). Assert no `doubt_messages`-style rows were created (table deferred to Phase 4 — the hAITU path must touch no such table).
+- **Done when**: Passes with Ollama up; skips (counted) with Ollama down.
+- **Test**: `assert response.status_code == 200 and response.json()["response"]` and `count_before == count_after`.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend], T10.1.3 [backend]. (covers G5 E2E — AI-response half)
+
+##### T10.3.4b [backend] — G5 E2E: 21st call → 429  [DB-only]
+
+- **Build**: `test_g5_e2e_haitu_topic_doubt.py::test_haitu_topic_doubt_21st_call_429`. No skip mark. With `reset_haitu_rate_limiter` (autouse) + `hour_bucket_override` pinned, seed enrollment + topic; mock `HaituService.answer` at the integration layer to return canned responses fast. Loop 20 POSTs → all 200; 21st POST → 429 with rate-limit body.
+- **Done when**: The 429 test passes always (no Ollama).
+- **Test**: `assert [r.status_code for r in first_20] == [200]*20 and twenty_first.status_code == 429`.
+- **Depends on**: T10.1.1 [backend], T10.1.2 [backend]. (covers G5 E2E — 429 half)
+
+##### T10.3.5 [backend] — Aggregate-gate: ollama-gated suite exits 0 with skip-count line
+
+- **Build**: Add a guard (a small test or a CI step recorded in TASKS.md) that runs `uv run pytest tests/integration/phase3_ollama_gated -q` and asserts (a) exit code 0, and (b) the `Ollama-gated: N skipped, M passed` terminal-summary line is present in output. This is the gate that distinguishes a genuinely-green Ollama run from a silently-all-skipped run, and is the entry condition the manual walkthrough (T10.4.1) depends on.
+- **Done when**: With Ollama up: exit 0, line `Ollama-gated: 0 skipped, 6 passed`. With Ollama down: exit 0, line `Ollama-gated: 4 skipped, 2 passed`. Either way the skip-count line is present and parseable.
+- **Test**: `assert exit_code == 0 and "Ollama-gated:" in output`.
+- **Depends on**: T10.3.1 [backend], T10.3.2 [backend], T10.3.3a [backend], T10.3.3b [backend], T10.3.4a [backend], T10.3.4b [backend].
+
+---
+
+### G10.4 — Manual End-to-End Walkthrough
+
+**Goal**: The 7-step ROOT Acceptance Test is executed manually against the running stack (backend + frontend + APISIX + Postgres + Ollama), each step's result is recorded, and any defects found are fixed before sign-off.
+**Subgoal test**: A walkthrough record exists showing all 7 steps passing (with specified status codes and UI states); any defects found were fixed and the affected step re-run green.
+**Repos**: [specs] [backend] [frontend] [deploy]
+
+##### T10.4.1 [specs] — Run ROOT Acceptance Test manually, record results
+
+- **Build**: Bring up the full stack via `haisir-deploy` docker compose (backend, frontend, APISIX, Postgres, Ollama with chat + bge-m3 models loaded). With a real student whose profile grade is "Grade 8", execute the 7 steps from the "## ROOT Acceptance Test" section verbatim. Record the observed status code / UI state for each step. **No code changes in this task** — execution + recording only. If a step fails, log it as a defect for T10.4.2/T10.4.3/T10.4.4. If stack-up itself fails, log as a deploy defect → T10.4.4.
+- **Done when**: A 7-row record exists, each row pass/fail with (if fail) a defect reference.
+- **Test**: The recorded table has 7 rows; each row has a pass/fail and (if fail) a defect reference.
+- **Depends on**: G10.2 subgoal test green (8 passed, 0 skipped) AND G10.3 subgoal test green via T10.3.5 (Ollama up: 4 Ollama-gated + 2 DB-only passed; Ollama down: 4 skipped + 2 passed, skip-count line present). Also requires G1–G9 complete (per `progress.md`) and stack brought up via `haisir-deploy` docker compose.
+
+##### T10.4.2 [backend] — Fix backend defects surfaced by the manual walkthrough
+
+- **Build**: For each defect logged in T10.4.1 whose root cause is in the backend (route handler, service, repository, schema, migration), implement the minimal fix. Re-run the affected integration test(s) and the failing manual step. Environmental defects (Ollama model not loaded, APISIX misconfig) are NOT backend — route to T10.4.3 or T10.4.4. If none found, record "no backend defects."
+- **Done when**: All backend-rooted defects fixed and the affected manual step re-runs green.
+- **Test**: The affected step from T10.4.1 flips fail→pass; the relevant G10.2/G10.3 test still passes.
+- **Depends on**: T10.4.1 [specs].
+
+##### T10.4.3 [frontend] — Fix frontend defects surfaced by the manual walkthrough
+
+- **Build**: For each defect logged in T10.4.1 whose root cause is in the frontend (component, hook, API call, header wiring), implement the minimal fix. Re-run the affected Playwright E2E spec and the failing manual step. If none found, record "no frontend defects."
+- **Done when**: All frontend-rooted defects fixed and the affected manual step re-runs green.
+- **Test**: The affected Playwright spec in the existing G3/G7/G8/G9 suite passes; the affected manual step flips to pass.
+- **Depends on**: T10.4.1 [specs].
+
+##### T10.4.4 [deploy] — Fix deploy defects surfaced by the manual walkthrough
+
+- **Build**: For each defect logged in T10.4.1 whose root cause is in the deploy repo (APISIX route config, WAF rule, env var, docker-compose service, Ollama model availability), implement the minimal fix (e.g., adjust `19-api-haitu.json`, add a WAF exclusion, fix an env var). Re-apply config and re-run the failing manual step. If none found, record "no deploy defects."
+- **Done when**: All deploy-rooted defects fixed and the affected manual step re-runs green.
+- **Test**: `GET /api/health` via APISIX → healthy; the affected manual step flips to pass.
+- **Depends on**: T10.4.1 [specs].
+
+---
+
+### G10.5 — Phase 3 Sign-off & Archive
+
+**Goal**: After all 12 verification items are green-or-skip-with-count and the manual walkthrough is recorded as fully passing, archive `PLAN.md` and `TASKS.md` and record Phase 3 as completed in `progress.md`.
+**Subgoal test**: `Implementation_planning/archive/` contains the Phase 3 PLAN.md and TASKS.md snapshots; `progress.md` "Completed Phases" section contains a Phase 3 entry.
+**Repos**: [specs]
+
+##### T10.5.1 [specs] — Verify full closure: 12 items + manual walkthrough + Playwright
+
+- **Build**: Compile a closure checklist: (a) the 12 verification items are each green or, for Ollama-gated items, green-or-skip-with-reported-count (and the reported count distinguishes green from all-skipped); (b) the 7-step manual walkthrough record shows all steps passing (defects from T10.4.2/T10.4.3/T10.4.4 resolved); (c) the existing frontend Playwright suite (G3/G7/G8/G9) is still green. If any item is not green, do NOT proceed — surface the gap.
+- **Done when**: The checklist has 12 + 7 + 1 rows, every row green (or skip-with-count for Ollama items when Ollama is absent).
+- **Test**: `assert all(row.green for row in checklist)`.
+- **Depends on**: T10.4.2 [backend], T10.4.3 [frontend], T10.4.4 [deploy].
+
+##### T10.5.2 [specs] — Archive PLAN.md + TASKS.md; update progress.md Completed Phases
+
+- **Build**: `git mv` `Implementation_planning/PLAN.md` and `Implementation_planning/TASKS.md` to `Implementation_planning/archive/` with Phase-3-suffixed filenames (`PLAN_Phase3-Enrollment-Haitu_2026-06-18.md`, `TASKS_Phase3-Enrollment-Haitu_2026-06-18.md`), preserving history. Append a "Phase 3 — Student Enrollment + hAITU Topic-Doubt ✓" entry to `progress.md` "Completed Phases" with: completion date, backend/frontend/deploy commit SHAs, archived-plan path, what-was-done summary (schema V34; enrollment domain/repo/service/routes; enrolled-only content filter; hAITU 4-stage pipeline + topic-doubt endpoint + rate limiter; APISIX route + env vars; frontend browse-courses + dashboard empty state + hAITU doubt panel; Playwright E2E suite; the 12 backend verification tests; manual walkthrough), and deviations (Ollama-gated tests skip-with-count when Ollama absent; any walkthrough defects + fixes). Do not delete the working files until archive copies are committed.
+- **Done when**: `ls Implementation_planning/archive/PLAN_Phase3*.md` and `ls Implementation_planning/archive/TASKS_Phase3*.md` both succeed; `grep "Phase 3 — Student Enrollment" Implementation_planning/progress.md` returns the new entry.
+- **Test**: `test -f Implementation_planning/archive/PLAN_Phase3-Enrollment-Haitu_2026-06-18.md` and `grep -q "Phase 3 — Student Enrollment" progress.md`.
+- **Depends on**: T10.5.1 [specs].
+
+---
+
+<!-- plan-baseline: backend:9379bb72c3e2ccb94d7256bf0eb533e37d78a76e frontend:54e198cc88399f1bd57d679bd010d134b5546c86 deploy:e57c56bdc5dc04a5eb3d37ac63fedf5c5007eb40 -->

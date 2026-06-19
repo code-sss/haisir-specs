@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:0d5305d frontend:31062ab deploy:e57c56b (2026-06-18)
+> Last baselined: backend:9379bb7 frontend:54e198c deploy:e57c56b (2026-06-18)
 
 ---
 
@@ -169,14 +169,57 @@
 
 ---
 
-## G10 — Next (TBD)
+## G10 [backend][specs]: Phase 3 Verification, Manual Walkthrough & Sign-off
 
-- [ ] Placeholder — add next gate tasks here before starting implementation
+> Closes Phase 3: the 12 remaining backend goal-level integration/E2E items, a manual 7-step ROOT Acceptance Test walkthrough against the running stack, defect fixing, and archival. Nothing deferred.
+
+### G10.1 — Shared Integration Fixtures & Scaffolding
+- [ ] T10.1.1 [backend]: Integration conftest — assert/ensure migration head = V34 (autouse) (no deps)
+- [ ] T10.1.2 [backend]: Shared fixtures module — make_student_client, reset_haitu_rate_limiter (autouse), unique_student_sub, rolled_back_session, seed_3level_tree (depends on T10.1.1)
+- [ ] T10.1.2b [backend]: Refactor existing dashboard integration test to import shared_fixtures (no behaviour change) (depends on T10.1.2)
+- [ ] T10.1.3 [backend]: ollama_probe.py — probe-based skip guard + skip-count terminal-summary reporter (no deps)
+- [ ] **G10.1: Shared Fixtures** — subgoal test: shared_fixtures imports clean; reset/rollback/seed usable; refactored dashboard test still passes
+
+### G10.2 — DB-Only Verification Tests (8 items)
+- [ ] T10.2.1 [backend]: G1.1 — V34 UNIQUE violation + idx_student_enrollments_student_sub exists (depends on T10.1.1, T10.1.2)
+- [ ] T10.2.2 [backend]: G2.1 — EnrollmentRepository CRUD via real rolled-back session (depends on T10.1.1, T10.1.2)
+- [ ] T10.2.3 [backend]: G2.2 — EnrollmentService enroll/drop/catalog (409) (depends on T10.1.1, T10.1.2)
+- [ ] T10.2.4 [backend]: G2.3 — route CRUD cycle 200/201/409/204/404 (depends on T10.1.1, T10.1.2)
+- [ ] T10.2.5 [backend]: G2 E2E — enroll→enrolled=true→drop→enrolled=false (depends on T10.1.1, T10.1.2)
+- [ ] T10.2.6 [backend]: G3.1 — seeded 3-level tree; subtree + enrolled-root queries (depends on T10.1.1, T10.1.2)
+- [ ] T10.2.7 [backend]: G3.2 — unenrolled→platform_nodes=[]; wrong node→403 (depends on T10.1.1, T10.1.2)
+- [ ] T10.2.8 [backend]: G5.2 — valid→200 (mocked); wrong enrollment→403; rate→429 (depends on T10.1.1, T10.1.2)
+- [ ] **G10.2: DB-Only Verification** — subgoal test: pytest tests/integration/phase3_db_only exits 0 with 8 passed, 0 skipped
+
+### G10.3 — Ollama-Gated Verification Tests
+- [ ] T10.3.1 [backend]: G4.1 — _stage1_rewrite with live Ollama  [Ollama-gated] (depends on T10.1.3)
+- [ ] T10.3.2 [backend]: G4.2 — seeded chunks; _stage2_retrieve ≥1 NodeWithScore  [Ollama-gated] (depends on T10.1.1, T10.1.2, T10.1.3)
+- [ ] T10.3.3a [backend]: G4 E2E — safe=False short-circuit (no _stage2 call)  [DB-only] (depends on T10.1.1, T10.1.2)
+- [ ] T10.3.3b [backend]: G4 E2E — safe=True full pipeline  [Ollama-gated] (depends on T10.1.1, T10.1.2, T10.1.3)
+- [ ] T10.3.4a [backend]: G5 E2E — AI response + no DB writes  [Ollama-gated] (depends on T10.1.1, T10.1.2, T10.1.3)
+- [ ] T10.3.4b [backend]: G5 E2E — 21st call→429 (mocked)  [DB-only] (depends on T10.1.1, T10.1.2)
+- [ ] T10.3.5 [backend]: Aggregate-gate — ollama-gated suite exits 0 with skip-count line present (depends on T10.3.1–T10.3.4b)
+- [ ] **G10.3: Ollama-Gated Verification** — subgoal test: Ollama up → 6 passed, "0 skipped, 6 passed"; down → 4 skipped + 2 passed, skip-count line present
+
+### G10.4 — Manual End-to-End Walkthrough
+- [ ] T10.4.1 [specs]: Run 7-step ROOT Acceptance Test manually against running stack, record results (depends on G10.2 + G10.3 subgoal tests green; G1–G9 complete; stack up via deploy)
+- [ ] T10.4.2 [backend]: Fix backend defects from walkthrough (no-op if none) (depends on T10.4.1)
+- [ ] T10.4.3 [frontend]: Fix frontend defects from walkthrough (no-op if none) (depends on T10.4.1)
+- [ ] T10.4.4 [deploy]: Fix deploy defects from walkthrough (no-op if none) (depends on T10.4.1)
+- [ ] **G10.4: Manual Walkthrough** — subgoal test: 7-step record all passing with defects fixed
+
+### G10.5 — Phase 3 Sign-off & Archive
+- [ ] T10.5.1 [specs]: Verify full closure — 12 items + 7 manual steps + Playwright suite all green-or-skip-with-count (depends on T10.4.2, T10.4.3, T10.4.4)
+- [ ] T10.5.2 [specs]: git mv PLAN.md + TASKS.md → archive/; append Phase 3 ✓ to progress.md Completed Phases (depends on T10.5.1)
+- [ ] **G10.5: Sign-off & Archive** — subgoal test: archive/ contains Phase3 PLAN+TASKS; progress.md has Phase 3 entry
 
 ---
 
 ## Ready now
 
-Tasks with no pending dependencies — can start immediately across all three repos:
+Tasks with no pending dependencies — can start immediately:
 
-All individual T-tasks across all repos are complete, and the frontend E2E Playwright suite (G3/G7/G8/G9) is green. Remaining items are backend integration and E2E tests at the goal level (G1, G2, G4, G5), which require running infrastructure or test suites.
+- T10.1.1 [backend]: Integration conftest — assert/ensure migration head = V34 (no deps)
+- T10.1.3 [backend]: ollama_probe.py — probe-based skip guard + skip-count reporter (no deps)
+
+Once T10.1.1 + T10.1.2 land, all 8 G10.2 DB-only tests unblock in parallel. Once T10.1.3 lands, all G10.3 tests unblock in parallel. T10.4.1 (manual walkthrough) is gated on G10.2 + G10.3 subgoal tests being green-with-enforced-counts. T10.5.x is gated on T10.4.x completion. All G1–G9 implementation and the frontend Playwright E2E suite are already complete.

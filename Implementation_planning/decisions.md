@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-06-18 — Phase 3 closeout plan: verify, manually test, then sign off (G10)
+
+> `/plan` cycle reconciling the existing Phase 3 PLAN.md (G1–G9) against current HEADs (backend `9379bb7`, frontend `54e198c`, deploy `e57c56b`). All G1–G9 implementation + the frontend Playwright E2E suite are done; the only unchecked items are 12 backend goal-level integration/E2E tests. User intent: **finish everything in Phase 3, test it all manually, then sign off — no deferral, no premature archiving.** New goal **G10** appended to PLAN.md (G1–G9 preserved as the implementation record).
+
+- **Scope = all 12 verification items + a manual walkthrough as the sign-off gate (no deferral).** Ranked options included deferring the 4 Ollama-gated items to a later cycle. Rejected: the user explicitly wants Phase 3 fully closed before any Phase 4 / Phase 2-revisit work. Ollama-gated items run when Ollama is up and **skip-with-reported-count** when it is down — they are never silently dropped.
+- **Two-tier test strategy to defeat the false-completeness gate.** The 8 DB-only tests (G10.2) are the deterministic CI gate — they always run against Postgres@V34, no skips. The 4 Ollama-gated tests (G10.3) are a separately-gated sub-signal: a `pytest_terminal_summary` hook prints `Ollama-gated: N skipped, M passed`, and an aggregate-gate task (T10.3.5) asserts that line is present, so a green all-skipped run is visibly distinct from a genuinely-green run. Without this, Ollama's `skipif` could make a green build mean "everything was skipped."
+- **Manual walkthrough (G10.4) gated on automated green-with-enforced-counts, not just "green-or-skip."** T10.4.1's entry condition references the G10.2/G10.3 *subgoal* tests (8 passed 0 skipped; Ollama bucket ≥1 passed-or-4-skipped+2-passed with the skip-count line), so the stack is known-good at the automated layer before a human walks the 7-step ROOT Acceptance Test against the running stack. Defects found route to per-repo fix tasks (T10.4.2/3/4); sign-off (G10.5) cannot happen until those resolve.
+- **Test isolation wired into a shared fixtures module (T10.1.2), not per-file.** `tests/integration/shared_fixtures.py` centralises the dependency-override wiring (`make_student_client` overrides `get_async_session`/`current_active_user`/`validate_csrf` + sends `X-Current-Role`) currently duplicated in `test_student_dashboard_integration.py`; the existing test is refactored to import it (T10.1.2b). `reset_haitu_rate_limiter` is **autouse** within `tests/integration/` (the limiter is a process-global singleton — without reset, the 21st-call 429 test and other suites share state). `unique_student_sub()` per test + `rolled_back_session()` prevent the V34 UNIQUE constraint from producing false 409s across tests. `integration_db_head` autouse asserts the integration DB is at `V34` before any DB-only test runs.
+- **Plan-baseline updated** backend `0dbec56` → `9379bb7`, frontend `31062ab` → `54e198c` (deploy unchanged `e57c56b`).
+
+---
+
 ## 2026-06-17 — Phase 3 plan review: fixes applied
 
 > Post-`/plan` review of PLAN.md against the actual `feature/rag` state of all three repos. Findings and fixes:
