@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | f55c40c (feature/rag — Phase 3 verification test suite + Ollama-gated aggregate gate, 2026-06-19) |
+| haisir-backend | fc2eeb2 (feature/rag — live Ollama verification fixes: MockLLM + asyncio marks, 2026-06-20) |
 | haisir-frontend | 7fc8811 (feature/rag — chore-only, no UI changes, 2026-06-19) |
 | haisir-deploy | 59e42f3 (feature/rag — hAITU APISIX route + backend HAITU/EMBEDDING env vars, 2026-06-19) |
 
-> Next session: run `git diff f55c40c..HEAD` in haisir-backend, `git diff 7fc8811..HEAD` in haisir-frontend, and `git diff 59e42f3..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff fc2eeb2..HEAD` in haisir-backend, `git diff 7fc8811..HEAD` in haisir-frontend, and `git diff 59e42f3..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 

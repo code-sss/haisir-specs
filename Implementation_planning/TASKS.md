@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:45e243b frontend:54e198c deploy:e57c56b (2026-06-19)
+> Last baselined: backend:fc2eeb2 frontend:54e198c deploy:e57c56b (2026-06-20)
 
 ---
 
@@ -189,7 +189,7 @@
 - [x] T10.2.6 [backend]: G3.1 — seeded 3-level tree; subtree + enrolled-root queries (depends on T10.1.1, T10.1.2) (2026-06-19)
 - [x] T10.2.7 [backend]: G3.2 — unenrolled→platform_nodes=[]; wrong node→403 (depends on T10.1.1, T10.1.2) (2026-06-19)
 - [x] T10.2.8 [backend]: G5.2 — valid→200 (mocked); wrong enrollment→403; rate→429 (depends on T10.1.1, T10.1.2) (2026-06-19)
-- [ ] **G10.2: DB-Only Verification** — subgoal test: pytest tests/integration/phase3_db_only exits 0 with 8 passed, 0 skipped (awaits CI postgres:18 run — all 8 gate tests implemented + collect cleanly; skip locally with no INTEGRATION_DB_URL)
+- [x] **G10.2: DB-Only Verification** — subgoal test: pytest tests/integration/phase3_db_only exits 0 with 8 passed, 0 skipped (verified 2026-06-20 against temporary pgvector Postgres container; CI run also green in backend-logs.txt)
 
 ### G10.3 — Ollama-Gated Verification Tests
 - [x] T10.3.1 [backend]: G4.1 — _stage1_rewrite with live Ollama  [Ollama-gated] (depends on T10.1.3) (2026-06-19)
@@ -199,7 +199,7 @@
 - [x] T10.3.4a [backend]: G5 E2E — AI response + no DB writes  [Ollama-gated] (depends on T10.1.1, T10.1.2, T10.1.3) (2026-06-19)
 - [x] T10.3.4b [backend]: G5 E2E — 21st call→429 (mocked)  [DB-only] (depends on T10.1.1, T10.1.2) (2026-06-19)
 - [x] T10.3.5 [backend]: Aggregate-gate — ollama-gated suite exits 0 with skip-count line present (depends on T10.3.1–T10.3.4b) (2026-06-19)
-- [ ] **G10.3: Ollama-Gated Verification** — subgoal test: Ollama up → suite passes, skip-count line present; down → gated tests skip, skip-count line present (awaits CI run — 6 tests implemented with per-test @OLLAMA_GATED_MARK/@OLLAMA_GATED_SKIP_MARK; 2 DB-only sub-cases (T10.3.3a, T10.3.4b) run with no Ollama, 4 gated skip when the probe fails. NOTE: @pytest.mark.anyio runs each gated test under both asyncio+trio, and rag_loop is also ollama_gated-marked, so the suite collects ~10 ollama_gated items (not 6) and CI RAG time is ~2x a single-backend run; this is the intended project pattern, not a defect. T10.3.5 only asserts the suite exits 0 with the skip-count line present, so the dual-backend count does not affect the gate.)
+- [x] **G10.3: Ollama-Gated Verification** — subgoal test: Ollama up → suite passes, skip-count line present; down → gated tests skip, skip-count line present (verified 2026-06-20 with live qwen3:14b + bge-m3: `tests/integration/phase3_ollama_gated/` = 6 passed, 0 skipped, summary line `Ollama-gated: 0 skipped, 4 passed`; CI run also green with skip-count line in backend-logs.txt)
 
 ### G10.4 — Manual End-to-End Walkthrough
 - [ ] T10.4.1 [specs]: Run 7-step ROOT Acceptance Test manually against running stack, record results (depends on G10.2 + G10.3 subgoal tests green; G1–G9 complete; stack up via deploy)
@@ -219,4 +219,6 @@
 
 Tasks with no pending dependencies — can start immediately:
 
-*None. T10.3.5 [backend] is now done. The remaining Phase 3 work (manual walkthrough and sign-off/archive) is gated on G10.2/G10.3 CI runs and manual stack verification; those tasks belong to T10.4.x/T10.5.x and cannot start until their prerequisites are green.*
+- T10.4.1 [specs]: Run 7-step ROOT Acceptance Test manually against running stack, record results (depends on G10.2 ✓ + G10.3 ✓ + G1–G9 complete; stack up via deploy)
+
+*G10 automated verification is closed. The remaining Phase 3 work is the manual walkthrough (T10.4.1), per-repo defect fixes (T10.4.2/3/4, no-op if none), and sign-off/archive (T10.5.x). T10.4.x is now unblocked; T10.5.x remains gated on T10.4.1–T10.4.4.*
