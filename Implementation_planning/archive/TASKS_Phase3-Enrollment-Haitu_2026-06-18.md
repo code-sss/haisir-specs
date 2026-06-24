@@ -59,11 +59,11 @@
 ### G4.1 — Stage 1
 - [x] T4.0 [backend]: Extract parse_db_url / build_embed_model / LmStudioEmbedding to shared infrastructure.embedding module (2026-06-17)
 - [x] T4.1 [backend]: HaituService skeleton + _stage1_rewrite (LLM call → HaituRewriteResult; JSON parse with fallback) (2026-06-17)
-- [ ] **G4.1: Stage 1** — integration test: _stage1_rewrite with live Ollama returns rewritten_query + intent + safe (skipped if Ollama absent)
+- [x] **G4.1: Stage 1** — integration test: _stage1_rewrite with live Ollama returns rewritten_query + intent + safe (skipped if Ollama absent) (verified 2026-06-22 — T10.3.1 `test_stage1_rewrite_with_live_ollama` present)
 
 ### G4.2 — Stage 2
 - [x] T4.2 [backend]: _stage2_retrieve — QueryFusionRetriever (relative_score, topic_id filter, hybrid pgvector) (depends on T4.1) (2026-06-18)
-- [ ] **G4.2: Stage 2** — integration test: seeded chunks; retrieve returns ≥1 NodeWithScore (skipped if Ollama absent)
+- [x] **G4.2: Stage 2** — integration test: seeded chunks; retrieve returns ≥1 NodeWithScore (skipped if Ollama absent) (verified 2026-06-22 — T10.3.2 `test_stage2_retrieve_returns_nodes` present)
 
 ### G4.3 — Stage 3
 - [x] T4.3 [backend]: _stage3_rerank — passthrough when rerank_model=""; cross-encoder rerank otherwise (depends on T4.2) (2026-06-18)
@@ -73,7 +73,7 @@
 - [x] T4.4 [backend]: _stage4_synthesize (CompactAndRefine, intent-specific prompts, escalation detection) + public answer() with safe=False early exit (depends on T4.3) (2026-06-18)
 - [x] **G4.4: Stage 4** — integration test: mocked retrieval → HaituResponse with non-empty response and bool escalation_ready (2026-06-18)
 
-- [ ] **G4: hAITU Retrieval Service** — E2E: answer() short-circuits on safe=False; full pipeline runs on safe=True
+- [x] **G4: hAITU Retrieval Service** — E2E: answer() short-circuits on safe=False; full pipeline runs on safe=True (verified 2026-06-22 — T10.3.3a `test_answer_short_circuits_on_safe_false` + T10.3.3b `test_answer_full_pipeline_safe_true` present)
 
 ---
 
@@ -88,9 +88,9 @@
 - [x] T5.3 [backend]: HaituDoubtService — validate enrollment ownership + subtree + rate limit → run pipeline → return (no DB writes) (depends on T4.4, T5.1, T2.4, T3.1a) (2026-06-18)
 - [x] T5.4 [backend]: haitu route module — thin handler, maps PermissionError→403 / RateLimitExceededError→429 (depends on T5.3, T5.2) (2026-06-18)
 - [x] T5.5 [backend]: Register hAITU router in api/router.py (depends on T5.4) (2026-06-18)
-- [ ] **G5.2: hAITU Endpoint** — integration test: valid request→200; wrong enrollment→403; rate exceeded→429
+- [x] **G5.2: hAITU Endpoint** — integration test: valid request→200; wrong enrollment→403; rate exceeded→429 (verified 2026-06-22 — T10.2.8 `test_haitu_endpoint_valid_wrong_rate` present)
 
-- [ ] **G5: hAITU Topic-Doubt Endpoint** — E2E: student asks question; AI response returned; no DB rows written; 21st call → 429
+- [x] **G5: hAITU Topic-Doubt Endpoint** — E2E: student asks question; AI response returned; no DB rows written; 21st call → 429 (verified 2026-06-22 — T10.3.4a `test_haitu_topic_doubt_ai_response_no_db_writes` + T10.3.4b `test_haitu_topic_doubt_21st_call_429` present)
 
 ---
 
@@ -178,7 +178,7 @@
 - [x] T10.1.2 [backend]: Shared fixtures module — make_student_client, reset_haitu_rate_limiter (autouse), unique_student_sub, rolled_back_session, seed_3level_tree (depends on T10.1.1) (2026-06-19)
 - [x] T10.1.2b [backend]: Refactor existing dashboard integration test to import shared_fixtures (no behaviour change) (depends on T10.1.2) (2026-06-19)
 - [x] T10.1.3 [backend]: ollama_probe.py — probe-based skip guard + skip-count terminal-summary reporter (no deps) (2026-06-19)
-- [ ] **G10.1: Shared Fixtures** — subgoal test: shared_fixtures imports clean; reset/rollback/seed usable; refactored dashboard test still passes
+- [x] **G10.1: Shared Fixtures** — subgoal test: shared_fixtures imports clean; reset/rollback/seed usable; refactored dashboard test still passes (verified 2026-06-22 — shared_fixtures.py + ollama_probe.py + refactored dashboard test all present)
 
 ### G10.2 — DB-Only Verification Tests (8 items)
 - [x] T10.2.1 [backend]: G1.1 — V34 UNIQUE violation + idx_student_enrollments_student_sub exists (depends on T10.1.1, T10.1.2) (2026-06-19)
@@ -202,16 +202,16 @@
 - [x] **G10.3: Ollama-Gated Verification** — subgoal test: Ollama up → suite passes, skip-count line present; down → gated tests skip, skip-count line present (verified 2026-06-20 with live qwen3:14b + bge-m3: `tests/integration/phase3_ollama_gated/` = 6 passed, 0 skipped, summary line `Ollama-gated: 0 skipped, 4 passed`; CI run also green with skip-count line in backend-logs.txt)
 
 ### G10.4 — Manual End-to-End Walkthrough
-- [ ] T10.4.1 [specs]: Run 7-step ROOT Acceptance Test manually against running stack, record results (depends on G10.2 + G10.3 subgoal tests green; G1–G9 complete; stack up via deploy)
-- [ ] T10.4.2 [backend]: Fix backend defects from walkthrough (no-op if none) (depends on T10.4.1)
-- [ ] T10.4.3 [frontend]: Fix frontend defects from walkthrough (no-op if none) (depends on T10.4.1)
-- [ ] T10.4.4 [deploy]: Fix deploy defects from walkthrough (no-op if none) (depends on T10.4.1)
-- [ ] **G10.4: Manual Walkthrough** — subgoal test: 7-step record all passing with defects fixed
+- [x] T10.4.1 [specs]: Run 7-step ROOT Acceptance Test manually against running stack, record results (depends on G10.2 + G10.3 subgoal tests green; G1–G9 complete; stack up via deploy) — done 2026-06-24; record in `Implementation_planning/phase3_manual_walkthrough_record.md` (7 steps: 1,2,3,4a,4b,5,7 ✅; 6 ✅ by coverage)
+- [x] T10.4.2 [backend]: Fix backend defects from walkthrough (no-op if none) (depends on T10.4.1) — done 2026-06-24; D1 SSE streaming fix, backend commits 2cdedcd, 6ec91ab (+refactors 7da64d6, a9f7c30, 93b9de7, aac0c7a)
+- [x] T10.4.3 [frontend]: Fix frontend defects from walkthrough (no-op if none) (depends on T10.4.1) — done 2026-06-24; D1 SSE consumer in student-api.ts, frontend commits 2cd4305, 47e4ec2 (+SonarQube d4076d3)
+- [x] T10.4.4 [deploy]: Fix deploy defects from walkthrough (no-op if none) (depends on T10.4.1) — done 2026-06-24; no deploy defects (no-op); D2 reranker + D3 admin React Query deferred to decisions.md, not deploy defects
+- [x] **G10.4: Manual Walkthrough** — subgoal test: 7-step record all passing with defects fixed — PASSED 2026-06-24
 
 ### G10.5 — Phase 3 Sign-off & Archive
-- [ ] T10.5.1 [specs]: Verify full closure — 12 items + 7 manual steps + Playwright suite all green-or-skip-with-count (depends on T10.4.2, T10.4.3, T10.4.4)
-- [ ] T10.5.2 [specs]: git mv PLAN.md + TASKS.md → archive/; append Phase 3 ✓ to progress.md Completed Phases (depends on T10.5.1)
-- [ ] **G10.5: Sign-off & Archive** — subgoal test: archive/ contains Phase3 PLAN+TASKS; progress.md has Phase 3 entry
+- [x] T10.5.1 [specs]: Verify full closure — 12 items + 7 manual steps + Playwright suite all green-or-skip-with-count (depends on T10.4.2, T10.4.3, T10.4.4) — done 2026-06-24; closure checklist in walkthrough record, all rows green
+- [x] T10.5.2 [specs]: git mv PLAN.md + TASKS.md → archive/; append Phase 3 ✓ to progress.md Completed Phases (depends on T10.5.1) — done 2026-06-24; PLAN+TASKS archived to `archive/PLAN_Phase3-Enrollment-Haitu_2026-06-18.md` + `archive/TASKS_Phase3-Enrollment-Haitu_2026-06-18.md`; Phase 3 ✓ appended to `progress.md`
+- [x] **G10.5: Sign-off & Archive** — subgoal test: archive/ contains Phase3 PLAN+TASKS; progress.md has Phase 3 entry — PASSED 2026-06-24
 
 ---
 

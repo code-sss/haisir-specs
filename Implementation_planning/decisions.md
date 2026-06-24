@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-06-24 — hAITU topic-doubt converted to SSE streaming; two deferred items logged
+
+> Phase 3 manual walkthrough (T10.4.1) surfaced that the single-shot JSON `POST /api/haitu/topic-doubt` caused gateway 504s on long RAG pipelines. Resolved by streaming; two design gaps deferred.
+
+- **`POST /api/haitu/topic-doubt` now streams SSE (contract change).** The prior single JSON response after a multi-minute 4-stage pipeline tripped frontend/gateway idle timeouts (504) and could leak a DB connection on abort. Endpoint now returns `text/event-stream` with incremental `{"token":…}` frames, a `{"escalation_ready":…}` frame, a final `{"done":true}` frame, 15 s `: ping` keepalives, `request.is_disconnected()` cancellation, and a DB session closed before the streaming phase. 403/429 remain ordinary HTTP errors returned before the stream starts. Backend commits `2cdedcd` / `6ec91ab` (+ refactors `7da64d6`, `a9f7c30`, `93b9de7`, `aac0c7a`); frontend commits `2cd4305` / `47e4ec2` (+ SonarQube `d4076d3`). Non-streaming `HaituService.answer()` retained for callers/tests. Spec updated in `vision/requirements/08_haitu_ai_layer.md` (§4, §3.1, BR-AI-002, BR-AI-009). **Trade-off:** streaming bypasses `CompactAndRefine` (it calls `complete()`, not `stream_complete()`) — a single prompt mirroring the QA template is used; `escalation_ready` is still computed from the accumulated response.
+- **Deferred — Stage 3 reranker is passthrough.** With `HAITU__RERANK_MODEL=""` (no cross-encoder configured), Stage 3 is a no-op. Acceptable for Phase 3; revisit when a rerank model is selected. Spec §3.1 already documents the empty-rerank skip.
+- **Deferred — admin feature uses `@tanstack/react-query`.** Deviates from CLAUDE.md "custom hooks with useState/useEffect only." Pre-existing Phase 1 admin work, outside the Phase 3 student scope (the student feature uses raw `fetch` via `fetchWithCSRFRetry`, satisfying the Phase 3 pass criterion). Cleanup item for a later cycle.
+
+---
+
 ## 2026-06-18 — Deferred: monitoring stack (Prometheus + Grafana) and WAF body exclusions
 
 > Work done during `feature/rag` for hAITU RAG pipeline deploy tasks. Two areas explicitly deferred — needs follow-up before Phase 4.

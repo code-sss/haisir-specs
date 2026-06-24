@@ -79,6 +79,12 @@ The retrieval follows haiguru's 4-stage pipeline adapted for hAIsir's HTTP conte
 - Synthesis receives `[{intent}] {original_query}` (NOT rewritten query — intentional for tone preservation).
 - LLM receives the top-K chunks and the system prompt from section 3.1.
 - Returns: `{response: str, escalation_ready: bool}` (max tokens: see section 5).
+- **Phase 3 streaming note:** the live `POST /api/haitu/topic-doubt` endpoint streams
+  tokens and does NOT use `CompactAndRefine` (it calls `complete()`, not
+  `stream_complete()`). The streaming path builds a single prompt mirroring the QA
+  template above and yields token deltas as SSE frames; `escalation_ready` is computed
+  from the accumulated full response. The non-streaming `answer()` path retains
+  `CompactAndRefine`. See §4 "Phase 3 streaming contract".
 
 **Video-only fallback:** If `data_topic_content_chunks` is empty for the topic, fall back to `topic_contents.text` (stored markdown) truncated to 4000 chars. Skip Stages 1–3; pass raw text directly to Stage 4.
 
@@ -390,13 +396,64 @@ POST /api/haitu/topic-doubt
                               // Returns 403 if not enrolled. Returns 400 if enrollment_id does not belong
                               // to the requesting student.
     message: str,             // the student's question (max 1000 chars)
-    history: [{role: "user"|"assistant", content: str}]  // last 5 turns (client-managed rolling window)
+    history: [{role: "student"|"ai", content: str}]  // last 5 turns (client-managed rolling window);
+                              // backend maps "student"→"user", "ai"→"assistant" for the LLM
   }
-→ Returns: {response: str, escalation_ready: bool}
+→ Returns: Server-Sent Events stream (`Content-Type: text/event-stream`).
+    See "Phase 3 streaming contract" below — tokens stream incrementally; a final
+    `done` event signals stream end and a preceding `escalation_ready` event carries
+    the escalation flag. 403 (invalid enrollment / topic out of scope) and 429 (rate
+    limit) are returned as ordinary HTTP errors BEFORE the stream begins, not as SSE
+    events.
 → Persistence: none in Phase 3 — chat history is session-only (client-side).
     Phase 4 will add: find/create doubts record; save AI response to doubt_messages;
     set haitu_attempted=true if escalation_ready.
-→ Rate limit: 20 calls/student/hour (BR-AI-003). Returns 429 if exceeded.
+→ Rate limit: 20 calls/student/hour (BR-AI-003). Returns 429 if exceeded (HTTP 429
+    before the stream starts). NOTE: the APISIX route (`19-api-haitu.json`) adds a
+    SECOND, independent limit-count of 20 req/min/IP → 429; the two limiters are
+    stacked (either may surface 429).
+
+> **Phase 3 streaming contract (implemented 2026-06, commits `2cd4305` FE / `2cdedcd` BE).**
+> The endpoint streams the response as SSE so the UI renders tokens as they are
+> produced and long RAG pipelines don't trip gateway idle timeouts (the prior
+> single-shot JSON response caused 504s). Wire format — one JSON object per
+> `data:` frame, `: ping` comments as keepalives:
+>
+> ```
+> data: {"token":"Photosynthesis"}\n\n
+> data: {"token":" is"}\n\n
+> ...                              // incremental token deltas
+> data: {"escalation_ready":false}\n\n   // exactly one, after the last token
+> data: {"done":true}\n\n            // final frame — signals stream end
+> : ping\n\n                        // keepalive comment, every 15 s during silence
+> ```
+>
+> Response headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`,
+> `Connection: keep-alive`, `X-Accel-Buffering: no`.
+>
+> Behaviour notes:
+> - **Unsafe query** (`safe=False` from Stage 1): emits one token frame with the
+>   reject reason, then `{"escalation_ready":false}`, then `{"done":true}` — Stages
+>   2–4 are skipped (short-circuit).
+> - **Out-of-context** (no retrieved chunks for the topic): emits one token frame
+>   with an out-of-context message, then `{"escalation_ready":true}`, then done.
+> - **Client disconnect**: the route polls `request.is_disconnected()` and, on
+>   disconnect, signals a shared cancellation flag that stops upstream LLM
+>   generation and tears down the background ping loop.
+> - **DB session lifecycle**: all DB work (enrollment/subtree validation, rate-limit
+>   check, context assembly) completes inside a scoped session that is CLOSED before
+>   the first token is yielded — an aborted stream cannot leave a connection checked out.
+> - **Stage 4 trade-off**: the streaming path uses a single prompt mirroring the §3.1
+>   QA template (NOT `CompactAndRefine`, which calls `complete()` not `stream_complete()`).
+>   `escalation_ready` is computed from the accumulated full response (too-short or
+>   escalation-phrase detection), the same logic the non-streaming `answer()` path uses.
+> - **Frontend consumer**: reads the stream via `ReadableStream` + `TextDecoder`,
+>   appends `token` frames to the AI bubble, captures `escalation_ready`, ends on
+>   `done`, ignores `: ping` comments. A resend-on-failure retry is available if the
+>   stream produces no tokens.
+>
+> The non-streaming `HaituService.answer()` (returns `HaituResponse{response, escalation_ready}`)
+> is retained for non-streaming callers and the unit/integration test suite.
 
 POST /api/haitu/exam-review-chat
 → Auth: student
@@ -479,6 +536,13 @@ Configurable by SuperAdmin in platform settings. Defaults:
 
 **BR-AI-002:** All hAITU API calls have a 30-second timeout. If exceeded, return 504 with fallback message.
 
+> **Phase 3 exception — `topic-doubt` streams.** `POST /api/haitu/topic-doubt` does
+> NOT use the single-shot 30 s → 504 model: it returns an SSE stream with 15 s `: ping`
+> keepalives so silent retrieval/reasoning doesn't look like an idle connection. The
+> APISIX route (`19-api-haitu.json`) sets a 360 s send/read timeout to accommodate the
+> multi-stage pipeline. The 30 s → 504 rule still applies to the other (future,
+> non-streaming) hAITU endpoints until they too are converted to streaming.
+
 **BR-AI-003:** Rate limiting: Max 20 hAITU calls per student per hour. Max 50 per teacher per hour. Exceeding returns 429 with message: "You've reached the limit for AI assistance this hour. Please try again later."
 
 > **Phase 2+ consideration:** More granular rate limiting (per-interaction-type limits, burst rate controls, daily/monthly cost-based quotas, per-institution quotas for managed deployments) is deferred to a later phase. The current flat per-role hourly limits are sufficient for v1 launch. Revisit when usage data is available.
@@ -503,6 +567,14 @@ These rules are enforced server-side regardless of what the client sends.
 **BR-AI-008:** hAITU never answers questions about other students, even if the question appears in a teacher-tools context. The student context is always singular.
 
 **BR-AI-009:** The model used for hAITU is determined by the `platform_settings.model` value at request time. Changing the model in settings takes effect on the next API call — no restart required.
+
+> **Phase 3 mechanism.** The SuperAdmin `platform_settings.model` UI is not built yet;
+> the model is configured via the `HAITU__MODEL_SPEC` env var (and `EMBEDDING__MODEL_SPEC`
+> for bge-m3). The spec string is prefix-dispatched to a provider: `anthropic://`,
+> `openai://`, `lmstudio://model@host:port/path`, or a plain model name → Ollama. The
+> near-term default is local (`lmstudio://` or Ollama) to keep student PII on-prem;
+> `anthropic://`/`openai://` are opt-in. `platform_settings.model` remains the
+> long-term vision once the settings UI lands.
 
 **BR-AI-010:** Content ingestion is async. The hAITU `topic-doubt` interaction gracefully degrades:
 - If `data_topic_content_chunks` is empty for the topic AND any `rag_indexing_outbox` row for a content item in this topic has `status IN ('pending', 'processing', 'retry')`: return HTTP 202 with `retry_after: 30` and the message "hAITU is still reviewing the materials for this topic — please try again in a moment."

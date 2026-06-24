@@ -101,6 +101,39 @@ The platform admin board content manager is fully implemented end-to-end. The Ad
 
 ## Completed Phases
 
+### Phase 3 — Student Enrollment + hAITU Topic-Doubt ✓
+
+**Completed:** 2026-06-24
+**Commits:** haisir-backend `6ec91ab` (feature/rag), haisir-frontend `47e4ec2` (feature/rag), haisir-deploy `3178451` (feature/rag)
+**Archived plan:** `Implementation_planning/archive/PLAN_Phase3-Enrollment-Haitu_2026-06-18.md`
+**Walkthrough record:** `Implementation_planning/phase3_manual_walkthrough_record.md`
+
+**What was done:**
+- V34 Alembic migration: `student_enrollments` table (UUID PK, `student_sub` TEXT, `course_path_node_id` UUID FK→`course_path_nodes` CASCADE, `enrolled_at`, `enrollment_source`; UNIQUE on `(student_sub, course_path_node_id)`; index on `student_sub`).
+- Enrollment domain layer: `StudentEnrollment` dataclass, infra table + imperative mapping, `AbstractEnrollmentRepository` (5 methods), concrete `EnrollmentRepository`; `AlreadyEnrolledError` / `EnrollmentNotFoundError` exceptions.
+- `EnrollmentService` (enroll / drop / get_catalog) with `recommended` = case-insensitive match of catalog node **name** vs student profile **grade**.
+- Three enrollment endpoints: `GET /api/student/catalog`, `POST /api/student/enrollments` (201/409/404), `DELETE /api/student/enrollments/{id}` (204/404); CSRF + `X-Current-Role: student` required.
+- Enrolled-only content filter: `get_subtree_node_ids` (recursive CTE), `get_enrolled_root_nodes`, `is_topic_in_enrolled_subtree`; `StudentDashboardService` filters `platform_nodes` + enforces subtree access (403 for unenrolled node/topic; empty list for unenrolled dashboard).
+- hAITU 4-stage retrieval pipeline: Stage 1 query rewrite + intent + safety (`HaituRewriteResult`); Stage 2 hybrid retrieval (`QueryFusionRetriever`, `relative_score`, `topic_id` filter, bge-m3 embed via shared `infrastructure.embedding` — LM Studio + Ollama adapters); Stage 3 optional rerank (passthrough when `HAITU__RERANK_MODEL=""`); Stage 4 synthesis (`CompactAndRefine` in `answer()`, single-prompt in streaming).
+- `HaituRateLimiter` (in-process 20 calls/student/hour) + `HaituDoubtService` orchestrator (enrollment ownership + subtree + rate limit; stateless — no DB writes).
+- `POST /api/haitu/topic-doubt` — **streamed as SSE** (`text/event-stream`): incremental `{"token":…}` frames, a `{"escalation_ready":…}` frame, a final `{"done":true}` frame, 15 s `: ping` keepalives, `request.is_disconnected()` cancellation, DB session closed before streaming; 403/429 returned as HTTP errors before the stream starts. Converted from single-shot JSON to fix gateway 504s on long RAG pipelines.
+- APISIX route `19-api-haitu.json` (360 s timeout, `limit-count` 20/min/IP, `limit-conn` 20/IP, `request-validation`, `secured-api` OIDC) + `HAITU__*` / `EMBEDDING__*` env vars wired into the backend service.
+- Frontend: Browse Courses screen (`/enroll` → `BrowseCoursesPage` + `CatalogCard` grid + persistent nav link), dashboard empty states with "Browse Courses" CTA, `HaituDoubtPanel` (chat bubbles, 429 rate-limit message, disabled escalation button, enrollment guard) below content; `useStudentCatalog` + `useHaituDoubt` hooks; SSE consumer via `ReadableStream`/`TextDecoder` with resend-on-failure.
+- Frontend Playwright E2E suite: 16 specs across G3/G7/G8/G9 + CI integration (Jenkinsfile E2E stage, JUnit+HTML report); `/commit-frontend` gates on the suite.
+- Backend verification: 12 goal-level integration/E2E tests — 8 DB-only (`tests/integration/phase3_db_only/`) + 4 Ollama-gated (`tests/integration/phase3_ollama_gated/`); shared fixtures module + Ollama probe + skip-count terminal-summary reporter; full unit suite 3537 passed, 22 skipped, 100% coverage.
+- Manual 7-step ROOT Acceptance Test walkthrough: all steps pass (record in `Implementation_planning/phase3_manual_walkthrough_record.md`); spec updated for the SSE contract change.
+
+**Deviations:**
+- hAITU `topic-doubt` converted from single-shot JSON to **SSE streaming** mid-phase to solve gateway 504s on long RAG pipelines; the streaming Stage-4 path bypasses `CompactAndRefine` (uses a single prompt mirroring the QA template) — non-streaming `answer()` retains `CompactAndRefine`. Spec updated in `vision/requirements/08_haitu_ai_layer.md` (§4, §3.1, BR-AI-002, BR-AI-009); design + trade-offs in `decisions.md` 2026-06-24.
+- Ollama-gated tests skip-with-reported-count when the LLM is absent (never silently dropped); a `pytest_terminal_summary` line distinguishes a genuinely-green run from an all-skipped run.
+- Stage 3 reranker is passthrough when `HAITU__RERANK_MODEL=""` (no cross-encoder configured) — design gap deferred to a later phase.
+- Admin feature uses `@tanstack/react-query` (deviation from CLAUDE.md "custom hooks with useState/useEffect only"); pre-existing Phase 1 admin scope, not Phase 3 — deferred cleanup.
+- Student profile grade has no UI screen (onboarding is CTA-only); set via `POST /api/students/me/profile`. `recommended=false` across the catalog until grade is set — acceptable for Phase 3.
+
+**Note:** All work on `feature/rag` branch — not yet merged to main in any sibling repo.
+
+---
+
 ### Phase 2 — RAG Infrastructure + Text Restructuring + Student Dashboard ✓
 
 **Completed:** 2026-06-17
