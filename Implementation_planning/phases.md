@@ -46,7 +46,7 @@ Decisions: `Implementation_planning/decisions.md` (2026-06-12 entries: RAG+hAITU
 
 ---
 
-## Phase 3 — Student Enrollment + hAITU Topic-Doubt (active — closeout in progress)
+## Phase 3 — Student Enrollment + hAITU Topic-Doubt ✓ (completed 2026-06-24)
 
 | Sub-phase | Scope | Depends on |
 |---|---|---|
@@ -57,8 +57,26 @@ Decisions: `Implementation_planning/decisions.md` (2026-06-12 entries: RAG+hAITU
 | **3e** ✓ — APISIX route + env vars | 19-api-haitu.json with 360s timeout; HAITU__* + EMBEDDING__* env vars wired in backend service | 3d |
 | **3f** ✓ — Enrollment frontend | S-enroll (/enroll) catalog page; enroll/drop CTA; Browse Courses nav link; empty-state handling in S-home + S-nav | 3b |
 | **3g** ✓ — hAITU doubt panel | HaituDoubtPanel in ContentViewer; useHaituDoubt hook (client-side history); escalation button (disabled placeholder) | 3d, 3f |
-| **3h** — Verification + manual walkthrough + sign-off (G10) | 12 backend goal-level integration/E2E tests (8 DB-only + 4 Ollama-gated with skip-count reporting); shared integration fixtures (migration-head V34 guard, dep-override wiring, rate-limiter reset, per-test isolation, Ollama probe); manual 7-step ROOT Acceptance Test against the running stack; per-repo defect fixes; archive PLAN.md/TASKS.md + mark Phase 3 ✓. **No deferral.** | 3a–3g |
+| **3h** ✓ — Verification + manual walkthrough + sign-off (G10) | 12 backend goal-level integration/E2E tests (8 DB-only + 4 Ollama-gated with skip-count reporting); shared integration fixtures (migration-head V34 guard, dep-override wiring, rate-limiter reset, per-test isolation, Ollama probe); manual 7-step ROOT Acceptance Test against the running stack; per-repo defect fixes; archive PLAN.md/TASKS.md + mark Phase 3 ✓. **No deferral.** | 3a–3g |
 
-Implementation for 3a–3g is complete (incl. frontend Playwright E2E suite). 3h is the closeout gate before Phase 3 is marked complete — see `Implementation_planning/PLAN.md` G10.
+Implementation for 3a–3g is complete (incl. frontend Playwright E2E suite). 3h sign-off landed 2026-06-24 — Phase 3 ✓. Archived: `archive/PLAN_Phase3-Enrollment-Haitu_2026-06-18.md`. APISIX hAITU timeout corrected 360s → 600s.
 
-**Deferred to Phase 4:** doubts + doubt_messages tables (V35), teacher escalation flow, mastery score tracking, student exam flow, parent features.
+**Carried into Phase 4:** doubts + doubt_messages tables (V35), teacher escalation flow, mastery score tracking, parent features.
+
+---
+
+## Phase 4 — Doubt Persistence + Teacher Escalation + Notifications + Mastery / Post-Exam Review (active)
+
+> Root goal: a student's hAITU doubt becomes a persistent thread a teacher can escalate into and reply to, with notifications; the student gains per-topic mastery tracking and a post-exam hAITU review. Two major features, deliberately sequenced (Feature 1 → Feature 2) with a P0 stabilization goal first.
+
+| Sub-goal | Concern | Repos |
+|---|---|---|
+| **G0** — Stabilize HEAD (P0 blocker) | Fix 5 Python-2 `except`-clause SyntaxErrors, merge `feature/rag`→`main` across repos, re-verify Phase 3 at HEAD + CI grep guard + correct stale CLAUDE.md Keycloak claim, and remove inline-ML deps (stub the dormant reranker; drop `sentence-transformers`/`torch`/uv torch-CPU pin; future reranker = external HTTP API) | backend, frontend, deploy, specs |
+| **G1** — Doubt persistence + hAITU thread completion | V35 (`doubts` + `doubt_messages`); Doubt/DoubtMessage domain models, repos, schemas, service; student S08 inbox + S09 thread UI; hAITU persists the doubt + student message pre-stream and the AI message post-stream with a `doubt_id` SSE frame; no-orphan-on-429 + no-duplicate-on-retry + disconnect/partial-text persistence tests | specs, backend, frontend |
+| **G2** — Teacher escalation | Escalate endpoint mounting at `/api/doubts`; teacher queue `GET`+claim and reply routes mounting under `/api/teachers` (`require_instructor`); shared-instructor-queue model; T06 teacher inbox + T07 reply UI; student "Request teacher help" CTA wired into S09 + the hAITU panel | specs, backend, frontend |
+| **G3** — Notifications subsystem | V36 `notifications`; NotificationService with a pluggable parent fan-out stub; 4 endpoints (list/unread-count/mark-read/mark-all-read) + APISIX route; bell + feed UI polled every 60s in the shared topbar (all roles); hourly auto-close cron in the worker (7-day) wired to `new_doubt_escalated` / `doubt_teacher_replied` / `doubt_auto_closed` events | specs, backend, frontend, deploy |
+| **G4** — Mastery + post-exam review | V37 `enrollment_topics` (verifies existing `questions.topic_id`, never alters it); EnrollmentTopic model/repo + Question mapping; MasteryService per-topic recalc wired into `submit_exam` and essay-grading auto-complete; `topic_marked_weak` / `student_at_risk` notifications; post-exam hAITU review (`POST /api/haitu/exam-review-chat`, `POST /api/haitu/pattern-analysis` in-memory cache) + S05 review screen; weak-topic flags exposed on the student home API and dashboard | specs, backend, frontend |
+
+DAG: G0 → G1 → G2 → G3 → G4 (acyclic). Dependencies flow `specs` contracts ahead of `backend` migrations ahead of `frontend` UI; G3 notifications are consumed by G2 (escalate events) and G4 (mastery events).
+
+Plan doc: `Implementation_planning/PLAN.md` (written 2026-06-24). Decisions: `Implementation_planning/decisions.md` (2026-06-24 Phase 4 entry). Progress checkboxes: `Implementation_planning/TASKS.md`. Baseline SHAs: backend `6ec91ab`, frontend `47e4ec2`, deploy `3178451`.

@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-06-24 — Phase 4 planning: doubt persistence + teacher escalation + notifications + mastery/post-exam review
+
+> `/plan` cycle for Phase 4. Root goal: a student's hAITU doubt becomes a persistent thread a teacher can escalate into and reply to, with notifications, and the student gains mastery tracking + a post-exam hAITU review. Seven load-bearing decisions locked; two Challenger rounds passed (round-1 raised 2 Blockers + 7 Majors, all resolved by re-splitting multi-repo tasks and adding the course_path_node_repo + escalate-mount fixes; round-2 verdict READY TO WRITE). Plan: `Implementation_planning/PLAN.md` (G0–G4, 17 subgoals, 65 tasks). Baseline SHAs: backend `6ec91ab`, frontend `47e4ec2`, deploy `3178451`.
+
+- **Doubt → student linkage is plain-text `student_sub`, no FK (Decision 1).** Matches the sacred "no FK constraints on user columns" rule (identity is Keycloak `sub` as a raw UUID). Rejected a `student_enrollments` FK extension — would have violated the rule and coupled doubts to enrollment state. Challenger B1 flagged an earlier contradictory "enrollment-FK" wording in the draft; corrected to plain-text `student_sub`.
+- **Shared-instructor-queue notification model.** A doubt escalated to teachers is not assigned to one teacher; it sits in a shared queue (`recipient_idp_sub` NULL + `recipient_role='instructor'`). Read caveat recorded: a `GET` on the queue returns the current snapshot — claiming is the optimistic-lock step, so two teachers seeing the same row before a claim is expected, not a bug.
+- **Teacher escalation mounts at `/api/doubts`; teacher queue/reply routes mount under `/api/teachers`** (uses `require_instructor`). Originally a single mount was ambiguous; a Challenger major forced an explicit split so the escalate endpoint shares the student doubts router prefix while teacher-only queue+reply live on the instructor namespace.
+- **`questions.topic_id` is left untouched.** It already exists (NOT NULL soft FK per `01_data_model.md`). V37 only *adds* `enrollment_topics` and verifies the column; it does not create or alter `questions.topic_id`. (Challenger M7 caught a draft contradiction.)
+- **hAITU spec lives at slot `11`** (`target/requirements/11_haitu_ai_layer.md`), falling back to `vision/requirements/08_haitu_ai_layer.md`. Slot 11 was the only free slot (08/09/10/12 taken). (Challenger B2 caught a draft referencing a non-existent `target/08_haitu_ai_layer.md`.)
+- **Inline-ML cleanup (G0.3): stub the reranker, remove heavy deps, future-hook to an external reranker API.** The only inline ML is the dormant hAITU Stage-3 reranker (`SentenceTransformerRerank`, already disabled via `HAITU__RERANK_MODEL=""` in Phase 3). Embedding/OCR/RAG are already external (Ollama/LM Studio HTTP). G0.3 stubs `_stage3_rerank` to a no-op, updates its tests, then removes `sentence-transformers` + `torch` + the uv torch-CPU pin from `pyproject.toml` (~1–2 GB wheels dropped), with a verify step guarding imports + the Phase 3 hAITU suite. Future reranker will be called via an external HTTP API (not inline), consistent with the lmstudio-local/ollama-cloud pattern.
+- **G0 stabilization is a P0 blocker landing before all feature work.** HEAD currently has Python-2 `except (A, B):` → `except A, B:` SyntaxErrors at 5 sites (parent.py:56,88; exam_session.py:219; haitu_service.py:262; worker/__main__.py:192) blocking `feature/rag` from merging to `main`. G0.1 fixes these + merges `feature/rag`→`main` across backend/frontend/deploy; G0.2 re-verifies Phase 3 at HEAD + adds a CI grep guard + corrects a stale CLAUDE.md Keycloak-roles claim (task T0.8).
+
+---
+
 ## 2026-06-24 — hAITU topic-doubt converted to SSE streaming; two deferred items logged
 
 > Phase 3 manual walkthrough (T10.4.1) surfaced that the single-shot JSON `POST /api/haitu/topic-doubt` caused gateway 504s on long RAG pipelines. Resolved by streaming; two design gaps deferred.
