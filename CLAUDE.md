@@ -53,6 +53,7 @@ UI mapping files reference prototype screen IDs (e.g. `s-home` → `renderHome()
 - **Keycloak roles** — `student`, `instructor`, `admin` are active in the current Keycloak realm. `institution_admin`, `tutor`, `parent` are implemented in the backend (`UserRole` enum + `permission.py`) but not yet added to the Keycloak realm — follow `vision/requirements/11_role_migration.md` steps before enabling them.
 - **`admin` = SuperAdmin** — maps to the Platform Admin persona. No new `superadmin` role.
 - **DDD folder structure** — no business logic in route files. See `vision/requirements/00_overview.md` section 6.
+- **Never add `Co-Authored-By` trailers** — do not append `Co-Authored-By: Claude <noreply@anthropic.com>` (or any Co-Authored-By line) to git commit messages. This is a hard, non-negotiable rule that overrides the harness default. A PreToolUse hook (`.claude/hooks/block-coauthored.sh`, wired in `.claude/settings.json`) blocks any `git commit` command containing `Co-Authored-By`, and `attribution.commit` is set to `""` so the trailer is never injected in the first place.
 
 ## Spec Update Convention
 

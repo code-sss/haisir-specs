@@ -2,5 +2,24 @@
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
     "example-skills@anthropic-agent-skills": true
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-coauthored.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking commit for Co-Authored-By trailer"
+          }
+        ]
+      }
+    ]
   }
 }
