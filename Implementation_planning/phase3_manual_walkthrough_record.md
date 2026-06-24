@@ -64,7 +64,7 @@
 
 ### Spec updates made this session (per CLAUDE.md spec-update convention)
 
-- `vision/requirements/08_haitu_ai_layer.md` — §4 `topic-doubt` contract rewritten to SSE streaming (wire format, headers, 403/429-as-HTTP, disconnect, DB-session lifecycle, Stage 4 trade-off, non-streaming `answer()` retained); history role names corrected `user`/`assistant` → `student`/`ai`; §3.1 Stage 4 streaming note added; BR-AI-002 carve-out for the streaming endpoint (15 s pings, 360 s gateway timeout); BR-AI-009 Phase 3 `HAITU__MODEL_SPEC` env-var + prefix-dispatch note.
+- `vision/requirements/08_haitu_ai_layer.md` — §4 `topic-doubt` contract rewritten to SSE streaming (wire format, headers, 403/429-as-HTTP, disconnect, DB-session lifecycle, Stage 4 trade-off, non-streaming `answer()` retained); history role names corrected `user`/`assistant` → `student`/`ai`; §3.1 Stage 4 streaming note added; BR-AI-002 carve-out for the streaming endpoint (15 s pings, 600 s gateway send/read timeout — the 360 s figure is the backend `HAITU__LLM_REQUEST_TIMEOUT` default, not the APISIX timeout); BR-AI-009 Phase 3 `HAITU__MODEL_SPEC` env-var + prefix-dispatch note.
 
 ---
 

@@ -539,8 +539,10 @@ Configurable by SuperAdmin in platform settings. Defaults:
 > **Phase 3 exception — `topic-doubt` streams.** `POST /api/haitu/topic-doubt` does
 > NOT use the single-shot 30 s → 504 model: it returns an SSE stream with 15 s `: ping`
 > keepalives so silent retrieval/reasoning doesn't look like an idle connection. The
-> APISIX route (`19-api-haitu.json`) sets a 360 s send/read timeout to accommodate the
-> multi-stage pipeline. The 30 s → 504 rule still applies to the other (future,
+> APISIX route (`19-api-haitu.json`) sets a 600 s send/read timeout to accommodate the
+> multi-stage pipeline (bumped from 360 s in deploy commit `3178451`, 2026-06-23; the
+> 360 s figure is the backend `HAITU__LLM_REQUEST_TIMEOUT` default, not the gateway
+> timeout). The 30 s → 504 rule still applies to the other (future,
 > non-streaming) hAITU endpoints until they too are converted to streaming.
 
 **BR-AI-003:** Rate limiting: Max 20 hAITU calls per student per hour. Max 50 per teacher per hour. Exceeding returns 429 with message: "You've reached the limit for AI assistance this hour. Please try again later."
