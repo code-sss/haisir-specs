@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | fc2eeb2 (feature/rag — live Ollama verification fixes: MockLLM + asyncio marks, 2026-06-20) |
-| haisir-frontend | 7fc8811 (feature/rag — chore: remove TASKS.md from tracking, 2026-06-19) |
-| haisir-deploy | 59e42f3 (feature/rag — hAITU APISIX route + backend HAITU/EMBEDDING env vars, 2026-06-19) |
+| haisir-backend | 6ec91ab (feature/rag — hAITU refactor + DDD boundaries + torch CPU-only CI, 2026-06-24) |
+| haisir-frontend | 47e4ec2 (feature/rag — hAITU SSE streaming consumer + SonarQube fixes, 2026-06-24) |
+| haisir-deploy | 3178451 (feature/rag — hAITU SSE APISIX route + proxy-buffering + SQLi target-exclusion, 2026-06-24) |
 
-> Next session: run `git diff fc2eeb2..HEAD` in haisir-backend, `git diff 7fc8811..HEAD` in haisir-frontend, and `git diff 59e42f3..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 6ec91ab..HEAD` in haisir-backend, `git diff 47e4ec2..HEAD` in haisir-frontend, and `git diff 3178451..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -602,11 +602,11 @@
 - Purpose: Run a student's doubt question through the 4-stage RAG pipeline (rewrite → retrieve → rerank → synthesize) scoped to an enrolled topic's subtree
 - Auth: student; CSRF required
 - Request: `HaituDoubtRequest { topic_id: UUID, enrollment_id: UUID, message: str, history: list[HaituDoubtMessage { role: "user"|"assistant"|"system", content: str }] (default []) }`
-- Response: `HaituDoubtResponse { response: str, escalation_ready: bool }`
-- Pipeline: stage 1 rewrites the query (LLM → JSON, safe fallback); stage 2 retrieves via QueryFusionRetriever (hybrid pgvector, topic_id filter); stage 3 reranks (passthrough when `rerank_model=""`, else cross-encoder); stage 4 synthesizes (CompactAndRefine, intent-specific prompts, escalation detection). `safe=False` from stage 1 short-circuits before retrieval.
-- Errors: 403 (PermissionError — enrollment invalid or topic outside enrolled subtree); 429 `"Rate limit exceeded"` (HaituRateLimiter: 20 calls/student/hour, in-process)
-- No DB writes — the endpoint is read-only with respect to persistent state
-- APISIX gateway (`19-api-haitu.json`): 360s send/read timeout; `limit-count` plugin (20 req/min per IP → 429, separate from the in-process per-student/hour limiter); `limit-conn` (20 concurrent connections/IP → 503); `request-validation` (requires `Content-Type: application/json` → 400 if absent); `secured-api` plugin config (OIDC deny on unauthenticated). Backend service has `HAITU__*` + `EMBEDDING__*` env vars wired in `common/docker-compose.yml` (T6.2).
+- Response: **SSE stream** (`Content-Type: text/event-stream`). Frames (each `data: {…}\n\n`): incremental `{"token": str}` → `{"escalation_ready": bool}` → terminal `{"done": true}`. 15 s `: ping` keepalives. Client disconnect (`request.is_disconnected()`) cancels the stream. The streaming Stage-4 path uses a single QA-mirroring prompt (bypasses `CompactAndRefine`, which the non-streaming `answer()` retains).
+- Pipeline: stage 1 rewrites the query (LLM → JSON, safe fallback); stage 2 retrieves via QueryFusionRetriever (hybrid pgvector, topic_id filter); stage 3 reranks (passthrough when `rerank_model=""`, else cross-encoder); stage 4 synthesizes (intent-specific prompts, escalation detection). `safe=False` from stage 1 short-circuits before retrieval.
+- Errors: 403 (enrollment invalid or topic outside enrolled subtree); 429 `"Rate limit exceeded"` (HaituRateLimiter: 20 calls/student/hour, in-process) — both returned as HTTP errors **before** the stream starts. DB session closed before streaming begins.
+- No DB writes — read-only with respect to persistent state.
+- APISIX gateway (`19-api-haitu.json`): route priority 20 (beats api-write 10 so the 6 s default read timeout does not 504 long-running calls); send/read timeout **600 s** (backend `HAITU__LLM_REQUEST_TIMEOUT` default is 360 s — the gateway is the higher ceiling); `proxy-buffering` disabled (required for SSE); `limit-count` (20 req/min per IP → 429, separate from the in-process per-student/hour limiter); `limit-conn` (20 concurrent connections/IP → 503); `request-validation` (requires `Content-Type: application/json` → 400 if absent); `secured-api` plugin config (OIDC deny on unauthenticated) with a targeted SQLi target-exclusion (Coraza id:199110) for `POST /api/haitu/*` chat-body ARGS (`json.*`) — rules 942130/942131/942340/942380/942400/942410 exempted only on the NL chat args, full inspection retained on headers/cookies/URI/query and any non-json body field. Backend service has `HAITU__*` + `EMBEDDING__*` env vars wired in `common/docker-compose.yml`.
 
 ---
 

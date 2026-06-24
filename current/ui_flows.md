@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | fc2eeb2 (feature/rag — live Ollama verification fixes: MockLLM + asyncio marks, 2026-06-20) |
-| haisir-frontend | 7fc8811 (feature/rag — chore-only, no UI changes, 2026-06-19) |
-| haisir-deploy | 59e42f3 (feature/rag — hAITU APISIX route + backend HAITU/EMBEDDING env vars, 2026-06-19) |
+| haisir-backend | 6ec91ab (feature/rag — hAITU refactor + DDD boundaries + torch CPU-only CI, 2026-06-24) |
+| haisir-frontend | 47e4ec2 (feature/rag — hAITU SSE streaming consumer + SonarQube fixes, 2026-06-24) |
+| haisir-deploy | 3178451 (feature/rag — hAITU SSE APISIX route + proxy-buffering + SQLi target-exclusion, 2026-06-24) |
 
-> Next session: run `git diff fc2eeb2..HEAD` in haisir-backend, `git diff 7fc8811..HEAD` in haisir-frontend, and `git diff 59e42f3..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 6ec91ab..HEAD` in haisir-backend, `git diff 47e4ec2..HEAD` in haisir-frontend, and `git diff 3178451..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -222,8 +222,8 @@ Rendered at the bottom of `ContentViewer` whenever a topic is selected.
 - **Chat UI** — scrollable bubble list (`role="log" aria-live="polite"`): student messages right-aligned (blue), AI messages left-aligned (grey). Spinner bubble while `isLoading`. Input textarea (Enter = send, Shift+Enter = newline), disabled while loading. Send button disabled when input empty or loading.
 - **Error banner** — 429 rate-limit → "You've reached the AI limit for this hour. Try again later."; other errors → "Something went wrong. Please try again."
 - **Escalation** — "Ask your teacher" button shown when `escalation_ready=true` from API; disabled with `title="Coming soon"` (instructor persona deferred).
-- `useHaituDoubt(topicId, enrollmentId)` hook — client-side message history (last 5 sent as `history` to API), loading/error state, 429 detection. Resets on `topicId` change. Calls `POST /api/haitu/topic-doubt`.
+- `useHaituDoubt(topicId, enrollmentId)` hook — client-side message history (last 5 sent as `history` to API), loading/error state, 429 detection. Resets on `topicId` change. Calls `POST /api/haitu/topic-doubt` and consumes the **SSE stream** via `ReadableStream`/`TextDecoder`, appending `{"token"}` frames to the live assistant bubble; on stream/network failure, resends the last message (resend-on-failure).
 
-> **Backend note:** `POST /api/haitu/topic-doubt` is now wired (T5.4/T5.5 done at backend `9379bb7`, 2026-06-18). Valid request → 200 + `HaituDoubtResponse`; wrong enrollment / out-of-subtree topic → 403; 21st call in the hour → 429. No DB rows written.
+> **Backend note:** `POST /api/haitu/topic-doubt` streams the answer as SSE (`text/event-stream`): `{"token":…}` frames → `{"escalation_ready":…}` → `{"done":true}`, with 15 s `: ping` keepalives and disconnect cancellation. Wrong enrollment / out-of-subtree topic → 403; 21st call in the hour → 429 (both returned as HTTP errors before the stream starts). No DB rows written.
 
 Unit test suite: 11 test files covering all components, hooks, and api layer (100% coverage). **Playwright E2E suite shipped (commit `54e198c`, 2026-06-18):** 16 specs across G3 content-filter, G7 browse-courses, G8 empty-state, and G9 hAITU panel, all green; gated in `/commit-frontend` as a peer to the 100% coverage check.
