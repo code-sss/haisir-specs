@@ -10,7 +10,7 @@
 - [ ] T0.1 [backend]: Fix 5 Python-2 except-clause SyntaxErrors
 - [ ] T0.2 [backend]: Merge feature/rag → main (depends on T0.1)
 - [ ] T0.3 [frontend]: Merge feature/rag → main
-- [ ] T0.4 [deploy]: Merge feature/rag → main
+- [x] T0.4 [deploy]: Merge feature/rag → main (2026-06-24)
 
 ### G0.2 — Re-verify Phase 3 at HEAD + CI guard + correct stale docs
 - [ ] T0.5 [backend]: Re-run Phase 3 integration suites at HEAD (depends on T0.2)
@@ -122,7 +122,6 @@
 Tasks with no pending dependencies — can be started immediately (the G0 merges can proceed in parallel):
 - T0.1 [backend]: Fix 5 Python-2 except-clause SyntaxErrors (no deps)
 - T0.3 [frontend]: Merge feature/rag → main (no deps)
-- T0.4 [deploy]: Merge feature/rag → main (no deps)
 - T0.8 [specs]: Correct stale CLAUDE.md Keycloak-roles claim (no deps)
 - T1.1.1 [specs]: Doubt lifecycle + persistence contracts in 11/03 (no deps)
 - T3.1.1 [specs]: Fill 10_notifications.md with the notification contract (no deps)
