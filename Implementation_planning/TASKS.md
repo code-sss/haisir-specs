@@ -1,14 +1,14 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:6ec91ab frontend:47e4ec2 deploy:3178451 (2026-06-24)
+> Last baselined: backend:a139208 frontend:47e4ec2 deploy:3178451 (2026-06-24)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0 is the P0 stabilization that must land first.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
 
 ### G0.1 — Fix Python-2 SyntaxErrors + merge feature/rag → main
-- [ ] T0.1 [backend]: Fix 5 Python-2 except-clause SyntaxErrors
-- [ ] T0.2 [backend]: Merge feature/rag → main (depends on T0.1)
+- [x] T0.1 [backend]: Fix 5 Python-2 except-clause SyntaxErrors (2026-06-24)
+- [x] T0.2 [backend]: Merge feature/rag → main (depends on T0.1) (2026-06-24)
 - [x] T0.3 [frontend]: Merge feature/rag → main (2026-06-24)
 - [x] T0.4 [deploy]: Merge feature/rag → main (2026-06-24)
 
@@ -120,9 +120,10 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately (the G0 merges can proceed in parallel):
-- T0.1 [backend]: Fix 5 Python-2 except-clause SyntaxErrors (no deps)
+- T0.5 [backend]: Re-run Phase 3 integration suites at HEAD (depends on T0.2 — done)
 - T0.6 [frontend]: Re-run Playwright E2E at HEAD (dep T0.3 done)
 - T0.8 [specs]: Correct stale CLAUDE.md Keycloak-roles claim (no deps)
+- T0.9 [backend]: Stub _stage3_rerank to a no-op (depends on T0.2 — done)
 - T1.1.1 [specs]: Doubt lifecycle + persistence contracts in 11/03 (no deps)
 - T3.1.1 [specs]: Fill 10_notifications.md with the notification contract (no deps)
 - T4.1.1 [specs]: 01/03/11 — enrollment_topics + exam→topic decision + S05 + exam-review (no deps)
