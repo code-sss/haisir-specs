@@ -28,7 +28,7 @@
 ## G1 — Doubt persistence + hAITU thread completion [specs][backend][frontend]
 
 ### G1.1 — Doubt schema + spec contracts (V35)
-- [ ] T1.1.1 [specs]: Doubt lifecycle + persistence contracts in 11/03
+- [x] T1.1.1 [specs]: Doubt lifecycle + persistence contracts in 11/03 (2026-06-25)
 - [ ] T1.1.2 [backend]: V35 migration: doubts + doubt_messages (depends on T1.1.1, T0.2)
 - [ ] T1.1.3 [backend]: Doubt + DoubtMessage domain models (imperative) (depends on T1.1.2)
 - [ ] T1.1.4 [backend]: Doubt Pydantic schemas (depends on T1.1.3)
@@ -120,6 +120,5 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T1.1.1 [specs]: Doubt lifecycle + persistence contracts in 11/03 (no deps)
 - T3.1.1 [specs]: Fill 10_notifications.md with the notification contract (no deps)
 - T4.1.1 [specs]: 01/03/11 — enrollment_topics + exam→topic decision + S05 + exam-review (no deps)

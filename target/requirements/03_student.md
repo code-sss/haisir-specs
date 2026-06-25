@@ -1,6 +1,6 @@
 # Student Persona
 
-> **Target state scope:** Student experience with platform content and parent Home Study content. Institutions, classes, doubts, hAITU, and notifications are out of scope for this increment.
+> **Target state scope:** Student experience with platform content, parent Home Study content, and the **doubt thread** (S08/S09 — Phase 4). Institutions, classes, and notifications wiring are out of scope for this increment; the doubt persistence + hAITU thread lifecycle is defined in `11_haitu_ai_layer.md`.
 
 ---
 
@@ -13,6 +13,8 @@
 | S-exam | Exam Taking | `/exam/:session_id` |
 | S-results | Exam Results | `/exam/:session_id/results` |
 | S-profile | Student Profile | `/profile` |
+| S08 | Doubt Inbox | `/doubts` |
+| S09 | Doubt Thread | `/doubts/:doubt_id` |
 
 ---
 
@@ -154,6 +156,67 @@ Student calls `POST /api/exam-sessions/session/{session_id}/questions/{question_
 
 ---
 
+## S08 — Doubt Inbox
+
+A student's list of their persisted hAITU doubt threads. Reached via the "My Doubts" nav link
+(visible only for `X-Current-Role: student`).
+
+- Renders one row per doubt: title, topic, status chip (`new` / `ai_answered` / `escalated` /
+  `answered` / `resolved`), and last-activity timestamp. Each row links to `/doubts/{doubt_id}`
+  (S09).
+- Status chip colour: `new`/`ai_answered` neutral, `escalated` amber, `answered` green,
+  `resolved`/`auto_closed` grey.
+- Sorted by last activity (most recent first).
+- Empty state: a friendly "No doubts yet — ask hAITU a question from any topic" message with a
+  link back to the content navigator (S-nav).
+- Data: `GET /api/students/me/doubts` (CSRF not required on GET; `X-Current-Role: student`).
+
+**Business rules:**
+- BR-STU-015: A student sees only their own doubts — the backend filters by
+  `doubts.student_sub = user.sub`; another student's doubt_id → 404 on the thread endpoint.
+
+---
+
+## S09 — Doubt Thread
+
+A single doubt thread rendered as a chat: student questions on the right, `ai`/`teacher`/
+`system` messages on the left, in chronological order. The bubble layout reuses the
+`HaituDoubtPanel` pattern from the topic page.
+
+- Header: doubt title + topic name + status chip + a back link to `/doubts`.
+- Message list: each message is a chat bubble tagged by `sender_type`:
+  - `student` → right-aligned, blue/green accent by source (platform blue `#185FA5`,
+    Home Study green `#1D9E75`).
+  - `ai` → left-aligned, neutral surface with a hAITU label.
+  - `teacher` → left-aligned, distinct teacher styling.
+  - `system` → centred, muted note (e.g. "Escalated to a teacher — you'll be notified when
+    they reply").
+- Follow-up composer: a textarea + "Send" button. Submit calls
+  `POST /api/students/me/doubts/{doubt_id}/messages`; the returned updated thread is rendered
+  with the new `student` bubble appended last.
+- Escalation CTA: a "Request teacher help" button, visible only when
+  `status IN ('new','ai_answered')`. On success it sets the status chip to `escalated`,
+  appends a `system` note "Escalated to a teacher — you'll be notified when they reply", and
+  hides the button. (The button targets `POST /api/doubts/{doubt_id}/escalate` — documented in
+  `04_teacher_tutor.md`; the hAITU panel's escalation button is enabled by the same flow.)
+- Data: `GET /api/students/me/doubts/{doubt_id}` (thread with messages).
+
+**Business rules:**
+- BR-STU-016: A student can only open their own doubt thread —
+  `doubt.student_sub == user.sub` else 404.
+- BR-STU-017: Follow-ups append a `student` message and return the updated thread; the
+  composer is disabled while a request is in flight.
+- BR-STU-018: Escalation is one-way from the student side — once `escalated` or `answered`, the
+  "Request teacher help" CTA is hidden.
+
+> **Persistence link from the hAITU panel:** after a hAITU topic-doubt reply streams, the
+> panel receives a `doubt_id` SSE event (see `11_haitu_ai_layer.md` §2) and shows a "View
+> thread" link to `/doubts/{doubt_id}`. Re-opening the panel for a topic with an existing open
+> doubt pre-loads the persisted thread via `GET /api/students/me/doubts/{doubt_id}` so history
+> is continuous (not client-side-only).
+
+---
+
 ## API Endpoints (student role)
 
 | Method | Path | Description |
@@ -171,3 +234,6 @@ Student calls `POST /api/exam-sessions/session/{session_id}/questions/{question_
 | `POST` | `/api/student/parent-link-codes` | Generate new link code |
 | `GET` | `/api/student/parent-links` | List active parent links |
 | `DELETE` | `/api/student/parent-links/:link_id` | Revoke a parent link |
+| `GET` | `/api/students/me/doubts` | List the student's doubt threads (S08); `X-Current-Role: student` |
+| `GET` | `/api/students/me/doubts/:doubt_id` | Get a doubt thread with messages (S09); 404 if not owned by the student |
+| `POST` | `/api/students/me/doubts/:doubt_id/messages` | Append a student follow-up to a doubt thread (CSRF + `X-Current-Role: student` + ownership) |
