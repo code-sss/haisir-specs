@@ -29,12 +29,12 @@
 
 ### G1.1 — Doubt schema + spec contracts (V35)
 - [x] T1.1.1 [specs]: Doubt lifecycle + persistence contracts in 11/03 (2026-06-25)
-- [ ] T1.1.2 [backend]: V35 migration: doubts + doubt_messages (depends on T1.1.1, T0.2)
-- [ ] T1.1.3 [backend]: Doubt + DoubtMessage domain models (imperative) (depends on T1.1.2)
-- [ ] T1.1.4 [backend]: Doubt Pydantic schemas (depends on T1.1.3)
-- [ ] T1.1.5 [backend]: DoubtRepository + DoubtMessageRepository (depends on T1.1.3)
-- [ ] T1.1.6 [backend]: DoubtService (find-or-create + message writers) (depends on T1.1.5)
-- [ ] T1.1.7 [backend]: Student doubt read routes (S08/S09) (depends on T1.1.4, T1.1.6)
+- [x] T1.1.2 [backend]: V35 migration: doubts + doubt_messages (depends on T1.1.1, T0.2) (2026-06-25)
+- [x] T1.1.3 [backend]: Doubt + DoubtMessage domain models (imperative) (depends on T1.1.2) (2026-06-25)
+- [x] T1.1.4 [backend]: Doubt Pydantic schemas (depends on T1.1.3) (2026-06-25)
+- [x] T1.1.5 [backend]: DoubtRepository + DoubtMessageRepository (depends on T1.1.3) (2026-06-25)
+- [x] T1.1.6 [backend]: DoubtService (find-or-create + message writers) (depends on T1.1.5) (2026-06-25)
+- [x] T1.1.7 [backend]: Student doubt read routes (S08/S09) (depends on T1.1.4, T1.1.6) (2026-06-25)
 
 ### G1.2 — hAITU persistence + doubt_id SSE
 - [ ] T1.2.1 [backend]: Persist doubt + student message in validation phase (post rate-limit) (depends on T1.1.6, T1.1.7)
@@ -120,5 +120,9 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
+- T1.2.1 [backend]: Persist doubt + student message in validation phase (post rate-limit) (deps T1.1.6 ✓, T1.1.7 ✓)
+- T1.3.1 [backend]: Student follow-up message endpoint (dep T1.1.7 ✓)
+- T2.1.1 [specs]: Teacher doubt contracts in 04/11 (dep T1.1.1 ✓)
+- T2.1.2a [backend]: Escalate endpoint + mount doubts router at /api/doubts (deps T1.1.6 ✓, T1.1.7 ✓)
 - T3.1.1 [specs]: Fill 10_notifications.md with the notification contract (no deps)
 - T4.1.1 [specs]: 01/03/11 — enrollment_topics + exam→topic decision + S05 + exam-review (no deps)
