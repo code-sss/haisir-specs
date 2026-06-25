@@ -15,7 +15,7 @@
 ### G0.2 — Re-verify Phase 3 at HEAD + CI guard + correct stale docs
 - [x] T0.5 [backend]: Re-run Phase 3 integration suites at HEAD (depends on T0.2) (2026-06-24)
 - [x] T0.6 [frontend]: Re-run Playwright E2E at HEAD (depends on T0.3) (2026-06-24)
-- [ ] T0.7 [backend]: CI grep guard against Python-2 except syntax (depends on T0.5)
+- [x] T0.7 [backend]: CI grep guard against Python-2 except syntax (depends on T0.5) (2026-06-25)
 - [x] T0.8 [specs]: Correct stale CLAUDE.md Keycloak-roles claim (2026-06-24)
 
 ### G0.3 — Remove inline-ML deps + stub the reranker (external-API future-hook)
@@ -120,7 +120,6 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately (the G0 merges can proceed in parallel):
-- T0.7 [backend]: CI grep guard against Python-2 except syntax (dep T0.5 done)
 - T0.9 [backend]: Stub _stage3_rerank to a no-op (depends on T0.2 — done)
 - T1.1.1 [specs]: Doubt lifecycle + persistence contracts in 11/03 (no deps)
 - T3.1.1 [specs]: Fill 10_notifications.md with the notification contract (no deps)

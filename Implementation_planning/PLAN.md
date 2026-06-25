@@ -69,7 +69,7 @@ A student's hAITU doubt conversation becomes a durable thread they can leave and
 - **Depends on**: T0.3 [frontend]
 
 ##### T0.7 [backend] — CI grep guard against Python-2 except syntax
-- **Build**: Add `scripts/check_except_syntax.py` in haisir-backend that regex-searches `^\s*except\s+[A-Za-z_][\w.]*\s*,` in `src/**/*.py` and exits 1 on match; wire into the existing CI workflow as a required step.
+- **Build**: Add `scripts/check_except_syntax.py` in haisir-backend that regex-searches `^\s*except\s+[A-Za-z_]\w*\s*,` (bare-name only — no dot, so dotted exception refs like `except json.JSONDecodeError, TypeError:` are deliberately NOT matched; that form is valid Python 3.14+ and is ruff's preferred form, which T0.1 left as-is) in `src/**/*.py` and exits 1 on match; wire into the existing CI workflow as a required step.
 - **Done when**: a CI run on a branch re-introducing `except A, B:` fails; a clean branch passes.
 - **Test**: `assert check_exit_code == 1` when the checker runs against a file containing `except ValueError, TypeError:`.
 - **Depends on**: T0.5 [backend]
