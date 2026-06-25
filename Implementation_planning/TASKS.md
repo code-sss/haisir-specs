@@ -19,11 +19,11 @@
 - [x] T0.8 [specs]: Correct stale CLAUDE.md Keycloak-roles claim (2026-06-24)
 
 ### G0.3 — Remove inline-ML deps + stub the reranker (external-API future-hook)
-- [ ] T0.9 [backend]: Stub _stage3_rerank to a no-op (depends on T0.2)
-- [ ] T0.10 [backend]: Update the reranker unit tests (depends on T0.9)
-- [ ] T0.11 [backend]: Remove sentence-transformers + torch + uv torch-CPU pin from pyproject (depends on T0.9, T0.10)
-- [ ] T0.12 [backend]: Verify post-cleanup — imports + Phase 3 hAITU suite + lock clean (depends on T0.11, T0.5)
-- [ ] **G0: Stabilize HEAD (P0 blocker)** — integration test
+- [x] T0.9 [backend]: Stub _stage3_rerank to a no-op (depends on T0.2) (2026-06-25)
+- [x] T0.10 [backend]: Update the reranker unit tests (depends on T0.9) (2026-06-25)
+- [x] T0.11 [backend]: Remove sentence-transformers + torch + uv torch-CPU pin from pyproject (depends on T0.9, T0.10) (2026-06-25)
+- [x] T0.12 [backend]: Verify post-cleanup — imports + Phase 3 hAITU suite + lock clean (depends on T0.11, T0.5) (2026-06-25)
+- [x] **G0: Stabilize HEAD (P0 blocker)** — integration test (2026-06-25)
 
 ## G1 — Doubt persistence + hAITU thread completion [specs][backend][frontend]
 
@@ -119,8 +119,7 @@
 - [ ] **G4: Mastery + post-exam review** — integration test
 
 ## Ready now
-Tasks with no pending dependencies — can be started immediately (the G0 merges can proceed in parallel):
-- T0.9 [backend]: Stub _stage3_rerank to a no-op (depends on T0.2 — done)
+Tasks with no pending dependencies — can be started immediately:
 - T1.1.1 [specs]: Doubt lifecycle + persistence contracts in 11/03 (no deps)
 - T3.1.1 [specs]: Fill 10_notifications.md with the notification contract (no deps)
 - T4.1.1 [specs]: 01/03/11 — enrollment_topics + exam→topic decision + S05 + exam-review (no deps)
