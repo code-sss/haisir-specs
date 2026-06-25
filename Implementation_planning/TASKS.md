@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:a139208 frontend:47e4ec2 deploy:3178451 (2026-06-24)
+> Last baselined: backend:ef1948a frontend:47e4ec2 deploy:3178451 (2026-06-24)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0 is the P0 stabilization that must land first.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -37,10 +37,10 @@
 - [x] T1.1.7 [backend]: Student doubt read routes (S08/S09) (depends on T1.1.4, T1.1.6) (2026-06-25)
 
 ### G1.2 — hAITU persistence + doubt_id SSE
-- [ ] T1.2.1 [backend]: Persist doubt + student message in validation phase (post rate-limit) (depends on T1.1.6, T1.1.7)
-- [ ] T1.2.2 [backend]: Emit doubt_id SSE + persist AI message post-stream (fresh session) (depends on T1.2.1)
-- [ ] T1.2.3 [backend]: No-orphan-on-429 + no-duplicate-on-retry test (depends on T1.2.2)
-- [ ] T1.2.4 [backend]: Disconnect/partial-text persistence test (depends on T1.2.2)
+- [x] T1.2.1 [backend]: Persist doubt + student message in validation phase (post rate-limit) (depends on T1.1.6, T1.1.7) (2026-06-25)
+- [x] T1.2.2 [backend]: Emit doubt_id SSE + persist AI message post-stream (fresh session) (depends on T1.2.1) (2026-06-25)
+- [x] T1.2.3 [backend]: No-orphan-on-429 + no-duplicate-on-retry test (depends on T1.2.2) (2026-06-25)
+- [x] T1.2.4 [backend]: Disconnect/partial-text persistence test (depends on T1.2.2) (2026-06-25)
 
 ### G1.3 — Student doubt inbox (S08) + thread (S09) UI
 - [ ] T1.3.1 [backend]: Student follow-up message endpoint (depends on T1.1.7)
@@ -120,7 +120,6 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T1.2.1 [backend]: Persist doubt + student message in validation phase (post rate-limit) (deps T1.1.6 ✓, T1.1.7 ✓)
 - T1.3.1 [backend]: Student follow-up message endpoint (dep T1.1.7 ✓)
 - T2.1.1 [specs]: Teacher doubt contracts in 04/11 (dep T1.1.1 ✓)
 - T2.1.2a [backend]: Escalate endpoint + mount doubts router at /api/doubts (deps T1.1.6 ✓, T1.1.7 ✓)
