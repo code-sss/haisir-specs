@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 6ec91ab (feature/rag — hAITU refactor + DDD boundaries + torch CPU-only CI, 2026-06-24) |
+| haisir-backend | d1564b0 (feature/rag + G0.3 — inline-ML deps removed [sentence-transformers + torch + uv torch-CPU pin], hAITU reranker stubbed to no-op passthrough, 2026-06-25) |
 | haisir-frontend | 47e4ec2 (feature/rag — hAITU SSE streaming consumer + SonarQube fixes, 2026-06-24) |
 | haisir-deploy | 3178451 (feature/rag — hAITU SSE APISIX route + proxy-buffering + SQLi target-exclusion, 2026-06-24) |
 
-> Next session: run `git diff 6ec91ab..HEAD` in haisir-backend, `git diff 47e4ec2..HEAD` in haisir-frontend, and `git diff 3178451..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff d1564b0..HEAD` in haisir-backend, `git diff 47e4ec2..HEAD` in haisir-frontend, and `git diff 3178451..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -453,6 +453,7 @@ Query: single LEFT JOIN `categories → course_path_nodes (owner_type='platform'
 - Env vars (`HAITU__*`): `MODEL_SPEC` (default: ""), `OLLAMA_BASE_URL` (default: `http://localhost:11434`), `MAX_TOKENS` (default: 2048), `TOP_K` (default: 5), `RERANK_MODEL` (default: ""), `LLM_CONTEXT_WINDOW` (default: 4096), `LLM_REQUEST_TIMEOUT` (default: 360.0), `LLM_THINKING` (default: false)
 - Config-only in this phase; retrieval endpoint (`POST /api/haitu/topic-doubt`) not yet implemented — planned for next cycle once vectors are populated
 - All 8 vars wired as bare `${HAITU__*}` in the Docker Compose worker service
+- `RERANK_MODEL` is now a future-hook only: the inline cross-encoder (`SentenceTransformerRerank`) and the `sentence-transformers`/`torch` deps were removed in G0.3. `_stage3_rerank` is a no-op passthrough; a non-empty `rerank_model` logs a warning and returns nodes unordered. An external rerank API client will be wired here later.
 
 ### RubricResolver
 - Location: `src/domain/services/rubric_resolver.py`

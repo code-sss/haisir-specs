@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 6ec91ab (feature/rag — hAITU refactor + DDD boundaries + torch CPU-only CI, 2026-06-24) |
+| haisir-backend | d1564b0 (feature/rag + G0.3 — inline-ML deps removed [sentence-transformers + torch + uv torch-CPU pin], hAITU reranker stubbed to no-op passthrough, 2026-06-25) |
 | haisir-frontend | 47e4ec2 (feature/rag — hAITU SSE streaming consumer + SonarQube fixes, 2026-06-24) |
 | haisir-deploy | 3178451 (feature/rag — hAITU SSE APISIX route + proxy-buffering + SQLi target-exclusion, 2026-06-24) |
 
-> Next session: run `git diff 6ec91ab..HEAD` in haisir-backend, `git diff 47e4ec2..HEAD` in haisir-frontend, and `git diff 3178451..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff d1564b0..HEAD` in haisir-backend, `git diff 47e4ec2..HEAD` in haisir-frontend, and `git diff 3178451..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
