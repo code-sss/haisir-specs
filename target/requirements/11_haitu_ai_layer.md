@@ -126,6 +126,30 @@ answered | ai_answered | escalated ──manual close──► resolved
 - `teacher` — an instructor's reply from the shared queue.
 - `system` — closing/system notes (e.g. "Escalated to a teacher", auto-close notice).
 
+### 3.4 Escalation routing — shared instructor queue (v1)
+
+v1 uses a **shared instructor queue** with no orgs/classes model:
+
+- When a student escalates (`POST /api/doubts/{id}/escalate`), `escalated_to` is set to
+  `NULL`. Any authenticated instructor with `X-Current-Role: instructor` can see the doubt in
+  `GET /api/teachers/me/doubts` (the shared queue returns unclaimed doubts where
+  `escalated_to IS NULL`, plus this instructor's own claimed doubts where
+  `escalated_to = user.sub`).
+- An instructor **claims** a doubt via `POST /api/teachers/me/doubts/{id}/claim`, which sets
+  `escalated_to = instructor.sub` — an optimistic advisory lock. If another instructor claimed
+  first, the endpoint returns 409; the caller should refresh the list.
+- After claiming, the doubt disappears from the "unclaimed" view of other instructors' queues
+  but remains visible in the claimer's list. Any instructor can still reply
+  (`POST /api/teachers/me/doubts/{id}/messages`) regardless of who claimed — claim is
+  advisory in v1, not a hard write-lock.
+- "Mark read" on a shared `new_doubt_escalated` notification (which has
+  `recipient_idp_sub IS NULL`) marks it read globally for the whole instructor role queue —
+  a documented v1 limitation (see `10_notifications.md`).
+
+**Rationale:** a full orgs/classes routing model (routing to a specific teacher by class
+membership) is deferred to a future phase. `escalated_to` is stored so routing can be refined
+without a schema change once orgs/classes exist.
+
 ---
 
 ## 4. Persistence contract
@@ -214,6 +238,8 @@ two identical successful queries yield **one** thread with **two** `student` mes
 
 ## 6. Endpoints touched by this increment
 
+### G1 — Student doubt persistence (Phase 4 G1)
+
 | Method | Path | Guard | Persistence effect |
 |---|---|---|---|
 | `POST` | `/api/haitu/topic-doubt` | `student` + CSRF | find-or-create doubt + student message (validation, post rate-limit); emits `doubt_id` SSE event; AI message + `haitu_attempted` via fresh-session background task |
@@ -221,10 +247,18 @@ two identical successful queries yield **one** thread with **two** `student` mes
 | `GET` | `/api/students/me/doubts/{doubt_id}` | `student` + ownership | thread with messages (S09) — 404 if `doubt.student_sub != user.sub` |
 | `POST` | `/api/students/me/doubts/{doubt_id}/messages` | `student` + CSRF + ownership | append a student follow-up; return updated thread |
 
-> The escalate + teacher-queue + teacher-reply endpoints (`POST /api/doubts/{id}/escalate`,
-> `GET /api/teachers/me/doubts`, `POST /api/teachers/me/doubts/{id}/claim`,
-> `POST /api/teachers/me/doubts/{id}/messages`) are documented in `04_teacher_tutor.md`
-> (T06/T07) and the escalate lifecycle is added to this file by T2.1.1.
+### G2 — Teacher escalation (Phase 4 G2)
+
+| Method | Path | Guard | Effect |
+|---|---|---|---|
+| `POST` | `/api/doubts/{doubt_id}/escalate` | `student` + CSRF + ownership | sets `status='escalated'`, `escalated_to=NULL`; emits `new_doubt_escalated` notification (G3.4) |
+| `GET` | `/api/teachers/me/doubts` | `instructor` | shared queue — unclaimed escalated doubts + this instructor's claimed doubts |
+| `POST` | `/api/teachers/me/doubts/{doubt_id}/claim` | `instructor` + CSRF | sets `escalated_to=user.sub`; 409 if already claimed by another |
+| `POST` | `/api/teachers/me/doubts/{doubt_id}/messages` | `instructor` + CSRF | appends a `teacher` message; sets `status='answered'`; emits `doubt_teacher_replied` notification (G3.4) |
+
+> Shared-queue routing semantics (who sees what, the claim advisory lock, v1 limitation on
+> read-marking shared notifications) are in §3.4. Full screen specs for the teacher inbox
+> (T06) and thread view (T07) are in `04_teacher_tutor.md`.
 
 ---
 
