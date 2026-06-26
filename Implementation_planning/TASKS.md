@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:ef1948a frontend:2cdb6b7 deploy:3178451 (2026-06-24)
+> Last baselined: backend:0a0b9e8 frontend:47e4ec2 deploy:3178451 (2026-06-24)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0 is the P0 stabilization that must land first.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -43,7 +43,7 @@
 - [x] T1.2.4 [backend]: Disconnect/partial-text persistence test (depends on T1.2.2) (2026-06-25)
 
 ### G1.3 — Student doubt inbox (S08) + thread (S09) UI
-- [ ] T1.3.1 [backend]: Student follow-up message endpoint (depends on T1.1.7)
+- [x] T1.3.1 [backend]: Student follow-up message endpoint (depends on T1.1.7) (2026-06-26)
 - [x] T1.3.2 [frontend]: Doubt API client + types (depends on T1.3.1) (2026-06-26)
 - [x] T1.3.3 [frontend]: S08 doubt inbox page (depends on T1.3.2) (2026-06-26)
 - [x] T1.3.4 [frontend]: S09 doubt thread page (depends on T1.3.3) (2026-06-26)
@@ -120,7 +120,6 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T1.3.1 [backend]: Student follow-up message endpoint (dep T1.1.7 ✓)
 - T2.1.1 [specs]: Teacher doubt contracts in 04/11 (dep T1.1.1 ✓)
 - T2.1.2a [backend]: Escalate endpoint + mount doubts router at /api/doubts (deps T1.1.6 ✓, T1.1.7 ✓)
 - T3.1.1 [specs]: Fill 10_notifications.md with the notification contract (no deps)
