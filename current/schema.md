@@ -357,6 +357,34 @@ Indexes: `ix_essay_grading_jobs_queue (status, created_at) WHERE status='queued'
 Constraints: UNIQUE `(student_sub, course_path_node_id)` — duplicate enroll attempt → 409.
 Index: `idx_student_enrollments_student_sub` on `student_sub` for per-student lookups.
 
+## doubts
+> Created by V35. Records a student's doubt about a topic or course-path node.
+
+- `id` (UUID, PK)
+- `student_sub` (Text, NOT NULL) — Keycloak subject; no FK (no local users table)
+- `topic_id` (UUID, FK → topics.id, nullable)
+- `course_path_node_id` (UUID, FK → course_path_nodes.id, nullable)
+- `title` (Text, nullable) — optional short title
+- `status` (VARCHAR 20, NOT NULL, default `'new'`) — CHECK: `'new' | 'ai_answered' | 'escalated' | 'answered' | 'resolved' | 'auto_closed'`
+- `escalated_to` (Text, nullable) — identifier of escalation target
+- `haitu_attempted` (BOOLEAN, NOT NULL, default false)
+- `auto_close_at` (TIMESTAMPTZ, NOT NULL, default `now() + interval '7 days'`)
+- `resolved_at` (TIMESTAMPTZ, nullable)
+- `created_at` / `updated_at` (TIMESTAMPTZ, NOT NULL, default `now()`)
+
+Indexes: `idx_doubts_student_sub` on `student_sub`; `idx_doubts_status` on `status`; `idx_doubts_auto_close` on `auto_close_at` WHERE `status != 'resolved'` (partial).
+
+## doubt_messages
+> Created by V35. A single message in a doubt thread.
+
+- `id` (UUID, PK)
+- `doubt_id` (UUID, FK → doubts.id, ON DELETE CASCADE)
+- `sender_type` (VARCHAR 10, NOT NULL) — CHECK: `'student' | 'ai' | 'teacher' | 'system'`
+- `content` (Text, NOT NULL)
+- `created_at` (TIMESTAMPTZ, NOT NULL, default `now()`)
+
+Index: `idx_doubt_messages_doubt_id` on `doubt_id`.
+
 ## data_topic_content_chunks
 - `id` (BigInteger, PK autoincrement) — LlamaIndex-managed row ID
 - `text` (Text, nullable) — chunked text content (SentenceSplitter chunk_size=512, chunk_overlap=100)

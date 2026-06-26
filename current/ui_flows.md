@@ -224,6 +224,30 @@ Rendered at the bottom of `ContentViewer` whenever a topic is selected.
 - **Escalation** — "Ask your teacher" button shown when `escalation_ready=true` from API; disabled with `title="Coming soon"` (instructor persona deferred).
 - `useHaituDoubt(topicId, enrollmentId)` hook — client-side message history (last 5 sent as `history` to API), loading/error state, 429 detection. Resets on `topicId` change. Calls `POST /api/haitu/topic-doubt` and consumes the **SSE stream** via `ReadableStream`/`TextDecoder`, appending `{"token"}` frames to the live assistant bubble; on stream/network failure, resends the last message (resend-on-failure).
 
-> **Backend note:** `POST /api/haitu/topic-doubt` streams the answer as SSE (`text/event-stream`): `{"token":…}` frames → `{"escalation_ready":…}` → `{"done":true}`, with 15 s `: ping` keepalives and disconnect cancellation. Wrong enrollment / out-of-subtree topic → 403; 21st call in the hour → 429 (both returned as HTTP errors before the stream starts). No DB rows written.
+> **Backend note (G1 update):** `POST /api/haitu/topic-doubt` now persists doubts. Before the stream starts, a `doubts` row and student `doubt_messages` row are created. The SSE stream emits `event: doubt_id` (payload `{"doubt_id":"<uuid>"}`) as the very first frame; after the stream ends a background task persists the AI reply. On 429 no row is created (no orphan). `HaituDoubtPanel` consumes `doubt_id` from the SSE and shows a "View thread" link to `/doubts/{doubtId}`. On panel re-open for the same topic (not yet resolved/closed), the hook pre-loads the existing thread from `GET /api/students/me/doubts` and restores chat history.
 
 Unit test suite: 11 test files covering all components, hooks, and api layer (100% coverage). **Playwright E2E suite shipped (commit `54e198c`, 2026-06-18):** 16 specs across G3 content-filter, G7 browse-courses, G8 empty-state, and G9 hAITU panel, all green; gated in `/commit-frontend` as a peer to the 100% coverage check.
+
+---
+
+## Student Doubt Inbox + Thread (G1 — complete)
+
+### Screen: `/doubts` (DoubtInboxPage — S08, student role)
+`app/doubts/page.tsx` → `DoubtInboxPage` (client component).
+
+- Fetches `GET /api/students/me/doubts` via `useDoubtInbox` hook.
+- Renders a list of doubt rows: question title (or truncated first message), topic name subtitle, status chip (New / AI Answered / Escalated / Answered / Resolved / Closed), relative timestamp.
+- Status chip colours: `new`/`ai_answered` → grey surface; `escalated` → amber; `answered` → green; `resolved`/`auto_closed` → grey muted.
+- Each row is a link → `/doubts/{id}`.
+- Empty state: "No doubts yet." + "Browse Courses" CTA → `/courses`.
+- Error state shown inline.
+- Student header: "My Doubts" nav link added beside "Browse Courses".
+
+### Screen: `/doubts/[id]` (DoubtThreadPage — S09, student role)
+`app/doubts/[id]/page.tsx` → `DoubtThreadPage` (client component).
+
+- Fetches `GET /api/students/me/doubts/{id}` via `useDoubtThread` hook.
+- Renders ordered `doubt_messages` as chat bubbles: `student` sender right-aligned, `ai` left-aligned, `teacher`/`system` distinguished.
+- Shows doubt title and topic name at top.
+- Follow-up input: textarea + send button; calls `POST /api/students/me/doubts/{id}/messages`; refreshes thread on success.
+- 404 → "Doubt not found" message.

@@ -49,7 +49,7 @@
 - [x] T1.3.4 [frontend]: S09 doubt thread page (depends on T1.3.3) (2026-06-26)
 - [x] T1.3.5 [frontend]: Link hAITU panel to persisted thread (doubt_id) (depends on T1.3.4, T1.2.2) (2026-06-26)
 - [x] T1.3.6 [frontend]: Student "My Doubts" nav link (depends on T1.3.3) (2026-06-26)
-- [ ] **G1: Doubt persistence + hAITU thread completion** — integration test
+- [x] **G1: Doubt persistence + hAITU thread completion** — integration test (2026-06-26)
 
 ## G2 — Teacher escalation [specs][backend][frontend]
 
