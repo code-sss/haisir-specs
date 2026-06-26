@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:ef1948a frontend:47e4ec2 deploy:3178451 (2026-06-24)
+> Last baselined: backend:ef1948a frontend:2cdb6b7 deploy:3178451 (2026-06-24)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0 is the P0 stabilization that must land first.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -44,11 +44,11 @@
 
 ### G1.3 — Student doubt inbox (S08) + thread (S09) UI
 - [ ] T1.3.1 [backend]: Student follow-up message endpoint (depends on T1.1.7)
-- [ ] T1.3.2 [frontend]: Doubt API client + types (depends on T1.3.1)
-- [ ] T1.3.3 [frontend]: S08 doubt inbox page (depends on T1.3.2)
-- [ ] T1.3.4 [frontend]: S09 doubt thread page (depends on T1.3.3)
-- [ ] T1.3.5 [frontend]: Link hAITU panel to persisted thread (doubt_id) (depends on T1.3.4, T1.2.2)
-- [ ] T1.3.6 [frontend]: Student "My Doubts" nav link (depends on T1.3.3)
+- [x] T1.3.2 [frontend]: Doubt API client + types (depends on T1.3.1) (2026-06-26)
+- [x] T1.3.3 [frontend]: S08 doubt inbox page (depends on T1.3.2) (2026-06-26)
+- [x] T1.3.4 [frontend]: S09 doubt thread page (depends on T1.3.3) (2026-06-26)
+- [x] T1.3.5 [frontend]: Link hAITU panel to persisted thread (doubt_id) (depends on T1.3.4, T1.2.2) (2026-06-26)
+- [x] T1.3.6 [frontend]: Student "My Doubts" nav link (depends on T1.3.3) (2026-06-26)
 - [ ] **G1: Doubt persistence + hAITU thread completion** — integration test
 
 ## G2 — Teacher escalation [specs][backend][frontend]
