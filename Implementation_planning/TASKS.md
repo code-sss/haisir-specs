@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:0a0b9e8 frontend:47e4ec2 deploy:3178451 (2026-06-24)
+> Last baselined: backend:1b0404c frontend:47e4ec2 deploy:3178451 (2026-06-24)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0 is the P0 stabilization that must land first.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -54,11 +54,11 @@
 ## G2 — Teacher escalation [specs][backend][frontend]
 
 ### G2.1 — Teacher doubt routes (shared instructor queue)
-- [ ] T2.1.1 [specs]: Teacher doubt contracts in 04/11 (depends on T1.1.1)
-- [ ] T2.1.2a [backend]: Escalate endpoint + mount doubts router at /api/doubts (depends on T1.1.6, T1.1.7)
-- [ ] T2.1.2b [backend]: Teacher queue GET + claim (mount /api/teachers) (depends on T2.1.2a)
-- [ ] T2.1.2c [backend]: Teacher reply endpoint (depends on T2.1.2b)
-- [ ] T2.1.3 [backend]: Teacher doubt schemas (depends on T2.1.2b, T2.1.2c)
+- [x] T2.1.1 [specs]: Teacher doubt contracts in 04/11 (depends on T1.1.1) (2026-06-27)
+- [x] T2.1.2a [backend]: Escalate endpoint + mount doubts router at /api/doubts (depends on T1.1.6, T1.1.7) (2026-06-27)
+- [x] T2.1.2b [backend]: Teacher queue GET + claim (mount /api/teachers) (depends on T2.1.2a) (2026-06-27)
+- [x] T2.1.2c [backend]: Teacher reply endpoint (depends on T2.1.2b) (2026-06-27)
+- [x] T2.1.3 [backend]: Teacher doubt schemas (depends on T2.1.2b, T2.1.2c) (2026-06-27)
 
 ### G2.2 — Teacher doubt inbox (T06) + reply (T07) UI
 - [ ] T2.2.1 [frontend]: Teacher doubt API client + types (depends on T2.1.3)
@@ -120,7 +120,6 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T2.1.1 [specs]: Teacher doubt contracts in 04/11 (dep T1.1.1 ✓)
-- T2.1.2a [backend]: Escalate endpoint + mount doubts router at /api/doubts (deps T1.1.6 ✓, T1.1.7 ✓)
+- T2.2.1 [frontend]: Teacher doubt API client + types (dep T2.1.3 ✓)
 - T3.1.1 [specs]: Fill 10_notifications.md with the notification contract (no deps)
 - T4.1.1 [specs]: 01/03/11 — enrollment_topics + exam→topic decision + S05 + exam-review (no deps)
