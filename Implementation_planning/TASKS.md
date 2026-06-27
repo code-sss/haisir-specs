@@ -61,10 +61,10 @@
 - [x] T2.1.3 [backend]: Teacher doubt schemas (depends on T2.1.2b, T2.1.2c) (2026-06-27)
 
 ### G2.2 — Teacher doubt inbox (T06) + reply (T07) UI
-- [ ] T2.2.1 [frontend]: Teacher doubt API client + types (depends on T2.1.3)
-- [ ] T2.2.2 [frontend]: T06 teacher doubt inbox page (depends on T2.2.1)
-- [ ] T2.2.3 [frontend]: T07 teacher thread + reply page (depends on T2.2.2)
-- [ ] T2.2.4 [frontend]: Teacher "Doubt Queue" nav link (depends on T2.2.2)
+- [x] T2.2.1 [frontend]: Teacher doubt API client + types (depends on T2.1.3) (2026-06-27)
+- [x] T2.2.2 [frontend]: T06 teacher doubt inbox page (depends on T2.2.1) (2026-06-27)
+- [x] T2.2.3 [frontend]: T07 teacher thread + reply page (depends on T2.2.2) (2026-06-27)
+- [x] T2.2.4 [frontend]: Teacher "Doubt Queue" nav link (depends on T2.2.2) (2026-06-27)
 
 ### G2.3 — Student "Request teacher help" activation
 - [ ] T2.3.1 [frontend]: Escalate CTA in S09 + hAITU panel (depends on T2.2.3, T2.1.2a, T1.3.5)
@@ -120,6 +120,6 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T2.2.1 [frontend]: Teacher doubt API client + types (dep T2.1.3 ✓)
+- T2.3.1 [frontend]: Escalate CTA in S09 + hAITU panel (deps T2.2.3 ✓, T2.1.2a ✓, T1.3.5 ✓)
 - T3.1.1 [specs]: Fill 10_notifications.md with the notification contract (no deps)
 - T4.1.1 [specs]: 01/03/11 — enrollment_topics + exam→topic decision + S05 + exam-review (no deps)
