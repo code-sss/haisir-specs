@@ -106,12 +106,15 @@ answered | ai_answered | escalated ──manual close──► resolved
 ```
 
 - `find_or_create_doubt` reuses an **open** doubt for the same (student, topic) — i.e. one
-  whose `status NOT IN ('resolved','auto_closed')` — instead of creating a duplicate. Two
+  whose `status NOT IN ('resolved','answered')` — instead of creating a duplicate. Two
   identical queries from the same student on the same topic therefore produce **one** thread
-  with 2 student + 2 ai messages, not two threads (T1.2.3).
+  with 2 student + 2 ai messages, not two threads (T1.2.3). Once a doubt reaches `answered`
+  (a teacher has replied), it is treated as closed: a new question on the same topic creates
+  a fresh doubt thread, restoring the full escalation path.
 - Escalation is allowed from `new` or `ai_answered` (the S09 "Request teacher help" CTA is
   visible only when `status IN (new, ai_answered)`); once `escalated` or `answered` the CTA is
-  hidden.
+  hidden on the current thread. A new thread (created when a student asks a new question after
+  `answered`) starts at `new` and exposes the CTA again.
 - A teacher reply from the shared queue sets `answered` and appends a `teacher` message.
 - The auto-close cron (G3.4) targets doubts with `status != 'resolved'` and
   `auto_close_at <= now()` (indexed via `idx_doubts_auto_close`), sets `resolved`, appends a
