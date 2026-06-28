@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:4fb709b frontend:9768e34 deploy:2f623f0 (2026-06-24)
+> Last baselined: backend:4fb709b frontend:9e92e31 deploy:2f623f0 (2026-06-24)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0 is the P0 stabilization that must land first.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -83,9 +83,9 @@
 - [x] T3.2.2 [deploy]: APISIX route for /api/notifications/* (doubt paths already covered) (depends on T3.2.1) (2026-06-27)
 
 ### G3.3 — Notification bell + feed UI
-- [ ] T3.3.1 [frontend]: Notification types + API + useNotifications (60s poll) (depends on T3.2.1)
-- [ ] T3.3.2 [frontend]: NotificationBell + feed page (depends on T3.3.1)
-- [ ] T3.3.3 [frontend]: Wire bell into shared topbar (all roles) (depends on T3.3.2)
+- [x] T3.3.1 [frontend]: Notification types + API + useNotifications (60s poll) (depends on T3.2.1) (2026-06-28)
+- [x] T3.3.2 [frontend]: NotificationBell + feed page (depends on T3.3.1) (2026-06-28)
+- [x] T3.3.3 [frontend]: Wire bell into shared topbar (all roles) (depends on T3.3.2) (2026-06-28)
 
 ### G3.4 — Auto-close cron + wire doubt events
 - [x] T3.4.1 [backend]: Auto-close cron loop in worker (depends on T3.1.4, T1.1.2, T1.1.5) (2026-06-28)
@@ -121,5 +121,4 @@
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
 - **G2: Teacher escalation** — integration test (all G2 subtasks now done; requires backend running)
-- T3.3.1 [frontend]: Notification types + API + useNotifications (depends on T3.2.1 ✓)
 - T4.1.1 [specs]: 01/03/11 — enrollment_topics + exam→topic decision + S05 + exam-review (no deps)
