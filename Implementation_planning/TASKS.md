@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:1b0404c frontend:9768e34 deploy:3178451 (2026-06-24)
+> Last baselined: backend:3b8f5f6 frontend:9768e34 deploy:54183f7 (2026-06-24)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0 is the P0 stabilization that must land first.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -73,14 +73,14 @@
 ## G3 — Notifications subsystem [specs][backend][frontend][deploy]
 
 ### G3.1 — Notification schema + service
-- [ ] T3.1.1 [specs]: Fill 10_notifications.md with the notification contract
-- [ ] T3.1.2 [backend]: V36 migration: notifications (depends on T3.1.1, T1.1.2)
-- [ ] T3.1.3 [backend]: Notification model + repository (depends on T3.1.2)
-- [ ] T3.1.4 [backend]: NotificationService + pluggable parent fan-out stub (depends on T3.1.3)
+- [x] T3.1.1 [specs]: Fill 10_notifications.md with the notification contract (2026-06-28)
+- [x] T3.1.2 [backend]: V36 migration: notifications (depends on T3.1.1, T1.1.2) (2026-06-28)
+- [x] T3.1.3 [backend]: Notification model + repository (depends on T3.1.2) (2026-06-28)
+- [x] T3.1.4 [backend]: NotificationService + pluggable parent fan-out stub (depends on T3.1.3) (2026-06-28)
 
 ### G3.2 — Notification endpoints + APISIX routes
-- [ ] T3.2.1 [backend]: 4 notification routes + schemas (depends on T3.1.4)
-- [ ] T3.2.2 [deploy]: APISIX route for /api/notifications/* (doubt paths already covered) (depends on T3.2.1)
+- [x] T3.2.1 [backend]: 4 notification routes + schemas (depends on T3.1.4) (2026-06-28)
+- [x] T3.2.2 [deploy]: APISIX route for /api/notifications/* (doubt paths already covered) (depends on T3.2.1) (2026-06-27)
 
 ### G3.3 — Notification bell + feed UI
 - [ ] T3.3.1 [frontend]: Notification types + API + useNotifications (60s poll) (depends on T3.2.1)
@@ -121,5 +121,8 @@
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
 - **G2: Teacher escalation** — integration test (all G2 subtasks now done; requires backend running)
-- T3.1.1 [specs]: Fill 10_notifications.md with the notification contract (no deps)
+- T3.3.1 [frontend]: Notification types + API + useNotifications (depends on T3.2.1 ✓)
+- T3.4.1 [backend]: Auto-close cron loop in worker (depends on T3.1.4 ✓, T1.1.2 ✓, T1.1.5 ✓)
+- T3.4.2 [backend]: Wire new_doubt_escalated into escalate endpoint (depends on T2.1.2a ✓, T3.1.4 ✓)
+- T3.4.3 [backend]: Wire doubt_teacher_replied into teacher reply (depends on T2.1.2c ✓, T3.1.4 ✓)
 - T4.1.1 [specs]: 01/03/11 — enrollment_topics + exam→topic decision + S05 + exam-review (no deps)
