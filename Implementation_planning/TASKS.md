@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:3b8f5f6 frontend:9768e34 deploy:54183f7 (2026-06-24)
+> Last baselined: backend:3b8f5f6 frontend:9768e34 deploy:2f623f0 (2026-06-24)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0 is the P0 stabilization that must land first.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
