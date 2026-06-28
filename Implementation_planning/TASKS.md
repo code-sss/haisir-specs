@@ -68,7 +68,7 @@
 
 ### G2.3 — Student "Request teacher help" activation
 - [x] T2.3.1 [frontend]: Escalate CTA in S09 + hAITU panel (depends on T2.2.3, T2.1.2a, T1.3.5) (2026-06-27)
-- [ ] **G2: Teacher escalation** — integration test
+- [x] **G2: Teacher escalation** — integration test (2026-06-27)
 
 ## G3 — Notifications subsystem [specs][backend][frontend][deploy]
 

@@ -618,6 +618,42 @@
 
 ---
 
+## Teacher Escalation Queue (G2)
+
+### POST /api/doubts/{doubt_id}/escalate
+- Purpose: Student escalates an owned doubt to the shared teacher queue
+- Auth: `X-Current-Role: student`; CSRF required
+- Request: no body required
+- Response: `DoubtThreadResponse` with status='escalated' and a new system message appended
+- Errors: 404 if doubt doesn't exist or not owned by caller; 409 if status not `new` or `ai_answered`
+
+### GET /api/teachers/me/doubts
+- Purpose: Return the shared escalated-doubt queue for the authenticated instructor
+- Auth: `X-Current-Role: instructor` (missing header → 400); no CSRF
+- Response: `TeacherDoubtListResponse { items: list[TeacherDoubtRead] }` — unclaimed (`escalated_to IS NULL`) plus claimed-by-me, newest-first. Each item: `doubt: DoubtRead`, `student_name: str`, `topic_title: str`, `escalated_to: str | None`, `last_message_at: datetime`
+
+### GET /api/teachers/me/doubts/{doubt_id}
+- Purpose: Return a single escalated doubt thread for the authenticated instructor
+- Auth: `X-Current-Role: instructor`; no CSRF
+- Response: `DoubtThreadResponse` (same shape as student thread response)
+- Errors: 404 if doubt doesn't exist, status not in `escalated`/`answered`, or claimed by a different instructor
+
+### POST /api/teachers/me/doubts/{doubt_id}/claim
+- Purpose: Atomically claim an escalated doubt (sets `escalated_to=instructor_sub` WHERE `escalated_to IS NULL`); idempotent re-claim of own doubt returns 200
+- Auth: `X-Current-Role: instructor`; CSRF required
+- Request: no body required
+- Response: `ClaimResponse { doubt_id: UUID, escalated_to: str }`
+- Errors: 404 if doubt doesn't exist or not escalated; 409 if already claimed by another instructor
+
+### POST /api/teachers/me/doubts/{doubt_id}/messages
+- Purpose: Append a teacher reply to a doubt thread and transition status to `answered`
+- Auth: `X-Current-Role: instructor`; CSRF required
+- Request: `CreateDoubtMessageRequest { content: str (min_length=1) }`
+- Response: `DoubtThreadResponse` with full updated thread
+- Errors: 404 if doubt doesn't exist
+
+---
+
 ## hAITU Doubt Resolution (G9 + G1)
 
 ### POST /api/haitu/topic-doubt
@@ -628,7 +664,7 @@
 - Pipeline: stage 1 rewrites the query (LLM → JSON, safe fallback); stage 2 retrieves via QueryFusionRetriever (hybrid pgvector, topic_id filter); stage 3 is a passthrough (inline cross-encoder removed in G0.3; `rerank_model` retained as a future-hook for an external rerank API — a non-empty value logs a warning and returns nodes unordered); stage 4 synthesizes (intent-specific prompts, escalation detection). `safe=False` from stage 1 short-circuits before retrieval.
 - Errors: 403 (enrollment invalid or topic outside enrolled subtree); 429 `"Rate limit exceeded"` (HaituRateLimiter: 20 calls/student/hour, in-process) — both returned as HTTP errors **before** the stream starts. DB session closed before streaming begins.
 - **Doubt persistence (G1):** creates/upserts a `doubts` row + student `doubt_messages` row in the validation phase (post rate-limit, before stream starts). On 429 no doubt row is created (no orphan). After the stream ends, a fire-and-forget background task opens a fresh DB session and persists the full accumulated AI reply as an `ai` `doubt_messages` row. On early disconnect the partial text is still persisted.
-- APISIX gateway (`19-api-haitu.json`): route priority 20 (beats api-write 10 so the 6 s default read timeout does not 504 long-running calls); send/read timeout **600 s** (backend `HAITU__LLM_REQUEST_TIMEOUT` default is 360 s — the gateway is the higher ceiling); `proxy-buffering` disabled (required for SSE); `limit-count` (20 req/min per IP → 429, separate from the in-process per-student/hour limiter); `limit-conn` (20 concurrent connections/IP → 503); `request-validation` (requires `Content-Type: application/json` → 400 if absent); `secured-api` plugin config (OIDC deny on unauthenticated) with a targeted SQLi target-exclusion (Coraza id:199110) for `POST /api/haitu/*` chat-body ARGS (`json.*`) — rules 942130/942131/942340/942380/942400/942410 exempted only on the NL chat args, full inspection retained on headers/cookies/URI/query and any non-json body field. Backend service has `HAITU__*` + `EMBEDDING__*` env vars wired in `common/docker-compose.yml`.
+- APISIX gateway (`19-api-haitu.json`): route priority 20 (beats api-write 10 so the 6 s default read timeout does not 504 long-running calls); send/read timeout **600 s** (backend `HAITU__LLM_REQUEST_TIMEOUT` default is 360 s — the gateway is the higher ceiling); `proxy-buffering` disabled (required for SSE); `limit-count` (20 req/min per IP → 429, separate from the in-process per-student/hour limiter); `limit-conn` (20 concurrent connections/IP → 503); `request-validation` (requires `Content-Type: application/json` → 400 if absent); `secured-api` plugin config (OIDC deny on unauthenticated) with a WAF exclusion (Coraza id:199110) for `POST /api/haitu/*` — rules 942200/942131/942130/942340/942380/942400/942410 removed **per-transaction** via `ctl:ruleRemoveById` (not `ctl:ruleRemoveTargetById`, which is unreliable in Coraza WASM on APISIX 3.17); rule 942200 added to suppress educational text false positives (e.g. propulsion/physics phrases matching MySQL comment obfuscation). All other routes retain full SQLi inspection. Backend service has `HAITU__*` + `EMBEDDING__*` env vars wired in `common/docker-compose.yml`.
 
 ---
 

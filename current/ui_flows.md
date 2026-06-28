@@ -221,7 +221,7 @@ Rendered at the bottom of `ContentViewer` whenever a topic is selected.
 - **Enrollment guard** — if `enrollmentId === null`, shows grey italic "Enroll in this course to ask hAITU questions." (no chat UI).
 - **Chat UI** — scrollable bubble list (`role="log" aria-live="polite"`): student messages right-aligned (blue), AI messages left-aligned (grey). Spinner bubble while `isLoading`. Input textarea (Enter = send, Shift+Enter = newline), disabled while loading. Send button disabled when input empty or loading.
 - **Error banner** — 429 rate-limit → "You've reached the AI limit for this hour. Try again later."; other errors → "Something went wrong. Please try again."
-- **Escalation** — "Ask your teacher" button shown when `escalation_ready=true` from API; disabled with `title="Coming soon"` (instructor persona deferred).
+- **Escalation** — "Ask your teacher" button shown when `escalation_ready=true` AND `!isEscalated`. Clicking calls `POST /api/doubts/{doubtId}/escalate`; button is disabled if `doubtId` is null (not yet set by the `doubt_id` SSE event) or while the mutation is pending. On success `isEscalated` is set (client mutation state) and the button hides. Escalation error shown inline.
 - `useHaituDoubt(topicId, enrollmentId)` hook — client-side message history (last 5 sent as `history` to API), loading/error state, 429 detection. Resets on `topicId` change. Calls `POST /api/haitu/topic-doubt` and consumes the **SSE stream** via `ReadableStream`/`TextDecoder`, appending `{"token"}` frames to the live assistant bubble; on stream/network failure, resends the last message (resend-on-failure).
 
 > **Backend note (G1 update):** `POST /api/haitu/topic-doubt` now persists doubts. Before the stream starts, a `doubts` row and student `doubt_messages` row are created. The SSE stream emits `event: doubt_id` (payload `{"doubt_id":"<uuid>"}`) as the very first frame; after the stream ends a background task persists the AI reply. On 429 no row is created (no orphan). `HaituDoubtPanel` consumes `doubt_id` from the SSE and shows a "View thread" link to `/doubts/{doubtId}`. On panel re-open for the same topic (not yet resolved/closed), the hook pre-loads the existing thread from `GET /api/students/me/doubts` and restores chat history.
@@ -250,4 +250,29 @@ Unit test suite: 11 test files covering all components, hooks, and api layer (10
 - Renders ordered `doubt_messages` as chat bubbles: `student` sender right-aligned, `ai` left-aligned, `teacher`/`system` distinguished.
 - Shows doubt title and topic name at top.
 - Follow-up input: textarea + send button; calls `POST /api/students/me/doubts/{id}/messages`; refreshes thread on success.
+- **Request teacher help** CTA — amber button visible when `status` is `new` or `ai_answered` and `!isEscalated`. Clicking calls `POST /api/doubts/{id}/escalate`; on success the button hides and the thread re-fetches (status chip updates to `escalated`, system message appears).
 - 404 → "Doubt not found" message.
+
+---
+
+## Teacher Doubt Queue (G2 — complete)
+
+### Screen: `/teacher/doubts` (TeacherDoubtInboxPage — T06, instructor role)
+`app/teacher/doubts/page.tsx` → `TeacherDoubtInboxPage` (client component, `TeacherDoubtsProviders` QueryClient wrapper).
+
+- Fetches `GET /api/teachers/me/doubts` via `useTeacherDoubtInbox` hook (enabled when `currentRole === "instructor"`).
+- Renders a list of `TeacherDoubtRow` items: student name, topic title, status chip (amber for `escalated`, green for `answered`), relative timestamp.
+- Per-row actions: **Claim** button (amber, shown when `escalated_to === null`) → calls `POST /api/teachers/me/doubts/{id}/claim`, navigates to `/teacher/doubts/{id}` on success; shows 409 "already claimed" error inline; **Open** link (shown when `escalated_to === userId`); **Taken** chip (shown when claimed by another instructor).
+- Empty state: "No escalated doubts — all caught up."
+- Error state: "Failed to load doubt queue."
+- Instructor header: "Doubt Queue" nav link → `/teacher/doubts`.
+
+### Screen: `/teacher/doubts/[id]` (TeacherDoubtThreadPage — T07, instructor role)
+`app/teacher/doubts/[id]/page.tsx` → `TeacherDoubtThreadPage` (client component).
+
+- Fetches `GET /api/teachers/me/doubts/{id}` via `useTeacherDoubtThread` hook (enabled when `currentRole === "instructor"`).
+- Header shows student name + topic title + status chip.
+- Renders ordered `doubt_messages` as `MessageBubble` components (shared component with S09: student right-aligned, ai/teacher left-aligned, system centred).
+- Reply composer: textarea + Send button (Enter submits, Shift+Enter newline); calls `POST /api/teachers/me/doubts/{id}/messages`; updates thread via `queryClient.setQueryData` on success.
+- 404 → "Doubt thread not found or you do not have access."
+- Back link → `/teacher/doubts`.
