@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | d1564b0 (feature/rag + G0.3 — inline-ML deps removed [sentence-transformers + torch + uv torch-CPU pin], hAITU reranker stubbed to no-op passthrough, 2026-06-25) |
-| haisir-frontend | 47e4ec2 (feature/rag — hAITU SSE streaming consumer + SonarQube fixes, 2026-06-24) |
-| haisir-deploy | 3178451 (feature/rag — hAITU SSE APISIX route + proxy-buffering + SQLi target-exclusion, 2026-06-24) |
+| haisir-backend | 9d27e8c (G3 notifications subsystem + auto-close cron + G2-patch — treat `answered` doubts as closed in `find_or_create_doubt`, 2026-06-28) |
+| haisir-frontend | 23e1a45 (G3 — NotificationBell + feed page + topbar wiring, 2026-06-28) |
+| haisir-deploy | 2ca21d4 (G3 — APISIX notifications route `20-api-notifications.json`, 2026-06-27) |
 
-> Next session: run `git diff d1564b0..HEAD` in haisir-backend, `git diff 47e4ec2..HEAD` in haisir-frontend, and `git diff 3178451..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 9d27e8c..HEAD` in haisir-backend, `git diff 23e1a45..HEAD` in haisir-frontend, and `git diff 2ca21d4..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -276,3 +276,18 @@ Unit test suite: 11 test files covering all components, hooks, and api layer (10
 - Reply composer: textarea + Send button (Enter submits, Shift+Enter newline); calls `POST /api/teachers/me/doubts/{id}/messages`; updates thread via `queryClient.setQueryData` on success.
 - 404 → "Doubt thread not found or you do not have access."
 - Back link → `/teacher/doubts`.
+
+---
+
+## Notifications (G3 — complete)
+
+All notification UI lives in the `src/features/notifications/` module (api client, types, hooks, domain grouping, components). The route `/notifications` has its own `NotificationsProviders` layout wrapper (`QueryClientProvider`).
+
+### Component: NotificationBell (shared topbar — all roles)
+Wired into the shared site header for every role. Bell icon with an unread-count badge (hidden when count is 0). Polls `GET /api/notifications/me/unread-count` every 60 s via `useNotifications`; polling **pauses when the tab is hidden** (`visibilitychange` → document hidden) and resumes on focus, avoiding wasted requests in background tabs. Clicking the bell opens a dropdown feed showing the most recent notifications, each with title, body, deep-link `action_url`, and a per-item "mark read" action (`PATCH /api/notifications/{id}/read`). A "Mark all read" button calls `PATCH /api/notifications/me/read-all` with the active role. Empty state: "You're all caught up."
+
+### Screen: `/notifications` (NotificationsPage — all roles)
+Full notification feed page. Fetches `GET /api/notifications/me` (default `limit=50`) via the `useNotifications` hook; renders items **grouped by recency** (Today / Yesterday / Earlier / Older) using the `notification-grouping.ts` domain helper. Each item shows title, body, a deep link to `action_url`, and read/unread styling. A "Mark all read" button in the header calls `PATCH /api/notifications/me/read-all`. Per-item mark-read via `PATCH /api/notifications/{id}/read`. Unread count is reflected in the topbar bell badge.
+
+- Domain: `notification-grouping.ts` — pure function mapping `created_at` → `today | yesterday | earlier | older` recency buckets.
+- Types: `Notification { id, type, title, body, action_url, read, created_at }`; `NotificationFeedResponse { unread_count, items }`; `UnreadCountResponse { count }`; `ReadAllResponse { marked_count }`.

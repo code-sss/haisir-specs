@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | d1564b0 (feature/rag + G0.3 — inline-ML deps removed [sentence-transformers + torch + uv torch-CPU pin], hAITU reranker stubbed to no-op passthrough, 2026-06-25) |
-| haisir-frontend | 47e4ec2 (feature/rag — hAITU SSE streaming consumer + SonarQube fixes, 2026-06-24) |
-| haisir-deploy | 3178451 (feature/rag — hAITU SSE APISIX route + proxy-buffering + SQLi target-exclusion, 2026-06-24) |
+| haisir-backend | 9d27e8c (G3 notifications subsystem + auto-close cron + G2-patch — treat `answered` doubts as closed in `find_or_create_doubt`, 2026-06-28) |
+| haisir-frontend | 23e1a45 (G3 — NotificationBell + feed page + topbar wiring, 2026-06-28) |
+| haisir-deploy | 2ca21d4 (G3 — APISIX notifications route `20-api-notifications.json`, 2026-06-27) |
 
-> Next session: run `git diff d1564b0..HEAD` in haisir-backend, `git diff 47e4ec2..HEAD` in haisir-frontend, and `git diff 3178451..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 9d27e8c..HEAD` in haisir-backend, `git diff 23e1a45..HEAD` in haisir-frontend, and `git diff 2ca21d4..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -27,6 +27,8 @@
 | V32_rag_vector_table_shim | Creates `data_topic_content_chunks` (BigInteger PK, text, metadata_ JSON, node_id VARCHAR, embedding vector(1024)). Registration shim only — LlamaIndex PGVectorStore owns this table; autogenerate diffs are suppressed. Downgrade: `DROP TABLE data_topic_content_chunks`. |
 | V33_add_text_search_tsv_to_chunks | Adds `text_search_tsv TSVECTOR` to `data_topic_content_chunks`; creates `fn_chunks_tsv_update()` BEFORE INSERT/UPDATE trigger that populates it via `to_tsvector('english', ...)`; backfills existing rows; creates GIN index `ix_chunks_text_search_tsv`. Required because V32 shim omitted this column which LlamaIndex `hybrid_search=True` expects to already exist. Downgrade: drops index, trigger, function, column. |
 | V34_student_enrollments | Creates `student_enrollments` table (UUID PK, `student_sub TEXT`, `course_path_node_id UUID FK→course_path_nodes ON DELETE CASCADE`, `enrolled_at TIMESTAMPTZ DEFAULT now()`, `enrollment_source VARCHAR(20) DEFAULT 'self'`). UNIQUE constraint `uq_student_enrollments_sub_node` on `(student_sub, course_path_node_id)`; index `idx_student_enrollments_student_sub` on `student_sub`. |
+| V35_doubts | Creates `doubts` table (UUID PK, `student_sub TEXT`, `topic_id`/`course_path_node_id` UUID FK nullable, `title TEXT`, `status VARCHAR(20)` CHECK 6-value enum default `'new'`, `escalated_to TEXT`, `haitu_attempted BOOLEAN`, `auto_close_at TIMESTAMPTZ` default `now() + interval '7 days'`, `resolved_at`, `created_at`/`updated_at`; partial index on `auto_close_at WHERE status != 'resolved'`) and `doubt_messages` table (UUID PK, `doubt_id` FK→doubts CASCADE, `sender_type VARCHAR(10)` CHECK 4-value enum, `content TEXT`, `created_at`; index on `doubt_id`). |
+| V36_notifications | Creates `notifications` table (UUID PK, `recipient_idp_sub TEXT` nullable, `recipient_role VARCHAR(20)`, `type VARCHAR(40)`, `title TEXT`, `body TEXT` nullable, `action_url TEXT` nullable, `read BOOLEAN` default false, `created_at TIMESTAMPTZ` default now()). Four indexes: `idx_notifications_recipient (recipient_idp_sub)`; `idx_notifications_role_unread (recipient_role, read)`; `idx_notifications_unread_personal (recipient_idp_sub) WHERE read=false AND recipient_idp_sub IS NOT NULL` (partial); `idx_notifications_shared_unread (recipient_role) WHERE read=false AND recipient_idp_sub IS NULL` (partial). |
 
 ---
 
@@ -384,6 +386,23 @@ Indexes: `idx_doubts_student_sub` on `student_sub`; `idx_doubts_status` on `stat
 - `created_at` (TIMESTAMPTZ, NOT NULL, default `now()`)
 
 Index: `idx_doubt_messages_doubt_id` on `doubt_id`.
+
+## notifications
+> Created by V36. Personal or shared-role-queue notification records. Emitted by doubt lifecycle events (escalate, teacher reply, auto-close) and the auto-close cron worker.
+
+- `id` (UUID, PK)
+- `recipient_idp_sub` (Text, nullable) — Keycloak sub of the recipient; **NULL = shared-queue notification** visible to all users of `recipient_role` (e.g. the instructor queue for `new_doubt_escalated`)
+- `recipient_role` (VARCHAR 20, NOT NULL) — role that receives this notification (`student`, `instructor`, `parent`)
+- `type` (VARCHAR 40, NOT NULL) — event type string: `new_doubt_escalated`, `doubt_teacher_replied`, `doubt_auto_closed`, `child_doubt_replied`, `child_doubt_auto_closed`
+- `title` (Text, NOT NULL) — short human-readable title
+- `body` (Text, nullable) — optional longer body text
+- `action_url` (Text, nullable) — optional deep-link URL (e.g. `/doubts/{id}`, `/teacher/doubts/{id}`, `/parent`)
+- `read` (Boolean, NOT NULL, default false)
+- `created_at` (TIMESTAMPTZ, NOT NULL, default now())
+
+Indexes: `idx_notifications_recipient (recipient_idp_sub)`; `idx_notifications_role_unread (recipient_role, read)`; `idx_notifications_unread_personal (recipient_idp_sub) WHERE read=false AND recipient_idp_sub IS NOT NULL` (partial — personal unread); `idx_notifications_shared_unread (recipient_role) WHERE read=false AND recipient_idp_sub IS NULL` (partial — shared-queue unread by role).
+
+> **v1 limitation:** shared-queue rows have no per-user read tracking — marking one read marks it read globally for all users of that role. Personal rows (`recipient_idp_sub IS NOT NULL`) are tracked per-user.
 
 ## data_topic_content_chunks
 - `id` (BigInteger, PK autoincrement) — LlamaIndex-managed row ID

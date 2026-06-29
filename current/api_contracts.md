@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | d1564b0 (feature/rag + G0.3 — inline-ML deps removed [sentence-transformers + torch + uv torch-CPU pin], hAITU reranker stubbed to no-op passthrough, 2026-06-25) |
-| haisir-frontend | 47e4ec2 (feature/rag — hAITU SSE streaming consumer + SonarQube fixes, 2026-06-24) |
-| haisir-deploy | 3178451 (feature/rag — hAITU SSE APISIX route + proxy-buffering + SQLi target-exclusion, 2026-06-24) |
+| haisir-backend | 9d27e8c (G3 notifications subsystem + auto-close cron + G2-patch — treat `answered` doubts as closed in `find_or_create_doubt`, 2026-06-28) |
+| haisir-frontend | 23e1a45 (G3 — NotificationBell + feed page + topbar wiring, 2026-06-28) |
+| haisir-deploy | 2ca21d4 (G3 — APISIX notifications route `20-api-notifications.json`, 2026-06-27) |
 
-> Next session: run `git diff d1564b0..HEAD` in haisir-backend, `git diff 47e4ec2..HEAD` in haisir-frontend, and `git diff 3178451..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 9d27e8c..HEAD` in haisir-backend, `git diff 23e1a45..HEAD` in haisir-frontend, and `git diff 2ca21d4..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -626,6 +626,7 @@
 - Request: no body required
 - Response: `DoubtThreadResponse` with status='escalated' and a new system message appended
 - Errors: 404 if doubt doesn't exist or not owned by caller; 409 if status not `new` or `ai_answered`
+- **Side effect (G3):** emits a `new_doubt_escalated` notification to the instructor shared queue (`recipient_role='instructor'`, `recipient_idp_sub=NULL`), body includes the student name resolved from `student_profiles`.
 
 ### GET /api/teachers/me/doubts
 - Purpose: Return the shared escalated-doubt queue for the authenticated instructor
@@ -651,6 +652,38 @@
 - Request: `CreateDoubtMessageRequest { content: str (min_length=1) }`
 - Response: `DoubtThreadResponse` with full updated thread
 - Errors: 404 if doubt doesn't exist
+- **Side effect (G3):** emits a `doubt_teacher_replied` notification to the student (`recipient_role='student'`, body includes the teacher name resolved from `teacher_profiles`) and calls the parent fan-out stub (`child_doubt_replied`, v1 no-op).
+
+---
+
+## Notifications (G3)
+
+> All four endpoints require `X-Current-Role` (any valid role). The two PATCH mutations additionally require `X-CSRF-Token`. APISIX route `20-api-notifications.json` — priority 15, `secured-api` OIDC plugin config, `limit-count` (60 req/min per IP → 429), `request-validation` (requires `Content-Type: application/json` → 400 if absent). Worker also runs an hourly `auto_close_doubts_loop` that resolves overdue doubts and emits `doubt_auto_closed` notifications (no HTTP endpoint — background cron).
+
+### GET /api/notifications/me
+- Purpose: Return the authenticated user's notification feed — personal notifications (`recipient_idp_sub = caller.sub`) plus shared-queue notifications for the caller's active role, within the last 90 days, newest-first
+- Auth: any valid role (`X-Current-Role` required); no CSRF
+- Query: `limit` (1–200, default 50), `offset` (>=0, default 0)
+- Response: `NotificationFeedResponse { unread_count: int, items: NotificationRead[] }` — each `NotificationRead`: `id, type, title, body, action_url, read, created_at`; the `group` field classifies each item by recency (`today` | `yesterday` | `earlier` | `older`)
+
+### GET /api/notifications/me/unread-count
+- Purpose: Lightweight unread count for topbar badge polling (no full payload fetch)
+- Auth: any valid role; no CSRF
+- Response: `UnreadCountResponse { count: int }`
+
+### PATCH /api/notifications/me/read-all
+- Purpose: Mark all unread notifications read for the caller's current role
+- Auth: any valid role; CSRF required
+- Request: `ReadAllRequest { role: str }` — must match the `X-Current-Role` header value
+- Response: `ReadAllResponse { marked_count: int }`
+- Errors: 403 `"Role mismatch: body.role must match X-Current-Role"` if `body.role` differs from the active role
+
+### PATCH /api/notifications/{notification_id}/read
+- Purpose: Mark a single notification read
+- Auth: any valid role; CSRF required
+- Response: `{ read: true }`
+- Errors: 404 if the notification is not found or not accessible (personal row not owned by the caller, or shared-queue row whose `recipient_role` doesn't match the caller's active role)
+- Note: marking a **shared-queue** notification read marks it read globally for all users of that role — v1 limitation, no per-user read tracking on shared rows. Personal rows are tracked per-user.
 
 ---
 
@@ -664,6 +697,7 @@
 - Pipeline: stage 1 rewrites the query (LLM → JSON, safe fallback); stage 2 retrieves via QueryFusionRetriever (hybrid pgvector, topic_id filter); stage 3 is a passthrough (inline cross-encoder removed in G0.3; `rerank_model` retained as a future-hook for an external rerank API — a non-empty value logs a warning and returns nodes unordered); stage 4 synthesizes (intent-specific prompts, escalation detection). `safe=False` from stage 1 short-circuits before retrieval.
 - Errors: 403 (enrollment invalid or topic outside enrolled subtree); 429 `"Rate limit exceeded"` (HaituRateLimiter: 20 calls/student/hour, in-process) — both returned as HTTP errors **before** the stream starts. DB session closed before streaming begins.
 - **Doubt persistence (G1):** creates/upserts a `doubts` row + student `doubt_messages` row in the validation phase (post rate-limit, before stream starts). On 429 no doubt row is created (no orphan). After the stream ends, a fire-and-forget background task opens a fresh DB session and persists the full accumulated AI reply as an `ai` `doubt_messages` row. On early disconnect the partial text is still persisted.
+- **G2-patch (commit 9d27e8c):** `find_or_create_doubt` now treats `answered` doubts as closed for thread-reuse — a follow-up question about a topic opens a **fresh thread** with the full escalation path instead of reusing an existing `answered` thread (which previously hid the teacher-help button permanently). The find-open exclusion set (`answered` excluded) is deliberately distinct from the auto-close terminal set (`answered` remains auto-closeable until it hits the 7-day `auto_close_at`).
 - APISIX gateway (`19-api-haitu.json`): route priority 20 (beats api-write 10 so the 6 s default read timeout does not 504 long-running calls); send/read timeout **600 s** (backend `HAITU__LLM_REQUEST_TIMEOUT` default is 360 s — the gateway is the higher ceiling); `proxy-buffering` disabled (required for SSE); `limit-count` (20 req/min per IP → 429, separate from the in-process per-student/hour limiter); `limit-conn` (20 concurrent connections/IP → 503); `request-validation` (requires `Content-Type: application/json` → 400 if absent); `secured-api` plugin config (OIDC deny on unauthenticated) with a WAF exclusion (Coraza id:199110) for `POST /api/haitu/*` — rules 942200/942131/942130/942340/942380/942400/942410 removed **per-transaction** via `ctl:ruleRemoveById` (not `ctl:ruleRemoveTargetById`, which is unreliable in Coraza WASM on APISIX 3.17); rule 942200 added to suppress educational text false positives (e.g. propulsion/physics phrases matching MySQL comment obfuscation). All other routes retain full SQLi inspection. Backend service has `HAITU__*` + `EMBEDDING__*` env vars wired in `common/docker-compose.yml`.
 
 ---
