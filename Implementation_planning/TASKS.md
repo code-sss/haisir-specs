@@ -100,7 +100,7 @@
 
 - [x] T2p.1 [specs]: Update 11_haitu_ai_layer.md — add `answered` to the closed-status exclusion in `find_or_create_doubt` (alongside `resolved`); update status machine note (2026-06-28)
 - [x] T2p.2 [backend]: `find_or_create_doubt` — treat `answered` like `resolved` (do not reuse); depends on T2p.1 (2026-06-29)
-- [ ] T2p.3 [frontend]: `canEscalate` in `doubt-status.ts` already correct — smoke-test that teacher-help button appears on the new thread; no code change expected
+- [x] T2p.3 [frontend]: `canEscalate` in `doubt-status.ts` already correct — smoke-test that teacher-help button appears on the new thread; no code change expected (2026-06-29)
 
 ## G4 — Mastery + post-exam review [specs][backend][frontend]
 
