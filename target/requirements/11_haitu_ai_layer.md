@@ -285,3 +285,129 @@ re-stated here — refer to the vision file for the authoritative text:
 > `doubts` + `doubt_messages` as described in §4. The client-side rolling 5-message window
 > sent in the request `history` field is retained for the in-flight prompt only; the durable
 > thread is the source of truth and is what S09 renders.
+
+---
+
+## 8. Exam review + pattern analysis (G4.3)
+
+Phase 4 G4.3 adds two **no-RAG** hAITU endpoints used by the S05 post-exam review screen
+(`03_student.md`). They reuse `HaituService`'s public no-RAG method (added in T4.3.1a —
+`answer_no_rag(messages, max_tokens)` / `stream_no_rag(prompt, cancel_event)`, which dispatch to
+the underlying private `_dispatch_llm` / `_stream_llm` / `_call_llm_raw` **without** the 4-stage
+RAG retrieval pipeline) and the `HaituRateLimiter` (in-memory `(sub, hour_bucket)`, 20/hr,
+singleton). The sacred RAG pipeline is untouched.
+
+**Body param canonicalization:** both endpoints take **`attempt_id`** (= `exam_sessions.id`),
+resolving the vision student-spec (`session_id`) vs haitu-spec (`attempt_id`) discrepancy. The
+S05 review payload is fetched separately via `GET /api/exam-sessions/session/{session_id}/answers`
+(the live path — NOT `.../review`); the hAITU endpoints receive only the `attempt_id` + the
+student's message, and assemble the question/answer context server-side from that attempt.
+
+### 8.1 `exam-review-chat` (§3.2) — per-question explanation + follow-ups
+
+**When:** Student is in the S05 review screen and either clicks "Ask hAITU to explain this" on a
+wrong/skipped question or types a follow-up in the review chat panel.
+
+**Context assembled server-side (no RAG):**
+- Assessment title, subject, board.
+- All questions for the attempt with: body, correct answer, student's answer, `is_correct`,
+  explanation.
+- The pre-computed pattern analysis (see §8.2).
+- Last 10 messages from this review session (the `history` field mirrors the rolling window;
+  the attempt-scoped context is the source of truth).
+
+**System prompt template (port of vision §3.2):**
+```
+You are hAITU, reviewing a student's performance on "{template_title}" ({subject}, {board}).
+
+Their results: {correct} correct, {wrong} wrong, {skipped} skipped out of {total}.
+
+Question details:
+{question_details}
+
+Rules:
+- The student wants to understand their mistakes. Be encouraging and precise.
+- When explaining a wrong answer, always show the correct reasoning step by step.
+- Identify patterns across mistakes (e.g. "You made this mistake on Q3, Q5, and Q8 — they all involve the same concept").
+- Never just say "the answer is X" — always explain why.
+- Keep responses focused on the exam content.
+```
+
+### 8.2 `pattern-analysis` (§3.2a) — pre-computed opening message
+
+**When:** Generated once per attempt on S05 page load, displayed as the opening hAITU message in
+the review panel.
+
+**Prompt (port of vision §3.2a):**
+```
+Analyse the following wrong answers from this exam and identify the single most common mistake
+pattern in 2–3 sentences. Be specific about which questions share the pattern.
+
+Wrong answers:
+{wrong_questions_with_answers}
+```
+
+If the attempt has zero wrong answers, the endpoint returns a neutral opening message
+("Great work — no wrong answers to analyse on this attempt.") instead of calling the LLM.
+
+### 8.3 API contracts
+
+```
+POST /api/haitu/exam-review-chat
+→ Auth: student (CSRF required; X-Current-Role: student)
+→ Body: {attempt_id: uuid, message: str, history: [{role, content}]}
+→ Returns: {response: str}
+→ Token limit: 500 (configurable by SuperAdmin; see §5 of the vision spec)
+
+POST /api/haitu/pattern-analysis
+→ Auth: student (CSRF required; X-Current-Role: student)
+→ Body: {attempt_id: uuid}
+→ Returns: {analysis: str}
+→ Cached per attempt_id (see §8.4)
+```
+
+### 8.4 Caching
+
+`pattern-analysis` is **cached per `attempt_id`** — the analysis is generated once for an attempt
+and reused across page loads / follow-ups within the same review session.
+
+> **v1 limitation:** the cache is **in-memory per worker**, not cross-process. With a single
+> worker (current scale) this gives exact per-attempt caching; under multi-worker deployment the
+> same `attempt_id` may be re-computed once per worker that handles it. This is acceptable for the
+> current scale and is documented here so it is not mistaken for a correctness bug. A shared
+> cache (Redis) is a future optimisation, not a Phase 4 requirement.
+
+`exam-review-chat` is **not cached** — each follow-up is a fresh LLM call (rate-limited per
+BR-AI-003).
+
+### 8.5 Guards
+
+Both endpoints enforce, in order:
+
+1. **Ownership (403):** the `exam_sessions` row for `attempt_id` must have
+   `user_id = calling student's idp_sub`. A session owned by another student → `403`.
+2. **Status gate (403 / 400):** the session status must be in `('completed', 'failed')`. An
+   ongoing / pending / `grading_pending` session → `403` (review not available yet). A
+   non-existent `attempt_id` → `404`.
+3. **CSRF (Depends(validate_csrf)):** required on both POSTs (CSRF on every mutation — do not
+   drop it when adding these endpoints).
+4. **Rate limit (BR-AI-003):** the `HaituRateLimiter` (20 calls/student/hour) gates both
+   endpoints; exceeding returns `429` with "You've reached the limit for AI assistance this
+   hour. Please try again later." A 429 on `pattern-analysis` leaves no cached entry.
+
+### 8.6 Failure handling (BR-AI-001/002/003)
+
+These apply to both `exam-review-chat` and `pattern-analysis`, ported from the vision spec §7:
+
+- **BR-AI-001:** If the LLM call fails (timeout, rate limit from the provider, 5xx), the backend
+  returns a graceful fallback response rather than propagating the error — `exam-review-chat`
+  returns `{"response": "I couldn't generate an explanation right now. Please try again in a
+  moment."}`; `pattern-analysis` returns `{"analysis": "Pattern analysis is temporarily
+  unavailable."}`. The S05 UI degrades gracefully (the chat remains usable; the opening message
+  shows the fallback).
+- **BR-AI-002:** All hAITU API calls have a 30-second timeout. If exceeded, return `504` with the
+  fallback message above (the response body is the fallback string, the HTTP status is `504` so the
+  client can distinguish a provider failure from a normal response).
+- **BR-AI-003:** Rate limiting — max 20 hAITU calls per student per hour (the `HaituRateLimiter`
+  shared with `topic-doubt`). Exceeding returns `429` with: "You've reached the limit for AI
+  assistance this hour. Please try again later."

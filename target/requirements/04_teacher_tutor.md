@@ -103,3 +103,38 @@ The instructor's view of a specific doubt thread — all messages in chronologic
 > The `doubt_teacher_replied` notification (emitted to the student after the teacher reply) is
 > wired in G3.4 (`10_notifications.md`), not in this endpoint. The reply endpoint itself only
 > persists the message and updates the status.
+
+---
+
+## Phase 4 — At-Risk Student Detection (G4.2)
+
+### BR-TCH-004 — `student_at_risk` shared-queue notification + recovery gate
+
+A student with **≥ 3 weak topics** (status `'weak'` in `enrollment_topics`, per
+BR-PROGRESS-001) produces a **`student_at_risk`** notification targeted at the `instructor`
+shared queue (`recipient_idp_sub IS NULL` — any instructor can see/claim it, the same shared
+queue model as escalated doubts in §3.4 of `11_haitu_ai_layer.md`). See `10_notifications.md`
+BR-NOTIF-010 for the firing mechanism and notification shape.
+
+**Recovery / re-fire hysteresis (exact, persistence-backed):**
+
+- The notification fires **only on the rising edge** — when the student's weak-topic count
+  crosses from `< 3` to `≥ 3` AND the `student_risk_state.at_risk_active` flag for that student
+  is `false` (V37 table — see `01_data_model.md`). On firing, `at_risk_active` is set to `true`
+  and `last_fired_at` is stamped.
+- It **does not re-fire** until the student has fully recovered: `at_risk_active` is set back to
+  `false` only when `count_weak_for_student == 0` — i.e. the student has risen **above 60%
+  mastery on ALL weak topics** (every weak topic left the `'weak'` state).
+- Once recovered (`at_risk_active = false`), a subsequent drop back below the threshold
+  (weak count rising `0 → ≥ 3`) fires the notification again — a fresh rising edge.
+
+This gives exact hysteresis: no re-fire while the student still has any weak topics, and a clean
+re-fire only after a full recovery followed by a fresh decline. The dedicated `student_risk_state`
+table is required because recovery leaves no record in the notifications table (a recovered
+student has no active weak topics to query), so the recovery edge cannot be derived from
+notifications alone.
+
+> The actual recalculation of `enrollment_topics.status` / `mastery_score` is the
+> `MasteryService`'s job (G4.2 — see `Implementation_planning/PLAN.md` T4.2.1a); this rule
+> defines only the at-risk detection + notification gate that consumes the resulting weak-topic
+> counts.

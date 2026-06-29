@@ -113,7 +113,7 @@
 > dedicated `student_risk_state` table folded into V37 (T4.1.2).
 
 ### G4.1 — Exam↔topic linkage + enrollment_topics schema (V37)
-- [ ] T4.1.1 [specs]: Author all G4 spec deltas + lock divergences (01/03/11/04) (no deps)
+- [x] T4.1.1 [specs]: Author all G4 spec deltas + lock divergences (01/03/11/04) (no deps)
 - [ ] T4.1.2 [backend]: V37 migration: add questions.topic_id (NULLABLE) + enrollment_topics + student_risk_state (depends on T4.1.1)
 - [ ] T4.1.3a [backend]: EnrollmentTopic domain model + repository (depends on T4.1.2)
 - [ ] T4.1.3b [backend]: Map questions.topic_id in Question model + repo (depends on T4.1.2)
@@ -141,8 +141,8 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T4.1.1 [specs]: Author all G4 spec deltas + lock divergences (01/03/11/04) (no deps)
+- T4.1.2 [backend]: V37 migration — questions.topic_id + enrollment_topics + student_risk_state (T4.1.1 spec deltas now authored; depends on T4.1.1 ✅)
 - T4.3.1a [backend]: Public no-RAG LLM methods on HaituService (no deps — HaituService + rate limiter exist from G3)
 
-These two can run in parallel: spec-writing unblocks the backend; the hAITU no-RAG method is
+T4.1.1 (specs) is complete. T4.1.2 unblocks the G4.1 schema work; the hAITU no-RAG method is
 independent of the spec deltas.

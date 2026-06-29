@@ -737,3 +737,116 @@ CREATE INDEX idx_doubt_messages_doubt_id ON doubt_messages(doubt_id);
 - Teacher reply, escalation endpoint `POST /api/doubts/{id}/escalate`, and notification triggers introduced in Phase 4 alongside teacher Keycloak role.
 
 **BR-DATA-008 — Doubt privacy (Phase 4):** Only the student who created a `doubts` row may read its messages. Teachers may read only escalated doubts assigned to them. No cross-student doubt access.
+
+---
+
+## Schema Extensions (Phase 4 G4 — Mastery + Enrollment Topics)
+
+Migration **V37**. All columns and tables are additive — nothing is dropped or renamed.
+> Behaviour and business rules in `target/requirements/04_teacher_tutor.md` (BR-TCH-004) and
+> the mastery algorithm in `Implementation_planning/PLAN.md` (T4.2.1a).
+
+### Locked decisions (2026-06-28 reconcile)
+
+- **`questions.topic_id` is added NULLABLE.** NOT NULL is not enforceable: legacy rows have
+  no topic linkage and there is no clean backfill source. The application layer **requires**
+  `topic_id` for newly created questions; legacy rows stay NULL and mastery recalc skips
+  them (BR-PROGRESS edge case c). Added in V37:
+  ```sql
+  ALTER TABLE questions ADD COLUMN topic_id UUID NULL;
+  CREATE INDEX ix_questions_topic_id ON questions(topic_id);
+  ```
+  No backfill. A B-tree index supports the per-topic attribution query.
+- **`exam_templates.topic_id` is NOT added.** The vision spec places `topic_id` on
+  `exam_templates` (BR-EXAM-PURPOSE-001), but G4 needs per-question topic attribution for
+  multi-topic exams, which only `questions.topic_id` provides. `questions.topic_id` is the
+  single source of truth for mastery attribution and works for both quiz (single-topic) and
+  exam (multi-topic) purposes. Quiz scoping resolves via `questions.topic_id` uniformly.
+
+### New column on `questions` (V37)
+
+| Column | Type | Constraint | Notes |
+|---|---|---|---|
+| `topic_id` | UUID | NULL | Soft pointer to `topics(id)` (no hard FK — attribution is advisory; legacy rows are NULL). The single source of truth for mastery attribution. Required by the application layer for newly created questions. |
+
+### New table — `enrollment_topics` (V37)
+
+Tracks a student's per-topic progress within a `student_enrollments` context. The FK target is
+`student_enrollments(id)` (V34, `UNIQUE(student_sub, course_path_node_id)`) — **NOT** the vision
+spec's nonexistent `enrollments` table.
+
+```sql
+CREATE TABLE enrollment_topics (
+    id                     UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_enrollment_id  UUID        NOT NULL REFERENCES student_enrollments(id) ON DELETE CASCADE,
+    topic_id               UUID        NOT NULL REFERENCES topics(id),
+    status                 VARCHAR(10) NOT NULL CHECK (status IN
+                                         ('not_started','in_progress','completed','weak')),
+    mastery_score          FLOAT       NULL CHECK (0 <= mastery_score <= 100),
+    last_studied_at        TIMESTAMPTZ NULL,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (student_enrollment_id, topic_id)
+);
+
+CREATE INDEX idx_enrollment_topics_enrollment ON enrollment_topics(student_enrollment_id);
+CREATE INDEX idx_enrollment_topics_topic_status ON enrollment_topics(topic_id, status);
+```
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID | PK |
+| `student_enrollment_id` | UUID | FK → `student_enrollments(id)` (CASCADE). The enrollment context that scopes this progress row. |
+| `topic_id` | UUID | FK → `topics(id)`. The topic this progress row tracks. |
+| `status` | VARCHAR(10) | `'not_started'` \| `'in_progress'` \| `'completed'` \| `'weak'`. Derived from `mastery_score` on recalc (BR-PROGRESS-001/002/003). |
+| `mastery_score` | FLOAT | `0.0`–`100.0`, NULL until the first attempt. |
+| `last_studied_at` | TIMESTAMPTZ | Updated on each mastery recalc for this topic. |
+| `created_at` / `updated_at` | TIMESTAMPTZ | Row timestamps. |
+
+### New table — `student_risk_state` (V37)
+
+Persistence backing for the `student_at_risk` recovery/re-fire gate (BR-TCH-004). Folded into V37
+so no second migration is needed. No FK on `student_sub` (sacred no-FK-on-identity rule).
+
+```sql
+CREATE TABLE student_risk_state (
+    student_sub      TEXT        PRIMARY KEY,
+    at_risk_active   BOOLEAN     NOT NULL DEFAULT FALSE,
+    last_fired_at    TIMESTAMPTZ NULL
+);
+```
+
+| Column | Type | Notes |
+|---|---|---|
+| `student_sub` | TEXT | Keycloak `sub` (no FK — identity is IdP-managed). |
+| `at_risk_active` | BOOLEAN | `true` while a `student_at_risk` state is active (≥3 weak topics); set `false` when `count_weak_for_student == 0`. |
+| `last_fired_at` | TIMESTAMPTZ | When the `student_at_risk` notification last fired. |
+
+### Mastery progress business rules
+
+**BR-PROGRESS-001 — Weak topic:** A topic is `weak` if `mastery_score < 60.0` after at least one
+quiz/exam attempt (`exam_sessions` with `status = 'completed'` for a template scoped to this
+topic). Status set to `'weak'`.
+
+**BR-PROGRESS-002 — Completed topic:** A topic is `completed` if `mastery_score >= 75.0` and at
+least one attempt submitted. Status set to `'completed'`.
+
+**BR-PROGRESS-003 — Mastery recalculation:** On the **first attempt**, `mastery_score =
+latest_score` (raw score directly). From the **second attempt onward**, `mastery_score =
+(latest_score * 0.6) + (previous_mastery * 0.4)`. This prevents false weak-topic flags from a
+single attempt (e.g. scoring 80% would give mastery 48% if `previous_mastery` defaulted to 0).
+Attempts are tracked via `exam_sessions` (both `purpose = 'quiz'` and `purpose = 'exam'`
+contribute to mastery). Status is re-derived from the recomputed `mastery_score` per
+BR-PROGRESS-001/002; scores in [60, 75) set `'in_progress'`.
+
+**Edge-case rules (apply to all mastery recalc):**
+- (a) Essay questions with NULL `earned_points` while grading is pending are **skipped** by the
+  recalc and computed from the remaining available points. If **all** questions are pending
+  (recalc has nothing to compute), the recalc is deferred to the essay-grading auto-complete hook
+  (T4.2.1c) — no `enrollment_topics` row is written on this pass.
+- (b) The first attempt creates the `enrollment_topics` row (status derived from score;
+  `mastery_score = latest_score`).
+- (c) Questions with NULL `topic_id` are **excluded** from per-topic attribution (legacy /
+  unlinked rows).
+- (d) Multi-topic exams attribute each question via `questions.topic_id` — each question's
+  earned/max points feed the per-topic score of its own topic, not a single session-wide score.
