@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:9d27e8c frontend:23e1a45 deploy:2ca21d4 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
+> Last baselined: backend:9d27e8c frontend:23e1a45 deploy:fc29884 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0–G3 + G2-patch are done; G4 is the remaining work.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -130,7 +130,7 @@
 ### G4.3 — Post-exam hAITU review (S05)
 - [ ] T4.3.1a [backend]: Public no-RAG LLM methods on HaituService (no deps)
 - [ ] T4.3.1b [backend]: POST /api/haitu/exam-review-chat + POST /api/haitu/pattern-analysis (depends on T4.3.1a, T4.1.3b, T4.1.1)
-- [ ] T4.3.1c [deploy]: APISIX routes for both endpoints (depends on T4.3.1b, T4.1.1)
+- [x] T4.3.1c [deploy]: APISIX routes for both endpoints (depends on T4.3.1b, T4.1.1) (2026-06-29)
 - [ ] T4.3.2 [frontend]: S05 review screen + hAITU review chat (depends on T4.3.1b, T4.3.1c, T4.1.1)
 - [ ] **G4.3: Post-exam hAITU review (S05)** — integration test
 
@@ -144,5 +144,6 @@ Tasks with no pending dependencies — can be started immediately:
 - T4.1.2 [backend]: V37 migration — questions.topic_id + enrollment_topics + student_risk_state (T4.1.1 spec deltas now authored; depends on T4.1.1 ✅)
 - T4.3.1a [backend]: Public no-RAG LLM methods on HaituService (no deps — HaituService + rate limiter exist from G3)
 
-T4.1.1 (specs) is complete. T4.1.2 unblocks the G4.1 schema work; the hAITU no-RAG method is
-independent of the spec deltas.
+T4.1.1 (specs) is complete. T4.3.1c (deploy) is complete — APISIX routes for exam-review-chat and
+pattern-analysis are authored and ready to load once T4.3.1b backend endpoints land.
+T4.3.2 [frontend] is still blocked on T4.3.1b [backend] (not yet done).
