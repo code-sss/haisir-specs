@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:4fb709b frontend:9e92e31 deploy:2f623f0 (2026-06-24)
+> Last baselined: backend:e92a045 frontend:9e92e31 deploy:2f623f0 (2026-06-24)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0 is the P0 stabilization that must land first.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -99,7 +99,7 @@
 > **Context:** `find_or_create_doubt` reuses any non-resolved doubt for the same (student, topic), including `answered` doubts. This means a student who asks a follow-up question after a teacher has already replied cannot escalate to a teacher again — the thread is permanently locked. Fix: treat `answered` as closed in `find_or_create_doubt` so a new doubt thread is created, restoring full escalation for new questions on the same topic.
 
 - [x] T2p.1 [specs]: Update 11_haitu_ai_layer.md — add `answered` to the closed-status exclusion in `find_or_create_doubt` (alongside `resolved`); update status machine note (2026-06-28)
-- [ ] T2p.2 [backend]: `find_or_create_doubt` — treat `answered` like `resolved` (do not reuse); depends on T2p.1
+- [x] T2p.2 [backend]: `find_or_create_doubt` — treat `answered` like `resolved` (do not reuse); depends on T2p.1 (2026-06-29)
 - [ ] T2p.3 [frontend]: `canEscalate` in `doubt-status.ts` already correct — smoke-test that teacher-help button appears on the new thread; no code change expected
 
 ## G4 — Mastery + post-exam review [specs][backend][frontend]
@@ -129,4 +129,5 @@
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
 - **G2: Teacher escalation** — integration test (all G2 subtasks now done; requires backend running)
+- T2p.3 [frontend]: `canEscalate` in `doubt-status.ts` already correct — smoke-test that teacher-help button appears on the new thread; no code change expected (depends on T2p.2 ✅)
 - T4.1.1 [specs]: 01/03/11 — enrollment_topics + exam→topic decision + S05 + exam-review (no deps)
