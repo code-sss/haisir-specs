@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 9d27e8c (G3 notifications subsystem + auto-close cron + G2-patch — treat `answered` doubts as closed in `find_or_create_doubt`, 2026-06-28) |
-| haisir-frontend | 23e1a45 (G3 — NotificationBell + feed page + topbar wiring, 2026-06-28) |
-| haisir-deploy | 2ca21d4 (G3 — APISIX notifications route `20-api-notifications.json`, 2026-06-27) |
+| haisir-backend | 7fd5cd7 (G4 — MasteryService + enrollment_topics V37 + exam-review-chat + pattern-analysis + enrollment status column fix, 2026-06-29) |
+| haisir-frontend | efc33d8 (G4 — ExamReviewPage S05 + FocusAreasStrip + SonarQube fixes, 2026-06-29) |
+| haisir-deploy | fc29884 (G4 — APISIX routes 21 + 22 for hAITU post-exam endpoints, 2026-06-29) |
 
-> Next session: run `git diff 9d27e8c..HEAD` in haisir-backend, `git diff 23e1a45..HEAD` in haisir-frontend, and `git diff 2ca21d4..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 7fd5cd7..HEAD` in haisir-backend, `git diff efc33d8..HEAD` in haisir-frontend, and `git diff fc29884..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -197,13 +197,14 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 
 ---
 
-## Student Dashboard (Phase 2 complete — enrollment filtering live, G3 done)
+## Student Dashboard (Phase 2 complete — enrollment filtering live, G3 done, G4.4 weak-topics done)
 
 ### Screen: `/home` (StudentHomePage — student role only)
 `app/home/page.tsx` branches on `currentRole === "student"` → renders `StudentHomePage`.
 
-Two sections, data from `useStudentDashboard` (`GET /api/student/dashboard`):
-- **Platform Board** — grid of root platform node cards (name, topic_count badge, "Start" → `/courses?source=platform&nodeId=…`). When no nodes returned (unenrolled — pending T3 enrollment filter): **empty state** with dashed border — "You haven't enrolled in any courses yet." + "Browse Courses" CTA → `/enroll`.
+Data from `useStudentDashboard` (`GET /api/student/dashboard`). Three sections in order:
+- **FocusAreasStrip** (G4.4) — rendered above all boards when `weak_topics` is non-empty. Orange-themed chip row; each chip shows topic title + mastery score badge (red pill) and links to `/home/topics/{enrollment_id}`. Hidden when no weak topics.
+- **Platform Board** — grid of root platform node cards (name, topic_count badge, "Start" → `/courses?source=platform&nodeId=…`). When no nodes returned (unenrolled): **empty state** with dashed border — "You haven't enrolled in any courses yet." + "Browse Courses" CTA → `/enroll`.
 - **Home Study** — if `has_parent_link=true`, grid of parent-owned root node cards with "Start" CTAs; else dashed-border placeholder "No Home Study content yet — ask your parent to link their account."
 
 ### Screen: `/courses` (StudentCoursesPage — student role)
@@ -229,6 +230,21 @@ Rendered at the bottom of `ContentViewer` whenever a topic is selected.
 Unit test suite: 11 test files covering all components, hooks, and api layer (100% coverage). **Playwright E2E suite shipped (commit `54e198c`, 2026-06-18):** 16 specs across G3 content-filter, G7 browse-courses, G8 empty-state, and G9 hAITU panel, all green; gated in `/commit-frontend` as a peer to the 100% coverage check.
 
 ---
+
+## Post-Exam Review + hAITU Chat (G4.3 — complete)
+
+### Screen: `/exam/[session_id]/review` (ExamReviewPage — S05, student role)
+`app/exam/[session_id]/review/page.tsx` → `ExamReviewPage` (client component).
+
+- **Top bar**: back link "← Back to Home" + exam title (`template_title` from review payload).
+- **Score bar**: percentage score (`score / total_marks`), correct / wrong / skipped / total question counts.
+- **Left panel** (`ExamReviewQuestionList`): collapsible `QuestionCard` items. Wrong / skipped cards default-expanded; correct cards collapsed. Colour-coded badges: green ✓ Correct, red ✗ Wrong, grey — Skipped. Choice questions render option list with ✓/✗ decorations; `optionCorrect` (green bg) + `optionWrong` (red bg). Text questions show "Your answer" / "Correct answer" rows. Explanation rendered in a blue-left-bordered box when present. "Ask hAITU to explain this" button per incorrect question triggers `explainQuestion(number, text)`. Reading-passage paragraph groups rendered as titled card with prose + nested question cards.
+- **Right panel** (`ExamReviewChatPanel`): hAITU chat sidebar. On mount calls `POST /api/haitu/pattern-analysis` via `useExamReviewChat` hook and renders the AI opening message. Follow-up questions call `POST /api/haitu/exam-review-chat` (non-streaming JSON); last 10 messages sent as history. Enter sends; Shift+Enter newlines. Spinner bubble while loading. 429 / 504 / 403 mapped to user-facing error banners. `explainQuestion` prepends "Explain question N: {text}" as the user message.
+- **Forbidden state**: shown when `getSessionAnswers` returns 403/null — "This exam isn't available for review yet" + "Back to Home".
+- **Error state**: shown on fetch failure — generic error message + "Back to Home".
+- `useExamReview(attemptId)`: fetches `GET /api/exam-sessions/session/{id}/answers`; 403/null → `isForbidden=true`; loading/error states exposed.
+- `useExamReviewChat(attemptId)`: loads pattern analysis on mount; resets all state on `attemptId` change; manages `messages: ExamReviewChatMessage[]`, `isLoading`, `error`, `patternAnalysisLoaded`; exposes `send(message)` + `explainQuestion(n, text)`.
+- Responsive: below 900 px panels stack vertically; right panel gets fixed 24 rem height.
 
 ## Student Doubt Inbox + Thread (G1 — complete)
 

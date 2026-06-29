@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:9d27e8c frontend:23e1a45 deploy:fc29884 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
+> Last baselined: backend:9d27e8c frontend:23e1a45 deploy:2ca21d4 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0–G3 + G2-patch are done; G4 is the remaining work.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -114,36 +114,30 @@
 
 ### G4.1 — Exam↔topic linkage + enrollment_topics schema (V37)
 - [x] T4.1.1 [specs]: Author all G4 spec deltas + lock divergences (01/03/11/04) (no deps)
-- [ ] T4.1.2 [backend]: V37 migration: add questions.topic_id (NULLABLE) + enrollment_topics + student_risk_state (depends on T4.1.1)
-- [ ] T4.1.3a [backend]: EnrollmentTopic domain model + repository (depends on T4.1.2)
-- [ ] T4.1.3b [backend]: Map questions.topic_id in Question model + repo (depends on T4.1.2)
+- [x] T4.1.2 [backend]: V37 migration: add questions.topic_id (NULLABLE) + enrollment_topics + student_risk_state (depends on T4.1.1) (2026-06-29)
+- [x] T4.1.3a [backend]: EnrollmentTopic domain model + repository (depends on T4.1.2) (2026-06-29)
+- [x] T4.1.3b [backend]: Map questions.topic_id in Question model + repo (depends on T4.1.2) (2026-06-29)
 - [ ] **G4.1: Exam↔topic linkage + enrollment_topics schema (V37)** — integration test
 
 ### G4.2 — MasteryService + notifications
-- [ ] T4.2.1a [backend]: MasteryService.recompute_for_session algorithm (depends on T4.1.3a, T4.1.3b, T4.2.2)
-- [ ] T4.2.1b [backend]: Wire MasteryService into submit_exam completed branch (depends on T4.2.1a, T4.2.2)
-- [ ] T4.2.1c [backend]: Wire MasteryService into essay-grading auto-complete + worker DI (depends on T4.2.1a, T4.2.2)
-- [ ] T4.2.1d [backend]: Wire MasteryService into manual release/finalize/override path (depends on T4.2.1a, T4.2.2)
-- [ ] T4.2.2 [backend]: topic_marked_weak + student_at_risk w/ persistence recovery gate (depends on T4.2.1a, T3.1.4)
+- [x] T4.2.1a [backend]: MasteryService.recompute_for_session algorithm (depends on T4.1.3a, T4.1.3b, T4.2.2) (2026-06-29)
+- [x] T4.2.1b [backend]: Wire MasteryService into submit_exam completed branch (depends on T4.2.1a, T4.2.2) (2026-06-29)
+- [x] T4.2.1c [backend]: Wire MasteryService into essay-grading auto-complete + worker DI (depends on T4.2.1a, T4.2.2) (2026-06-29)
+- [x] T4.2.1d [backend]: Wire MasteryService into manual release/finalize/override path (depends on T4.2.1a, T4.2.2) (2026-06-29)
+- [x] T4.2.2 [backend]: topic_marked_weak + student_at_risk w/ persistence recovery gate (depends on T4.2.1a, T3.1.4) (2026-06-29)
 - [ ] **G4.2: MasteryService + notifications** — integration test
 
 ### G4.3 — Post-exam hAITU review (S05)
-- [ ] T4.3.1a [backend]: Public no-RAG LLM methods on HaituService (no deps)
-- [ ] T4.3.1b [backend]: POST /api/haitu/exam-review-chat + POST /api/haitu/pattern-analysis (depends on T4.3.1a, T4.1.3b, T4.1.1)
+- [x] T4.3.1a [backend]: Public no-RAG LLM methods on HaituService (no deps) (2026-06-29)
+- [x] T4.3.1b [backend]: POST /api/haitu/exam-review-chat + POST /api/haitu/pattern-analysis (depends on T4.3.1a, T4.1.3b, T4.1.1) (2026-06-29)
 - [x] T4.3.1c [deploy]: APISIX routes for both endpoints (depends on T4.3.1b, T4.1.1) (2026-06-29)
-- [ ] T4.3.2 [frontend]: S05 review screen + hAITU review chat (depends on T4.3.1b, T4.3.1c, T4.1.1)
+- [x] T4.3.2 [frontend]: S05 review screen + hAITU review chat (depends on T4.3.1b, T4.3.1c, T4.1.1) (2026-06-29)
 - [ ] **G4.3: Post-exam hAITU review (S05)** — integration test
 
 ### G4.4 — Weak-topic flags + dashboard
-- [ ] T4.4.1 [backend]: StudentDashboardRead exposes weak_topics (depends on T4.1.3a)
-- [ ] T4.4.2 [frontend]: Focus areas weak-topic strip on /home (depends on T4.4.1)
+- [x] T4.4.1 [backend]: StudentDashboardRead exposes weak_topics (depends on T4.1.3a) (2026-06-29)
+- [x] T4.4.2 [frontend]: Focus areas weak-topic strip on /home (depends on T4.4.1) (2026-06-29)
 - [ ] **G4.4: Weak-topic flags + dashboard** — integration test
 
 ## Ready now
-Tasks with no pending dependencies — can be started immediately:
-- T4.1.2 [backend]: V37 migration — questions.topic_id + enrollment_topics + student_risk_state (T4.1.1 spec deltas now authored; depends on T4.1.1 ✅)
-- T4.3.1a [backend]: Public no-RAG LLM methods on HaituService (no deps — HaituService + rate limiter exist from G3)
-
-T4.1.1 (specs) is complete. T4.3.1c (deploy) is complete — APISIX routes for exam-review-chat and
-pattern-analysis are authored and ready to load once T4.3.1b backend endpoints land.
-T4.3.2 [frontend] is still blocked on T4.3.1b [backend] (not yet done).
+All G4 implementation tasks complete. Remaining work: integration tests for G4.1–G4.4.

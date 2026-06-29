@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 9d27e8c (G3 notifications subsystem + auto-close cron + G2-patch — treat `answered` doubts as closed in `find_or_create_doubt`, 2026-06-28) |
-| haisir-frontend | 23e1a45 (G3 — NotificationBell + feed page + topbar wiring, 2026-06-28) |
-| haisir-deploy | 2ca21d4 (G3 — APISIX notifications route `20-api-notifications.json`, 2026-06-27) |
+| haisir-backend | 7fd5cd7 (G4 — MasteryService + enrollment_topics V37 + exam-review-chat + pattern-analysis + enrollment status column fix, 2026-06-29) |
+| haisir-frontend | efc33d8 (G4 — ExamReviewPage S05 + FocusAreasStrip + SonarQube fixes, 2026-06-29) |
+| haisir-deploy | fc29884 (G4 — APISIX routes 21 + 22 for hAITU post-exam endpoints, 2026-06-29) |
 
-> Next session: run `git diff 9d27e8c..HEAD` in haisir-backend, `git diff 23e1a45..HEAD` in haisir-frontend, and `git diff 2ca21d4..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 7fd5cd7..HEAD` in haisir-backend, `git diff efc33d8..HEAD` in haisir-frontend, and `git diff fc29884..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -29,6 +29,7 @@
 | V34_student_enrollments | Creates `student_enrollments` table (UUID PK, `student_sub TEXT`, `course_path_node_id UUID FK→course_path_nodes ON DELETE CASCADE`, `enrolled_at TIMESTAMPTZ DEFAULT now()`, `enrollment_source VARCHAR(20) DEFAULT 'self'`). UNIQUE constraint `uq_student_enrollments_sub_node` on `(student_sub, course_path_node_id)`; index `idx_student_enrollments_student_sub` on `student_sub`. |
 | V35_doubts | Creates `doubts` table (UUID PK, `student_sub TEXT`, `topic_id`/`course_path_node_id` UUID FK nullable, `title TEXT`, `status VARCHAR(20)` CHECK 6-value enum default `'new'`, `escalated_to TEXT`, `haitu_attempted BOOLEAN`, `auto_close_at TIMESTAMPTZ` default `now() + interval '7 days'`, `resolved_at`, `created_at`/`updated_at`; partial index on `auto_close_at WHERE status != 'resolved'`) and `doubt_messages` table (UUID PK, `doubt_id` FK→doubts CASCADE, `sender_type VARCHAR(10)` CHECK 4-value enum, `content TEXT`, `created_at`; index on `doubt_id`). |
 | V36_notifications | Creates `notifications` table (UUID PK, `recipient_idp_sub TEXT` nullable, `recipient_role VARCHAR(20)`, `type VARCHAR(40)`, `title TEXT`, `body TEXT` nullable, `action_url TEXT` nullable, `read BOOLEAN` default false, `created_at TIMESTAMPTZ` default now()). Four indexes: `idx_notifications_recipient (recipient_idp_sub)`; `idx_notifications_role_unread (recipient_role, read)`; `idx_notifications_unread_personal (recipient_idp_sub) WHERE read=false AND recipient_idp_sub IS NOT NULL` (partial); `idx_notifications_shared_unread (recipient_role) WHERE read=false AND recipient_idp_sub IS NULL` (partial). |
+| V37_mastery_enrollment_topics | Adds `questions.topic_id UUID NULL` + `ix_questions_topic_id` index. Creates `enrollment_topics` table (UUID PK gen_random_uuid(), `student_enrollment_id UUID FK→student_enrollments CASCADE`, `topic_id UUID FK→topics`, `status VARCHAR(20)` CHECK 4-value enum `not_started\|in_progress\|completed\|weak`, `mastery_score FLOAT NULL` CHECK 0–100, `last_studied_at TIMESTAMPTZ NULL`, `created_at`/`updated_at TIMESTAMPTZ`; UNIQUE `uq_enrollment_topics_enrollment_topic (student_enrollment_id, topic_id)`; index `idx_enrollment_topics_enrollment` on `student_enrollment_id`; index `idx_enrollment_topics_topic_status` on `(topic_id, status)`). Creates `student_risk_state` table (`student_sub TEXT PK`, `at_risk_active BOOLEAN` default false, `last_fired_at TIMESTAMPTZ NULL`). Status column size set to `VARCHAR(20)` (follow-up fix in 7fd5cd7 after initial `VARCHAR(10)`). |
 
 ---
 
@@ -146,6 +147,7 @@
 - `rubric` (JSONB, nullable) — `essay` questions only; custom grading rubric: `{ scale_max: 3|4|5, criteria: [{name, weight, descriptors}] }`; 3–6 criteria; weights must sum to 1.0 (±0.01 tolerance); validated by Pydantic on create/update (V29)
 - `model_answer` (TEXT, nullable) — `essay` questions only; hint text passed to the LLM as grading context; returned to students via the review endpoint when `grading_status` is `released`, `finalized`, or `overridden` (V29; visibility gated in hotfix v2026.3.5)
 - `auto_grade_essay` (BOOLEAN, NOT NULL, default true) — `essay` questions only; when false, the question is skipped by the AI grading pipeline on session submit (V29)
+- `topic_id` (UUID, nullable) — links the question to a topic; used by `MasteryService` for post-exam mastery attribution; indexed (`ix_questions_topic_id`); existing rows NULL after V37 (no backfill)
 
 ## paragraph_questions
 - `id` (UUID, PK)
@@ -359,6 +361,29 @@ Indexes: `ix_essay_grading_jobs_queue (status, created_at) WHERE status='queued'
 Constraints: UNIQUE `(student_sub, course_path_node_id)` — duplicate enroll attempt → 409.
 Index: `idx_student_enrollments_student_sub` on `student_sub` for per-student lookups.
 
+## enrollment_topics
+> Created by V37. Per-student, per-topic mastery progress record within an enrollment.
+
+- `id` (UUID, PK, gen_random_uuid())
+- `student_enrollment_id` (UUID, FK → student_enrollments.id ON DELETE CASCADE)
+- `topic_id` (UUID, FK → topics.id)
+- `status` (VARCHAR(20)) — `not_started` | `in_progress` | `completed` | `weak`; CHECK enforced by `ck_enrollment_topics_status`
+- `mastery_score` (Float, nullable) — 0–100; CHECK `ck_enrollment_topics_mastery_score`
+- `last_studied_at` (TIMESTAMPTZ, nullable)
+- `created_at` / `updated_at` (TIMESTAMPTZ)
+- UNIQUE: `uq_enrollment_topics_enrollment_topic (student_enrollment_id, topic_id)`
+- Index: `idx_enrollment_topics_enrollment` on `student_enrollment_id`
+- Index: `idx_enrollment_topics_topic_status` on `(topic_id, status)`
+
+## student_risk_state
+> Created by V37. One row per student; tracks whether the at-risk flag is currently active.
+
+- `student_sub` (Text, PK) — Keycloak subject identifier
+- `at_risk_active` (Boolean, NOT NULL, default false) — true when ≥ 3 weak topics; cleared when `weak_count == 0`
+- `last_fired_at` (TIMESTAMPTZ, nullable) — timestamp of the most recent at-risk notification fire
+
+---
+
 ## doubts
 > Created by V35. Records a student's doubt about a topic or course-path node.
 
@@ -501,6 +526,12 @@ Query: single LEFT JOIN `categories → course_path_nodes (owner_type='platform'
 - Config-only in this phase; retrieval endpoint (`POST /api/haitu/topic-doubt`) not yet implemented — planned for next cycle once vectors are populated
 - All 8 vars wired as bare `${HAITU__*}` in the Docker Compose worker service
 - `RERANK_MODEL` is now a future-hook only: the inline cross-encoder (`SentenceTransformerRerank`) and the `sentence-transformers`/`torch` deps were removed in G0.3. `_stage3_rerank` is a no-op passthrough; a non-empty `rerank_model` logs a warning and returns nodes unordered. An external rerank API client will be wired here later.
+
+### MasteryService
+- Location: `src/domain/services/mastery_service.py`
+- `recompute_for_session(student_sub, session_id)` — groups scored questions by `topic_id`, computes `mastery_score = 0.6×new + 0.4×existing` (EWA), upserts `enrollment_topics`. Emits `topic_marked_weak` notification on weak transition; emits `student_at_risk` notification (instructor shared queue) when ≥ 3 weak topics via `student_risk_state.claim_if_inactive`; clears flag when `weak_count == 0`.
+- Attribution: `get_path_to_root(course_path_node_id)` traversal to find the deepest enrolled ancestor for each question's topic.
+- Triggered from: `submit_exam()` on `ExamStatus.completed`, `confirm_grade()`, `override_grade()`, and essay grading `_maybe_autocomplete_session()` (auto_release mode in the worker).
 
 ### RubricResolver
 - Location: `src/domain/services/rubric_resolver.py`

@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 9d27e8c (G3 notifications subsystem + auto-close cron + G2-patch — treat `answered` doubts as closed in `find_or_create_doubt`, 2026-06-28) |
-| haisir-frontend | 23e1a45 (G3 — NotificationBell + feed page + topbar wiring, 2026-06-28) |
-| haisir-deploy | 2ca21d4 (G3 — APISIX notifications route `20-api-notifications.json`, 2026-06-27) |
+| haisir-backend | 7fd5cd7 (G4 — MasteryService + enrollment_topics V37 + exam-review-chat + pattern-analysis + enrollment status column fix, 2026-06-29) |
+| haisir-frontend | efc33d8 (G4 — ExamReviewPage S05 + FocusAreasStrip + SonarQube fixes, 2026-06-29) |
+| haisir-deploy | fc29884 (G4 — APISIX routes 21 + 22 for hAITU post-exam endpoints, 2026-06-29) |
 
-> Next session: run `git diff 9d27e8c..HEAD` in haisir-backend, `git diff 23e1a45..HEAD` in haisir-frontend, and `git diff 2ca21d4..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 7fd5cd7..HEAD` in haisir-backend, `git diff efc33d8..HEAD` in haisir-frontend, and `git diff fc29884..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -547,8 +547,9 @@
 - Purpose: Return platform root nodes and parent-link status for the logged-in student
 - Auth: student (`X-Current-Role: student`; wrong role → 403; missing header → 400)
 - Note: uses `Depends(validate_csrf)` — `X-CSRF-Token` required despite being a GET (deviation from spec which said GET-only needs no CSRF)
-- Response: `StudentDashboardRead { platform_nodes: PlatformNodeCard[], has_parent_link: bool }`
+- Response: `StudentDashboardRead { platform_nodes: PlatformNodeCard[], has_parent_link: bool, weak_topics: WeakTopic[] }`
   - `PlatformNodeCard { id: UUID, name: str, node_type: str, topic_count: int, owner_type: str, children: list[PlatformNodeCard] }`
+  - `WeakTopic { enrollment_id: UUID, topic_id: UUID, topic_title: str, status: str, mastery_score: float | null }` — sourced from `enrollment_topics WHERE status='weak'` for the authenticated student; empty list when no weak topics
 
 ### GET /api/student/nodes
 - Purpose: Return the node tree for a given owner (platform or parent), enforcing parent-link access
@@ -699,6 +700,27 @@
 - **Doubt persistence (G1):** creates/upserts a `doubts` row + student `doubt_messages` row in the validation phase (post rate-limit, before stream starts). On 429 no doubt row is created (no orphan). After the stream ends, a fire-and-forget background task opens a fresh DB session and persists the full accumulated AI reply as an `ai` `doubt_messages` row. On early disconnect the partial text is still persisted.
 - **G2-patch (commit 9d27e8c):** `find_or_create_doubt` now treats `answered` doubts as closed for thread-reuse — a follow-up question about a topic opens a **fresh thread** with the full escalation path instead of reusing an existing `answered` thread (which previously hid the teacher-help button permanently). The find-open exclusion set (`answered` excluded) is deliberately distinct from the auto-close terminal set (`answered` remains auto-closeable until it hits the 7-day `auto_close_at`).
 - APISIX gateway (`19-api-haitu.json`): route priority 20 (beats api-write 10 so the 6 s default read timeout does not 504 long-running calls); send/read timeout **600 s** (backend `HAITU__LLM_REQUEST_TIMEOUT` default is 360 s — the gateway is the higher ceiling); `proxy-buffering` disabled (required for SSE); `limit-count` (20 req/min per IP → 429, separate from the in-process per-student/hour limiter); `limit-conn` (20 concurrent connections/IP → 503); `request-validation` (requires `Content-Type: application/json` → 400 if absent); `secured-api` plugin config (OIDC deny on unauthenticated) with a WAF exclusion (Coraza id:199110) for `POST /api/haitu/*` — rules 942200/942131/942130/942340/942380/942400/942410 removed **per-transaction** via `ctl:ruleRemoveById` (not `ctl:ruleRemoveTargetById`, which is unreliable in Coraza WASM on APISIX 3.17); rule 942200 added to suppress educational text false positives (e.g. propulsion/physics phrases matching MySQL comment obfuscation). All other routes retain full SQLi inspection. Backend service has `HAITU__*` + `EMBEDDING__*` env vars wired in `common/docker-compose.yml`.
+
+---
+
+## hAITU Post-Exam Review (G4.3)
+
+### POST /api/haitu/exam-review-chat
+- Purpose: Stream a review chat (no RAG — model sees conversation only) about a completed exam session
+- Auth: student (`X-Current-Role: student`); CSRF required
+- Request: `ExamReviewChatRequest { attempt_id: UUID, message: str, history: list[{role, content}] }`
+- Response: `text/plain` streaming chunks (plain text, not SSE frames); chunks are model token output
+- Errors: 403 if session not found, not owned by the authenticated student, or `status != completed`
+- APISIX route `21-api-haitu-exam-review.json`: priority 20 (beats api-write), send/read timeout 600 s, `proxy-buffering` disabled (streaming), `limit-count` 20/60s per IP → 429, `request-validation` (requires `Content-Type: application/json`; body must include `attempt_id` (UUID), `message` (string), `history` (array)); WAF NL exclusion inherited from secured-api
+
+### POST /api/haitu/pattern-analysis
+- Purpose: Analyse incorrect answers in a completed exam session and return a pattern + recommendation summary
+- Auth: student (`X-Current-Role: student`); CSRF required
+- Request: `PatternAnalysisRequest { attempt_id: UUID }`
+- Response: `PatternAnalysisResponse { patterns: list[str], recommendations: list[str] }` — empty lists when no incorrect answers exist or when the LLM JSON response cannot be parsed
+- Errors: 403 if session not found, not owned, or `status != completed`
+- Implementation: loads `ExamSessionQuestions` + resolves `question_text` via `QuestionService`; builds a prompt with incorrect Q&A pairs; calls `HaituService.answer_no_rag()` with a structured JSON system prompt; parses `{"patterns":[…],"recommendations":[…]}` from the LLM output; falls back to empty lists on `JSONDecodeError`
+- APISIX route `22-api-haitu-pattern-analysis.json`: priority 20, normal JSON POST (no streaming), send 10 s / read 60 s timeout, `limit-count` 20/60s per IP → 429, `request-validation` (requires `Content-Type: application/json`; body must include `attempt_id` (UUID)); WAF NL exclusion inherited from secured-api
 
 ---
 
