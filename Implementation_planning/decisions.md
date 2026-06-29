@@ -4,6 +4,91 @@
 
 ---
 
+## 2026-06-28 — Phase 4 G4 refine: mastery + post-exam review (reconciled against built code)
+
+> `/plan` reconciliation cycle. G0–G3 + the G2-patch are built and checked; G4 is the only
+> remaining work. The user chose **Option 1 (Refine)** — keep the existing G4 decomposition,
+> reconcile the baseline to current HEADs, verify G4 tasks against the now-built G1–G3
+> code, and re-challenge the tree. Three parallel context agents gathered target specs +
+> current state + live-code ground truth; 1 challenger round on the ranked execution options
+> (inlined) + 1 challenger round on the decomposition (13-point checklist). Baseline advanced
+> to backend `9d27e8c`, frontend `23e1a45`, deploy `2ca21d4`. Plan: `Implementation_planning/PLAN.md` (G4 only, refined). Both `UNRESOLVED`
+> items resolved on a second look (2026-06-28): enrollment↔topic direction confirmed via
+> `get_subtree_node_ids`; recovery gate = dedicated `student_risk_state` table folded into V37.
+
+- **FLIP — `questions.topic_id` must be ADDED in V37, not merely verified (supersedes the
+  2026-06-24 Decision #4).** Live-code verification proves the column does not exist in any
+  migration, the SQLAlchemy `questions` Table, the `Question` dataclass, or
+  `QuestionRepository.get_by_ids`. The 2026-06-24 assertion ("already exists as a NOT NULL
+  soft FK per `01_data_model.md`") was wrong — `target/requirements/01_data_model.md` does
+  not declare it either. V37 now ADDS `questions.topic_id UUID NULL` + a B-tree index, and
+  T4.1.3b extends the `Question` dataclass, Table, and repo loaders. The G4 tree's original
+  T4.1.2 "(+ questions.topic_id only if absent)" hedge was the correct one.
+- **`questions.topic_id` is NULLABLE, no backfill.** NOT NULL is not enforceable because
+  legacy rows have no topic linkage and there is no clean backfill source. The application
+  layer requires `topic_id` for newly created questions; legacy rows stay NULL and mastery
+  recalc skips them (BR-PROGRESS edge case c).
+- **`exam_templates.topic_id` is NOT added (avoid scope creep).** The vision spec puts
+  `topic_id` on `exam_templates` (BR-EXAM-PURPOSE-001), but G4 needs per-question topic
+  attribution for multi-topic exams, which only `questions.topic_id` provides.
+  `questions.topic_id` is the single source of truth for mastery attribution and works for
+  both quiz (single-topic) and exam (multi-topic) purposes.
+- **`enrollment_topics` FKs to `student_enrollments(id)`, not the vision's `enrollments`.**
+  The target data model has `student_enrollments` (V34, UNIQUE(`student_sub`,
+  `course_path_node_id`)); the vision `enrollments` table does not exist in target. Concrete
+  SQL DDL (PK, UNIQUE(`student_enrollment_id`, `topic_id`), indexes) authored in T4.1.1 —
+  the vision spec only had a dataclass.
+- **Review endpoint path is `GET /api/exam-sessions/session/{id}/answers`** (live path), not
+  `.../review`. S05 consumes `/answers`, which already returns per-question `is_correct`,
+  `earned_points`, `points`, `explanation`, `user_answer_options`,
+  `correct_answer_options`, `ai_feedback`, `grading_status`.
+- **`HaituService` gets a public no-RAG method (T4.3.1a).** `answer()`/`stream_answer()` run
+  the full 4-stage RAG; the underlying `_dispatch_llm`/`_stream_llm`/`_call_llm_raw` are
+  private. G4.3's exam-review-chat + pattern-analysis need an LLM call WITHOUT the RAG
+  retrieval stages, so a new public `answer_no_rag(messages, max_tokens)` /
+  `stream_no_rag(prompt, cancel_event)` is added — reusing the provider dispatch without
+  touching the sacred RAG pipeline. `HaituRateLimiter` (in-mem `(sub, hour_bucket)`, 20/hr,
+  singleton) is reused for both new endpoints.
+- **New T4.2.1d — wire MasteryService into the manual essay release/finalize/override path.**
+  The draft only wired the `submit_exam` completed branch and the essay auto-release hook.
+  Challenger caught that `recompute_score` is also called on the manual release/finalize/
+  override path (`exam_session.py` ~L1228, ~L1323); a teacher-released essay exam would
+  never trigger mastery recalc. T4.2.1d closes the BR-PROGRESS coverage gap.
+- **`student_at_risk` recovery gate is persistence-based, not in-memory.** Fire on the
+  rising edge (<3 → ≥3) AND only if no active/unresolved `student_at_risk` notification
+  exists for the student; clear when `count_weak_for_student` returns to 0. In-memory would
+  not survive worker restarts and breaks multi-worker. Exact persistence mechanism
+  (notifications-table derived query vs dedicated flag) left `UNRESOLVED` for the
+  implementer.
+- **Body params canonicalized to `attempt_id`** (= `exam_sessions.id`) for both new hAITU
+  endpoints, resolving the vision student-spec (`session_id`) vs haitu-spec (`attempt_id`)
+  discrepancy.
+- **Spec-first execution ordering (user-chosen Option 1).** T4.1.1 resolves all divergences
+  (enrollment_topics DDL, BR-PROGRESS rules, S05, exam-review contracts, `BR-TCH-004`
+  definition, `attempt_id` canonicalization, 403 guards) BEFORE any backend code, so every
+  downstream backend task is unambiguous.
+- **`BR-TCH-004` defined** in `target/requirements/04_teacher_tutor.md` (was grep-zero):
+  ≥3 weak topics → `student_at_risk` shared-queue notification for instructors; no re-fire
+  until the student recovers above 60% on all weak topics and drops again. References
+  BR-NOTIF-010 for the firing mechanism.
+- **Enrollment↔topic coverage rule (UNRESOLVED #1 resolved 2026-06-28).** A topic is covered
+  by an enrollment when the enrolled `course_path_node` is the topic's node or an **ancestor**
+  of it — confirmed by `get_subtree_node_ids` (`course_path_node_repository.py:246-250`)
+  expanding the enrolled root downward to descendants. Multi-enrollment tie-break:
+  **deepest (closest-ancestor)** match wins; skip the topic (no `enrollment_topics` row) if
+  no enrollment covers it. Rejected the descendant-expansion alternative after verifying the
+  CTE direction.
+- **`student_at_risk` recovery gate = dedicated `student_risk_state` table (UNRESOLVED #2
+  resolved 2026-06-28).** A new `student_risk_state(student_sub PK, at_risk_active BOOL,
+  last_fired_at TIMESTAMPTZ)` table, created in V37 (no extra migration — V37 is new; no FK
+  on `student_sub` per the sacred no-FK-on-identity rule). Fire only on the rising edge
+  (<3 → ≥3) AND `at_risk_active == false`; set `true` on fire, `false` when
+  `count_weak_for_student == 0`. This gives exact BR-TCH-004 hysteresis. Rejected the
+  pure-notifications-table derivation (cannot detect "recovered since last fire" — recovery
+  leaves no record) and the time-window approximation (leaks refires after the window).
+
+---
+
 ## 2026-06-24 — Phase 4 planning: doubt persistence + teacher escalation + notifications + mastery/post-exam review
 
 > `/plan` cycle for Phase 4. Root goal: a student's hAITU doubt becomes a persistent thread a teacher can escalate into and reply to, with notifications, and the student gains mastery tracking + a post-exam hAITU review. Seven load-bearing decisions locked; two Challenger rounds passed (round-1 raised 2 Blockers + 7 Majors, all resolved by re-splitting multi-repo tasks and adding the course_path_node_repo + escalate-mount fixes; round-2 verdict READY TO WRITE). Plan: `Implementation_planning/PLAN.md` (G0–G4, 17 subgoals, 65 tasks). Baseline SHAs: backend `6ec91ab`, frontend `47e4ec2`, deploy `3178451`.

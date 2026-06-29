@@ -1,8 +1,8 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:e92a045 frontend:9e92e31 deploy:2f623f0 (2026-06-24)
-> Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0 is the P0 stabilization that must land first.
+> Last baselined: backend:9d27e8c frontend:23e1a45 deploy:2ca21d4 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
+> Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0–G3 + G2-patch are done; G4 is the remaining work.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
 
@@ -102,32 +102,47 @@
 - [x] T2p.2 [backend]: `find_or_create_doubt` — treat `answered` like `resolved` (do not reuse); depends on T2p.1 (2026-06-29)
 - [x] T2p.3 [frontend]: `canEscalate` in `doubt-status.ts` already correct — smoke-test that teacher-help button appears on the new thread; no code change expected (2026-06-29)
 
-## G4 — Mastery + post-exam review [specs][backend][frontend]
+## G4 — Mastery + post-exam review [specs][backend][frontend][deploy]
 
-### G4.1 — Exam→topic linkage + enrollment_topics schema
-- [ ] T4.1.1 [specs]: 01/03/11 — enrollment_topics + exam→topic decision + S05 + exam-review
-- [ ] T4.1.2 [backend]: V37 migration: enrollment_topics (+ questions.topic_id only if absent) (depends on T4.1.1, T3.1.2)
-- [ ] T4.1.3a [backend]: EnrollmentTopic model + repository (depends on T4.1.2)
-- [ ] T4.1.3b [backend]: Map questions.topic_id in the Question model (depends on T4.1.2)
+> Refined 2026-06-28. Key reconciliation: `questions.topic_id` does NOT exist in live code —
+> V37 must ADD it (NULLABLE, no backfill). `exam_templates.topic_id` is NOT added.
+> Review endpoint is `GET /api/exam-sessions/session/{id}/answers` (not `.../review`).
+> New T4.2.1d covers the manual essay release/finalize/override mastery path. Both
+> `UNRESOLVED` items resolved 2026-06-28 (second look): enrollment↔topic direction confirmed
+> via `get_subtree_node_ids` (deepest-match attribution, skip-if-uncovered); recovery gate =
+> dedicated `student_risk_state` table folded into V37 (T4.1.2).
 
-### G4.2 — Mastery recalc service
-- [ ] T4.2.1a [backend]: MasteryService + per-topic recalc algorithm (depends on T4.1.3a, T4.1.3b)
-- [ ] T4.2.1b [backend]: Wire MasteryService into submit_exam (depends on T4.2.1a)
-- [ ] T4.2.1c [backend]: Wire MasteryService into essay-grading auto-complete (depends on T4.2.1a)
-- [ ] T4.2.2 [backend]: topic_marked_weak + student_at_risk notifications (depends on T4.2.1a, T3.1.4)
+### G4.1 — Exam↔topic linkage + enrollment_topics schema (V37)
+- [ ] T4.1.1 [specs]: Author all G4 spec deltas + lock divergences (01/03/11/04) (no deps)
+- [ ] T4.1.2 [backend]: V37 migration: add questions.topic_id (NULLABLE) + enrollment_topics + student_risk_state (depends on T4.1.1)
+- [ ] T4.1.3a [backend]: EnrollmentTopic domain model + repository (depends on T4.1.2)
+- [ ] T4.1.3b [backend]: Map questions.topic_id in Question model + repo (depends on T4.1.2)
+- [ ] **G4.1: Exam↔topic linkage + enrollment_topics schema (V37)** — integration test
+
+### G4.2 — MasteryService + notifications
+- [ ] T4.2.1a [backend]: MasteryService.recompute_for_session algorithm (depends on T4.1.3a, T4.1.3b, T4.2.2)
+- [ ] T4.2.1b [backend]: Wire MasteryService into submit_exam completed branch (depends on T4.2.1a, T4.2.2)
+- [ ] T4.2.1c [backend]: Wire MasteryService into essay-grading auto-complete + worker DI (depends on T4.2.1a, T4.2.2)
+- [ ] T4.2.1d [backend]: Wire MasteryService into manual release/finalize/override path (depends on T4.2.1a, T4.2.2)
+- [ ] T4.2.2 [backend]: topic_marked_weak + student_at_risk w/ persistence recovery gate (depends on T4.2.1a, T3.1.4)
+- [ ] **G4.2: MasteryService + notifications** — integration test
 
 ### G4.3 — Post-exam hAITU review (S05)
-- [ ] T4.3.1a [backend]: POST /api/haitu/exam-review-chat (depends on T4.1.3b)
-- [ ] T4.3.1b [backend]: POST /api/haitu/pattern-analysis (in-memory cache) (depends on T4.1.3b)
-- [ ] T4.3.2 [frontend]: S05 exam review screen + hAITU review chat (depends on T4.3.1a, T4.3.1b)
+- [ ] T4.3.1a [backend]: Public no-RAG LLM methods on HaituService (no deps)
+- [ ] T4.3.1b [backend]: POST /api/haitu/exam-review-chat + POST /api/haitu/pattern-analysis (depends on T4.3.1a, T4.1.3b, T4.1.1)
+- [ ] T4.3.1c [deploy]: APISIX routes for both endpoints (depends on T4.3.1b, T4.1.1)
+- [ ] T4.3.2 [frontend]: S05 review screen + hAITU review chat (depends on T4.3.1b, T4.3.1c, T4.1.1)
+- [ ] **G4.3: Post-exam hAITU review (S05)** — integration test
 
 ### G4.4 — Weak-topic flags + dashboard
-- [ ] T4.4.1 [backend]: Student home API exposes weak-topic flags (depends on T4.1.3a)
-- [ ] T4.4.2 [frontend]: Weak-topic flags on student dashboard (depends on T4.4.1)
-- [ ] **G4: Mastery + post-exam review** — integration test
+- [ ] T4.4.1 [backend]: StudentDashboardRead exposes weak_topics (depends on T4.1.3a)
+- [ ] T4.4.2 [frontend]: Focus areas weak-topic strip on /home (depends on T4.4.1)
+- [ ] **G4.4: Weak-topic flags + dashboard** — integration test
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- **G2: Teacher escalation** — integration test (all G2 subtasks now done; requires backend running)
-- T2p.3 [frontend]: `canEscalate` in `doubt-status.ts` already correct — smoke-test that teacher-help button appears on the new thread; no code change expected (depends on T2p.2 ✅)
-- T4.1.1 [specs]: 01/03/11 — enrollment_topics + exam→topic decision + S05 + exam-review (no deps)
+- T4.1.1 [specs]: Author all G4 spec deltas + lock divergences (01/03/11/04) (no deps)
+- T4.3.1a [backend]: Public no-RAG LLM methods on HaituService (no deps — HaituService + rate limiter exist from G3)
+
+These two can run in parallel: spec-writing unblocks the backend; the hAITU no-RAG method is
+independent of the spec deltas.
