@@ -352,17 +352,53 @@ If the attempt has zero wrong answers, the endpoint returns a neutral opening me
 
 ### 8.3 API contracts
 
+> **Streaming update (G4.3-patch, 2026-06-30):** Both endpoints were originally specified as
+> single-shot JSON POSTs. Gateway idle-timeout (≈60 s) caused 504s on long LLM generations —
+> the same issue that prompted the `topic-doubt` SSE conversion in Phase 3. Both endpoints are
+> now **SSE-streamed** (primary), with JSON as a secondary fallback. The wire format below
+> matches the Phase 3 `topic-doubt` contract exactly so the frontend can reuse the existing
+> `consumeHaituSSE` / `parseHaituFrame` consumer.
+
+#### SSE wire format (primary — applies to both endpoints)
+
+```
+Content-Type: text/event-stream
+X-Accel-Buffering: no          ← disables nginx proxy buffering
+
+Frames (each = one or more "data: …" lines + blank line):
+  data: {"token":"<markdown chunk>"}\n\n   ← incremental output; concatenating all tokens
+                                             reproduces the full JSON-fallback answer
+  data: {"done":true}\n\n                  ← sent once at the end
+  data: {"error":"<message>"}\n\n          ← mid-stream error (after streaming starts)
+  : ping\n\n                               ← heartbeat every 15 s during silent phases
+
+Non-200 errors (ownership, status gate, CSRF, rate limit) are returned as HTTP errors
+BEFORE streaming starts — the same as topic-doubt.
+```
+
+Frontend idle timeout: 45 s (three missed heartbeats). Total stream backstop: 300 s.
+Backend must emit `: ping` every 15 s whenever no token has been sent for ≥15 s.
+
+#### JSON fallback (secondary — for non-streaming callers / tests)
+
 ```
 POST /api/haitu/exam-review-chat
 → Auth: student (CSRF required; X-Current-Role: student)
-→ Body: {attempt_id: uuid, message: str, history: [{role, content}]}
-→ Returns: {response: str}
-→ Token limit: 500 (configurable by SuperAdmin; see §5 of the vision spec)
+→ Body: {attempt_id: uuid, message: str, history: [{role: str, content: str}]}
+       Note: history[].content is REQUIRED — omitting it produces a 422.
+       session_id is accepted as a deprecated alias for attempt_id (same value).
+→ Primary:  text/event-stream — token frames as above
+→ Fallback: {"response": "<markdown>"}   ← object form only; bare-string form is retired
+→ Token limit: 500
 
 POST /api/haitu/pattern-analysis
 → Auth: student (CSRF required; X-Current-Role: student)
 → Body: {attempt_id: uuid}
-→ Returns: {analysis: str}
+→ Primary:  text/event-stream — token frames as above
+→ Fallback: {"analysis": "<markdown>"}   ← retained for tests / non-streaming callers
+→ Not-ready: HTTP 202  {"status": "pending"}  ← when analysis not yet computed
+             (replaces the old empty {"patterns":[],"recommendations":[]} 200)
+→ Idempotent per attempt_id (duplicate concurrent calls must return the same result)
 → Cached per attempt_id (see §8.4)
 ```
 
@@ -370,6 +406,11 @@ POST /api/haitu/pattern-analysis
 
 `pattern-analysis` is **cached per `attempt_id`** — the analysis is generated once for an attempt
 and reused across page loads / follow-ups within the same review session.
+
+**Not-ready state:** when the cache entry is absent on first call (analysis not yet computed),
+the endpoint returns `HTTP 202 {"status": "pending"}` instead of the previous empty
+`{"patterns":[],"recommendations":[]} 200`. The frontend must distinguish this from an empty
+analysis and show a graceful "Preparing your review…" state rather than an error.
 
 > **v1 limitation:** the cache is **in-memory per worker**, not cross-process. With a single
 > worker (current scale) this gives exact per-attempt caching; under multi-worker deployment the
@@ -400,14 +441,35 @@ Both endpoints enforce, in order:
 These apply to both `exam-review-chat` and `pattern-analysis`, ported from the vision spec §7:
 
 - **BR-AI-001:** If the LLM call fails (timeout, rate limit from the provider, 5xx), the backend
-  returns a graceful fallback response rather than propagating the error — `exam-review-chat`
-  returns `{"response": "I couldn't generate an explanation right now. Please try again in a
-  moment."}`; `pattern-analysis` returns `{"analysis": "Pattern analysis is temporarily
-  unavailable."}`. The S05 UI degrades gracefully (the chat remains usable; the opening message
-  shows the fallback).
-- **BR-AI-002:** All hAITU API calls have a 30-second timeout. If exceeded, return `504` with the
-  fallback message above (the response body is the fallback string, the HTTP status is `504` so the
-  client can distinguish a provider failure from a normal response).
+  emits `data: {"error":"I couldn't generate an explanation right now. Please try again in a
+  moment."}\n\n` (SSE primary) or returns the equivalent JSON fallback body. The S05 UI
+  degrades gracefully — if no tokens were received, show a non-blocking error notice and keep
+  the seed opening message visible; if tokens were partially received, keep the partial reply.
+- **BR-AI-002:** Backend LLM timeout is 30 s per call. Gateway timeout is 600 s (backstop).
+  If the LLM times out, the backend emits the BR-AI-001 error frame before closing the stream.
+  The old `504` contract (HTTP status = 504) is superseded by the SSE error frame — the stream
+  starts with 200, and errors mid-stream are signalled via the `{"error":…}` frame.
 - **BR-AI-003:** Rate limiting — max 20 hAITU calls per student per hour (the `HaituRateLimiter`
-  shared with `topic-doubt`). Exceeding returns `429` with: "You've reached the limit for AI
-  assistance this hour. Please try again later."
+  shared with `topic-doubt`). Exceeding returns `429` as an HTTP error **before** streaming
+  starts (same as `topic-doubt`).
+
+### 8.7 APISIX / gateway requirements (updated)
+
+Both APISIX routes (`21-api-haitu-exam-review.json`, `22-api-haitu-pattern-analysis.json`) must:
+
+- Set `proxy_read_timeout` and `proxy_send_timeout` to **600 s** (was default ≈60 s — the 504 cause).
+- Set `proxy-buffering: false` (required for SSE flushing — same as the `topic-doubt` route).
+- Pass through the `X-Accel-Buffering: no` response header from the upstream.
+
+### 8.8 Frontend graceful degradation contract (S05)
+
+The S05 review chat panel must never be blank:
+
+1. **Seed immediately:** on S05 load, seed the chat with one AI bubble: `"I've reviewed your
+   exam. Ask me about any question you'd like to go over."` before the `pattern-analysis` call.
+2. **Replace on stream:** on first token from `pattern-analysis`, replace the seed bubble and
+   append subsequent tokens to it.
+3. **Keep seed on empty/pending/timeout:** if `pattern-analysis` returns 202 pending, times out,
+   or errors, keep the seed bubble — do not replace it with an error banner.
+4. **Non-blocking notice:** on error, show a dismissible notice alongside the seed (not instead
+   of it); the chat input remains usable.

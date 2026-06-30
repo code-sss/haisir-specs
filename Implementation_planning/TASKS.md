@@ -117,7 +117,7 @@
 - [x] T4.1.2 [backend]: V37 migration: add questions.topic_id (NULLABLE) + enrollment_topics + student_risk_state (depends on T4.1.1) (2026-06-29)
 - [x] T4.1.3a [backend]: EnrollmentTopic domain model + repository (depends on T4.1.2) (2026-06-29)
 - [x] T4.1.3b [backend]: Map questions.topic_id in Question model + repo (depends on T4.1.2) (2026-06-29)
-- [ ] **G4.1: Exam↔topic linkage + enrollment_topics schema (V37)** — integration test
+- [x] **G4.1: Exam↔topic linkage + enrollment_topics schema (V37)** — integration test (2026-06-30)
 
 ### G4.2 — MasteryService + notifications
 - [x] T4.2.1a [backend]: MasteryService.recompute_for_session algorithm (depends on T4.1.3a, T4.1.3b, T4.2.2) (2026-06-29)
@@ -125,19 +125,81 @@
 - [x] T4.2.1c [backend]: Wire MasteryService into essay-grading auto-complete + worker DI (depends on T4.2.1a, T4.2.2) (2026-06-29)
 - [x] T4.2.1d [backend]: Wire MasteryService into manual release/finalize/override path (depends on T4.2.1a, T4.2.2) (2026-06-29)
 - [x] T4.2.2 [backend]: topic_marked_weak + student_at_risk w/ persistence recovery gate (depends on T4.2.1a, T3.1.4) (2026-06-29)
-- [ ] **G4.2: MasteryService + notifications** — integration test
+- [x] **G4.2: MasteryService + notifications** — integration test (2026-06-30)
 
 ### G4.3 — Post-exam hAITU review (S05)
 - [x] T4.3.1a [backend]: Public no-RAG LLM methods on HaituService (no deps) (2026-06-29)
 - [x] T4.3.1b [backend]: POST /api/haitu/exam-review-chat + POST /api/haitu/pattern-analysis (depends on T4.3.1a, T4.1.3b, T4.1.1) (2026-06-29)
 - [x] T4.3.1c [deploy]: APISIX routes for both endpoints (depends on T4.3.1b, T4.1.1) (2026-06-29)
 - [x] T4.3.2 [frontend]: S05 review screen + hAITU review chat (depends on T4.3.1b, T4.3.1c, T4.1.1) (2026-06-29)
-- [ ] **G4.3: Post-exam hAITU review (S05)** — integration test
+- [x] **G4.3: Post-exam hAITU review (S05)** — integration test (2026-06-30) — 7a–7f verified manually; 7g (pattern-analysis SSE streaming) blocked by gateway timeout, tracked as G4-patch T4p.2.2/T4p.4.2
 
 ### G4.4 — Weak-topic flags + dashboard
 - [x] T4.4.1 [backend]: StudentDashboardRead exposes weak_topics (depends on T4.1.3a) (2026-06-29)
 - [x] T4.4.2 [frontend]: Focus areas weak-topic strip on /home (depends on T4.4.1) (2026-06-29)
-- [ ] **G4.4: Weak-topic flags + dashboard** — integration test
+- [x] **G4.4: Weak-topic flags + dashboard** — integration test (2026-06-30) — strip renders with correct topics and mastery %; link bug (href undefined) found and fixed (T4p.5.3/T4p.5.4); strip absent after recovery verified (T6)
+
+## G4-patch — S05 streaming + bug fixes found during G4 testing [backend][frontend][deploy][specs]
+
+> Found during manual G4 walkthrough (2026-06-30). Root cause: exam-review-chat and
+> pattern-analysis are slow no-RAG LLM calls behind a gateway with a ~60 s idle timeout —
+> the same issue that triggered the topic-doubt SSE conversion in Phase 3. Also captures
+> three bug fixes (action_url, focus-areas-strip href, WeakTopicRead.enrollment_id) already
+> applied, and one open gap (has_exam hardcoded false).
+
+### G4p.1 — Spec update
+- [x] T4p.1.1 [specs]: Update 11_haitu_ai_layer.md §8 — SSE wire format for exam-review-chat
+  + pattern-analysis; 202 pending state; 8.7 gateway requirements; 8.8 frontend degradation
+  contract (2026-06-30)
+
+### G4p.2 — Backend: stream both endpoints
+- [ ] T4p.2.1 [backend]: Stream POST /api/haitu/exam-review-chat over SSE (token frames +
+  heartbeats + done; JSON fallback {"response":str}; history[].content required; accept
+  session_id as deprecated alias for attempt_id) (depends on T4p.1.1)
+- [ ] T4p.2.2 [backend]: Stream POST /api/haitu/pattern-analysis over SSE + add 202 pending
+  state (token frames + heartbeats + done; 202 {"status":"pending"} when not ready; idempotent
+  per attempt_id; JSON fallback {"analysis":str}) (depends on T4p.1.1)
+- [ ] T4p.2.3 [backend]: DTO alignment — pin exam-review-chat JSON fallback to {"response":str}
+  object form only; canonicalize attempt_id (document session_id as deprecated alias); pin
+  pattern-analysis fallback to {"analysis":str}; verify /answers shape matches spec (items,
+  question_text, string-ID *_answer_options) (depends on T4p.2.1, T4p.2.2)
+
+### G4p.3 — Deploy: gateway timeouts
+- [ ] T4p.3.1 [deploy]: Update APISIX routes 21-api-haitu-exam-review.json and
+  22-api-haitu-pattern-analysis.json — proxy_read_timeout 600 s, proxy_send_timeout 600 s,
+  proxy-buffering false (was missing, causing 504s) (depends on T4p.1.1)
+
+### G4p.4 — Frontend: streaming consumer + graceful opening
+- [ ] T4p.4.1 [frontend]: Stream exam-review-chat on the frontend — add Accept:
+  text/event-stream to askExamReviewChat, route through consumeHaituSSE, lazy AI bubble on
+  first token, abort on attempt-id switch/unmount, 45 s idle / 300 s total backstop, JSON
+  fallback; resend badge only on clean failure (no tokens received) (depends on T4p.2.1)
+- [ ] T4p.4.2 [frontend]: Stream pattern-analysis + graceful opening — seed chat with friendly
+  fallback opening before the call; on first token replace seed + append; on
+  202/timeout/error keep seed + show non-blocking notice; update useExamReviewChat effect
+  (depends on T4p.2.2)
+- [ ] T4p.4.3 [frontend]: Update unit tests for streaming (lazy bubble, token append, abort,
+  JSON fallback, resend still works, seed→replace for pattern-analysis, seed kept on
+  empty/pending/timeout); maintain 100% coverage (depends on T4p.4.1, T4p.4.2)
+
+### G4p.5 — Bug fixes applied during testing (already fixed, tracked for record)
+- [x] T4p.5.1 [backend]: Fix topic_marked_weak action_url — was /home/topics/{enrollment_id}
+  (wrong ID type + non-existent route); fixed to /courses?topic={topic_id} (2026-06-30)
+- [x] T4p.5.2 [backend]: Fix student_at_risk action_url — was /teacher/student/{sub}
+  (non-existent route); fixed to /teacher/doubts (2026-06-30)
+- [x] T4p.5.3 [backend]: Add enrollment_id to WeakTopicRead schema — field was declared in
+  frontend WeakTopic type but never returned by the API (2026-06-30)
+- [x] T4p.5.4 [frontend]: Fix focus-areas-strip chip href — was /home/topics/{enrollment_id}
+  (undefined + non-existent route); fixed to /courses?topic={topic_id} (2026-06-30)
+
+### G4p.6 — Open gap: has_exam hardcoded false
+- [ ] T4p.6.1 [backend]: Wire has_exam in GET /api/student/nodes/{id}/topics — currently
+  hardcoded false (comment: "exam linkage not yet implemented"); query exam_templates for a
+  published template scoped to the topic's node and return true when one exists. This is
+  required for the "Take Exam" button to appear in the new /courses student navigator.
+  Until fixed, students must use the legacy /exam?node_id= page to start exams.
+- [ ] T4p.6.2 [frontend]: Once T4p.6.1 lands, wire "Take Exam" click in TopicListPanel to
+  navigate to /exam?node_id={nodeId} (or start a session directly) (depends on T4p.6.1)
 
 ## Ready now
-All G4 implementation tasks complete. Remaining work: integration tests for G4.1–G4.4.
+G4 implementation tasks complete. Pending: integration tests for G4.1–G4.4 and G4-patch tasks.
