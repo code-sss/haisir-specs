@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:9841027 frontend:efc33d8 deploy:fc29884 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
+> Last baselined: backend:9841027 frontend:2c9ba5d deploy:fc29884 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0–G3 + G2-patch are done; G4 is the remaining work.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -202,8 +202,8 @@
   published template scoped to the topic's node and return true when one exists. This is
   required for the "Take Exam" button to appear in the new /courses student navigator.
   Until fixed, students must use the legacy /exam?node_id= page to start exams.
-- [ ] T4p.6.2 [frontend]: Once T4p.6.1 lands, wire "Take Exam" click in TopicListPanel to
-  navigate to /exam?node_id={nodeId} (or start a session directly) (depends on T4p.6.1)
+- [x] T4p.6.2 [frontend]: Once T4p.6.1 lands, wire "Take Exam" click in TopicListPanel to
+  navigate to /exam?node_id={nodeId} (or start a session directly) (depends on T4p.6.1) (2026-07-01)
 
 ## Ready now
 - **G4p.2 [backend] DONE (2026-07-01)**: T4p.2.1/T4p.2.2/T4p.2.3 — exam-review-chat and
