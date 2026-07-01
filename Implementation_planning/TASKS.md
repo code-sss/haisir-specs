@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:d612a66 frontend:efc33d8 deploy:fc29884 (2026-07-01 — refined; G0–G3 + G2-patch complete, G4 remaining)
+> Last baselined: backend:d612a66 frontend:efc33d8 deploy:457de26 (2026-07-01 — refined; G0–G3 + G2-patch complete, G4 remaining)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0–G3 + G2-patch are done; G4 is the remaining work.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -265,12 +265,15 @@
   unaffected — no change expected. Maintain 100% coverage. (depends on T4p2.2, T4p2.3) (2026-07-01)
 
 ### G4p2.3 — Deploy: verify gateway readiness (no config change expected)
-- [ ] T4p2.6 [deploy]: Verify `22-api-haitu-pattern-analysis.json` needs no change —
+- [x] T4p2.6 [deploy]: Verify `22-api-haitu-pattern-analysis.json` needs no change —
   `proxy-buffering` disabled + 600s send/read timeouts already shipped in G4p.3 are sufficient for
   a request that now holds the connection open for the full generation instead of returning
   instantly. Note as a watch-item (not a blocker at current scale): longer-held connections make
   the existing `limit-conn: 20 / burst 10 per remote_addr` easier to reach under bursty same-IP
-  load (e.g. a classroom finishing exams around the same time). (depends on T4p2.2)
+  load (e.g. a classroom finishing exams around the same time). (depends on T4p2.2) (2026-07-01) —
+  verified against `haisir-backend@0bcb289` (inline-stream + `asyncio.shield` fix): `jq` confirms
+  `upstream.timeout.read`/`send` = 600, `proxy-buffering.disable_proxy_buffering` = true; no file
+  change required
 
 ### G4p2.4 — Frontend: none required
 - No frontend changes. The existing `useExamReviewChat`/`consumeHaituSSE` consumer (shipped in
@@ -278,11 +281,13 @@
   on the very first call instead of never arriving. No polling loop is being added.
 
 ## Ready now
-- **T4p2.6 [deploy] (2026-07-01)**: only remaining G4-patch-2 task. Backend portion
-  (T4p2.1–T4p2.5) is complete; verify the `22-api-haitu-pattern-analysis.json` APISIX route
-  needs no change (proxy-buffering disabled + 600 s timeouts already shipped in G4p.3 are
-  sufficient for the now-inline-held connection). Once T4p2.6 closes, resume G4 test-plan
-  items T7(g) and T8.
+- **No unchecked tasks remain in TASKS.md.** G4-patch-2 [specs][backend][deploy] is fully
+  closed (2026-07-01): T4p2.1 (specs) + T4p2.2–T4p2.5 (backend) + T4p2.6 (deploy, verified
+  no config change needed) + G4p2.4 (frontend — none required). G4 (and G4-patch,
+  G4-patch-2) are complete on paper; the outstanding step is the **live end-to-end
+  verification**, not tracked as a TASKS.md checkbox: resume `g4_test_plan.md` items T7(g)
+  (pattern-analysis SSE streaming against a running stack) and T8. Nobody has run those
+  against a live stack yet as of this update — do that before considering G4 fully closed.
 - **G4-patch-2 [backend][specs] DONE (2026-07-01)**: T4p2.1 (spec correction) + T4p2.2–T4p2.5
   (backend) — pattern-analysis cache-miss now computes inline: SSE callers stream real tokens
   on the first call via a detached `asyncio.Task` that broadcasts to a per-request queue; JSON
@@ -291,6 +296,9 @@
   `_persist_task` in `post_topic_doubt` hardened with a strong-reference registry. 202 contract
   removed (unreachable same-worker under the v1 in-memory-per-worker model); schema retained.
   100% coverage held (4115 tests).
+- **G4p2.3 [deploy] DONE (2026-07-01)**: T4p2.6 — verified `22-api-haitu-pattern-analysis.json`
+  needs no change against `haisir-backend@0bcb289`; `jq` confirms 600s read/send timeouts +
+  proxy-buffering disabled already present.
 - **G4p.2 [backend] DONE (2026-07-01)**: T4p.2.1/T4p.2.2/T4p.2.3 — exam-review-chat and
   pattern-analysis now SSE-streamed (token frames + 15 s heartbeats + done event; 202 pending
   pattern; JSON fallback {"response":str} / {"analysis":str}; attempt_id canonical,
