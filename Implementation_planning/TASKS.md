@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:9d27e8c frontend:23e1a45 deploy:2ca21d4 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
+> Last baselined: backend:9d27e8c frontend:23e1a45 deploy:fc29884 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0–G3 + G2-patch are done; G4 is the remaining work.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -165,9 +165,13 @@
   question_text, string-ID *_answer_options) (depends on T4p.2.1, T4p.2.2)
 
 ### G4p.3 — Deploy: gateway timeouts
-- [ ] T4p.3.1 [deploy]: Update APISIX routes 21-api-haitu-exam-review.json and
+- [x] T4p.3.1 [deploy]: Update APISIX routes 21-api-haitu-exam-review.json and
   22-api-haitu-pattern-analysis.json — proxy_read_timeout 600 s, proxy_send_timeout 600 s,
-  proxy-buffering false (was missing, causing 504s) (depends on T4p.1.1)
+  proxy-buffering false (was missing, causing 504s) (depends on T4p.1.1) (2026-06-30)
+- [x] **G4p.3: Deploy: gateway timeouts** — integration test (2026-06-30) — both route JSON
+  files validated with `jq`; 21-api-haitu-exam-review.json already had 600s/proxy-buffering
+  from T4.3.1c; 22-api-haitu-pattern-analysis.json updated to match (was 60s/10s, no
+  proxy-buffering — the 504 cause for pattern-analysis specifically)
 
 ### G4p.4 — Frontend: streaming consumer + graceful opening
 - [ ] T4p.4.1 [frontend]: Stream exam-review-chat on the frontend — add Accept:
@@ -202,4 +206,6 @@
   navigate to /exam?node_id={nodeId} (or start a session directly) (depends on T4p.6.1)
 
 ## Ready now
-G4 implementation tasks complete. Pending: integration tests for G4.1–G4.4 and G4-patch tasks.
+- **T4p.2.1 [backend]**: Stream `POST /api/haitu/exam-review-chat` over SSE (depends on T4p.1.1, done)
+- **T4p.2.2 [backend]**: Stream `POST /api/haitu/pattern-analysis` over SSE + 202 pending state (depends on T4p.1.1, done)
+- **T4p.6.1 [backend]**: Wire `has_exam` in `GET /api/student/nodes/{id}/topics` (no deps)
