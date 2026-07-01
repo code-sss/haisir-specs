@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 7fd5cd7 (G4 — MasteryService + enrollment_topics V37 + exam-review-chat + pattern-analysis + enrollment status column fix, 2026-06-29) |
-| haisir-frontend | efc33d8 (G4 — ExamReviewPage S05 + FocusAreasStrip + SonarQube fixes, 2026-06-29) |
-| haisir-deploy | fc29884 (G4 — APISIX routes 21 + 22 for hAITU post-exam endpoints, 2026-06-29) |
+| haisir-backend | d612a66 (G4-patch — S05 SSE streaming + IDOR fix + has_exam wired, 2026-07-01) |
+| haisir-frontend | 302ac06 (G4-patch — Take Exam nav + streaming review chat + markdown rendering, 2026-07-01) |
+| haisir-deploy | 457de26 (G4-patch — pattern-analysis route timeouts fixed for streaming, 2026-07-01) |
 
-> Next session: run `git diff 7fd5cd7..HEAD` in haisir-backend, `git diff efc33d8..HEAD` in haisir-frontend, and `git diff fc29884..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff d612a66..HEAD` in haisir-backend, `git diff 302ac06..HEAD` in haisir-frontend, and `git diff 457de26..HEAD` in haisir-deploy to see only what changed since this snapshot. No schema/migration changes in the G4-patch cycle (2026-06-29 → 2026-07-01).
 
 ---
 

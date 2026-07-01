@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-07-01 — G4-patch-2: pattern-analysis first-load fix — polling rejected in favour of inline streaming
+
+> Found during G4 integration testing item T7g (`Implementation_planning/g4_test_plan.md`):
+> the S05 pattern-analysis opening message never appears on a student's first visit. A
+> debugging session against `haisir-backend` in isolation (without visibility into
+> `haisir-deploy`) proposed a client-side polling fix — keep the backend's existing
+> fire-and-forget-then-202 design unchanged, and have the frontend re-POST every 3–5 s for up
+> to ~30–45 s. That proposal was **rejected** after cross-repo investigation + one challenger
+> round (see `TASKS.md` G4-patch-2 for the accepted fix).
+
+- **REJECTED — client-side polling.** The proposal's core claim ("costs nothing extra against
+  the rate-limit budget; no backend changes needed") only holds under a single backend
+  worker. `haisir-backend/Dockerfile:102` bakes `--workers 2` into the image — confirmed as
+  the actual deployed default via `haisir-deploy/common/docker-compose.yml` (no override).
+  `_PATTERN_ANALYSIS_CACHE` is a worker-local Python dict; the APISIX `limit-count` on
+  `22-api-haitu-pattern-analysis.json` is `policy: "local"`; no Redis/memcached/sticky-routing
+  exists anywhere in `haisir-deploy`. A poll landing on the *other* worker process has no
+  visibility into the in-flight computation, re-triggers `HaituRateLimiter.check_and_increment`
+  (the same 20/hr budget shared with `topic-doubt`/`exam-review-chat`), and launches a
+  duplicate LLM computation — burning rate-limit quota and compute cost per poll instead of
+  "nothing extra."
+- **ACCEPTED — inline streaming on cache-miss, backend-only.** `post_pattern_analysis` reuses
+  the SSE machinery already proven in production for `exam-review-chat`
+  (`_generate_sse_from_tokens` / `_pump_token_events` / `HaituService.stream_no_rag`) to compute
+  and stream the analysis inline, within the same request/worker that received the first call.
+  202 becomes a rare cross-worker-race fallback instead of the guaranteed common path. No
+  frontend change is required — the existing SSE consumer (shipped in G4-patch, T4p.4.2)
+  already replaces the seed bubble on the first token.
+- **Bonus finding, folded into the same task group:** the fire-and-forget
+  `asyncio.create_task(...); del _bg` pattern used for the old background computation (and
+  identically for `_persist_task` in `post_topic_doubt`) carries an inline comment claiming
+  "the event loop holds a reference to the task until it completes" — this contradicts
+  asyncio's own documentation (tasks with no external strong reference may be garbage-collected
+  mid-execution). Not proven to have caused an incident, but real enough to fix opportunistically
+  while touching this code (T4p2.3–T4p2.4): store the detached task itself in the cache and have
+  concurrent same-worker requests `await asyncio.shield(task)` rather than a per-request-owned
+  `Future` (a naive Future would hang/cancel-leak if the owning request disconnects).
+
 ## 2026-06-28 — Phase 4 G4 refine: mastery + post-exam review (reconciled against built code)
 
 > `/plan` reconciliation cycle. G0–G3 + the G2-patch are built and checked; G4 is the only

@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 7fd5cd7 (G4 — MasteryService + enrollment_topics V37 + exam-review-chat + pattern-analysis + enrollment status column fix, 2026-06-29) |
-| haisir-frontend | efc33d8 (G4 — ExamReviewPage S05 + FocusAreasStrip + SonarQube fixes, 2026-06-29) |
-| haisir-deploy | fc29884 (G4 — APISIX routes 21 + 22 for hAITU post-exam endpoints, 2026-06-29) |
+| haisir-backend | d612a66 (G4-patch — S05 SSE streaming + IDOR fix + has_exam wired, 2026-07-01) |
+| haisir-frontend | 302ac06 (G4-patch — Take Exam nav + streaming review chat + markdown rendering, 2026-07-01) |
+| haisir-deploy | 457de26 (G4-patch — pattern-analysis route timeouts fixed for streaming, 2026-07-01) |
 
-> Next session: run `git diff 7fd5cd7..HEAD` in haisir-backend, `git diff efc33d8..HEAD` in haisir-frontend, and `git diff fc29884..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff d612a66..HEAD` in haisir-backend, `git diff 302ac06..HEAD` in haisir-frontend, and `git diff 457de26..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -474,15 +474,18 @@
 - Errors: 409 if session already `'completed'` or `'grading_pending'`
 - WAF: protected by dedicated APISIX route `18-api-exam-session-submit.json` (PL2 Coraza); `text_answer` (matching questions submit JSON pair arrays) and `working_text` (may contain mathematical notation) have targeted CRS rule exclusions for RCE/SQLi/XSS false positives; session cookies exempt from rules 942440/932220; all other CRS rules remain active
 
-### GET /api/exam-sessions/session/{session_id}/review
-- Purpose: Get graded results for a completed or grading_pending session
+### GET /api/exam-sessions/session/{session_id}/answers
+- Purpose: Get the graded review payload (S05, called by the frontend `/exam/[session_id]/review` page) for a completed or failed session
 - Auth: student (session owner); exam owner (parent who owns the template, or admin) additionally receives `ai_rationale` per essay question
-- Response: same shape as submit response; matching question answers decoded from raw JSON pairs to `"left_text → right_text"` strings for display (falls back to IDs if option text is unavailable); `earned_points` and `earned_marks` are rounded to 2 decimal places; each answer also includes:
+- Response: `ExamReviewPayload { session_id, template_title, subject, board, score, total_marks, correct_count, wrong_count, skipped_count, total_count, items: ExamReviewItem[] }`
+  - `ExamReviewItem { question_id, question_text, question_type, options, correct_answer_options: str[] (option IDs), user_answer_options: str[] (option IDs), is_correct, points, earned_points, explanation, ai_feedback, model_answer, grading_status, ai_rationale }` — **reworked 2026-07-01** from the prior `ExamSessionAnswer`/`ExamSessionAnswerResponse` shapes: `question` renamed to `question_text`, answer options are now ID lists rather than full option objects, `earned_points` rounded to 2dp, and `passed`/`passing_ratio`/`pending_review_count` were dropped in favour of `correct_count`/`wrong_count`/`skipped_count`
   - `grading_status: str | null` — for essay questions: `pending | ai_graded | released | finalized | overridden | disputed | error`; null for non-essay
   - `ai_feedback: str | null` — visible when `grading_status in ('released','finalized','overridden')`; null otherwise
   - `model_answer: str | null` — the prose model answer set by the exam author; visible to students only when `grading_status in ('released','finalized','overridden')`; null otherwise
   - `explanation: str | null` — the mark scheme/rubric notes set by the exam author; for essay questions gated to same released grade statuses; for non-essay questions always returned
   - `ai_rationale: dict | null` — full LLM output; visible only to exam owner; always null for student callers
+- Errors: 403 if session not owned or `status not in ('completed', 'failed')` (**tightened 2026-07-01** — was 400 for any incomplete attempt, now also 403 and now permits `failed` sessions to be reviewed)
+- Side effect: calls `_finalize_session()` — sets `finished_at` if unset; only transitions `status` `grading_pending → completed` (**bug fix 2026-07-01**: previously any non-`completed` status, including `failed`, was unconditionally overwritten back to `completed`)
 
 ### POST /api/exam-sessions/session/{session_id}/questions/{question_id}/dispute
 - Purpose: Student disputes a released AI grade on an essay question
@@ -562,7 +565,7 @@
 ### GET /api/student/nodes/{node_id}/topics
 - Purpose: Return live topics for a course-path node filtered to student visibility
 - Auth: student
-- Response: `list[StudentTopicRead { id, title, status, order, has_exam (always false this phase) }]`
+- Response: `list[StudentTopicRead { id, title, status, order, has_exam }]` — `has_exam` now reflects a real lookup against `exam_templates`, scoped to BR-DATA-003 visibility + enrolled-subtree authorization (G4p.6, backend `d612a66`; was hardcoded `false`)
 - Only `status='live'` topics returned; draft topics silently excluded
 
 ### GET /api/student/topics/{topic_id}/content
@@ -703,24 +706,29 @@
 
 ---
 
-## hAITU Post-Exam Review (G4.3)
+## hAITU Post-Exam Review (G4.3 + G4-patch streaming, 2026-07-01)
 
 ### POST /api/haitu/exam-review-chat
 - Purpose: Stream a review chat (no RAG — model sees conversation only) about a completed exam session
 - Auth: student (`X-Current-Role: student`); CSRF required
-- Request: `ExamReviewChatRequest { attempt_id: UUID, message: str, history: list[{role, content}] }`
-- Response: `text/plain` streaming chunks (plain text, not SSE frames); chunks are model token output
-- Errors: 403 if session not found, not owned by the authenticated student, or `status != completed`
+- Request: `ExamReviewChatRequest { attempt_id: UUID, message: str, history: list[{role, content}] (default []) }` — `session_id` accepted as a deprecated alias, copied to `attempt_id` via a `model_validator` when `attempt_id` is absent
+- Response: **SSE stream** (`response_model=None`) when the caller sends `Accept: text/event-stream` — frames `data: {"token": str}` repeated, then `data: {"done": true}`; a mid-stream `data: {"error": str}` frame signals failure. **JSON fallback** `ExamReviewChatFallbackResponse { response: str }` when the Accept header is absent.
+- Rate limiting: `HaituRateLimiter` (20 calls/student/hour, in-process) — **newly enforced on this endpoint**; 429 on exceeded
+- Errors: 403 if session not found, not owned by the authenticated student, or `status not in ('completed', 'failed')` (was `!= completed` only)
 - APISIX route `21-api-haitu-exam-review.json`: priority 20 (beats api-write), send/read timeout 600 s, `proxy-buffering` disabled (streaming), `limit-count` 20/60s per IP → 429, `request-validation` (requires `Content-Type: application/json`; body must include `attempt_id` (UUID), `message` (string), `history` (array)); WAF NL exclusion inherited from secured-api
 
 ### POST /api/haitu/pattern-analysis
-- Purpose: Analyse incorrect answers in a completed exam session and return a pattern + recommendation summary
+- Purpose: Analyse incorrect answers in a completed exam session and return a markdown pattern + recommendation summary; result is **cached per `attempt_id`** in a bounded in-process dict (`_PATTERN_ANALYSIS_CACHE`, FIFO eviction once over 10,000 entries — lost on worker restart, acceptable at current scale)
 - Auth: student (`X-Current-Role: student`); CSRF required
-- Request: `PatternAnalysisRequest { attempt_id: UUID }`
-- Response: `PatternAnalysisResponse { patterns: list[str], recommendations: list[str] }` — empty lists when no incorrect answers exist or when the LLM JSON response cannot be parsed
-- Errors: 403 if session not found, not owned, or `status != completed`
-- Implementation: loads `ExamSessionQuestions` + resolves `question_text` via `QuestionService`; builds a prompt with incorrect Q&A pairs; calls `HaituService.answer_no_rag()` with a structured JSON system prompt; parses `{"patterns":[…],"recommendations":[…]}` from the LLM output; falls back to empty lists on `JSONDecodeError`
-- APISIX route `22-api-haitu-pattern-analysis.json`: priority 20, normal JSON POST (no streaming), send 10 s / read 60 s timeout, `limit-count` 20/60s per IP → 429, `request-validation` (requires `Content-Type: application/json`; body must include `attempt_id` (UUID)); WAF NL exclusion inherited from secured-api
+- Request: `PatternAnalysisRequest { attempt_id: UUID }` — `session_id` accepted as a deprecated alias (same aliasing pattern as exam-review-chat)
+- Response:
+  - **SSE stream** (`Accept: text/event-stream`) once the cached result is ready: single `data: {"token": <full analysis>}` frame (replay, not incremental — analysis is pre-computed) then `data: {"done": true}`
+  - **202** `PatternAnalysisPendingResponse { status: "pending" }` while computation for this `attempt_id` is still in-flight (cache holds a `None` sentinel)
+  - **JSON fallback** `PatternAnalysisFallbackResponse { analysis: str }` when the Accept header is absent and the result is ready
+  - Neutral message `"Great work — no wrong answers to analyse on this attempt."` when there are no incorrect answers (no LLM call made)
+  - **Response format changed** from structured `{patterns: [...], recommendations: [...]}` JSON to free-form markdown text — the system prompt now asks for plain markdown, no JSON envelope
+- Errors: 403 if session not found or not owned by the caller — **ownership is now verified on every call before consulting the cache** (2026-07-01 IDOR fix: previously only checked on cache miss, so once an analysis existed any authenticated student could read another student's cached result by `attempt_id`)
+- APISIX route `22-api-haitu-pattern-analysis.json`: priority 20, send/read timeout **600 s / 600 s** (was 10 s / 60 s — this was the direct cause of the 504 that blocked G4.3 test item 7g), `proxy-buffering` disabled, `limit-count` 20/60s per IP → 429, **`limit-conn` 20 concurrent/IP → 503** (newly added), `request-validation` (requires `Content-Type: application/json`; body must include `attempt_id` (UUID)); WAF NL exclusion inherited from secured-api
 
 ---
 

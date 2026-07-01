@@ -205,7 +205,83 @@
 - [x] T4p.6.2 [frontend]: Once T4p.6.1 lands, wire "Take Exam" click in TopicListPanel to
   navigate to /exam?node_id={nodeId} (or start a session directly) (depends on T4p.6.1) (2026-07-01)
 
+## G4-patch-2 — pattern-analysis never resolves on first load [backend][specs][deploy]
+
+> Found during G4 test-plan item T7g (`Implementation_planning/g4_test_plan.md`) — the
+> pattern-analysis opening message never appears on a student's first visit to S05. Root cause:
+> `POST /api/haitu/pattern-analysis` always returns 202 pending on cache-miss and kicks off a
+> detached `asyncio.create_task` background computation; per spec §8.8.3 (shipped in G4-patch,
+> T4p.4.2) the frontend correctly keeps the static seed bubble and does not retry on 202 — so the
+> real analysis is only reachable via a second, separate page load, and even then only if it lands
+> on the same backend worker process that originally computed it. A client-side polling fix was
+> proposed and **rejected** — see `decisions.md` 2026-07-01 — in favour of a backend-only fix that
+> computes the analysis inline within the same request/worker via the SSE machinery already proven
+> for `exam-review-chat`, removing 202-as-the-common-path entirely.
+>
+> **Why polling was rejected:** the backend runs `--workers 2` (`haisir-backend/Dockerfile:102`),
+> confirmed as the actual deployed default with no shared cache, sticky routing, or clustered
+> rate-limit policy anywhere in `haisir-deploy` (APISIX `limit-count` on this route is
+> `policy: "local"`). `_PATTERN_ANALYSIS_CACHE` is a worker-local dict. A poll landing on the
+> *other* worker process re-triggers `HaituRateLimiter.check_and_increment` (the same 20/hr budget
+> shared with `topic-doubt`/`exam-review-chat`) and launches a duplicate LLM computation — the
+> opposite of the "costs nothing extra" assumption behind the polling proposal.
+
+### G4p2.1 — Spec correction
+- [ ] T4p2.1 [specs]: Update `target/requirements/11_haitu_ai_layer.md` §8.2 ("Generated once per
+  attempt on S05 page load"), §8.3 (202 contract), §8.4 (caching — document 202 as a rare
+  cross-worker fallback, not the common first-call path), §8.8 (note no frontend change is
+  needed — real tokens now arrive on the first call)
+
+### G4p2.2 — Backend: inline-stream the cache-miss path
+- [ ] T4p2.2 [backend]: In `post_pattern_analysis` (`src/api/routes/haitu.py`), replace the
+  fire-and-forget `asyncio.create_task(_compute_and_cache_pattern_analysis(...))` + immediate 202
+  with inline computation on cache-miss: SSE callers get real tokens via the same
+  `_generate_sse_from_tokens`/`_pump_token_events`/`HaituService.stream_no_rag` machinery already
+  used by `exam-review-chat`; JSON-fallback callers `await answer_no_rag(...)` inline and return
+  `{"analysis": ...}` directly. Populate `_PATTERN_ANALYSIS_CACHE[attempt_id]` when the stream
+  ends, exactly as today (unchanged replay behaviour on a second load). (depends on T4p2.1)
+- [ ] T4p2.3 [backend]: Concurrent-request guard — replace the `None` in-flight sentinel with the
+  detached `asyncio.Task` object itself; a second request for the same `attempt_id` landing on the
+  *same* worker while the first is still computing awaits that task via `asyncio.shield(task)`
+  (NOT a per-request-owned `Future` — a disconnect on one request must not cancel or hang another
+  request awaiting the same shared computation). 202 remains only for the genuine cross-worker
+  race (different worker, no visibility into the task). (depends on T4p2.2)
+- [ ] T4p2.4 [backend]: Apply the same shielded-shared-task fix to `_persist_task` in
+  `post_topic_doubt` (`haitu.py` ~line 275-279) — identical fire-and-forget
+  `asyncio.create_task(...); del _bg`-style pattern with the same factually-incorrect justifying
+  comment ("the event loop holds a reference to the task until it completes" — contradicts
+  asyncio's own docs on weak task references). Same file, same root cause, cheap to fix while
+  touching this pattern; not the cause of the T7g bug itself (topic-doubt is fire-and-forget by
+  design — this is a hardening pass, not a behaviour change). (depends on T4p2.3)
+- [ ] T4p2.5 [backend]: Rewrite the now-invalid tests in
+  `tests/unit/routes/test_haitu_review.py::TestPostPatternAnalysis` —
+  `test_first_call_with_incorrect_answers_returns_202` (TC-PA1),
+  `test_cache_sentinel_returns_202` (TC-PA3), `test_failed_session_returns_202` (TC-PA8),
+  `test_background_task_populates_cache` (TC-PA10),
+  `test_background_task_failure_clears_cache_sentinel` — to assert inline SSE/JSON streaming +
+  cache population on cache-miss; add a same-worker concurrent-request test (second request
+  awaits the shared task and receives the real result, not 202). TC-PA2/4/5/6/7/9 (cache-hit,
+  neutral message, ownership/IDOR, rate-limit, SSE-cache-hit-replay, attempt_id-alias) are
+  unaffected — no change expected. Maintain 100% coverage. (depends on T4p2.2, T4p2.3)
+
+### G4p2.3 — Deploy: verify gateway readiness (no config change expected)
+- [ ] T4p2.6 [deploy]: Verify `22-api-haitu-pattern-analysis.json` needs no change —
+  `proxy-buffering` disabled + 600s send/read timeouts already shipped in G4p.3 are sufficient for
+  a request that now holds the connection open for the full generation instead of returning
+  instantly. Note as a watch-item (not a blocker at current scale): longer-held connections make
+  the existing `limit-conn: 20 / burst 10 per remote_addr` easier to reach under bursty same-IP
+  load (e.g. a classroom finishing exams around the same time). (depends on T4p2.2)
+
+### G4p2.4 — Frontend: none required
+- No frontend changes. The existing `useExamReviewChat`/`consumeHaituSSE` consumer (shipped in
+  G4-patch, T4p.4.2) already replaces the seed bubble on the first SSE token — tokens now arrive
+  on the very first call instead of never arriving. No polling loop is being added.
+
 ## Ready now
+- **G4-patch-2 [backend][specs][deploy] BLOCKING G4 integration testing (2026-07-01)**: T7(g) of
+  `g4_test_plan.md` failed — pattern-analysis stuck on 202 pending on first load. Start with
+  T4p2.1 (spec correction), then T4p2.2 → T4p2.3 → T4p2.4 → T4p2.5 (backend), T4p2.6 (deploy
+  verification only). No frontend task. Once closed, resume G4 test-plan items T7(g) and T8.
 - **G4p.2 [backend] DONE (2026-07-01)**: T4p.2.1/T4p.2.2/T4p.2.3 — exam-review-chat and
   pattern-analysis now SSE-streamed (token frames + 15 s heartbeats + done event; 202 pending
   pattern; JSON fallback {"response":str} / {"analysis":str}; attempt_id canonical,

@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 7fd5cd7 (G4 — MasteryService + enrollment_topics V37 + exam-review-chat + pattern-analysis + enrollment status column fix, 2026-06-29) |
-| haisir-frontend | efc33d8 (G4 — ExamReviewPage S05 + FocusAreasStrip + SonarQube fixes, 2026-06-29) |
-| haisir-deploy | fc29884 (G4 — APISIX routes 21 + 22 for hAITU post-exam endpoints, 2026-06-29) |
+| haisir-backend | d612a66 (G4-patch — S05 SSE streaming + IDOR fix + has_exam wired, 2026-07-01) |
+| haisir-frontend | 302ac06 (G4-patch — Take Exam nav + streaming review chat + markdown rendering, 2026-07-01) |
+| haisir-deploy | 457de26 (G4-patch — pattern-analysis route timeouts fixed for streaming, 2026-07-01) |
 
-> Next session: run `git diff 7fd5cd7..HEAD` in haisir-backend, `git diff efc33d8..HEAD` in haisir-frontend, and `git diff fc29884..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff d612a66..HEAD` in haisir-backend, `git diff 302ac06..HEAD` in haisir-frontend, and `git diff 457de26..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -212,7 +212,7 @@ Full-page three-panel layout. Data managed by `useStudentNav` + `useStudentCatal
 
 - **Tab bar** — "Platform" (always enabled) / "Home Study" (disabled when `has_parent_link=false`). ArrowLeft/ArrowRight keyboard navigation; switching source resets node/topic/content + `selectedTopicId`/`selectedRootNodeId`.
 - **NodeTreeSidebar** (left `<aside>`) — renders `StudentNode[]` from `GET /api/student/nodes?owner_type={source}`. Each `NodeRow` shows a chevron + expand/collapse for nodes with `children`; leaf nodes fire `selectNode(id)`. **Empty state** (when tree is empty — unenrolled): "No courses enrolled." + "Browse Courses" link → `/enroll`.
-- **TopicListPanel** (centre `<section>`) — `StudentTopic[]` from `GET /api/student/nodes/{id}/topics`. Fires `selectTopic(id)` on click; sets `selectedTopicId` state.
+- **TopicListPanel** (centre `<section>`) — `StudentTopic[]` from `GET /api/student/nodes/{id}/topics`. Fires `selectTopic(id)` on click; sets `selectedTopicId` state. Each topic row with `has_exam=true` renders a **"Take Exam"** button routing to `/exam?node_id={selectedNodeId}` (G4p.6, backend `d612a66` / frontend `302ac06` — replaces the earlier static exam-available badge that never linked anywhere).
 - **ContentViewer** (right) — `StudentTopicContent[]` from `GET /api/student/topics/{id}/content`. Shows "No content available" when `contents` is empty. When a topic is selected (`topicId != null`), renders **HaituDoubtPanel** below the content.
 - `selectedRootNodeId` is resolved via `findRootNodeId(nodeTree, nodeId)` on node selection; `selectedEnrollmentId` is looked up in the catalog (`catalogNodes.find(n => n.id === selectedRootNodeId)?.enrollment_id`).
 
@@ -231,19 +231,19 @@ Unit test suite: 11 test files covering all components, hooks, and api layer (10
 
 ---
 
-## Post-Exam Review + hAITU Chat (G4.3 — complete)
+## Post-Exam Review + hAITU Chat (G4.3 — complete; G4-patch streaming rework 2026-07-01)
 
 ### Screen: `/exam/[session_id]/review` (ExamReviewPage — S05, student role)
 `app/exam/[session_id]/review/page.tsx` → `ExamReviewPage` (client component).
 
 - **Top bar**: back link "← Back to Home" + exam title (`template_title` from review payload).
 - **Score bar**: percentage score (`score / total_marks`), correct / wrong / skipped / total question counts.
-- **Left panel** (`ExamReviewQuestionList`): collapsible `QuestionCard` items. Wrong / skipped cards default-expanded; correct cards collapsed. Colour-coded badges: green ✓ Correct, red ✗ Wrong, grey — Skipped. Choice questions render option list with ✓/✗ decorations; `optionCorrect` (green bg) + `optionWrong` (red bg). Text questions show "Your answer" / "Correct answer" rows. Explanation rendered in a blue-left-bordered box when present. "Ask hAITU to explain this" button per incorrect question triggers `explainQuestion(number, text)`. Reading-passage paragraph groups rendered as titled card with prose + nested question cards.
-- **Right panel** (`ExamReviewChatPanel`): hAITU chat sidebar. On mount calls `POST /api/haitu/pattern-analysis` via `useExamReviewChat` hook and renders the AI opening message. Follow-up questions call `POST /api/haitu/exam-review-chat` (non-streaming JSON); last 10 messages sent as history. Enter sends; Shift+Enter newlines. Spinner bubble while loading. 429 / 504 / 403 mapped to user-facing error banners. `explainQuestion` prepends "Explain question N: {text}" as the user message.
+- **Left panel** (`ExamReviewQuestionList`): collapsible `QuestionCard` items. Wrong / skipped cards default-expanded; correct cards collapsed. Colour-coded badges: green ✓ Correct, red ✗ Wrong, grey — Skipped. Choice questions render option list with ✓/✗ decorations; `optionCorrect` (green bg) + `optionWrong` (red bg). **Matching questions** render as left→right pairs (`MatchingPairs`) marked ✓/✗ per pair instead of an options list — `user_answer_options`/`correct_answer_options` are parsed as `"L:R"` id-pair strings. Text questions show "Your answer" / "Correct answer" rows (both hidden for matching; "Correct answer" also hidden for essay). **`model_answer`** (teal box) and **`ai_feedback`** (blue box) render when present, ahead of the explanation box. Explanation rendered in a blue-left-bordered box when present. "Ask hAITU to explain this" button per incorrect question triggers `explainQuestion(number, text)`. Reading-passage paragraph groups rendered as titled card with prose + nested question cards.
+- **Right panel** (`ExamReviewChatPanel`): hAITU chat sidebar. On mount, `useExamReviewChat` immediately seeds a friendly "preparing your review" bubble, then streams `POST /api/haitu/pattern-analysis` over SSE (`Accept: text/event-stream`) and replaces the seed bubble with the first token (falls back to a single synthetic token on the JSON/202 path). Follow-up questions and `explainQuestion` stream `POST /api/haitu/exam-review-chat` over SSE, appending tokens into a lazily-created AI bubble (spinner shows until the first token arrives). AI bubbles (and the doubt panel) render through a shared **`MarkdownText`** component (react-markdown + remark-gfm, no rehype-raw — AI markdown can't inject raw HTML). Last 10 messages sent as history. Enter sends; Shift+Enter newlines. A clean failure (no AI token ever arrived) badges the user bubble with a **↻ Resend** button (`retry()` re-sends the exact message + history); a non-blocking error banner (e.g. the "Preparing your review…" 202 notice) is dismissible via `clearError()` without clearing the chat. In-flight streams are aborted on `attemptId` switch and on unmount. 429 / 502 / 403 mapped to user-facing error banners. `explainQuestion` prepends "Explain question N: {text}" as the user message.
 - **Forbidden state**: shown when `getSessionAnswers` returns 403/null — "This exam isn't available for review yet" + "Back to Home".
 - **Error state**: shown on fetch failure — generic error message + "Back to Home".
-- `useExamReview(attemptId)`: fetches `GET /api/exam-sessions/session/{id}/answers`; 403/null → `isForbidden=true`; loading/error states exposed.
-- `useExamReviewChat(attemptId)`: loads pattern analysis on mount; resets all state on `attemptId` change; manages `messages: ExamReviewChatMessage[]`, `isLoading`, `error`, `patternAnalysisLoaded`; exposes `send(message)` + `explainQuestion(n, text)`.
+- `useExamReview(attemptId)`: fetches `GET /api/exam-sessions/session/{id}/answers`; 403/null → `isForbidden=true`; loading/error states exposed. `session-answers-mapper.ts` maps the live DTO to the `ExamReviewPayload` domain model (anti-corruption layer — tolerates both current and legacy backend shapes).
+- `useExamReviewChat(attemptId)`: loads pattern analysis on mount via SSE with JSON fallback; resets all state (including the abort controller) on `attemptId` change; manages `messages: ExamReviewChatMessage[]`, `isLoading`, `error`, `patternAnalysisLoaded`, `failedMessageId`; exposes `send(message)`, `retry()`, `explainQuestion(n, text)`, `clearError()`.
 - Responsive: below 900 px panels stack vertically; right panel gets fixed 24 rem height.
 
 ## Student Doubt Inbox + Thread (G1 — complete)

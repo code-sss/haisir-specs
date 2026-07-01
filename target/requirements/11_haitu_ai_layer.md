@@ -338,6 +338,12 @@ Rules:
 **When:** Generated once per attempt on S05 page load, displayed as the opening hAITU message in
 the review panel.
 
+> **G4-patch-2 correction (2026-07-01):** the analysis is computed **inline, within the same
+> request** that first asks for it — not by a detached background task returning an immediate
+> 202. See §8.4 for the corrected caching/readiness contract; the original design (always 202 on
+> cache-miss, background task, client expected to somehow re-fetch later) never actually surfaced
+> the analysis on a student's first visit and is superseded.
+
 **Prompt (port of vision §3.2a):**
 ```
 Analyse the following wrong answers from this exam and identify the single most common mistake
@@ -394,9 +400,11 @@ POST /api/haitu/exam-review-chat
 POST /api/haitu/pattern-analysis
 → Auth: student (CSRF required; X-Current-Role: student)
 → Body: {attempt_id: uuid}
-→ Primary:  text/event-stream — token frames as above
-→ Fallback: {"analysis": "<markdown>"}   ← retained for tests / non-streaming callers
-→ Not-ready: HTTP 202  {"status": "pending"}  ← when analysis not yet computed
+→ Primary:  text/event-stream — token frames as above; on cache-miss these are REAL incremental
+            tokens computed inline in this request (not a replay of a background result)
+→ Fallback: {"analysis": "<markdown>"}   ← retained for tests / non-streaming callers; on
+            cache-miss this blocks inline for the LLM call (bounded by BR-AI-002's 30 s timeout)
+→ Not-ready: HTTP 202  {"status": "pending"}  ← rare cross-worker-race fallback only, see §8.4
              (replaces the old empty {"patterns":[],"recommendations":[]} 200)
 → Idempotent per attempt_id (duplicate concurrent calls must return the same result)
 → Cached per attempt_id (see §8.4)
@@ -405,18 +413,32 @@ POST /api/haitu/pattern-analysis
 ### 8.4 Caching
 
 `pattern-analysis` is **cached per `attempt_id`** — the analysis is generated once for an attempt
-and reused across page loads / follow-ups within the same review session.
+and reused (instant replay) across page reloads / re-opens within the same review session.
 
-**Not-ready state:** when the cache entry is absent on first call (analysis not yet computed),
-the endpoint returns `HTTP 202 {"status": "pending"}` instead of the previous empty
-`{"patterns":[],"recommendations":[]} 200`. The frontend must distinguish this from an empty
-analysis and show a graceful "Preparing your review…" state rather than an error.
-
-> **v1 limitation:** the cache is **in-memory per worker**, not cross-process. With a single
-> worker (current scale) this gives exact per-attempt caching; under multi-worker deployment the
-> same `attempt_id` may be re-computed once per worker that handles it. This is acceptable for the
-> current scale and is documented here so it is not mistaken for a correctness bug. A shared
-> cache (Redis) is a future optimisation, not a Phase 4 requirement.
+> **G4-patch-2 correction (2026-07-01):** on cache-miss (the common first-call case), the endpoint
+> now computes the analysis **inline within the same request/worker**, reusing the SSE streaming
+> machinery already shipped for `exam-review-chat` (`stream_no_rag` for SSE callers,
+> `answer_no_rag` for the JSON fallback) — it does **not** spawn a detached background task and
+> return an immediate 202. The original design (always 202 on cache-miss, background task,
+> nothing pushes the result to an already-open page) meant a student's first visit to S05 never
+> displayed the real analysis — only a second, separate page load could, and even then only if it
+> happened to land on the same worker process. That design is superseded.
+>
+> **Concurrent same-worker requests:** if a second request for the same `attempt_id` arrives on the
+> *same* worker while the first is still computing, it awaits the same in-flight computation
+> (stored as a detached `asyncio.Task`, awaited via `asyncio.shield()` so one request's disconnect
+> cannot cancel or hang another) and receives the real result — not a 202.
+>
+> **202 is now a rare fallback**, reserved for the genuine cross-worker race: a second request for
+> the same `attempt_id` landing on a *different* worker process than the one computing it, with no
+> visibility into that computation. When this does happen, the frontend's existing graceful-seed
+> behaviour (§8.8) is the correct fallback — no client-side retry/poll loop is added or required.
+>
+> **v1 limitation (unchanged):** the cache is **in-memory per worker**, not cross-process. The
+> backend runs `--workers 2` by default (`haisir-backend/Dockerfile`) — confirmed as the actual
+> deployed configuration, not a hypothetical future-scale concern — so the cross-worker race above
+> is a real, if infrequent, case rather than a single-worker edge case. A shared cache (Redis) is a
+> future optimisation that would eliminate it entirely; not a Phase 4 requirement.
 
 `exam-review-chat` is **not cached** — each follow-up is a fresh LLM call (rate-limited per
 BR-AI-003).
@@ -470,6 +492,10 @@ The S05 review chat panel must never be blank:
 2. **Replace on stream:** on first token from `pattern-analysis`, replace the seed bubble and
    append subsequent tokens to it.
 3. **Keep seed on empty/pending/timeout:** if `pattern-analysis` returns 202 pending, times out,
-   or errors, keep the seed bubble — do not replace it with an error banner.
+   or errors, keep the seed bubble — do not replace it with an error banner. As of G4-patch-2,
+   202 is a rare cross-worker-race fallback rather than the common first-call response (see
+   §8.4), so this path is exercised infrequently in practice; no client-side retry/poll loop is
+   added — the existing seed-then-replace-on-first-token behaviour is unchanged and requires no
+   frontend code changes.
 4. **Non-blocking notice:** on error, show a dismissible notice alongside the seed (not instead
    of it); the chat input remains usable.
