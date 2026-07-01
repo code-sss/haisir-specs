@@ -227,10 +227,10 @@
 > opposite of the "costs nothing extra" assumption behind the polling proposal.
 
 ### G4p2.1 — Spec correction
-- [ ] T4p2.1 [specs]: Update `target/requirements/11_haitu_ai_layer.md` §8.2 ("Generated once per
+- [x] T4p2.1 [specs]: Update `target/requirements/11_haitu_ai_layer.md` §8.2 ("Generated once per
   attempt on S05 page load"), §8.3 (202 contract), §8.4 (caching — document 202 as a rare
   cross-worker fallback, not the common first-call path), §8.8 (note no frontend change is
-  needed — real tokens now arrive on the first call)
+  needed — real tokens now arrive on the first call) (2026-07-01)
 
 ### G4p2.2 — Backend: inline-stream the cache-miss path
 - [ ] T4p2.2 [backend]: In `post_pattern_analysis` (`src/api/routes/haitu.py`), replace the
