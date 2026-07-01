@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:d612a66 frontend:efc33d8 deploy:457de26 (2026-07-01 — refined; G0–G3 + G2-patch complete, G4 remaining)
+> Last baselined: backend:f6bdf2b frontend:302ac06 deploy:457de26 (2026-07-01 — refined; G0–G3 + G2-patch complete, G4 remaining)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0–G3 + G2-patch are done; G4 is the remaining work.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -244,8 +244,10 @@
   detached `asyncio.Task` object itself; a second request for the same `attempt_id` landing on the
   *same* worker while the first is still computing awaits that task via `asyncio.shield(task)`
   (NOT a per-request-owned `Future` — a disconnect on one request must not cancel or hang another
-  request awaiting the same shared computation). 202 remains only for the genuine cross-worker
-  race (different worker, no visibility into the task). (depends on T4p2.2) (2026-07-01)
+  request awaiting the same shared computation). The cross-worker race (different worker, no
+  visibility into the task) is NOT special-cased with 202 — it falls through to its own
+  independent live computation on that worker; see the 2026-07-01 correction in
+  `target/requirements/11_haitu_ai_layer.md` §8.4 (depends on T4p2.2) (2026-07-01)
 - [x] T4p2.4 [backend]: Apply the same shielded-shared-task fix to `_persist_task` in
   `post_topic_doubt` (`haitu.py` ~line 275-279) — identical fire-and-forget
   `asyncio.create_task(...); del _bg`-style pattern with the same factually-incorrect justifying
@@ -280,22 +282,52 @@
   G4-patch, T4p.4.2) already replaces the seed bubble on the first SSE token — tokens now arrive
   on the very first call instead of never arriving. No polling loop is being added.
 
+## G4-patch-3 — Silent truncation on stream failure + reasoning-model token starvation [backend][specs]
+
+> Found opportunistically while hardening the G4p2 streaming paths. Both `exam-review-chat` and
+> `pattern-analysis` capped `stream_no_rag`/`answer_no_rag` at a hardcoded `max_tokens=500`. Two
+> problems: (1) reasoning-capable models spend part of that budget on hidden `reasoning_content`
+> before any visible output, so 500 could truncate the visible answer to a few words or nothing;
+> (2) a mid-stream pump failure (e.g. the LLM backend going unreachable) silently ended the SSE
+> stream with a bare `{"done":true}` — indistinguishable from a short-but-complete answer, in
+> violation of the already-written BR-AI-001 error-frame contract.
+
+- [x] T4p3.1 [specs]: Update `target/requirements/11_haitu_ai_layer.md` §8.3 (drop the stale
+  "Token limit: 500" line) + §8.6 (2026-07-01 correction note: token-cap removal rationale +
+  explicit `{"error":...}` frame on pump failure) (2026-07-01)
+- [x] T4p3.2 [backend]: Remove the hardcoded `_REVIEW_TOKEN_LIMIT=500` override from both
+  `stream_no_rag`/`answer_no_rag` call sites in `post_exam_review_chat` and
+  `_compute_pattern_analysis_stream`/`_compute_pattern_analysis_json` — both now fall back to the
+  configured `HAITU__MAX_TOKENS` default (2048) (2026-07-01)
+- [x] T4p3.3 [backend]: `HaituService.stream_no_rag` pump failures now push the raised exception
+  through the queue (not just `None`) so the consumer re-raises after any tokens already yielded;
+  `_pump_token_events` catches that and pushes an explicit `{"error": "I couldn't generate a
+  response right now. Please try again in a moment."}` frame before the terminal `None`, matching
+  the existing `_PATTERN_ANALYSIS_ERROR_MESSAGE` pattern (depends on T4p3.2) (2026-07-01)
+- [x] **G4-patch-3: silent truncation fix** — backend `f6bdf2b` (via `fb121aa`); unit tests
+  updated in `test_haitu_service.py` + `test_haitu_review.py`; no frontend change needed — the
+  SSE consumer already surfaces `{"error":...}` frames per T4p.4.1 (2026-07-01)
+
 ## Ready now
-- **No unchecked tasks remain in TASKS.md.** G4-patch-2 [specs][backend][deploy] is fully
-  closed (2026-07-01): T4p2.1 (specs) + T4p2.2–T4p2.5 (backend) + T4p2.6 (deploy, verified
-  no config change needed) + G4p2.4 (frontend — none required). G4 (and G4-patch,
-  G4-patch-2) are complete on paper; the outstanding step is the **live end-to-end
-  verification**, not tracked as a TASKS.md checkbox: resume `g4_test_plan.md` items T7(g)
-  (pattern-analysis SSE streaming against a running stack) and T8. Nobody has run those
-  against a live stack yet as of this update — do that before considering G4 fully closed.
+- **No unchecked tasks remain in TASKS.md.** G4, G4-patch, G4-patch-2, and G4-patch-3 are
+  complete on paper. **T7 and T8 (`g4_test_plan.md`) are now verified against the live stack
+  (2026-07-01)**: T7 including 7g (pattern-analysis SSE streaming on first load — confirmed
+  fixed by G4-patch-2); T8's four guard scenarios (8a–8d — ownership/IDOR, status-gate,
+  missing-role-header) all returned the expected `403`/`400` against a real backend session
+  (student `sub=576ed7e1-...`). Not tracked as TASKS.md checkboxes — tracked in
+  `g4_test_plan.md`'s own closing checklist. **Remaining in `g4_test_plan.md`: T9** (focus-areas
+  strip on `/home`) **and T10** (essay-exam mastery path) — neither run live yet as of this
+  update.
 - **G4-patch-2 [backend][specs] DONE (2026-07-01)**: T4p2.1 (spec correction) + T4p2.2–T4p2.5
   (backend) — pattern-analysis cache-miss now computes inline: SSE callers stream real tokens
   on the first call via a detached `asyncio.Task` that broadcasts to a per-request queue; JSON
   callers `await answer_no_rag` inline and return `{"analysis": ...}`; concurrent same-worker
   requests `asyncio.shield` the shared in-flight task and replay the real result (no 202);
   `_persist_task` in `post_topic_doubt` hardened with a strong-reference registry. 202 contract
-  removed (unreachable same-worker under the v1 in-memory-per-worker model); schema retained.
-  100% coverage held (4115 tests).
+  and its `PatternAnalysisPendingResponse` schema removed entirely (not merely unreachable
+  same-worker) — the cross-worker race case falls through to its own independent live
+  computation instead, an accepted rare/low-cost edge case (corrected 2026-07-01, see
+  `decisions.md`). 100% coverage held (4115 tests).
 - **G4p2.3 [deploy] DONE (2026-07-01)**: T4p2.6 — verified `22-api-haitu-pattern-analysis.json`
   needs no change against `haisir-backend@0bcb289`; `jq` confirms 600s read/send timeouts +
   proxy-buffering disabled already present.

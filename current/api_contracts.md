@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | d612a66 (G4-patch — S05 SSE streaming + IDOR fix + has_exam wired, 2026-07-01) |
+| haisir-backend | f6bdf2b (G4-patch-2 + G4-patch-3 — pattern-analysis inline-stream fix + stream-failure hardening, 2026-07-01) |
 | haisir-frontend | 302ac06 (G4-patch — Take Exam nav + streaming review chat + markdown rendering, 2026-07-01) |
 | haisir-deploy | 457de26 (G4-patch — pattern-analysis route timeouts fixed for streaming, 2026-07-01) |
 
-> Next session: run `git diff d612a66..HEAD` in haisir-backend, `git diff 302ac06..HEAD` in haisir-frontend, and `git diff 457de26..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff f6bdf2b..HEAD` in haisir-backend, `git diff 302ac06..HEAD` in haisir-frontend, and `git diff 457de26..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -713,6 +713,8 @@
 - Auth: student (`X-Current-Role: student`); CSRF required
 - Request: `ExamReviewChatRequest { attempt_id: UUID, message: str, history: list[{role, content}] (default []) }` — `session_id` accepted as a deprecated alias, copied to `attempt_id` via a `model_validator` when `attempt_id` is absent
 - Response: **SSE stream** (`response_model=None`) when the caller sends `Accept: text/event-stream` — frames `data: {"token": str}` repeated, then `data: {"done": true}`; a mid-stream `data: {"error": str}` frame signals failure. **JSON fallback** `ExamReviewChatFallbackResponse { response: str }` when the Accept header is absent.
+- No hardcoded token cap (**changed 2026-07-01**, was `max_tokens=500`) — falls back to the configured `HAITU__MAX_TOKENS` default (2048); the prior 500 cap could truncate reasoning-model output since those models spend part of the budget on hidden `reasoning_content` before visible text
+- A mid-stream pump failure (e.g. the LLM backend goes unreachable) now pushes an explicit `data: {"error": "I couldn't generate a response right now. Please try again in a moment."}` frame before the terminal `done` (**changed 2026-07-01** — was a silent end-of-stream indistinguishable from a short-but-complete answer)
 - Rate limiting: `HaituRateLimiter` (20 calls/student/hour, in-process) — **newly enforced on this endpoint**; 429 on exceeded
 - Errors: 403 if session not found, not owned by the authenticated student, or `status not in ('completed', 'failed')` (was `!= completed` only)
 - APISIX route `21-api-haitu-exam-review.json`: priority 20 (beats api-write), send/read timeout 600 s, `proxy-buffering` disabled (streaming), `limit-count` 20/60s per IP → 429, `request-validation` (requires `Content-Type: application/json`; body must include `attempt_id` (UUID), `message` (string), `history` (array)); WAF NL exclusion inherited from secured-api
@@ -722,11 +724,13 @@
 - Auth: student (`X-Current-Role: student`); CSRF required
 - Request: `PatternAnalysisRequest { attempt_id: UUID }` — `session_id` accepted as a deprecated alias (same aliasing pattern as exam-review-chat)
 - Response:
-  - **SSE stream** (`Accept: text/event-stream`) once the cached result is ready: single `data: {"token": <full analysis>}` frame (replay, not incremental — analysis is pre-computed) then `data: {"done": true}`
-  - **202** `PatternAnalysisPendingResponse { status: "pending" }` while computation for this `attempt_id` is still in-flight (cache holds a `None` sentinel)
-  - **JSON fallback** `PatternAnalysisFallbackResponse { analysis: str }` when the Accept header is absent and the result is ready
+  - **Cache hit:** SSE (`Accept: text/event-stream`) replays the cached string as a single `data: {"token": <full analysis>}` frame then `data: {"done": true}`; JSON fallback returns `PatternAnalysisFallbackResponse { analysis: str }` immediately.
+  - **Cache miss (2026-07-01, G4-patch-2 — no longer 202):** computed **inline in this request/worker** — SSE callers get **real incremental tokens** as the LLM generates them (same `stream_no_rag` machinery as exam-review-chat); JSON callers `await` the full result inline (bounded by the 30 s LLM timeout) and return `{analysis: str}`. The cache is populated once the stream/call finishes, so a student's *first* S05 visit now sees the real analysis (previously: always 202, background task, never surfaced on the first load — see `Implementation_planning/decisions.md` 2026-07-01).
+  - **The 202 `PatternAnalysisPendingResponse` contract is retired outright** — the route has no pending/not-ready response of any kind (not even a rare fallback). A concurrent request for the same `attempt_id` on the *same* worker `asyncio.shield`s the in-flight `asyncio.Task` and receives the real result. A concurrent request landing on a *different* worker (in-memory cache is per-worker, `--workers 2` is the real deployed default) has no visibility into that task and simply runs its own independent live computation — its own LLM call, its own rate-limit charge, its own eventual cache entry. This is an accepted rare/low-cost edge case, not engineered around, since nothing in the frontend polls on a pending state anyway.
   - Neutral message `"Great work — no wrong answers to analyse on this attempt."` when there are no incorrect answers (no LLM call made)
   - **Response format changed** from structured `{patterns: [...], recommendations: [...]}` JSON to free-form markdown text — the system prompt now asks for plain markdown, no JSON envelope
+  - No hardcoded token cap (**changed 2026-07-01**, was `max_tokens=500`) — falls back to `HAITU__MAX_TOKENS` (2048), same rationale as exam-review-chat
+  - A mid-stream pump failure now pushes an explicit `data: {"error": "I couldn't generate an explanation right now. Please try again in a moment."}` frame before `done` (**changed 2026-07-01**, was silent truncation)
 - Errors: 403 if session not found or not owned by the caller — **ownership is now verified on every call before consulting the cache** (2026-07-01 IDOR fix: previously only checked on cache miss, so once an analysis existed any authenticated student could read another student's cached result by `attempt_id`)
 - APISIX route `22-api-haitu-pattern-analysis.json`: priority 20, send/read timeout **600 s / 600 s** (was 10 s / 60 s — this was the direct cause of the 504 that blocked G4.3 test item 7g), `proxy-buffering` disabled, `limit-count` 20/60s per IP → 429, **`limit-conn` 20 concurrent/IP → 503** (newly added), `request-validation` (requires `Content-Type: application/json`; body must include `attempt_id` (UUID)); WAF NL exclusion inherited from secured-api
 

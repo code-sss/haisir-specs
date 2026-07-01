@@ -4,6 +4,62 @@
 
 ---
 
+## 2026-07-01 — Spec correction: pattern-analysis 202 contract is fully retired, not a rare cross-worker fallback
+
+> Found while reconciling `haisir-specs` against all four sibling-repo HEADs (spec sync cycle
+> following G4-patch-3). Not a new code change — a documentation-only correction. The G4-patch-2
+> entry immediately below this one (and the corresponding `TASKS.md` T4p2.3/T4p2.6 wording) states
+> that HTTP 202 "remains only for the genuine cross-worker race." That entry is left as written
+> (append-only), but it does not match the code it describes.
+
+- **`haisir-backend@0bcb289`'s own commit message says otherwise**: "Remove dead
+  `PatternAnalysisPendingResponse` schema and the misleading comments claiming a 202 OpenAPI
+  contract the route never declared." Reading `post_pattern_analysis` in
+  `src/api/routes/haitu.py` confirms this: the schema is gone, no code path returns
+  `HTTP_202_ACCEPTED`, and the route's own docstring states *"This endpoint never returns
+  202... computation is always served inline (cache hit, shared-task await, or live compute)."*
+  Tests in `test_haitu_review.py` assert "not 202" as the universal behaviour.
+- **The cross-worker race is not special-cased at all** — it isn't handled with a 202, and it
+  isn't prevented either. A second request for the same `attempt_id` landing on a *different*
+  worker than the one computing it has no visibility into `_PATTERN_ANALYSIS_CACHE` (in-memory,
+  per-worker) and simply falls through to its own independent live computation: its own LLM call,
+  its own `HaituRateLimiter` charge, its own cache entry once done. This is accepted as an
+  infrequent, low-cost edge case rather than engineered around, since nothing in the frontend
+  polls on a 202 anyway (the seed-bubble-then-replace-on-first-token behaviour from G4-patch,
+  T4p.4.2, degrades gracefully regardless of which path serves the request).
+- Spec corrected: `target/requirements/11_haitu_ai_layer.md` §8.3 (dropped the "Not-ready: HTTP
+  202" line), §8.4 (replaced the "202 is now a rare fallback" paragraph with the accurate
+  duplicate-live-computation description), §8.8 (dropped 202 from the frontend degradation
+  triggers — it's a timeout/error path only now). `TASKS.md` T4p2.3 and the G4-patch-2 "Ready
+  now" summary corrected in place (not append-only, so edited directly rather than appended).
+
+## 2026-07-01 — G4-patch-3: remove hardcoded review token cap; surface stream-pump failures instead of silent truncation
+
+> Found opportunistically while hardening the G4-patch-2 streaming paths (backend `fb121aa`,
+> baselined into `f6bdf2b`). Not a test-plan failure — a code-review-style catch during the same
+> work session.
+
+- **Removed the hardcoded `max_tokens=500` override on `exam-review-chat` /
+  `pattern-analysis`.** Both calls now fall back to the configured `HAITU__MAX_TOKENS` default
+  (2048). Reasoning-capable models spend part of their token budget on hidden
+  `reasoning_content` before emitting any visible output, so a 500-token ceiling could truncate
+  the visible answer to a few words or, depending on how much the model "thought" that turn,
+  nothing at all.
+- **Mid-stream pump failures now emit an explicit `{"error":...}` SSE frame instead of silently
+  ending the stream.** Previously `HaituService.stream_no_rag`'s pump thread logged the
+  exception and pushed only a terminal `None`, so a failure partway through generation was
+  indistinguishable from a normal, complete (if short) end of stream — silently violating the
+  already-written BR-AI-001 contract (§8.6 of `11_haitu_ai_layer.md`), which promises an error
+  frame on LLM failure. Fixed: the pump now pushes the exception itself through the queue: the
+  consumer re-raises it after yielding any tokens produced so far, and
+  `_pump_token_events`/`_compute_pattern_analysis_stream` catch that and push the same
+  `{"error": "I couldn't generate a ... right now. Please try again in a moment."}` frame already
+  used for other BR-AI-001 failure paths. No frontend change needed — the SSE consumer shipped in
+  G4-patch (T4p.4.1) already treats an `{"error":...}` frame as a clean failure and shows the
+  resend affordance.
+- Spec updated: `target/requirements/11_haitu_ai_layer.md` §8.3 (dropped the stale "Token limit:
+  500" line) and §8.6 (correction note). See `TASKS.md` G4-patch-3.
+
 ## 2026-07-01 — G4-patch-2: pattern-analysis first-load fix — polling rejected in favour of inline streaming
 
 > Found during G4 integration testing item T7g (`Implementation_planning/g4_test_plan.md`):

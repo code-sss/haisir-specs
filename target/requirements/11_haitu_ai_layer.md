@@ -395,7 +395,7 @@ POST /api/haitu/exam-review-chat
        session_id is accepted as a deprecated alias for attempt_id (same value).
 → Primary:  text/event-stream — token frames as above
 → Fallback: {"response": "<markdown>"}   ← object form only; bare-string form is retired
-→ Token limit: 500
+→ Token limit: none (falls back to HAITU__MAX_TOKENS, default 2048) — see 2026-07-01 correction below
 
 POST /api/haitu/pattern-analysis
 → Auth: student (CSRF required; X-Current-Role: student)
@@ -404,9 +404,9 @@ POST /api/haitu/pattern-analysis
             tokens computed inline in this request (not a replay of a background result)
 → Fallback: {"analysis": "<markdown>"}   ← retained for tests / non-streaming callers; on
             cache-miss this blocks inline for the LLM call (bounded by BR-AI-002's 30 s timeout)
-→ Not-ready: HTTP 202  {"status": "pending"}  ← rare cross-worker-race fallback only, see §8.4
-             (replaces the old empty {"patterns":[],"recommendations":[]} 200)
-→ Idempotent per attempt_id (duplicate concurrent calls must return the same result)
+→ 202 is retired — the route has no pending/not-ready response at all, see §8.4
+→ Idempotent per attempt_id on the same worker (duplicate concurrent calls on the same worker
+  await one shared computation; see §8.4 for the cross-worker exception)
 → Cached per attempt_id (see §8.4)
 ```
 
@@ -429,16 +429,25 @@ and reused (instant replay) across page reloads / re-opens within the same revie
 > (stored as a detached `asyncio.Task`, awaited via `asyncio.shield()` so one request's disconnect
 > cannot cancel or hang another) and receives the real result — not a 202.
 >
-> **202 is now a rare fallback**, reserved for the genuine cross-worker race: a second request for
-> the same `attempt_id` landing on a *different* worker process than the one computing it, with no
-> visibility into that computation. When this does happen, the frontend's existing graceful-seed
-> behaviour (§8.8) is the correct fallback — no client-side retry/poll loop is added or required.
+> **2026-07-01 correction — 202 removed entirely, not merely demoted to a rare fallback.** An
+> earlier draft of this correction (still visible in `Implementation_planning/decisions.md`'s
+> 2026-07-01 G4-patch-2 entry, which is append-only and left as-is) stated that 202 would remain
+> as a rare cross-worker-race fallback. The shipped code (`haisir-backend@0bcb289`) went further:
+> the `PatternAnalysisPendingResponse` schema and the 202 status code were deleted outright. The
+> route's own docstring is explicit: *"This endpoint never returns 202... computation is always
+> served inline."* Concretely, the cross-worker race case (a second request for the same
+> `attempt_id` landing on a *different* worker than the one computing it, which has no visibility
+> into that in-flight task) is **not** handled specially — it falls through to a second,
+> independent live computation on that worker (its own LLM call + its own rate-limit charge, then
+> its own cache entry), rather than returning 202. This is accepted as an infrequent, low-cost
+> edge case rather than engineered around, since nothing in the frontend polls on a 202 anyway.
 >
 > **v1 limitation (unchanged):** the cache is **in-memory per worker**, not cross-process. The
 > backend runs `--workers 2` by default (`haisir-backend/Dockerfile`) — confirmed as the actual
-> deployed configuration, not a hypothetical future-scale concern — so the cross-worker race above
-> is a real, if infrequent, case rather than a single-worker edge case. A shared cache (Redis) is a
-> future optimisation that would eliminate it entirely; not a Phase 4 requirement.
+> deployed configuration, not a hypothetical future-scale concern — so the cross-worker
+> duplicate-compute case above is real, if infrequent, rather than a single-worker edge case. A
+> shared cache (Redis) is a future optimisation that would eliminate it entirely; not a Phase 4
+> requirement.
 
 `exam-review-chat` is **not cached** — each follow-up is a fresh LLM call (rate-limited per
 BR-AI-003).
@@ -475,6 +484,18 @@ These apply to both `exam-review-chat` and `pattern-analysis`, ported from the v
   shared with `topic-doubt`). Exceeding returns `429` as an HTTP error **before** streaming
   starts (same as `topic-doubt`).
 
+> **2026-07-01 correction:** both endpoints previously called `stream_no_rag`/`answer_no_rag` with
+> a hardcoded `max_tokens=500`, and a mid-stream pump failure (e.g. the LLM backend going
+> unreachable mid-response) silently ended the stream with a bare `{"done":true}` — indistinguishable
+> from a normal, complete (if short) answer, in violation of BR-AI-001. Fixed: the 500-token
+> override is removed (both calls now fall back to the configured `HAITU__MAX_TOKENS` default,
+> 2048) since reasoning-capable models spend part of the budget on hidden `reasoning_content`
+> before visible output, and 500 could truncate the visible answer to a few words or nothing. A
+> pump failure now pushes an explicit `{"error":"I couldn't generate a
+> response/explanation right now. Please try again in a moment."}` frame before the terminal
+> `None`/`{"done":true}`, so the client can tell a genuine failure apart from a clean end of
+> stream, per BR-AI-001.
+
 ### 8.7 APISIX / gateway requirements (updated)
 
 Both APISIX routes (`21-api-haitu-exam-review.json`, `22-api-haitu-pattern-analysis.json`) must:
@@ -491,11 +512,10 @@ The S05 review chat panel must never be blank:
    exam. Ask me about any question you'd like to go over."` before the `pattern-analysis` call.
 2. **Replace on stream:** on first token from `pattern-analysis`, replace the seed bubble and
    append subsequent tokens to it.
-3. **Keep seed on empty/pending/timeout:** if `pattern-analysis` returns 202 pending, times out,
-   or errors, keep the seed bubble — do not replace it with an error banner. As of G4-patch-2,
-   202 is a rare cross-worker-race fallback rather than the common first-call response (see
-   §8.4), so this path is exercised infrequently in practice; no client-side retry/poll loop is
-   added — the existing seed-then-replace-on-first-token behaviour is unchanged and requires no
-   frontend code changes.
+3. **Keep seed on timeout/error:** if `pattern-analysis` times out or errors, keep the seed bubble
+   — do not replace it with an error banner. 202 is retired (§8.4) so this is now purely a
+   timeout/error path, not a pending-state path; no client-side retry/poll loop is added — the
+   existing seed-then-replace-on-first-token behaviour is unchanged and requires no frontend code
+   changes.
 4. **Non-blocking notice:** on error, show a dismissible notice alongside the seed (not instead
    of it); the chat input remains usable.
