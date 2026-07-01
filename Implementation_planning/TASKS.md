@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:9d27e8c frontend:efc33d8 deploy:fc29884 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
+> Last baselined: backend:9841027 frontend:efc33d8 deploy:fc29884 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0–G3 + G2-patch are done; G4 is the remaining work.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -153,16 +153,16 @@
   contract (2026-06-30)
 
 ### G4p.2 — Backend: stream both endpoints
-- [ ] T4p.2.1 [backend]: Stream POST /api/haitu/exam-review-chat over SSE (token frames +
+- [x] T4p.2.1 [backend]: Stream POST /api/haitu/exam-review-chat over SSE (token frames +
   heartbeats + done; JSON fallback {"response":str}; history[].content required; accept
-  session_id as deprecated alias for attempt_id) (depends on T4p.1.1)
-- [ ] T4p.2.2 [backend]: Stream POST /api/haitu/pattern-analysis over SSE + add 202 pending
+  session_id as deprecated alias for attempt_id) (depends on T4p.1.1) (2026-07-01)
+- [x] T4p.2.2 [backend]: Stream POST /api/haitu/pattern-analysis over SSE + add 202 pending
   state (token frames + heartbeats + done; 202 {"status":"pending"} when not ready; idempotent
-  per attempt_id; JSON fallback {"analysis":str}) (depends on T4p.1.1)
-- [ ] T4p.2.3 [backend]: DTO alignment — pin exam-review-chat JSON fallback to {"response":str}
+  per attempt_id; JSON fallback {"analysis":str}) (depends on T4p.1.1) (2026-07-01)
+- [x] T4p.2.3 [backend]: DTO alignment — pin exam-review-chat JSON fallback to {"response":str}
   object form only; canonicalize attempt_id (document session_id as deprecated alias); pin
   pattern-analysis fallback to {"analysis":str}; verify /answers shape matches spec (items,
-  question_text, string-ID *_answer_options) (depends on T4p.2.1, T4p.2.2)
+  question_text, string-ID *_answer_options) (depends on T4p.2.1, T4p.2.2) (2026-07-01)
 
 ### G4p.3 — Deploy: gateway timeouts
 - [x] T4p.3.1 [deploy]: Update APISIX routes 21-api-haitu-exam-review.json and
@@ -206,12 +206,8 @@
   navigate to /exam?node_id={nodeId} (or start a session directly) (depends on T4p.6.1)
 
 ## Ready now
-- **G4p.4 [frontend] DONE (2026-07-01)**: T4p.4.1/T4p.4.2/T4p.4.3 — S05 exam-review-chat +
-  pattern-analysis now SSE-streamed on the frontend (Accept: text/event-stream, reuse
-  consumeHaituSSE, lazy AI bubble, seed→replace for pattern-analysis, 202/timeout/error keep
-  seed + dismissible non-blocking notice, abort on attempt-id switch/unmount, JSON fallback,
-  resend only on clean failure); 100% coverage held.
-- **T4p.2.1 [backend]**: Stream `POST /api/haitu/exam-review-chat` over SSE (depends on T4p.1.1, done)
-- **T4p.2.2 [backend]**: Stream `POST /api/haitu/pattern-analysis` over SSE + 202 pending state (depends on T4p.1.1, done)
-- **T4p.2.3 [backend]**: DTO alignment for both hAITU review endpoints (depends on T4p.2.1, T4p.2.2)
+- **G4p.2 [backend] DONE (2026-07-01)**: T4p.2.1/T4p.2.2/T4p.2.3 — exam-review-chat and
+  pattern-analysis now SSE-streamed (token frames + 15 s heartbeats + done event; 202 pending
+  pattern; JSON fallback {"response":str} / {"analysis":str}; attempt_id canonical,
+  session_id alias; rate-limit skips cache hits); 100% coverage held (4099 tests).
 - **T4p.6.1 [backend]**: Wire `has_exam` in `GET /api/student/nodes/{id}/topics` (no deps)
