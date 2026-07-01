@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:9841027 frontend:efc33d8 deploy:fc29884 (2026-07-01 — refined; G0–G3 + G2-patch complete, G4 remaining)
+> Last baselined: backend:d612a66 frontend:efc33d8 deploy:fc29884 (2026-07-01 — refined; G0–G3 + G2-patch complete, G4 remaining)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0–G3 + G2-patch are done; G4 is the remaining work.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -233,27 +233,27 @@
   needed — real tokens now arrive on the first call) (2026-07-01)
 
 ### G4p2.2 — Backend: inline-stream the cache-miss path
-- [ ] T4p2.2 [backend]: In `post_pattern_analysis` (`src/api/routes/haitu.py`), replace the
+- [x] T4p2.2 [backend]: In `post_pattern_analysis` (`src/api/routes/haitu.py`), replace the
   fire-and-forget `asyncio.create_task(_compute_and_cache_pattern_analysis(...))` + immediate 202
   with inline computation on cache-miss: SSE callers get real tokens via the same
   `_generate_sse_from_tokens`/`_pump_token_events`/`HaituService.stream_no_rag` machinery already
   used by `exam-review-chat`; JSON-fallback callers `await answer_no_rag(...)` inline and return
   `{"analysis": ...}` directly. Populate `_PATTERN_ANALYSIS_CACHE[attempt_id]` when the stream
-  ends, exactly as today (unchanged replay behaviour on a second load). (depends on T4p2.1)
-- [ ] T4p2.3 [backend]: Concurrent-request guard — replace the `None` in-flight sentinel with the
+  ends, exactly as today (unchanged replay behaviour on a second load). (depends on T4p2.1) (2026-07-01)
+- [x] T4p2.3 [backend]: Concurrent-request guard — replace the `None` in-flight sentinel with the
   detached `asyncio.Task` object itself; a second request for the same `attempt_id` landing on the
   *same* worker while the first is still computing awaits that task via `asyncio.shield(task)`
   (NOT a per-request-owned `Future` — a disconnect on one request must not cancel or hang another
   request awaiting the same shared computation). 202 remains only for the genuine cross-worker
-  race (different worker, no visibility into the task). (depends on T4p2.2)
-- [ ] T4p2.4 [backend]: Apply the same shielded-shared-task fix to `_persist_task` in
+  race (different worker, no visibility into the task). (depends on T4p2.2) (2026-07-01)
+- [x] T4p2.4 [backend]: Apply the same shielded-shared-task fix to `_persist_task` in
   `post_topic_doubt` (`haitu.py` ~line 275-279) — identical fire-and-forget
   `asyncio.create_task(...); del _bg`-style pattern with the same factually-incorrect justifying
   comment ("the event loop holds a reference to the task until it completes" — contradicts
   asyncio's own docs on weak task references). Same file, same root cause, cheap to fix while
   touching this pattern; not the cause of the T7g bug itself (topic-doubt is fire-and-forget by
-  design — this is a hardening pass, not a behaviour change). (depends on T4p2.3)
-- [ ] T4p2.5 [backend]: Rewrite the now-invalid tests in
+  design — this is a hardening pass, not a behaviour change). (depends on T4p2.3) (2026-07-01)
+- [x] T4p2.5 [backend]: Rewrite the now-invalid tests in
   `tests/unit/routes/test_haitu_review.py::TestPostPatternAnalysis` —
   `test_first_call_with_incorrect_answers_returns_202` (TC-PA1),
   `test_cache_sentinel_returns_202` (TC-PA3), `test_failed_session_returns_202` (TC-PA8),
@@ -262,7 +262,7 @@
   cache population on cache-miss; add a same-worker concurrent-request test (second request
   awaits the shared task and receives the real result, not 202). TC-PA2/4/5/6/7/9 (cache-hit,
   neutral message, ownership/IDOR, rate-limit, SSE-cache-hit-replay, attempt_id-alias) are
-  unaffected — no change expected. Maintain 100% coverage. (depends on T4p2.2, T4p2.3)
+  unaffected — no change expected. Maintain 100% coverage. (depends on T4p2.2, T4p2.3) (2026-07-01)
 
 ### G4p2.3 — Deploy: verify gateway readiness (no config change expected)
 - [ ] T4p2.6 [deploy]: Verify `22-api-haitu-pattern-analysis.json` needs no change —
@@ -278,10 +278,19 @@
   on the very first call instead of never arriving. No polling loop is being added.
 
 ## Ready now
-- **G4-patch-2 [backend][specs][deploy] BLOCKING G4 integration testing (2026-07-01)**: T7(g) of
-  `g4_test_plan.md` failed — pattern-analysis stuck on 202 pending on first load. Start with
-  T4p2.1 (spec correction), then T4p2.2 → T4p2.3 → T4p2.4 → T4p2.5 (backend), T4p2.6 (deploy
-  verification only). No frontend task. Once closed, resume G4 test-plan items T7(g) and T8.
+- **T4p2.6 [deploy] (2026-07-01)**: only remaining G4-patch-2 task. Backend portion
+  (T4p2.1–T4p2.5) is complete; verify the `22-api-haitu-pattern-analysis.json` APISIX route
+  needs no change (proxy-buffering disabled + 600 s timeouts already shipped in G4p.3 are
+  sufficient for the now-inline-held connection). Once T4p2.6 closes, resume G4 test-plan
+  items T7(g) and T8.
+- **G4-patch-2 [backend][specs] DONE (2026-07-01)**: T4p2.1 (spec correction) + T4p2.2–T4p2.5
+  (backend) — pattern-analysis cache-miss now computes inline: SSE callers stream real tokens
+  on the first call via a detached `asyncio.Task` that broadcasts to a per-request queue; JSON
+  callers `await answer_no_rag` inline and return `{"analysis": ...}`; concurrent same-worker
+  requests `asyncio.shield` the shared in-flight task and replay the real result (no 202);
+  `_persist_task` in `post_topic_doubt` hardened with a strong-reference registry. 202 contract
+  removed (unreachable same-worker under the v1 in-memory-per-worker model); schema retained.
+  100% coverage held (4115 tests).
 - **G4p.2 [backend] DONE (2026-07-01)**: T4p.2.1/T4p.2.2/T4p.2.3 — exam-review-chat and
   pattern-analysis now SSE-streamed (token frames + 15 s heartbeats + done event; 202 pending
   pattern; JSON fallback {"response":str} / {"analysis":str}; attempt_id canonical,
