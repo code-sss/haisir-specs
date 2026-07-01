@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:9d27e8c frontend:23e1a45 deploy:fc29884 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
+> Last baselined: backend:9d27e8c frontend:efc33d8 deploy:fc29884 (2026-06-28 — refined; G0–G3 + G2-patch complete, G4 remaining)
 > Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0–G3 + G2-patch are done; G4 is the remaining work.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
@@ -174,17 +174,17 @@
   proxy-buffering — the 504 cause for pattern-analysis specifically)
 
 ### G4p.4 — Frontend: streaming consumer + graceful opening
-- [ ] T4p.4.1 [frontend]: Stream exam-review-chat on the frontend — add Accept:
+- [x] T4p.4.1 [frontend]: Stream exam-review-chat on the frontend — add Accept:
   text/event-stream to askExamReviewChat, route through consumeHaituSSE, lazy AI bubble on
   first token, abort on attempt-id switch/unmount, 45 s idle / 300 s total backstop, JSON
-  fallback; resend badge only on clean failure (no tokens received) (depends on T4p.2.1)
-- [ ] T4p.4.2 [frontend]: Stream pattern-analysis + graceful opening — seed chat with friendly
+  fallback; resend badge only on clean failure (no tokens received) (depends on T4p.2.1) (2026-07-01)
+- [x] T4p.4.2 [frontend]: Stream pattern-analysis + graceful opening — seed chat with friendly
   fallback opening before the call; on first token replace seed + append; on
   202/timeout/error keep seed + show non-blocking notice; update useExamReviewChat effect
-  (depends on T4p.2.2)
-- [ ] T4p.4.3 [frontend]: Update unit tests for streaming (lazy bubble, token append, abort,
+  (depends on T4p.2.2) (2026-07-01)
+- [x] T4p.4.3 [frontend]: Update unit tests for streaming (lazy bubble, token append, abort,
   JSON fallback, resend still works, seed→replace for pattern-analysis, seed kept on
-  empty/pending/timeout); maintain 100% coverage (depends on T4p.4.1, T4p.4.2)
+  empty/pending/timeout); maintain 100% coverage (depends on T4p.4.1, T4p.4.2) (2026-07-01)
 
 ### G4p.5 — Bug fixes applied during testing (already fixed, tracked for record)
 - [x] T4p.5.1 [backend]: Fix topic_marked_weak action_url — was /home/topics/{enrollment_id}
@@ -206,6 +206,12 @@
   navigate to /exam?node_id={nodeId} (or start a session directly) (depends on T4p.6.1)
 
 ## Ready now
+- **G4p.4 [frontend] DONE (2026-07-01)**: T4p.4.1/T4p.4.2/T4p.4.3 — S05 exam-review-chat +
+  pattern-analysis now SSE-streamed on the frontend (Accept: text/event-stream, reuse
+  consumeHaituSSE, lazy AI bubble, seed→replace for pattern-analysis, 202/timeout/error keep
+  seed + dismissible non-blocking notice, abort on attempt-id switch/unmount, JSON fallback,
+  resend only on clean failure); 100% coverage held.
 - **T4p.2.1 [backend]**: Stream `POST /api/haitu/exam-review-chat` over SSE (depends on T4p.1.1, done)
 - **T4p.2.2 [backend]**: Stream `POST /api/haitu/pattern-analysis` over SSE + 202 pending state (depends on T4p.1.1, done)
+- **T4p.2.3 [backend]**: DTO alignment for both hAITU review endpoints (depends on T4p.2.1, T4p.2.2)
 - **T4p.6.1 [backend]**: Wire `has_exam` in `GET /api/student/nodes/{id}/topics` (no deps)
