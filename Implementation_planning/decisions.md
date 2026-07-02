@@ -4,6 +4,54 @@
 
 ---
 
+## 2026-07-02 — Phase 5 planned (Parent Curriculum Builder + Link Codes, RAG-Connected)
+
+- **Scope choice:** Phase 5 = the carried-over parent curriculum builder + link codes, *expanded*
+  with two slices the challenger showed to be hard prerequisites: (a) the RAG re-ingestion/delete
+  chunk-cleanup slice of the "RAG hardening" backlog — parents are high-churn authors and the
+  existing `rag_outbox_loop` pipeline is append-only (`insert_nodes`, no per-`content_id` delete),
+  so note edits would duplicate/orphan vectors; (b) the `/parent` frontend shell + route-guard
+  slice of the role-migration backlog (there is no `/parent` app area to guard today). The rest of
+  role migration (`become-tutor`/`invite-role`, role-switcher metadata, `/institution` guards) is
+  deferred — natural Phase 6.
+- **hAITU access for parent-owned topics = parent-link gate, not enrollments.** `enrollment_id`
+  becomes optional on `POST /api/haitu/topic-doubt`; parent-owned topics require an active
+  `parent_child_links` row (+ `topic.status='live'`) checked per-request in `HaituDoubtService`
+  (same predicate as `infrastructure/visibility.py`), so revocation severs access immediately.
+  Chosen over allowing enrollments on parent nodes to avoid making `student_enrollments`
+  load-bearing outside platform content. Vector retrieval stays `topic_id`-filtered; the service
+  gate is the sole cross-family defense (explicit 403 tests in T5.3).
+- **Re-ingestion design:** content update → outbox upsert-with-reset
+  (`ON CONFLICT (content_id) DO UPDATE` back to `pending`; `updated_at` via existing trigger);
+  worker deletes stale chunks by `metadata_->>'content_id'` (raw SQL — LlamaIndex-owned table)
+  before `insert_nodes`; content delete → chunk + outbox cleanup in the same TX; cascade cleanup
+  on topic/node delete. Delete→insert ordering accepted for v1 (brief retrieval gap OK).
+- **Adopt idempotency is DB-enforced:** V38 adds `course_path_nodes.source_node_id` + partial
+  unique index `(owner_id, source_node_id)` — repeat adopt of the same platform root → 409.
+  Clone deep-copies nodes + topics only (BR-DATA-005); adopted topics start RAG-empty, surfaced
+  as "No notes yet" states in both parent builder and student viewer.
+- **Live link endpoints kept as-is:** redemption stays `POST /api/parent-child-links` +
+  `GET /api/parent-link-codes/{code}` (404 unknown / 410 expired-or-used / 409 duplicate link /
+  new 422 max-10 cap); the spec's `/api/parent/children/link` alias gets corrected in specs
+  instead of duplicating routes. New surface: student-side code generation
+  (`/api/student/parent-link-codes`, `/api/student/parent-links`) + `GET /api/parent/children`.
+  Note: the validate GET carries CSRF (`Depends(validate_csrf)`) — frontend must send the token
+  even on that GET.
+- **Deploy repo not needed this phase** — existing APISIX wildcard `/api/*` routes + route 16
+  (parent extraction upload) cover all new endpoints; verified against `common/routes/`.
+- **LLM-dependent acceptance assertions are Ollama-gated** (new `phase5_ollama_gated` suite,
+  following the phase3 convention): CI asserts contract level only (SSE 200 + `doubt_id` +
+  persistence, outbox state transitions); grounded-answer and chunk-replacement assertions need
+  bge-m3 + a chat model up.
+- **Sibling visibility kept as implemented:** all actively-linked children of a parent see all of
+  that parent's content (`visibility.py` semantics) — per-child audience scoping was consciously
+  deferred; revisit if parents with multiple children at different grades complain.
+- Two challenger rounds run (round 1: 1 blocker — un-gated LLM assertions in the acceptance test —
+  5 major, 10 minor; round 2: APPROVE, all resolved, no `<!-- UNRESOLVED -->` items). Baseline:
+  backend `9532392`, frontend `df7067e`, deploy `98912f8`.
+
+---
+
 ## 2026-07-02 — Phase 4 signed off
 
 - All five sub-goals (G0–G4) plus G2-patch and G4-patch/-2/-3/-4 are done. `TASKS.md`/`PLAN.md`

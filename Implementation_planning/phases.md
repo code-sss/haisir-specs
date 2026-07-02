@@ -89,3 +89,31 @@ real admin-built UI (post-T4.1.4). Archived: `archive/PLAN_Phase4-Mastery-PostEx
 nodes/topics, upload notes), parent link-code generation/redemption, remaining role-migration
 work (`vision/requirements/11_role_migration.md`: `become-tutor`/`invite-role` flows, frontend
 role-switcher metadata, `/institution` + `/parent` route guards).
+
+---
+
+## Phase 5 — Parent Curriculum Builder + Link Codes, RAG-Connected (planned 2026-07-02)
+
+> Root goal: a parent links to their child, builds/adopts a private curriculum, uploads content
+> that flows through extraction + RAG embedding, and the linked child studies it in Home Study
+> and asks hAITU questions grounded in the parent's notes. Full goal tree: `PLAN.md` / `TASKS.md`.
+
+| Sub-goal | Concern | Repos |
+|---|---|---|
+| **G1** — Parent–child linking lifecycle | Student link-code generation/rotation + link management endpoints and new `/profile` page; parent children list + revoke; max-10 cap | backend, frontend, specs |
+| **G2** — Parent workspace shell | Guarded `/parent` app area (route guard, layout, P-home dashboard, P-link page, dead-CTA fix) | frontend, specs |
+| **G3** — Parent curriculum builder | V38 adopt-lineage migration; owner-scoped node/topic CRUD + hierarchy rules; idempotent adopt/clone (409); parent instant content + owner-scoped PATCH/DELETE; builder UI reusing parameterized admin content components | backend, frontend, specs |
+| **G4** — RAG ingestion + re-ingestion lifecycle | Outbox enqueue on create, upsert-with-reset on update, chunk+outbox cleanup on delete (incl. cascade), worker delete-stale-before-insert; "No notes yet" UI states | backend, frontend, specs |
+| **G5** — hAITU on parent-owned topics | Optional `enrollment_id`; parent-link authorization gate in `HaituDoubtService`; severance + cross-family 403 tests; Home Study hAITU panel | backend, frontend, specs |
+| **G6** — Student Home Study surface | Live-only + revocation enforcement tests on all student read paths; source-aware empty states; content-viewing verification | backend, frontend |
+| **G7** — Phase acceptance | CI-safe E2E journey + Ollama-gated grounded variant; frontend suites + manual walkthrough record | backend, frontend |
+
+DAG spine: G1 → G2 → G3 → G4 → G5 → G6 → G7; G5/G6 backend tests are fixture-driven and can run
+in parallel with G1–G3. No deploy-repo work (existing APISIX wildcard routes cover all new
+endpoints). Baseline: backend `9532392`, frontend `df7067e`, deploy `98912f8`.
+
+**Deferred to Phase 6 (candidates):** remaining role migration (`become-tutor`/`invite-role`,
+role-switcher metadata, `/institution` route guards); RAG ops backlog (external HTTP reranker for
+the stubbed Stage 3, bundled inference service in deploy, hAITU Prometheus monitoring — still
+blocked on Chainguard licensing); per-child audience scoping of parent content; parent-facing
+hAITU endpoints (vision §3.5–3.7).
