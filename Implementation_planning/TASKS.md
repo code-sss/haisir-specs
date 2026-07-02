@@ -129,21 +129,21 @@
   (2026-07-01) found three additional paths the original 3-task proposal would have missed:
   the edit-hydration response (`ExamTemplateQuestionWithDetails`), the frontend state converter
   (`toQuestionV2`), and JSON import/export. See `decisions.md` 2026-07-01.
-  - [ ] T4.1.4a [backend][specs]: Add `topic_id: UUID4 | None = None` to `QuestionItemV2`,
-    `StaticQuestionPatchItem`, and `ExamTemplateQuestionWithDetails` in `src/schemas/exam.py`.
-  - [ ] T4.1.4b [backend]: Wire `topic_id` in `src/api/routes/exam.py`: `_create_v2_question`
+  - [x] T4.1.4a [backend][specs]: Add `topic_id: UUID4 | None = None` to `QuestionItemV2`,
+    `StaticQuestionPatchItem`, and `ExamTemplateQuestionWithDetails` in `src/schemas/exam.py`. (2026-07-02)
+  - [x] T4.1.4b [backend]: Wire `topic_id` in `src/api/routes/exam.py`: `_create_v2_question`
     → `QuestionExtras(topic_id=item.topic_id)`; `_process_patch_item` →
     `QuestionUpdateExtras(topic_id=item.topic_id, clear_topic_id=("topic_id" in
     item.model_fields_set and item.topic_id is None))` mirroring `clear_model_answer`; the
     edit-hydration builder `_build_with_details` → `ExamTemplateQuestionWithDetails(topic_id=
-    question.topic_id)` so the picker pre-populates on edit.
-  - [ ] T4.1.4c [backend][tests]: Extend `tests/unit/schemas/test_exam.py`
+    question.topic_id)` so the picker pre-populates on edit. (2026-07-02)
+  - [x] T4.1.4c [backend][tests]: Extend `tests/unit/schemas/test_exam.py`
     (`TestQuestionItemV2NewFields`/`TestStaticQuestionPatchItemNewFields`: `test_topic_id_accepted`
     + default-None assertion). Add a phase4 integration test: create a static exam with
     `topic_id` → PATCH (set + clear) → assert `questions.topic_id` persisted + `GET
     .../questions-with-details` returns it; add a mastery E2E (question with `topic_id` via the
     admin builder → student takes exam → submit → `enrollment_topics` row written — the path
-    currently untestable, which is why the gap went undetected).
+    currently untestable, which is why the gap went undetected). (2026-07-02)
   - [ ] T4.1.4d [frontend]: Add `topic_id?: string | null` to `QuestionV2`
     (`src/features/exam/types/exam.types.ts`); map it in `toQuestionV2` + add
     `ApiTemplateQuestion.topic_id` (`src/features/exam/hooks/use-exam-authoring.ts`); expose
@@ -364,15 +364,23 @@
   SSE consumer already surfaces `{"error":...}` frames per T4p.4.1 (2026-07-01)
 
 ## Ready now
-- **G4.1 is RE-OPENED (2026-07-01) as T4.1.4** — see above. The admin exam builder cannot set
+- **T4.1.4 backend portion DONE (2026-07-02)** — T4.1.4a (schemas: `topic_id` on
+  `QuestionItemV2`/`StaticQuestionPatchItem`/`ExamTemplateQuestionWithDetails`), T4.1.4b (route
+  wiring: `QuestionExtras`/`QuestionUpdateExtras` + `clear_topic_id` + with-details hydration),
+  and T4.1.4c (schema + route unit tests + two phase4 integration tests: static-exam topic_id
+  persistence/clear/with-details + mastery E2E) are all `[x]`. 4134 passed, 29 skipped, 100%
+  coverage; no migration (V37 already added the column). **T4.1.4d/e/f [frontend] are now READY**
+  for `/implement` in `haisir-frontend` — the backend contract they consume (per-question
+  `topic_id` on create/patch + edit-hydration, optional at the API boundary, `null` = clear) is
+  live. T4.1.4g [specs] was already done 2026-07-01. **Phase 4 cannot be closed until T4.1.4d/e/f
+  land** and `g4_test_plan.md` T2 (plus the end-to-end form of T3–T6 / T10) passes. See
+  `decisions.md` 2026-07-01.
+- **G4.1 was RE-OPENED (2026-07-01) as T4.1.4** — see above. The admin exam builder could not set
   `questions.topic_id`: the static create/patch route (`POST`/`PATCH /api/exams/{node_id}/static`)
-  never wired it, so `MasteryService` skips every UI-created question and G4.2/G4.4 are unreachable
-  through the real admin→student flow. T4.1.1/T4.1.3b were marked done but only covered the V37
-  column + domain/repo, not the creation path. The service layer is already complete; T4.1.4a–g
-  (backend schemas + route wiring + edit-hydration + frontend types/hook/api/converter/JSON-picker
-  + tests + specs) are the remaining work for `/implement` in `haisir-backend` and
-  `haisir-frontend`. **Phase 4 cannot be closed until T4.1.4 lands** and `g4_test_plan.md` T2 (plus
-  the end-to-end form of T3–T6 / T10) passes. See `decisions.md` 2026-07-01.
+  never wired it, so `MasteryService` skipped every UI-created question and G4.2/G4.4 were
+  unreachable through the real admin→student flow. T4.1.1/T4.1.3b were marked done but only
+  covered the V37 column + domain/repo, not the creation path. The backend fix (T4.1.4a/b/c) is
+  now complete; only the frontend (d/e/f) remains.
 - **T7 and T8 (`g4_test_plan.md`) are verified against the live stack (2026-07-01)**: T7 including
   7g (pattern-analysis SSE streaming on first load — confirmed fixed by G4-patch-2); T8's four
   guard scenarios (8a–8d — ownership/IDOR, status-gate, missing-role-header) all returned the
