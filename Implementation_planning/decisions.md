@@ -4,6 +4,59 @@
 
 ---
 
+## 2026-07-02 — Phase 4 signed off
+
+- All five sub-goals (G0–G4) plus G2-patch and G4-patch/-2/-3/-4 are done. `TASKS.md`/`PLAN.md`
+  archived to `archive/{PLAN,TASKS}_Phase4-Mastery-PostExam_2026-06-24.md`; `phases.md` and
+  `progress.md`'s Completed Phases section updated. Final baseline: backend `0cb36bd`, frontend
+  `df7067e`, deploy `98912f8`.
+- **Retroactively logged before close:** G4-patch-4 (deploy `98912f8`) — narrowed the hAITU Coraza
+  WAF chat-endpoint exclusion (found via live browser testing of exam-review-chat; AI-generated
+  markdown was tripping RCE/PHP/SQLi false positives beyond the existing SQLi exclusion set). Not
+  filed as a task before the fix landed; added to `TASKS.md` retroactively so the audit trail was
+  complete at close.
+- `g4_test_plan.md` T1–T10 (schema, builder topic picker, EWA mastery formula, `topic_marked_weak`,
+  third-topic `student_at_risk` + no-refire, recovery clear, essay-grading mastery path, S05
+  review screen, security guards, FocusAreasStrip) all re-verified live through the real
+  admin-built UI post-T4.1.4 — no open items in the closing checklist.
+- Carried into Phase 5: parent curriculum builder, parent link-code generation/redemption, and the
+  remaining `11_role_migration.md` work (`become-tutor`/`invite-role`, role-switcher metadata,
+  `/institution` + `/parent` route guards) — none touched this phase.
+
+---
+
+## 2026-07-02 — G4.1 closed: T4.1.4 landed, committed, and verified live
+
+> Closes the gap opened 2026-07-01 below.
+
+- Backend committed as `haisir-backend@0cb36bd` ("feat(exam): wire topic_id through static exam
+  create/patch/read"); frontend committed as `haisir-frontend@df7067e` ("feat(exam): attribute
+  questions to topics for per-topic mastery (G4.2)"). Both were verified directly against the
+  actual repo contents in this session (not taken on faith from TASKS.md): `topic_id` is wired
+  through `QuestionItemV2`/`StaticQuestionPatchItem`/`ExamTemplateQuestionWithDetails`,
+  `_create_v2_question`/`_process_patch_item`/`_build_with_details`, and all six frontend
+  touchpoints (`exam.types.ts`, `use-exam-authoring.ts`, `exam-api.ts`, `json-importer.ts`,
+  `question-editor.tsx`, `exam-builder.tsx`).
+- **Addition beyond the original task text:** the backend implementation added
+  `_validate_topic_ids` (`src/api/routes/exam.py`) — a 400 guard rejecting any submitted
+  `topic_id` that doesn't belong to the target course node, checked before persistence on both
+  create and patch. Reasonable hardening; not scoped in T4.1.4b but doesn't conflict with any
+  decision above.
+- **Frontend deviation confirmed intentional (T4.1.4f):** `useTopics(nodeId)` is called once in
+  `ExamBuilder`, not threaded as `nodeId` into `question-editor.tsx`. `topics: Topic[]` is passed
+  down as a plain prop through `ParagraphEditor` → `QuestionEditor` instead, matching this
+  codebase's existing one-active-fetcher-plus-passive-consumers precedent. Documented in TASKS.md;
+  no spec impact.
+- Backend full test suite re-run in this session: 4143 passed, 29 skipped, 100% coverage held.
+- `g4_test_plan.md` T1–T10 manually verified live by the user against the running stack, including
+  a full re-run of T3–T6 (weak-topic marking, EWA formula recalculation, third-topic
+  `student_at_risk` alert + no-refire, recovery clear) and T9's recovered-state check (5–6) through
+  the now-working real admin-built UI — topic dropdown renders and pre-populates on edit, a full
+  student exam attempt runs end-to-end, and the focus-areas strip appears and clears correctly.
+  No open items remain in `g4_test_plan.md`'s closing checklist.
+
+---
+
 ## 2026-07-01 — G4.1 re-open: exam builder never wires questions.topic_id (T4.1.4)
 
 > Found during the G4 test-plan close-out review. The admin exam builder cannot set

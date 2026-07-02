@@ -1,8 +1,11 @@
-# Progress
+# Progress — Phase 4 (CLOSED 2026-07-02)
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:f6bdf2b frontend:302ac06 deploy:457de26 (2026-07-01 — refined; G0–G3 + G2-patch complete, G4 remaining)
-> Order: G0 → G1 → G2 → G3 → G4 (acyclic). G0–G3 + G2-patch are done; G4 is the remaining work.
+> Final baseline: backend:0cb36bd frontend:df7067e deploy:98912f8 (2026-07-02 — Phase 4 signed off; this file archived to `archive/TASKS_Phase4-Mastery-PostExam_2026-06-24.md`)
+> Order: G0 → G1 → G2 → G3 → G4 (acyclic). All of G0–G4 + G2-patch + G4-patch/-2/-3/-4 are done.
+> `g4_test_plan.md` T1–T10 all verified live against the real admin-built UI post-T4.1.4
+> (2026-07-02) — no open items at close. See `progress.md` Completed Phases → Phase 4 for the
+> sign-off record.
 
 ## G0 — Stabilize HEAD (P0 blocker) [backend][frontend][deploy][specs]
 
@@ -117,7 +120,7 @@
 - [x] T4.1.2 [backend]: V37 migration: add questions.topic_id (NULLABLE) + enrollment_topics + student_risk_state (depends on T4.1.1) (2026-06-29)
 - [x] T4.1.3a [backend]: EnrollmentTopic domain model + repository (depends on T4.1.2) (2026-06-29)
 - [x] T4.1.3b [backend]: Map questions.topic_id in Question model + repo (depends on T4.1.2) (2026-06-29)
-- [ ] T4.1.4 — Wire `questions.topic_id` into the exam builder (re-open 2026-07-01).
+- [x] T4.1.4 — Wire `questions.topic_id` into the exam builder (re-open 2026-07-01).
   T4.1.1/T4.1.3b were marked done but only covered the V37 column + the Question domain/repo
   mapping; the creation/patch path the admin exam builder actually uses
   (`POST/PATCH /api/exams/{node_id}/static`) never accepts or persists `topic_id`. Without it,
@@ -175,14 +178,19 @@
   Frontend (d/e/f): `pnpm lint`, `pnpm typecheck`, `pnpm test:coverage` all pass clean (2771/2771
   tests, 100% statements/branches/functions/lines) against the live backend contract from
   T4.1.4a/b/c.
-- [ ] **G4.1: Exam↔topic linkage + enrollment_topics schema (V37)** — STILL RE-OPENED: all coding
-  subtasks of T4.1.4 are done, but the goal line cannot flip to done from a frontend-only session.
-  `g4_test_plan.md` T2 requires a manual live-stack walkthrough (real admin login, real backend,
-  real browser) — set a topic on a question via the builder UI, save, confirm `questions.topic_id`
-  persists, then run a student attempt through to confirm `enrollment_topics` gets written. This
-  was not run here (no live backend/browser session available in this repo's `/implement`). Until
-  T2 (and the end-to-end form of T3–T6 / T10) is run and passes, G4.1's goal line and G4.2/G4.4's
-  live-flow closure remain open. See `g4_test_plan.md` T2.
+- [x] **G4.1: Exam↔topic linkage + enrollment_topics schema (V37)** — CLOSED 2026-07-02. Backend
+  (`haisir-backend@0cb36bd`) and frontend (`haisir-frontend@df7067e`) code verified directly in
+  this session: `topic_id` present and wired through `QuestionItemV2` / `StaticQuestionPatchItem` /
+  `ExamTemplateQuestionWithDetails`, `_create_v2_question` / `_process_patch_item` /
+  `_build_with_details`, plus an added `_validate_topic_ids` guard (400 if a submitted `topic_id`
+  doesn't belong to the target course node — not in the original task text, a reasonable hardening
+  found during code review). Full backend suite: 4143 passed, 29 skipped, 100% coverage. Frontend
+  wiring confirmed in `exam.types.ts`, `use-exam-authoring.ts`, `exam-api.ts`, `json-importer.ts`,
+  `question-editor.tsx`, `exam-builder.tsx` (topics fetched once in `ExamBuilder`, passed down —
+  per T4.1.4f's documented deviation). `g4_test_plan.md` T2 (admin sets topic via builder UI, saves,
+  student takes exam, `enrollment_topics` written) and T10 (essay mastery path) manually verified
+  live by the user 2026-07-02 — topic dropdown renders in the builder, exam-taking and focus-areas
+  strip work end-to-end.
 
 ### G4.2 — MasteryService + notifications
 - [x] T4.2.1a [backend]: MasteryService.recompute_for_session algorithm (depends on T4.1.3a, T4.1.3b, T4.2.2) (2026-06-29)
@@ -373,32 +381,45 @@
   updated in `test_haitu_service.py` + `test_haitu_review.py`; no frontend change needed — the
   SSE consumer already surfaces `{"error":...}` frames per T4p.4.1 (2026-07-01)
 
+## G4-patch-4 — Deploy: narrow hAITU Coraza WAF exclusion to chat endpoints only [deploy]
+
+> Found via live browser testing while verifying G4.3's exam-review-chat manually. Not filed as a
+> task before the fix landed — recorded here retroactively so the audit trail is complete before
+> Phase 4 closes.
+
+- [x] T4p4.1 [deploy]: `common/plugin_configs/03-secured-api.json` — exam-review-chat's
+  AI-generated markdown feedback (numbered lists, headings, words like "system") was tripping
+  RCE/PHP/SQLi false positives (932200, 933160, 942350, 942370, 942430, 942440) beyond the
+  existing SQLi exclusion set (942200, 942131/130/340/380/400/410), causing 403s. Narrowed the
+  exemption's URI match from the whole `/api/haitu/*` prefix to just `topic-doubt` and
+  `exam-review-chat` (pattern-analysis's body is only an `attempt_id` UUID and gets no benefit,
+  so it keeps full WAF inspection). Re-confirmed `ctl:ruleRemoveTargetById` (field-scoped removal)
+  is unreliable on this Coraza WASM build (APISIX 3.17) via live browser re-test — same finding as
+  rule 931130 on `/api/topics-contents/` — so full `ctl:ruleRemoveById` remains the only working
+  form; residual risk (all 13 rule IDs disabled request-wide, not just the JSON body, for these
+  two endpoints) is accepted and documented inline in the plugin config. (2026-07-01)
+- [x] **G4-patch-4: narrow hAITU WAF exclusion** — deploy `98912f8` (2026-07-01)
+
 ## Ready now
-- **T4.1.4 (all of a–g) DONE (2026-07-02)** — backend (a/b/c) landed 2026-07-02 morning; frontend
-  (d/e/f) implemented 2026-07-02 via `/implement` in `haisir-frontend` (`pnpm lint`/`typecheck`/
-  `test:coverage` all clean, 2771/2771 tests, 100% coverage) but **left uncommitted** in the
-  working tree at the user's request — HEAD is still `302ac06`; the `frontend:` baseline SHA
-  below has NOT been advanced and should be updated once the user commits. T4.1.4g [specs] was
-  already done 2026-07-01. Frontend implementation detail: `useTopics` is called once in `ExamBuilder` (not
-  threaded as `nodeId` into `question-editor.tsx` as originally worded) — `topics: Topic[]` is
-  passed down as a plain prop instead; see the T4.1.4f note above and `decisions.md` if a fuller
-  rationale is wanted. **No coded `[frontend]`/`[backend]` task remains blocked on T4.1.4.**
-  What remains is the **manual live-stack verification** in `g4_test_plan.md` T2 (create questions
-  with `topic_id` via the real admin builder UI against a running backend, then run a student
-  attempt through to confirm `enrollment_topics` is written) — this cannot be run from a
-  frontend-only `/implement` session (no live backend/browser available here) and is what still
-  blocks G4.1's goal line and the live-flow closure of G4.2/G4.4.
-- **G4.1 goal line remains RE-OPENED** pending the `g4_test_plan.md` T2 live-stack walkthrough
-  above — all coding subtasks (T4.1.1–T4.1.4g) are now `[x]`; only the manual verification step
-  is outstanding.
+- **T4.1.4 (all of a–g) DONE and COMMITTED (2026-07-02)** — backend committed as
+  `haisir-backend@0cb36bd` ("feat(exam): wire topic_id through static exam create/patch/read");
+  frontend committed as `haisir-frontend@df7067e` ("feat(exam): attribute questions to topics for
+  per-topic mastery (G4.2)"). Baselined SHAs at the top of this file updated accordingly. Verified
+  directly this session: backend full suite 4143 passed / 29 skipped / 100% coverage; code
+  inspection confirms `topic_id` wired end-to-end in both repos, plus an added
+  `_validate_topic_ids` 400-guard (topic must belong to the target course node) not in the
+  original task text. Frontend `useTopics` is called once in `ExamBuilder` and passed down as a
+  plain `topics` prop (T4.1.4f's documented deviation from literal `nodeId`-threading).
+- **G4.1 goal line CLOSED (2026-07-02)** — `g4_test_plan.md` T2 and T10 manually verified by the
+  user against the live stack: topic dropdown renders in the admin exam builder, a full student
+  exam attempt runs end-to-end, and the focus-areas strip appears correctly.
 - **T7 and T8 (`g4_test_plan.md`) are verified against the live stack (2026-07-01)**: T7 including
   7g (pattern-analysis SSE streaming on first load — confirmed fixed by G4-patch-2); T8's four
   guard scenarios (8a–8d — ownership/IDOR, status-gate, missing-role-header) all returned the
   expected `403`/`400` against a real backend session (student `sub=576ed7e1-...`). Not tracked as
-  TASKS.md checkboxes — tracked in `g4_test_plan.md`'s own closing checklist. **Remaining in
-  `g4_test_plan.md`: T2** (frontend now ready — needs a live-stack run), **T9** (focus-areas strip
-  on `/home`), and **T10** (essay-exam mastery path) — none run live end-to-end yet as of this
-  update.
+  TASKS.md checkboxes — tracked in `g4_test_plan.md`'s own closing checklist. **T2–T6, T9, T10 all
+  verified live (2026-07-02)** — see G4.1 closure note above. `g4_test_plan.md`'s closing checklist
+  is fully ticked; no open items remain.
 - **G4-patch-2 [backend][specs] DONE (2026-07-01)**: T4p2.1 (spec correction) + T4p2.2–T4p2.5
   (backend) — pattern-analysis cache-miss now computes inline: SSE callers stream real tokens
   on the first call via a detached `asyncio.Task` that broadcasts to a per-request queue; JSON
