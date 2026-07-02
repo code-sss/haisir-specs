@@ -164,7 +164,7 @@
     `ExamBuilder` → `QuestionEditor` + `ParagraphEditor`. Picker value = `topic_id ?? ""`;
     selecting "" sets `topic_id: null` (explicit clear); any other value sets `topic_id: <id>`.
     Pre-populates on edit via the T4.1.4b with-details field.
-  - [ ] T4.1.4g [specs]: Update `07_platform_admin.md` exam-builder contract (per-question
+  - [x] T4.1.4g [specs]: Update `07_platform_admin.md` exam-builder contract (per-question
     topic picker + reconcile the topics endpoint `/api/admin/nodes/:node_id/topics` → actual
     `/api/topics/{course_path_node_id}`); record `topic_id` optional-at-API / UI-required in the
     `01_data_model.md` exam-builder note. (done 2026-07-01)
