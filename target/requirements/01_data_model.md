@@ -762,6 +762,16 @@ Migration **V37**. All columns and tables are additive — nothing is dropped or
   multi-topic exams, which only `questions.topic_id` provides. `questions.topic_id` is the
   single source of truth for mastery attribution and works for both quiz (single-topic) and
   exam (multi-topic) purposes. Quiz scoping resolves via `questions.topic_id` uniformly.
+- **Enforcement (2026-07-01, G4.1 T4.1.4).** The "application layer requires `topic_id` for newly
+  created questions" mandate is enforced **in the UI** (the exam builder's per-question Topic
+  dropdown — see `07_platform_admin.md`), not as a hard 422 at the API boundary. `topic_id` is
+  optional on `QuestionItemV2` / `StaticQuestionPatchItem` (`UUID4 | None = None`) so legacy rows,
+  JSON-imported exams, and programmatic/test creation keep working; NULL-topic questions are
+  skipped by mastery recalc, not rejected. The exam-builder create/patch routes
+  (`POST`/`PATCH /api/exams/{node_id}/static`) carry `topic_id` end-to-end (schema →
+  `QuestionExtras` → `Question` row), and `GET .../questions-with-details` returns it for
+  edit-hydration. (T4.1.1 / T4.1.3b originally marked this done but only covered the column +
+  domain/repo — the creation path itself is wired by T4.1.4; see `decisions.md` 2026-07-01.)
 
 ### New column on `questions` (V37)
 

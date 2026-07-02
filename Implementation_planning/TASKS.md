@@ -117,7 +117,62 @@
 - [x] T4.1.2 [backend]: V37 migration: add questions.topic_id (NULLABLE) + enrollment_topics + student_risk_state (depends on T4.1.1) (2026-06-29)
 - [x] T4.1.3a [backend]: EnrollmentTopic domain model + repository (depends on T4.1.2) (2026-06-29)
 - [x] T4.1.3b [backend]: Map questions.topic_id in Question model + repo (depends on T4.1.2) (2026-06-29)
-- [x] **G4.1: Exam↔topic linkage + enrollment_topics schema (V37)** — integration test (2026-06-30)
+- [ ] T4.1.4 — Wire `questions.topic_id` into the exam builder (re-open 2026-07-01).
+  T4.1.1/T4.1.3b were marked done but only covered the V37 column + the Question domain/repo
+  mapping; the creation/patch path the admin exam builder actually uses
+  (`POST/PATCH /api/exams/{node_id}/static`) never accepts or persists `topic_id`. Without it,
+  `MasteryService.recompute_for_session` skips every question (`question.topic_id is None`,
+  `src/domain/services/mastery_service.py:142`), so G4.2/G4.4 are unreachable through the real
+  admin→student flow — the 2026-06-30 integration tests passed only by setting `topic_id` directly.
+  The service layer is already complete (`QuestionExtras.topic_id`, `QuestionUpdateExtras.topic_id`
+  + `clear_topic_id`); only schemas + route wiring + frontend + tests remain. A challenger pass
+  (2026-07-01) found three additional paths the original 3-task proposal would have missed:
+  the edit-hydration response (`ExamTemplateQuestionWithDetails`), the frontend state converter
+  (`toQuestionV2`), and JSON import/export. See `decisions.md` 2026-07-01.
+  - [ ] T4.1.4a [backend][specs]: Add `topic_id: UUID4 | None = None` to `QuestionItemV2`,
+    `StaticQuestionPatchItem`, and `ExamTemplateQuestionWithDetails` in `src/schemas/exam.py`.
+  - [ ] T4.1.4b [backend]: Wire `topic_id` in `src/api/routes/exam.py`: `_create_v2_question`
+    → `QuestionExtras(topic_id=item.topic_id)`; `_process_patch_item` →
+    `QuestionUpdateExtras(topic_id=item.topic_id, clear_topic_id=("topic_id" in
+    item.model_fields_set and item.topic_id is None))` mirroring `clear_model_answer`; the
+    edit-hydration builder `_build_with_details` → `ExamTemplateQuestionWithDetails(topic_id=
+    question.topic_id)` so the picker pre-populates on edit.
+  - [ ] T4.1.4c [backend][tests]: Extend `tests/unit/schemas/test_exam.py`
+    (`TestQuestionItemV2NewFields`/`TestStaticQuestionPatchItemNewFields`: `test_topic_id_accepted`
+    + default-None assertion). Add a phase4 integration test: create a static exam with
+    `topic_id` → PATCH (set + clear) → assert `questions.topic_id` persisted + `GET
+    .../questions-with-details` returns it; add a mastery E2E (question with `topic_id` via the
+    admin builder → student takes exam → submit → `enrollment_topics` row written — the path
+    currently untestable, which is why the gap went undetected).
+  - [ ] T4.1.4d [frontend]: Add `topic_id?: string | null` to `QuestionV2`
+    (`src/features/exam/types/exam.types.ts`); map it in `toQuestionV2` + add
+    `ApiTemplateQuestion.topic_id` (`src/features/exam/hooks/use-exam-authoring.ts`); expose
+    `nodeId` from the `useExamAuthoring` return (read from `?node_id=`).
+  - [ ] T4.1.4e [frontend]: Emit `topic_id` in the `toItem` create-body builder
+    (`src/features/exam/api/exam-api.ts`). The PATCH body already `JSON.stringify`s the
+    `QuestionV2` array directly, so the three states map correctly with no extra work:
+    `undefined` → omitted by `JSON.stringify` → backend preserves; `null` → sent → backend clears
+    (`clear_topic_id`); `string` → sent → backend sets. Add `topic_id` to `PlanV2Item` /
+    `normalizePlanItem` / `serializeQuestion` in `src/features/exam/domain/json-importer.ts` for
+    JSON round-trip (soft pointer — no validation; a dangling UUID after cross-node import just
+    means mastery skips that question, per `01_data_model.md`).
+  - [ ] T4.1.4f [frontend]: Add a topic `<select>` to `question-editor.tsx` reusing
+    `useTopics(nodeId)` from `src/features/admin/hooks/use-topics.ts` (returns draft + live topics
+    for the node; backed by `GET /api/topics/{course_path_node_id}` guarded
+    `require_any_platform_role()` — admin + instructor; parents cannot reach the builder, see
+    `decisions.md` 2026-07-01). Thread `nodeId`: `useExamAuthoring` → `src/app/add-exam/page.tsx` →
+    `ExamBuilder` → `QuestionEditor` + `ParagraphEditor`. Picker value = `topic_id ?? ""`;
+    selecting "" sets `topic_id: null` (explicit clear); any other value sets `topic_id: <id>`.
+    Pre-populates on edit via the T4.1.4b with-details field.
+  - [ ] T4.1.4g [specs]: Update `07_platform_admin.md` exam-builder contract (per-question
+    topic picker + reconcile the topics endpoint `/api/admin/nodes/:node_id/topics` → actual
+    `/api/topics/{course_path_node_id}`); record `topic_id` optional-at-API / UI-required in the
+    `01_data_model.md` exam-builder note. (done 2026-07-01)
+- [ ] **G4.1: Exam↔topic linkage + enrollment_topics schema (V37)** — RE-OPENED 2026-07-01 (was
+  integration test 2026-06-30): the exam builder creation/patch path never wired
+  `questions.topic_id` — T4.1.1/T4.1.3b were marked done but only covered the column + domain/repo.
+  Blocked on T4.1.4. Until it lands, G4.2/G4.4 mastery is unreachable via the admin→student UI
+  flow, and `g4_test_plan.md` T2 (plus the end-to-end form of T3–T6 / T10) cannot pass.
 
 ### G4.2 — MasteryService + notifications
 - [x] T4.2.1a [backend]: MasteryService.recompute_for_session algorithm (depends on T4.1.3a, T4.1.3b, T4.2.2) (2026-06-29)
@@ -309,15 +364,22 @@
   SSE consumer already surfaces `{"error":...}` frames per T4p.4.1 (2026-07-01)
 
 ## Ready now
-- **No unchecked tasks remain in TASKS.md.** G4, G4-patch, G4-patch-2, and G4-patch-3 are
-  complete on paper. **T7 and T8 (`g4_test_plan.md`) are now verified against the live stack
-  (2026-07-01)**: T7 including 7g (pattern-analysis SSE streaming on first load — confirmed
-  fixed by G4-patch-2); T8's four guard scenarios (8a–8d — ownership/IDOR, status-gate,
-  missing-role-header) all returned the expected `403`/`400` against a real backend session
-  (student `sub=576ed7e1-...`). Not tracked as TASKS.md checkboxes — tracked in
-  `g4_test_plan.md`'s own closing checklist. **Remaining in `g4_test_plan.md`: T9** (focus-areas
-  strip on `/home`) **and T10** (essay-exam mastery path) — neither run live yet as of this
-  update.
+- **G4.1 is RE-OPENED (2026-07-01) as T4.1.4** — see above. The admin exam builder cannot set
+  `questions.topic_id`: the static create/patch route (`POST`/`PATCH /api/exams/{node_id}/static`)
+  never wired it, so `MasteryService` skips every UI-created question and G4.2/G4.4 are unreachable
+  through the real admin→student flow. T4.1.1/T4.1.3b were marked done but only covered the V37
+  column + domain/repo, not the creation path. The service layer is already complete; T4.1.4a–g
+  (backend schemas + route wiring + edit-hydration + frontend types/hook/api/converter/JSON-picker
+  + tests + specs) are the remaining work for `/implement` in `haisir-backend` and
+  `haisir-frontend`. **Phase 4 cannot be closed until T4.1.4 lands** and `g4_test_plan.md` T2 (plus
+  the end-to-end form of T3–T6 / T10) passes. See `decisions.md` 2026-07-01.
+- **T7 and T8 (`g4_test_plan.md`) are verified against the live stack (2026-07-01)**: T7 including
+  7g (pattern-analysis SSE streaming on first load — confirmed fixed by G4-patch-2); T8's four
+  guard scenarios (8a–8d — ownership/IDOR, status-gate, missing-role-header) all returned the
+  expected `403`/`400` against a real backend session (student `sub=576ed7e1-...`). Not tracked as
+  TASKS.md checkboxes — tracked in `g4_test_plan.md`'s own closing checklist. **Remaining in
+  `g4_test_plan.md`: T2** (blocked on T4.1.4), **T9** (focus-areas strip on `/home`), and **T10**
+  (essay-exam mastery path) — none run live end-to-end yet as of this update.
 - **G4-patch-2 [backend][specs] DONE (2026-07-01)**: T4p2.1 (spec correction) + T4p2.2–T4p2.5
   (backend) — pattern-analysis cache-miss now computes inline: SSE callers stream real tokens
   on the first call via a detached `asyncio.Task` that broadcasts to a per-request queue; JSON

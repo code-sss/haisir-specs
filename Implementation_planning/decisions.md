@@ -4,6 +4,68 @@
 
 ---
 
+## 2026-07-01 — G4.1 re-open: exam builder never wires questions.topic_id (T4.1.4)
+
+> Found during the G4 test-plan close-out review. The admin exam builder cannot set
+> `questions.topic_id`, which silently disables mastery attribution (G4.2/G4.4) for any exam
+> created through the UI. A challenger pass independently verified the gap and expanded the fix
+> scope. Recorded here so `/implement` picks up the full task list (TASKS.md T4.1.4) in each code
+> repo — no code was changed in the sibling repos from the specs repo.
+
+- **The gap.** `questions.topic_id` (added nullable by V37, T4.1.2) is wired only at the
+  domain/repo layer (`Question.topic_id`, `QuestionExtras.topic_id`, `QuestionUpdateExtras`
+  + `clear_topic_id`, `QuestionService.create`/`_apply_extras`). The creation/patch path the admin
+  exam builder uses — `POST`/`PATCH /api/exams/{node_id}/static` — never accepts it:
+  `QuestionItemV2` and `StaticQuestionPatchItem` (`src/schemas/exam.py`) have no `topic_id` field,
+  `_create_v2_question` and `_process_patch_item` (`src/api/routes/exam.py`) don't pass it to
+  `QuestionExtras`/`QuestionUpdateExtras`, and the edit-hydration response
+  `ExamTemplateQuestionWithDetails` doesn't return it. The standalone `POST /api/questions`
+  (`question.py:269`) is the only route that wires `topic_id`, and no admin UI calls it.
+  Consequence: `MasteryService.recompute_for_session` skips every question whose
+  `topic_id is None` (`mastery_service.py:142`), so weak-topic detection, `topic_marked_weak`,
+  `student_at_risk`, and the FocusAreasStrip are all unreachable through the real admin→student
+  flow. The 2026-06-30 G4.1–G4.4 integration tests passed only because they set `topic_id` directly
+  (DB / standalone route), bypassing the UI — which is why the gap went undetected.
+- **Challenger findings (the original 3-task proposal would have missed these):** (1) the
+  edit-hydration response `ExamTemplateQuestionWithDetails` must also carry `topic_id` or the
+  picker can't pre-populate on edit; (2) the frontend state converter `toQuestionV2`
+  (`use-exam-authoring.ts`) must map `topic_id` or edit-reload drops it from form state; (3) JSON
+  import/export (`json-importer.ts` `serializeQuestion`/`normalizePlanItem`) must carry
+  `topic_id` or an exported→re-imported exam loses topic linkage. The challenger also confirmed no
+  other question-creation path needs wiring (`POST /api/exams/template-question` links existing
+  questions; dynamic generation selects existing questions by topic — both inherit `topic_id`),
+  no clone/duplicate-exam path exists, and no `PATCH /api/questions/{id}` route exists.
+- **Decision 1 — `topic_id` is OPTIONAL at the API boundary, REQUIRED in the UI.**
+  `QuestionItemV2`/`StaticQuestionPatchItem` get `topic_id: UUID4 | None = None` (None default).
+  Rationale: the column is deliberately NULLABLE to support legacy rows (`01_data_model.md`), the
+  spec's "application layer requires `topic_id` for newly created questions" is a forward-looking
+  expectation not a hard 422 (a hard-require would break JSON import of legacy exams, programmatic/
+  test creation, and diverge from the standalone `POST /api/questions` which already treats it as
+  optional), and the UI picker makes it effectively required for new questions. The mastery service
+  already skips NULL-`topic_id` questions, so legacy data is unaffected.
+- **Decision 2 — clear mechanism mirrors `model_answer`/`rubric`.** `clear_topic_id` is derived
+  from `StaticQuestionPatchItem.model_fields_set` (`"topic_id" in fields_set and topic_id is None`),
+  not an explicit `clear_topic_id: bool` field. This matches the precedent set by
+  `clear_model_answer`/`clear_rubric` and the already-shipped `QuestionUpdateExtras.clear_topic_id`
+  flag (no service-layer change needed).
+- **Decision 3 — JSON round-trip carries `topic_id` as a soft pointer, no validation.** `topic_id`
+  survives export→import unchanged. Since it's an advisory soft FK (no hard FK on the column), a
+  UUID that doesn't resolve on a different node just means mastery skips that question — harmless
+  per spec. No stripping/validation on export.
+- **Decision 4 — re-open G4.1 as T4.1.4, not a new G4-patch-4.** T4.1.1 ("Author all G4 spec
+  deltas") and T4.1.3b ("Map questions.topic_id in Question model + repo") were marked `[x]` but
+  never wired the creation route — the spec mandate ("application layer requires `topic_id` for
+  newly created questions", `01_data_model.md:751`) was never enforced in the creation path.
+  Re-opening G4.1 keeps the audit trail honest (a marked-done task was incomplete) rather than
+  filing a post-test-found patch. The G4.1 goal line in TASKS.md is flipped to `[ ]` / RE-OPENED.
+- **Parent-role scope (non-issue).** `GET /api/topics/{course_path_node_id}` is guarded
+  `require_any_platform_role()` (admin + instructor; excludes `parent`), and the static-exam
+  create/patch routes are guarded `require_instructor()`. The parent curriculum builder is not yet
+  built (`progress.md`), so parents cannot reach the exam builder today — the picker's topics fetch
+  will not 403 for anyone who can reach the builder. Revisit when the parent exam builder lands.
+
+---
+
 ## 2026-07-01 — Spec correction: pattern-analysis 202 contract is fully retired, not a rare cross-worker fallback
 
 > Found while reconciling `haisir-specs` against all four sibling-repo HEADs (spec sync cycle

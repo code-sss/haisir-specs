@@ -65,6 +65,26 @@ Single source of truth for upload + extraction progress. Visible only when ≥1 
 
 Full behaviour and business rules in `target/requirements/12_content_extraction.md`.
 
+### Exam builder — per-question topic picker (Phase 4 / G4.1)
+
+The exam builder (`/add-exam`, edit at `?template_id=`) authors a static exam template under a
+course-path node. Each question editor carries a **Topic** dropdown so the admin can attach the
+question to a topic — this sets `questions.topic_id`, the single source of truth for per-topic
+mastery attribution (G4.2).
+
+- The dropdown lists all topics for the exam's node via `GET /api/topics/{course_path_node_id}`
+  (guarded `require_any_platform_role()` — admin + instructor; returns both `draft` and `live`
+  topics so a question can be attached to a not-yet-published topic). Note: this is the actual
+  built route; the `/api/admin/nodes/:node_id/topics` path in the API table below is an aspirational
+  stub pending a contract reconciliation pass.
+- `topic_id` is **optional at the API boundary** (`QuestionItemV2` / `StaticQuestionPatchItem`:
+  `topic_id: UUID4 | None = None`) and **required in the UI** — the picker defaults to "No topic"
+  but every authored question should set one, or its score is excluded from mastery recalculation
+  (`MasteryService` skips `topic_id IS NULL` questions).
+- On edit, the picker pre-populates from `GET .../questions-with-details` (which returns
+  `topic_id`). Selecting "No topic" explicitly clears it (PATCH sends `topic_id: null`); leaving
+  it untouched preserves the existing value (PATCH omits the field).
+
 **Business rules:**
 - BR-ADM-001: Platform Admin can only write `owner_type = 'platform'` content.
 - BR-ADM-002: Platform Admin cannot read or modify `owner_type = 'parent'` content.
@@ -72,6 +92,7 @@ Full behaviour and business rules in `target/requirements/12_content_extraction.
 - BR-ADM-004: Platform content published to `live` is immediately visible to all authenticated students.
 - BR-ADM-005: Platform Admin cannot access student profiles, exam sessions, or parent-child links.
 - BR-ADM-006: Platform Admin extraction quota is APISIX-gated only (20 uploads/hr token-rate). No application-layer quota in v1.
+- BR-ADM-007: Every question authored via the exam builder SHOULD carry a `topic_id` (set via the per-question Topic dropdown) so its score contributes to per-topic mastery. `topic_id` is optional at the API (legacy / NULL-topic questions are skipped by mastery recalc, not rejected); the UI makes it effectively required.
 
 ---
 
