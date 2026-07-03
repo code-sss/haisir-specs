@@ -508,3 +508,60 @@ After materialization, every `topic_contents` row supports two edit affordances:
 12. **Cost preview heuristic** (haisir-frontend): client-side estimate from file size; confirmation gate for >$2.
 
 `/plan` will decompose this further into ordered tasks per repo.
+
+---
+
+## 11 — Content Rendering (LaTeX / Math)
+
+> Added 2026-07-02 (pre-Phase-5 hardening pass, G8/T8.4). **Requirement only — no implementation
+> in pre-Phase-5.** Tracked as backlog item `vision/requirements/backlog.md` BL-003 (Status: Ready).
+> Ships as a focused content-rendering follow-up phase.
+
+### Problem
+
+Educational content carries LaTeX math. The through-Phase-4 frontend has **no math-rendering
+library** installed (no `katex`, `remark-math`, `rehype-katex`, or `mathjax` in `package.json`).
+Every text surface interpolates strings as plain React text children, so LaTeX renders as raw
+literal characters (visible `$` and backslashes) across:
+
+| Surface | File | Field |
+|---|---|---|
+| Topic `text` content (S-nav content viewer) | `content-viewer.tsx:49` | `item.text` |
+| Exam `question_text` (S-exam) | `question-renderer.tsx:231` | `question.question_text` |
+| Exam option text | `single-choice-input.tsx:48` (+ sibling input components) | `opt.text` |
+| Review question list (S05) | `exam-review-question-list.tsx:63` | `item.question_text` |
+| AI chat bubbles (hAITU doubt + exam-review chat) | `markdown-text.tsx` | `msg.content` (no math plugin) |
+
+### Requirement
+
+`question_text`, option text, topic `text` content, and review question bodies MUST render LaTeX
+math (inline `$...$` and block `$$...$$`) as typeset mathematics, not raw literal text. The same
+applies to AI-generated chat content (hAITU explanations, exam-review chat) which already flows
+through `MarkdownText` but without a math plugin.
+
+### Agreed approach
+
+- **Library:** KaTeX (synchronous, smaller, sufficient for authored educational content) over
+  MathJax (heavier async model). Add `katex`, `remark-math`, `rehype-katex` to the frontend.
+- **Markdown path:** wire `remarkMath` + `rehypeKatex` into the shared `MarkdownText`
+  (`react-markdown` plugins alongside the existing `remark-gfm`). Import `katex/dist/katex.min.css`
+  once at the app root. This covers the AI chat bubbles and any markdown surface.
+- **Plain-text path:** the four non-markdown surfaces (`ContentViewer`, `QuestionRenderer`, the
+  option-input components, `ExamReviewQuestionList`) currently interpolate text directly. Route
+  each through a math-aware renderer — either a shared `<MathText>` component (KaTeX `renderToString`
+  on detected math spans) or promote them to `MarkdownText` (markdown + math) if authored content
+  is expected to use markdown. Decision per surface on pickup (see BL-003 open questions).
+- **Delimiters:** accept inline `$...$` and block `$$...$$` (KaTeX default via `remark-math`);
+  confirm whether `\(...\)` / `\[...\]` should also be recognised (extraction sources may emit
+  those). Recommendation: accept both `$` and `\(\)` families.
+- **Security:** KaTeX escapes by default (no `trust` / `\url` macros). `MarkdownText` keeps its
+  no-`rehype-raw` policy — math rendering must not open an HTML injection path. The extraction
+  pipeline's restructured markdown remains sanitised.
+- **SSR:** KaTeX renders client-side; confirm no layout shift / hydration mismatch on the content
+  viewer and exam pages (render math in an effect or use KaTeX server-side render for static
+  parts).
+
+### Out of pre-Phase-5 scope
+
+Implementation is deferred — this section states the requirement and the agreed approach only.
+The follow-up phase that implements it will decompose the work into per-surface tasks.

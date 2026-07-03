@@ -4,6 +4,74 @@
 
 ---
 
+## 2026-07-02 — Pre-Phase 5 planned (Phase 4 Release-Hardening Pass)
+
+- **Trigger:** 14 issues found while manually testing the through-Phase-4 build. The build is
+  functionally complete but not release-ready for user testing (orphaned review route, unfiltered
+  exam taking, dead weak-topic deep-links, collapsing tree, no recommended-grade UI path, at-risk
+  notification routing to the wrong page, no LaTeX rendering, weak inbox UX). Pre-Phase-5 is a
+  hardening pass sequenced **before** Phase 5; Phase 5's goal tree is unchanged.
+- **Scope = a specs-repo plan.** Code tasks (`[backend]`/`[frontend]`/`[deploy]`) are implementation
+  tickets for the sibling repos — **not executed in the specs repo**. The `[specs]` tasks
+  (T6.3, T7.4, T8.2, T8.3, T8.4) are written as part of the plan: `09_onboarding.md` (grade step),
+  `10_notifications.md` + `03_student.md` + `04_teacher_tutor.md` (inbox UX + at-risk routing),
+  `03_student.md` (mastery NULL-topic limitation), `12_content_extraction.md` §11 (LaTeX
+  rendering requirement), and two backlog entries (`backlog.md` BL-002, BL-003).
+- **Four scope decisions (recommended option on each):**
+  1. **Issue 9 — defer the teacher at-risk view, fix `action_url`, spec the view for Phase 6.**
+     Building `/teacher/students/{sub}` + an instructor-facing weak-topics endpoint is real
+     teacher-side tooling that belongs with role migration. Interim: `student_at_risk`
+     `action_url = NULL` (no broken navigation). Backlog BL-002 (Deferred). `04_teacher_tutor.md`
+     + `10_notifications.md` BR-NOTIF-010a record the interim.
+  2. **Issue 11 — defer LaTeX rendering to a dedicated content-rendering follow-up, spec + backlog
+     it.** `remark-math` + `rehype-katex` across five render surfaces is self-contained and ships
+     better as one focused phase than as part of the hardening pass. Requirement + approach
+     specced in `12_content_extraction.md` §11; backlog BL-003 (Status: Ready).
+  3. **Issue 12 — targeted inbox polish now** (bell dropdown, status filters, last-message
+     previews). No full redesign — keeps the hardening pass small.
+  4. **Issues 13/14 — grade collection in pre-Phase-5 student onboarding + Phase 5 `/profile`
+     makes it editable.** `recommended` is activatable for testers now; Phase 5 T1.5 `/profile`
+     exposes the editable grade. `09_onboarding.md` BR-ON-008 amended (student View B only;
+     parent onboarding untouched).
+- **Issue 3 (multi-topic / subject-level mastery) is not a bug.** `MasteryService` groups per
+  `topic_id` correctly; `topic_id = NULL` questions are silently skipped — so a subject-level exam
+  with no per-question tagging computes no mastery. This is the **accepted v1 limitation**
+  (documented in `03_student.md`); subject-level rollup is deferred. Authors must tag questions
+  with `topic_id` for mastery to fire (already specced in `07_platform_admin.md` BR-ADM-007).
+- **No migrations, no deploy gateway work.** Every fix rides on existing schema; only
+  `haisir-deploy/docs/qa-sample.json` is edited (add `topic_id` to question objects — issue 4).
+- **Plan artefacts:** `PLAN_PrePhase5-Hardening_2026-07-02.md`,
+  `TASKS_PrePhase5-Hardening_2026-07-02.md`, `phases.md` (Pre-Phase 5 section inserted before
+  Phase 5). Baseline: backend `0cb36bd`, frontend `df7067e`, deploy `98912f8`.
+
+---
+
+## 2026-07-02 — Pre-Phase 5 plan review: one gap closed, one gap documented
+
+- **Trigger:** requested review of the just-written Pre-Phase 5 plan before execution starts.
+- **Gap closed — G1/T1.4 added (issue 15, found in review, not user-reported).** Verified against
+  `haisir-frontend` source: wiring in-app navigation to `/exam/[id]/review` (G1/T1.1–T1.3) exposes
+  a latent bug — `review-helpers.ts:16-22` maps `is_correct === null` straight to `"skipped"`, so
+  an ungraded essay (`grading_status: "pending"`, already mapped onto `ExamReviewItem` by
+  `session-answers-mapper.ts:109` but never read by the review page) would render as "Skipped"
+  instead of "Pending grading" the moment the route becomes reachable. This is a regression G1
+  itself would introduce (the route was previously unreachable, so the bug never surfaced) — not
+  a pre-existing user-visible issue. T1.4 added to G1, must land in the same slice as T1.1–T1.3.
+- **Gap documented, not fixed — onboarding grade skip has no recovery path.** Verified there is no
+  `/profile` route or any other UI in the through-Phase-4 frontend that writes
+  `student_profiles.grade`; onboarding does not re-run once complete. A student who clicks "Skip"
+  on the G6/T6.1 grade step is stuck with `recommended = False` and no in-app way to fix it until
+  Phase 5 ships `/profile` (T1.5). Closing this fully means either disallowing skip or building an
+  earlier settings surface — both larger than pre-Phase-5's "small surgical fixes" scope, and not
+  one of the original 14 issues. Documented explicitly in `09_onboarding.md` and `phases.md`
+  instead of left implicit, per the standing instruction to note+spec what can't be fixed now.
+- **Everything else in the plan verified accurate** — root causes for issues 1–2, 5, 9, 10, 13/14
+  spot-checked against `haisir-backend`/`haisir-frontend` source (mastery_service.py:142/270-278,
+  V37 migration, exam.py:410-439, catalog-card.tsx:18, on03-student-ready.tsx) all matched the
+  plan's claims exactly.
+
+---
+
 ## 2026-07-02 — Phase 5 planned (Parent Curriculum Builder + Link Codes, RAG-Connected)
 
 - **Scope choice:** Phase 5 = the carried-over parent curriculum builder + link codes, *expanded*

@@ -57,9 +57,16 @@ newest-escalated first.
 
 **Screen elements:**
 - Doubt rows: student name, topic title, question preview (truncated), time since escalation,
-  status chip (`escalated` / `answered`).
+  status chip (`escalated` / `answered`), and a **one-line last-message preview excerpt**
+  (latest `doubt_message.content` truncated) so the teacher can scan the queue without opening
+  each thread.
+- **Status / claim filter (pre-Phase-5 G7, issue 12):** a filter control (All / Unclaimed /
+  Claimed by me / Answered) narrows the list client-side. "Unclaimed" is the default landing view
+  so the queue surfaces actionable doubts first; claimed-by-others rows are hidden in that view
+  (today they render as "Taken" with no way to hide them).
 - **"Claim"** button (visible when `escalated_to IS NULL`) → calls claim endpoint; on 409
-  (already claimed by another instructor) shows a toast and refreshes the list.
+  (already claimed by another instructor) shows a toast and refreshes the list. A success toast
+  confirms the claim (today the UI only surfaces claim errors, not successes).
 - **"Open"** link (visible when `escalated_to = user.sub` — already mine) → navigates to T07.
 - "Doubt Queue" nav link visible only for `X-Current-Role: instructor`; students do not see it.
 - Empty state ("No escalated doubts — all caught up") when the shared queue is empty.
@@ -138,3 +145,23 @@ notifications alone.
 > `MasteryService`'s job (G4.2 — see `Implementation_planning/PLAN.md` T4.2.1a); this rule
 > defines only the at-risk detection + notification gate that consumes the resulting weak-topic
 > counts.
+
+### At-risk notification routing (pre-Phase-5 G8, issue 9)
+
+The `student_at_risk` notification carries an `action_url` that deep-links the teacher to the
+at-risk student's detail view. **No such view exists today** — the only teacher route is
+`/teacher/doubts` (the doubt queue), which is the wrong destination for an at-risk signal (an
+at-risk student is not a doubt). Pre-Phase-5 (G8/T8.1) sets `action_url = NULL` as the interim:
+clicking the notification in the feed marks it read with **no navigation**, so teachers are never
+sent to the wrong page.
+
+The proper destination — a `/teacher/students/{student_sub}` page surfacing the at-risk student's
+weak topics and recent exam results — is **deferred to Phase 6** with the rest of the teacher /
+role-migration tooling. It is tracked in `vision/requirements/backlog.md` BL-002 (Status:
+Deferred). When BL-002 ships, `action_url` is set to `/teacher/students/{student_sub}` and the
+notification body is enriched with the student's display name (today the body is generic; the
+name lookup is a follow-up in the `MasteryService` call path).
+
+Until then, the `10_notifications.md` notification-payload table lists the `student_at_risk`
+`action_url` as **NULL (interim)** — not `/teacher/doubts` and not the not-yet-built
+`/teacher/student/{student_sub}`.

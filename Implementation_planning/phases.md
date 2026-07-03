@@ -92,6 +92,48 @@ role-switcher metadata, `/institution` + `/parent` route guards).
 
 ---
 
+## Pre-Phase 5 — Phase 4 Release-Hardening Pass (planned 2026-07-02)
+
+> Root goal: make the through-Phase-4 build release-ready for user testing by fixing 14 issues
+> found in manual testing (plus one latent bug, issue 15, found during plan review — see below).
+> Full goal tree: `PLAN_PrePhase5-Hardening_2026-07-02.md` /
+> `TASKS_PrePhase5-Hardening_2026-07-02.md`. **Specs-repo plan** — code tasks are tickets for the
+> sibling repos; the `[specs]` tasks (T6.3, T7.4, T8.2, T8.3, T8.4) are written as part of the plan.
+
+| Goal | Issues | Repos | Disposition |
+|---|---|---|---|
+| **G1** — Exam review navigation wired | 1, 8, 15 | frontend | Fix — wire `/exam/[id]/review` from post-submit, AttemptsModal, Results button; fix pending-grading mislabeled as "Skipped" (T1.4, gap found in review) |
+| **G2** — Exam builder bulk-topic + sample JSON | 2, 4 | frontend, deploy | Fix — "Apply topic to all" control; `qa-sample.json` carries `topic_id` |
+| **G3** — Topic-filtered exam taking | 5 | backend, frontend | Fix — optional `topic_id` filter on `GET /api/exams/course/{node_id}`; "Take Exam" passes it |
+| **G4** — Deep-link + tree interaction | 6, 7 | frontend | Fix — `/courses?topic=` consumed (expand ancestors + select); NodeTreeSidebar chevron separated from label select+expand |
+| **G5** — Catalog grade label | 10 | frontend | Fix — "Grade N" display on grade root nodes |
+| **G6** — Student grade/profile + onboarding | 13, 14 | frontend, backend, specs | Fix — grade picker in student onboarding View B → `POST /api/students/me/profile`; 09_onboarding amended; Phase 5 `/profile` makes it editable |
+| **G7** — Inbox UX targeted polish | 12 | frontend, specs | Fix — bell dropdown, status filters, last-message previews; 10_notifications + 03_student + 04_teacher_tutor specced |
+| **G8** — At-risk notif interim + deferred docs | 3, 9, 11 | backend, specs | Interim + spec — `action_url=NULL`; teacher at-risk view (BL-002, Phase 6); NULL-topic mastery limit documented; LaTeX rendering requirement (BL-003, follow-up) |
+
+**Gate:** pre-Phase-5 must close before Phase 5 starts. Phase 5's `/profile` page (T1.5) extends
+the grade field G6/T6.1 introduces; the parent onboarding dead-link (T2.6) is untouched here.
+**No Alembic migrations** — all fixes ride on existing schema (V37 `questions.topic_id`,
+`student_profiles.grade`, `notifications.action_url`). **No deploy gateway work** except the
+`qa-sample.json` content edit. Baseline: backend `0cb36bd`, frontend `df7067e`, deploy `98912f8`.
+
+**Deferred (not in pre-Phase-5):**
+- **Issue 3 (subject-level mastery)** — accepted v1 limitation; `topic_id=NULL` questions are
+  silently skipped by `MasteryService`. Documented in `03_student.md`; subject-level rollup
+  deferred.
+- **Issue 9 (teacher at-risk view)** — `action_url=NULL` interim; the
+  `/teacher/students/{sub}` view is Phase 6 (backlog BL-002).
+- **Issue 11 (LaTeX rendering)** — requirement + approach specced in
+  `12_content_extraction.md` §11; ships as a focused follow-up (backlog BL-003, Status: Ready).
+
+**Gap found during plan review (2026-07-02), documented not fixed:** skipping the G6/T6.1 grade
+step at onboarding leaves a student with **no UI path** to set `student_profiles.grade` until
+Phase 5 ships `/profile` (T1.5) — onboarding doesn't re-run once complete, and no other screen in
+the through-Phase-4 build writes to that field. Documented as an accepted interim limitation in
+`09_onboarding.md` (testers should not skip if they want `recommended` to activate pre-Phase-5).
+
+---
+
 ## Phase 5 — Parent Curriculum Builder + Link Codes, RAG-Connected (planned 2026-07-02)
 
 > Root goal: a parent links to their child, builds/adopts a private curriculum, uploads content

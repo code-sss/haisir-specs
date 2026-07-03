@@ -42,6 +42,60 @@ Two distinct sections on the dashboard:
 
 ---
 
+## Mastery, Focus Areas & Weak-Topic Deep-Linking (Phase 4 + pre-Phase 5)
+
+> Added 2026-07-02 (pre-Phase-5 hardening pass, G8/T8.3 + G4/T4.1). Documents the per-topic mastery
+> model, the accepted v1 limitation on `topic_id = NULL`, and the Focus Areas deep-link contract.
+
+### Per-topic mastery (G4.2)
+
+`MasteryService.recompute_for_session` recomputes mastery after an exam is submitted (and after
+essay auto-grade / manual release / finalize / override). It groups a session's **scored**
+questions by `questions.topic_id` and, per topic, blends the new per-topic score with the prior
+`enrollment_topics.mastery_score` (EWA: first attempt = raw score; subsequent = `0.6×new + 0.4×existing`).
+Thresholds: `< 60` → `weak`, `60–75` → `progressing`, `≥ 75` → `completed` (BR-PROGRESS-001/002/003).
+A topic transitioning into `weak` emits a personal `topic_marked_weak` notification; a student with
+≥ 3 weak topics emits a shared-queue `student_at_risk` notification to instructors (see
+`04_teacher_tutor.md` At-Risk + `10_notifications.md` BR-NOTIF-010).
+
+### Accepted v1 limitation — `topic_id = NULL` questions (issue 3)
+
+`MasteryService._collect_scored` **skips** any question with `topic_id IS NULL` (or unscored) —
+verified at `mastery_service.py:142`. Therefore:
+
+- A **multi-topic exam** (e.g. a Maths mock with algebra- and trigonometry-tagged questions)
+  computes mastery **per topic** correctly — each tagged topic gets its own score, status, and
+  (if weak) its own `topic_marked_weak` notification. This is the supported path.
+- A **subject-level exam with NO per-question topic tagging** (`topic_id = NULL` on every
+  question) computes **no mastery at all** — every question is skipped, `recompute_for_session`
+  returns early, and no `enrollment_topics` row is written. The exam contributes to no topic's
+  mastery and fires no weak-topic / at-risk notifications.
+
+This is the **accepted v1 limitation**: there is no subject-level mastery rollup. Authors who
+want an exam to influence mastery MUST tag every question with a `topic_id` via the exam builder
+Topic picker (see `07_platform_admin.md` "Exam builder — per-question topic picker", BR-ADM-007).
+Subject-level mastery aggregation (a rollup when `topic_id` is absent) is deferred — tracked in
+`Implementation_planning/PLAN_PrePhase5-Hardening_2026-07-02.md` G8.
+
+### Focus Areas strip + weak-topic deep-link (issue 6)
+
+`GET /api/student/dashboard` returns `weak_topics: WeakTopic[]` (topics where the student's
+`enrollment_topics.status = 'weak'`). S-home renders a **Focus Areas** strip (orange chips) above
+the Platform Board when `weak_topics` is non-empty. Each chip deep-links to the topic in S-nav:
+
+- **Chip URL:** `/courses?topic={topic_id}` (the `topic_id` of the weak topic).
+- **Deep-link contract (pre-Phase-5 G4/T4.1):** S-nav (`/courses` → `StudentCoursesPage`) MUST
+  consume the `topic` search param on load — resolve the topic to its owning node, set that node
+  as selected, **expand all ancestor nodes** in the left tree (so the topic's parent chain is
+  visible), and select the topic in the right panel. If the topic is not found (stale link, parent
+  revoked), fall back to the default collapsed tree with no error.
+- **NodeTreeSidebar behaviour (pre-Phase-5 G4/T4.2):** clicking a **non-leaf** node's label selects
+  it AND expands it (revealing its children) — it does **not** collapse the node. The chevron is
+  a separate toggle control (expand/collapse only). This fixes the carried-from-Phase-3 bug where
+  clicking a non-leaf label only toggled collapse and never opened the topic.
+
+---
+
 ## S-nav — Content Navigator
 
 Two source tabs: **Platform** | **Home Study**.
@@ -66,6 +120,12 @@ Two source tabs: **Platform** | **Home Study**.
 - BR-STU-003: Students only see topics with `status = 'live'`.
 - BR-STU-004: "Take Exam" is shown if the topic's parent node has at least one published `exam_template` scoped to that node.
 - BR-STU-005: Exam sessions are per-student; `exam_sessions.user_id = student.idp_sub`.
+- BR-STU-023 (pre-Phase-5 G3, issue 5): When "Take Exam" is launched **from a topic row** (not a
+  node-level card), the exam list on S-exam is filtered to templates that have at least one
+  question tagged with that `topic_id` — i.e. the request is
+  `GET /api/exams/course/{node_id}?topic_id={topic_id}`. A node-level launch (from S-home subject
+  cards) omits `topic_id` and lists every template under the node, unchanged. This stops a topic
+  click (e.g. "Ratio" under Maths) from showing every Maths exam.
 
 ---
 
@@ -157,13 +217,24 @@ the passage context.
 - Right panel: hAITU chat scoped to this attempt.
 
 **Per regular question card:**
-- Question number badge (green = correct, red = wrong, grey = skipped).
+- Question number badge (green = correct, red = wrong, grey = skipped, **amber = pending grading**).
 - Question text.
-- Result label (✓ Correct / ✗ Wrong / — Skipped).
+- Result label (✓ Correct / ✗ Wrong / — Skipped / **⏳ Pending grading**).
 - Collapsed by default. Click header to expand.
 - Expanded state shows: all answer options with the correct one (green ✓) and the student's wrong
   answer (red ✗) highlighted, plus the hAITU explanation for wrong/skipped questions.
 - "Ask hAITU to explain this" button for wrong/skipped questions without a pre-loaded explanation.
+
+**Pending-grading status (pre-Phase-5 G1/T1.4 — gap found in plan review, 2026-07-02):** an
+ungraded essay question has `is_correct = null` **and** `grading_status = "pending"` (both
+returned by the `/answers` endpoint below). A question card MUST distinguish this from an
+un-attempted question (`is_correct = null`, no `grading_status`) — an ungraded essay renders
+"⏳ Pending grading" (amber), never "— Skipped" (grey). This status must be checked **before**
+falling back to the skipped case. Verified as a real bug in the current frontend
+(`review-helpers.ts:16-22` `getReviewQuestionStatus` does not check `grading_status` at all) —
+harmless while S05 had no inbound navigation (issue 1/8), but user-visible and misleading once
+pre-Phase-5 G1 wires "Review answers" / "View attempt" / "Results" into this screen. See
+`Implementation_planning/PLAN_PrePhase5-Hardening_2026-07-02.md` G1/T1.4.
 
 **Per paragraph question card:**
 - Passage title and body shown at top of the card group.
@@ -229,18 +300,26 @@ A student's list of their persisted hAITU doubt threads. Reached via the "My Dou
 (visible only for `X-Current-Role: student`).
 
 - Renders one row per doubt: title, topic, status chip (`new` / `ai_answered` / `escalated` /
-  `answered` / `resolved`), and last-activity timestamp. Each row links to `/doubts/{doubt_id}`
+  `answered` / `resolved`), last-activity timestamp, and a **one-line last-message preview
+  excerpt** (the latest `doubt_message.content` truncated). Each row links to `/doubts/{doubt_id}`
   (S09).
 - Status chip colour: `new`/`ai_answered` neutral, `escalated` amber, `answered` green,
   `resolved`/`auto_closed` grey.
+- **Status filter (pre-Phase-5 G7, issue 12):** a filter control (All / New / Escalated /
+  Answered / Resolved) narrows the list client-side. Default = All.
 - Sorted by last activity (most recent first).
 - Empty state: a friendly "No doubts yet — ask hAITU a question from any topic" message with a
   link back to the content navigator (S-nav).
-- Data: `GET /api/students/me/doubts` (CSRF not required on GET; `X-Current-Role: student`).
+- Data: `GET /api/students/me/doubts` (CSRF not required on GET; `X-Current-Role: student`). The
+  list endpoint SHOULD include a `last_message_excerpt` per row to avoid N+1 thread fetches
+  (backend enhancement — if not added, the preview is truncated client-side from existing fields
+  and the excerpt field is a follow-up).
 
 **Business rules:**
 - BR-STU-015: A student sees only their own doubts — the backend filters by
   `doubts.student_sub = user.sub`; another student's doubt_id → 404 on the thread endpoint.
+- BR-STU-024 (pre-Phase-5 G7, issue 12): The doubt inbox MUST offer a status filter and a
+  last-message preview excerpt per row so the student can scan threads without opening each one.
 
 ---
 

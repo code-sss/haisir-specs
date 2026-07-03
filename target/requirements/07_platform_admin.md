@@ -84,6 +84,14 @@ mastery attribution (G4.2).
 - On edit, the picker pre-populates from `GET .../questions-with-details` (which returns
   `topic_id`). Selecting "No topic" explicitly clears it (PATCH sends `topic_id: null`); leaving
   it untouched preserves the existing value (PATCH omits the field).
+- **Bulk "Apply topic to all" (pre-Phase-5 G2, issue 2):** the builder carries a control above the
+  questions list — a Topic `<select>` (same `topics` source) + "Apply to all questions" button —
+  that sets `topic_id` on **every** question at once (standalone questions AND every
+  paragraph-embedded question). This removes the tedium of setting the same topic on 20+ questions
+  one-by-one for a same-topic exam. Individual per-question Topic dropdowns remain for override
+  after a bulk apply (and for multi-topic / mock exams where different questions carry different
+  `topic_id`s — which MasteryService handles per-topic, see `03_student.md` "Mastery, Focus Areas &
+  Weak-Topic Deep-Linking").
 
 **Business rules:**
 - BR-ADM-001: Platform Admin can only write `owner_type = 'platform'` content.

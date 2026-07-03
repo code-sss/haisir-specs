@@ -78,7 +78,7 @@ These are the notification types wired in Phase 4 (G3.4). Additional types from 
 | `child_doubt_replied` | "Teacher responded to {child_name}" | "{teacher_name} answered {child_name}'s question about {topic_title}" | `/parent` |
 | `child_doubt_auto_closed` | "{child_name}'s question was closed" | "{child_name}'s question about {topic_title} was closed after 7 days of inactivity." | `/parent` |
 | `topic_marked_weak` | "Topic needs attention" | "{topic_title} has been flagged as a weak area" | `/home/topics/{enrollment_id}` |
-| `student_at_risk` | "Student needs attention" | "{student_name} is struggling across multiple topics" | `/teacher/student/{student_sub}` |
+| `student_at_risk` | "Student needs attention" | "{student_name} is struggling across multiple topics" | **NULL (interim)** — see §7 BR-NOTIF-010 and `04_teacher_tutor.md` "At-risk notification routing" |
 
 ---
 
@@ -192,6 +192,15 @@ The `doubts.auto_close_at` column defaults to `now() + interval '7 days'` at row
 
 **BR-NOTIF-010:** `student_at_risk` (G4) fires when a student has ≥ 3 weak topics. It is a shared-queue notification for the `instructor` role (`recipient_idp_sub NULL`). It does not re-fire until the student recovers.
 
+**BR-NOTIF-010a (pre-Phase-5 G8, issue 9):** The `student_at_risk` `action_url` is **NULL** as
+an interim. The would-be destination — a teacher at-risk / student-detail view — does not exist
+yet (only `/teacher/doubts` exists, which is the wrong page for an at-risk signal). Clicking the
+notification in the feed marks it read with no navigation. When the at-risk detail view ships
+(Phase 6 — `vision/requirements/backlog.md` BL-002), `action_url` is set to
+`/teacher/students/{student_sub}` and the body is enriched with the student's display name. Until
+then the feed handler's `if action_url.startswith("/")` guard means a NULL `action_url` is a
+no-op navigation. See `04_teacher_tutor.md` "At-risk notification routing".
+
 **BR-NOTIF-011:** See §6 (auto-close cron).
 
 ---
@@ -202,11 +211,17 @@ Notifications are **never deleted** from the database. The 90-day window is a di
 
 ---
 
-## 9. UI Screens (Phase 4)
+## 9. UI Screens (Phase 4 + pre-Phase-5 G7)
 
 | Screen | Route | Description |
 |---|---|---|
-| Notification bell | Shared topbar (all roles) | Bell icon with unread-count badge (red pill, hidden when count=0); clicks navigate to `/notifications` |
-| Notification feed | `/notifications` | Lists notifications grouped by recency (Today / Yesterday / Earlier / Older); "Mark all read" button; empty state "You're all caught up" |
+| Notification bell | Shared topbar (all roles) | Bell icon with unread-count badge (red pill, hidden when count=0). **Pre-Phase-5 G7 (issue 12): clicking the bell opens a dropdown** showing the recent 5–10 unread notifications (title + relative time + unread dot); each item click → mark-read + `router.push(action_url)` (no-op when `action_url` is NULL, e.g. `student_at_risk`); a "View all" footer → `/notifications`; an inline "Mark all read" action. The dropdown closes on outside-click / Escape. The 60s unread-count poll and tab-hidden pause are unchanged. |
+| Notification feed | `/notifications` | Lists notifications grouped by recency (Today / Yesterday / Earlier / Older); "Mark all read" button; empty state "You're all caught up". **Pre-Phase-5 G7 (issue 12): an "Unread only" toggle** narrows the list to unread rows; a **type/source icon** (or coloured dot) per item makes the source scannable (doubt vs mastery vs at-risk). |
+
+**BR-NOTIF-012 (pre-Phase-5 G7, issue 12):** The notification bell MUST be a dropdown preview of
+recent unread items (not a plain link to `/notifications`), and the feed MUST offer an
+"Unread only" toggle plus a per-type/source indicator. The bell dropdown and the feed both call
+the existing endpoints (`GET /api/notifications/me`, `GET .../unread-count`,
+`PATCH .../{id}/read`, `PATCH .../me/read-all`) — no new endpoints.
 
 Bell is rendered in `src/components/layout/header/header.tsx` for all authenticated roles (inside the existing `user.name ?` conditional). Feed page is `src/app/notifications/page.tsx` inside `MainLayout + Header`, guarded by `useAuth`.
