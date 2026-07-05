@@ -16,7 +16,7 @@
 
 ## G2 [frontend/deploy]: Exam builder bulk-topic + sample JSON (issues 2, 4)
 - [ ] T2.1 [frontend]: "Apply topic to all questions" control in ExamBuilder
-- [ ] T2.2 [deploy]: Add topic_id to qa-sample.json question objects
+- [x] T2.2 [deploy]: Add topic_id to qa-sample.json question objects (2026-07-04)
 - [ ] T2.3 [frontend]: JSON import/export round-trip test for topic_id (depends on T2.2)
 - [ ] **G2: Exam builder bulk-topic + sample JSON** — bulk topic apply ships; qa-sample.json exercises topic_id
 
@@ -56,7 +56,7 @@
 - [ ] **G8: At-risk notification interim fix + deferred-items spec documentation** — no broken nav; 3 deferred items spec'd + backloged
 
 ## Ready now (no pending deps)
-T2.1, T2.2, T3.1, T4.1, T4.2, T5.1, T6.1, T6.2, T7.1, T7.2, T7.3, T8.1
+T2.1, T2.3, T3.1, T4.1, T4.2, T5.1, T6.1, T6.2, T7.1, T7.2, T7.3, T8.1
 
 ## Already written (specs repo, part of this plan)
 T6.3, T7.4, T8.2, T8.3, T8.4 — spec content committed to target/requirements/* and vision/requirements/backlog.md
