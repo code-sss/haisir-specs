@@ -6,6 +6,8 @@
 >
 > `[specs]` tasks are specs-repo edits — **already written** as part of the plan (✅). `[backend]` /
 > `[frontend]` / `[deploy]` tasks are implementation tickets for the sibling repos.
+>
+> Last baselined: backend:0cc78a6 frontend:df7067e deploy:98912f8 (2026-07-05)
 
 ## G1 [frontend]: Exam review navigation wired (issues 1, 8)
 - [x] T1.1 [frontend]: Post-submit "Review answers" CTA → /exam/{id}/review (2026-07-04)
@@ -23,7 +25,7 @@
 ## G3 [backend/frontend]: Topic-filtered exam taking (issue 5)
 - [x] T3.1 [backend]: Optional topic_id filter on GET /api/exams/course/{node_id} (+ /template) (2026-07-05)
 - [ ] T3.2 [frontend]: TopicListPanel "Take Exam" passes topic_id; /exam consumes it (depends on T3.1)
-- [ ] T3.3 [backend]: Integration test — topic_id filter returns only matching templates (depends on T3.1)
+- [x] T3.3 [backend]: Integration test — topic_id filter returns only matching templates (depends on T3.1) (2026-07-05)
 - [ ] **G3: Topic-filtered exam taking** — Take Exam on a topic lists only that topic's exams
 
 ## G4 [frontend]: Deep-link + tree interaction fixes (issues 6, 7)
@@ -56,7 +58,7 @@
 - [ ] **G8: At-risk notification interim fix + deferred-items spec documentation** — no broken nav; 3 deferred items spec'd + backloged
 
 ## Ready now (no pending deps)
-T3.2, T3.3, T5.1, T6.1, T6.2, T7.1, T7.2, T7.3, T8.1
+T3.2, T5.1, T6.1, T6.2, T7.1, T7.2, T7.3, T8.1
 
 ## Already written (specs repo, part of this plan)
 T6.3, T7.4, T8.2, T8.3, T8.4 — spec content committed to target/requirements/* and vision/requirements/backlog.md
