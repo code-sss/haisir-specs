@@ -8,11 +8,11 @@
 > `[frontend]` / `[deploy]` tasks are implementation tickets for the sibling repos.
 
 ## G1 [frontend]: Exam review navigation wired (issues 1, 8)
-- [ ] T1.1 [frontend]: Post-submit "Review answers" CTA → /exam/{id}/review
-- [ ] T1.2 [frontend]: AttemptsModal per-attempt "View" → /exam/{id}/review (depends on T1.1)
-- [ ] T1.3 [frontend]: "📊 Results" button → attempts list; each row routes to review (depends on T1.2)
-- [ ] T1.4 [frontend]: Review page must not mislabel pending-grading questions as "Skipped" (gap found in plan review; must land with T1.1–T1.3)
-- [ ] **G1: Exam review navigation wired** — /exam/[session_id]/review reachable from post-submit, attempts modal, and results button, without mislabeling ungraded essays
+- [x] T1.1 [frontend]: Post-submit "Review answers" CTA → /exam/{id}/review (2026-07-04)
+- [x] T1.2 [frontend]: AttemptsModal per-attempt "View" → /exam/{id}/review (depends on T1.1) (2026-07-04)
+- [x] T1.3 [frontend]: "📊 Results" button → attempts list; each row routes to review (depends on T1.2) (2026-07-04)
+- [x] T1.4 [frontend]: Review page must not mislabel pending-grading questions as "Skipped" (gap found in plan review; must land with T1.1–T1.3) (2026-07-04)
+- [x] **G1: Exam review navigation wired** — /exam/[session_id]/review reachable from post-submit, attempts modal, and results button, without mislabeling ungraded essays (2026-07-04)
 
 ## G2 [frontend/deploy]: Exam builder bulk-topic + sample JSON (issues 2, 4)
 - [ ] T2.1 [frontend]: "Apply topic to all questions" control in ExamBuilder
@@ -56,7 +56,7 @@
 - [ ] **G8: At-risk notification interim fix + deferred-items spec documentation** — no broken nav; 3 deferred items spec'd + backloged
 
 ## Ready now (no pending deps)
-T1.1, T1.4, T2.1, T2.2, T3.1, T4.1, T4.2, T5.1, T6.1, T6.2, T7.1, T7.2, T7.3, T8.1
+T2.1, T2.2, T3.1, T4.1, T4.2, T5.1, T6.1, T6.2, T7.1, T7.2, T7.3, T8.1
 
 ## Already written (specs repo, part of this plan)
 T6.3, T7.4, T8.2, T8.3, T8.4 — spec content committed to target/requirements/* and vision/requirements/backlog.md

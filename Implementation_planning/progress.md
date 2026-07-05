@@ -126,6 +126,8 @@ The platform admin board content manager is fully implemented end-to-end. The Ad
 > Snapshot baseline: haisir-backend `0cb36bd` (main, T4.1.4 topic_id wired through static exam create/patch/read, 2026-07-02), haisir-frontend `df7067e` (main, topic attribution UI for per-topic mastery, 2026-07-02), haisir-deploy `98912f8` (main, narrowed hAITU WAF exclusion, 2026-07-01).
 > Next session: `git diff 0cb36bd..HEAD` in haisir-backend, `git diff df7067e..HEAD` in haisir-frontend, `git diff 98912f8..HEAD` in haisir-deploy.
 
+**Also complete (2026-07-04 — current-state check, no spec changes needed):** Verified all three sibling repos against the 2026-07-02 baseline before starting Pre-Phase-5 work. Only trivial commits since: backend gained a devcontainer extensions update, an OpenAPI `400` response-description annotation on `POST /{node_id}/static` (no contract change), and test-only fixes; frontend gained a devcontainer-only commit; deploy unchanged. No schema, API, or UI changes — specs remain accurate, nothing to update. Matches the Phase 5 `PLAN.md` baseline watermark (`9532392`/`df7067e`/`98912f8`) to within those same trivial commits, so no SHA-drift warning applies. `current/snapshot_shas.md` advanced to backend `8711bec`, frontend `359cf52`, deploy `98912f8` (2026-07-04).
+
 **Not yet built:** Parent curriculum builder (adopt board subtree, create own nodes/topics, upload notes), parent link-code generation and redemption, remaining role-migration work (`become-tutor`/`invite-role` flows, frontend role-switcher metadata, `/institution` + `/parent` route guards). Playwright E2E tests deferred across all phases (Playwright not installed).
 
 ## Completed Phases
