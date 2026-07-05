@@ -7,6 +7,8 @@
 > `[specs]` tasks are specs-repo edits — **already written** as part of the plan (✅). `[backend]` /
 > `[frontend]` / `[deploy]` tasks are implementation tickets for the sibling repos.
 
+> Last baselined: backend:3ad6789 frontend:df7067e deploy:98912f8 (2026-07-05)
+
 ## G1 [frontend]: Exam review navigation wired (issues 1, 8)
 - [x] T1.1 [frontend]: Post-submit "Review answers" CTA → /exam/{id}/review (2026-07-04)
 - [x] T1.2 [frontend]: AttemptsModal per-attempt "View" → /exam/{id}/review (depends on T1.1) (2026-07-04)
@@ -37,7 +39,7 @@
 
 ## G6 [frontend/backend/specs]: Student grade/profile + onboarding completeness (issues 13, 14)
 - [ ] T6.1 [frontend]: Grade picker in student onboarding View B → POST /api/students/me/profile
-- [ ] T6.2 [backend]: Verify profile upsert accepts grade-only patch (verification + test)
+- [x] T6.2 [backend]: Verify profile upsert accepts grade-only patch (verification + test) (2026-07-05)
 - [x] T6.3 [specs]: 09_onboarding.md — student View B collects grade (amends BR-ON-008) ✅ written
 - [ ] **G6: Student grade/profile + onboarding completeness** — recommended badge activatable from UI; onboarding grade step specced
 
@@ -56,7 +58,7 @@
 - [ ] **G8: At-risk notification interim fix + deferred-items spec documentation** — no broken nav; 3 deferred items spec'd + backloged
 
 ## Ready now (no pending deps)
-T5.1, T6.1, T6.2, T7.1, T7.2, T7.3, T8.1
+T5.1, T6.1, T7.1, T7.2, T7.3, T8.1
 
 ## Already written (specs repo, part of this plan)
 T6.3, T7.4, T8.2, T8.3, T8.4 — spec content committed to target/requirements/* and vision/requirements/backlog.md
