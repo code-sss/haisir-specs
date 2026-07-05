@@ -27,9 +27,9 @@
 - [ ] **G3: Topic-filtered exam taking** — Take Exam on a topic lists only that topic's exams
 
 ## G4 [frontend]: Deep-link + tree interaction fixes (issues 6, 7)
-- [ ] T4.1 [frontend]: /courses consumes ?topic= searchParam → expand ancestors + select topic
-- [ ] T4.2 [frontend]: NodeTreeSidebar: separate chevron toggle from label select+expand
-- [ ] **G4: Deep-link + tree interaction fixes** — Focus Areas chip deep-links correctly; non-leaf label selects+expands without collapse
+- [x] T4.1 [frontend]: /courses consumes ?topic= searchParam → expand ancestors + select topic (2026-07-05)
+- [x] T4.2 [frontend]: NodeTreeSidebar: separate chevron toggle from label select+expand (2026-07-05)
+- [x] **G4: Deep-link + tree interaction fixes** — Focus Areas chip deep-links correctly; non-leaf label selects+expands without collapse (2026-07-05)
 
 ## G5 [frontend]: Catalog grade label (issue 10)
 - [ ] T5.1 [frontend]: CatalogCard renders "Grade {name}" when node_type === "grade"
@@ -56,7 +56,7 @@
 - [ ] **G8: At-risk notification interim fix + deferred-items spec documentation** — no broken nav; 3 deferred items spec'd + backloged
 
 ## Ready now (no pending deps)
-T3.1, T4.1, T4.2, T5.1, T6.1, T6.2, T7.1, T7.2, T7.3, T8.1
+T3.1, T5.1, T6.1, T6.2, T7.1, T7.2, T7.3, T8.1
 
 ## Already written (specs repo, part of this plan)
 T6.3, T7.4, T8.2, T8.3, T8.4 — spec content committed to target/requirements/* and vision/requirements/backlog.md
