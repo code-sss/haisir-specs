@@ -51,14 +51,14 @@
 - [ ] **G7: Inbox UX targeted polish** — bell dropdown, status filters, previews shipped + specced
 
 ## G8 [backend/specs]: At-risk notification interim fix + deferred-items spec documentation (issues 3, 9, 11)
-- [ ] T8.1 [backend]: student_at_risk action_url → null (no broken nav) until view exists
+- [x] T8.1 [backend]: student_at_risk action_url → null (no broken nav) until view exists (2026-07-05)
 - [x] T8.2 [specs]: 04_teacher_tutor.md + backlog: teacher at-risk detail view (Phase 6) ✅ written
 - [x] T8.3 [specs]: 03_student.md mastery note — NULL topic_id questions contribute no mastery + 07 cross-ref ✅ written
 - [x] T8.4 [specs]: 12_content_extraction.md + backlog: LaTeX/math rendering requirement (content-rendering follow-up) ✅ written
-- [ ] **G8: At-risk notification interim fix + deferred-items spec documentation** — no broken nav; 3 deferred items spec'd + backloged
+- [x] **G8: At-risk notification interim fix + deferred-items spec documentation** — no broken nav; 3 deferred items spec'd + backloged (2026-07-05)
 
 ## Ready now (no pending deps)
-T7.1, T7.2, T7.3, T8.1
+T7.1, T7.2, T7.3
 
 ## Already written (specs repo, part of this plan)
 T6.3, T7.4, T8.2, T8.3, T8.4 — spec content committed to target/requirements/* and vision/requirements/backlog.md
