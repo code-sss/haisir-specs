@@ -7,7 +7,7 @@
 > `[specs]` tasks are specs-repo edits — **already written** as part of the plan (✅). `[backend]` /
 > `[frontend]` / `[deploy]` tasks are implementation tickets for the sibling repos.
 
-> Last baselined: backend:3ad6789 frontend:df7067e deploy:98912f8 (2026-07-05)
+> Last baselined: backend:3ad6789 frontend:515f955 deploy:98912f8 (2026-07-05)
 
 ## G1 [frontend]: Exam review navigation wired (issues 1, 8)
 - [x] T1.1 [frontend]: Post-submit "Review answers" CTA → /exam/{id}/review (2026-07-04)
@@ -34,14 +34,14 @@
 - [x] **G4: Deep-link + tree interaction fixes** — Focus Areas chip deep-links correctly; non-leaf label selects+expands without collapse (2026-07-05)
 
 ## G5 [frontend]: Catalog grade label (issue 10)
-- [ ] T5.1 [frontend]: CatalogCard renders "Grade {name}" when node_type === "grade"
-- [ ] **G5: Catalog grade label** — enrollment root grade nodes display "Grade N"
+- [x] T5.1 [frontend]: CatalogCard renders "Grade {name}" when node_type === "grade" (2026-07-05)
+- [x] **G5: Catalog grade label** — enrollment root grade nodes display "Grade N" (2026-07-05)
 
 ## G6 [frontend/backend/specs]: Student grade/profile + onboarding completeness (issues 13, 14)
-- [ ] T6.1 [frontend]: Grade picker in student onboarding View B → POST /api/students/me/profile
+- [x] T6.1 [frontend]: Grade picker in student onboarding View B → POST /api/students/me/profile (2026-07-05)
 - [x] T6.2 [backend]: Verify profile upsert accepts grade-only patch (verification + test) (2026-07-05)
 - [x] T6.3 [specs]: 09_onboarding.md — student View B collects grade (amends BR-ON-008) ✅ written
-- [ ] **G6: Student grade/profile + onboarding completeness** — recommended badge activatable from UI; onboarding grade step specced
+- [x] **G6: Student grade/profile + onboarding completeness** — recommended badge activatable from UI; onboarding grade step specced (2026-07-05)
 
 ## G7 [frontend/specs]: Inbox UX targeted polish (issue 12)
 - [ ] T7.1 [frontend]: NotificationBell dropdown (recent unread + mark-read + "View all")
@@ -58,7 +58,7 @@
 - [ ] **G8: At-risk notification interim fix + deferred-items spec documentation** — no broken nav; 3 deferred items spec'd + backloged
 
 ## Ready now (no pending deps)
-T5.1, T6.1, T7.1, T7.2, T7.3, T8.1
+T7.1, T7.2, T7.3, T8.1
 
 ## Already written (specs repo, part of this plan)
 T6.3, T7.4, T8.2, T8.3, T8.4 — spec content committed to target/requirements/* and vision/requirements/backlog.md
