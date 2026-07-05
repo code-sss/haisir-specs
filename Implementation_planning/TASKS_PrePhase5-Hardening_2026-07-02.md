@@ -21,7 +21,7 @@
 - [x] **G2: Exam builder bulk-topic + sample JSON** — bulk topic apply ships; qa-sample.json exercises topic_id (2026-07-05)
 
 ## G3 [backend/frontend]: Topic-filtered exam taking (issue 5)
-- [ ] T3.1 [backend]: Optional topic_id filter on GET /api/exams/course/{node_id} (+ /template)
+- [x] T3.1 [backend]: Optional topic_id filter on GET /api/exams/course/{node_id} (+ /template) (2026-07-05)
 - [ ] T3.2 [frontend]: TopicListPanel "Take Exam" passes topic_id; /exam consumes it (depends on T3.1)
 - [ ] T3.3 [backend]: Integration test — topic_id filter returns only matching templates (depends on T3.1)
 - [ ] **G3: Topic-filtered exam taking** — Take Exam on a topic lists only that topic's exams
@@ -56,7 +56,7 @@
 - [ ] **G8: At-risk notification interim fix + deferred-items spec documentation** — no broken nav; 3 deferred items spec'd + backloged
 
 ## Ready now (no pending deps)
-T3.1, T5.1, T6.1, T6.2, T7.1, T7.2, T7.3, T8.1
+T3.2, T3.3, T5.1, T6.1, T6.2, T7.1, T7.2, T7.3, T8.1
 
 ## Already written (specs repo, part of this plan)
 T6.3, T7.4, T8.2, T8.3, T8.4 — spec content committed to target/requirements/* and vision/requirements/backlog.md
