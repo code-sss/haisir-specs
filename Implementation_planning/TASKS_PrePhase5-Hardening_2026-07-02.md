@@ -60,8 +60,10 @@
 ## Ready now (no pending deps)
 (none — all G1–G8 tasks complete; Pre-Phase-5 hardening pass is closed)
 
-## Pre-Phase-5 status: CLOSED (2026-07-05)
-All goals G1–G8 complete. Per the plan header, Phase 5 (`TASKS.md`) may now start.
+## Pre-Phase-5 status: CLOSED (2026-07-05), manually verified (2026-07-06)
+All goals G1–G8 complete. All 15 issues (14 reported + T1.4) manually retested end-to-end and
+confirmed fixed; issues 3 and 11 confirmed correctly deferred per scope decisions. Per the plan
+header, Phase 5 (`TASKS.md`) may now start.
 
 ## Already written (specs repo, part of this plan)
 T6.3, T7.4, T8.2, T8.3, T8.4 — spec content committed to target/requirements/* and vision/requirements/backlog.md

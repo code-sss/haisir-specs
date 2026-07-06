@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-07-06 — Pre-Phase 5 hardening pass closed: manual QA verified
+
+- **Trigger:** all G1–G8 implementation tasks were checked off (2026-07-05) in the sibling repos;
+  user manually retested all 15 issues (14 originally reported + T1.4 found in plan review)
+  end-to-end against the running build.
+- **Result:** all 15 issues confirmed fixed. Issues 3 (subject-level mastery) and 11 (LaTeX
+  rendering) confirmed correctly **not** implemented — verified as the deliberate spec-only
+  deferrals decided in the 2026-07-02 entry (backlog BL-002/BL-003, Phase 6 / follow-up).
+- **Status:** Pre-Phase-5 is now closed with QA sign-off, not just code-complete. Phase 5
+  (`PLAN.md`/`TASKS.md`) is cleared to start.
+- **Updated:** `TASKS_PrePhase5-Hardening_2026-07-02.md` (status line), `phases.md` (Pre-Phase 5
+  heading marked ✓ completed 2026-07-06 with verification note).
+
+---
+
 ## 2026-07-02 — Pre-Phase 5 planned (Phase 4 Release-Hardening Pass)
 
 - **Trigger:** 14 issues found while manually testing the through-Phase-4 build. The build is

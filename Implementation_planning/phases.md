@@ -92,7 +92,7 @@ role-switcher metadata, `/institution` + `/parent` route guards).
 
 ---
 
-## Pre-Phase 5 — Phase 4 Release-Hardening Pass (planned 2026-07-02)
+## Pre-Phase 5 — Phase 4 Release-Hardening Pass ✓ (completed 2026-07-06)
 
 > Root goal: make the through-Phase-4 build release-ready for user testing by fixing 14 issues
 > found in manual testing (plus one latent bug, issue 15, found during plan review — see below).
@@ -131,6 +131,10 @@ step at onboarding leaves a student with **no UI path** to set `student_profiles
 Phase 5 ships `/profile` (T1.5) — onboarding doesn't re-run once complete, and no other screen in
 the through-Phase-4 build writes to that field. Documented as an accepted interim limitation in
 `09_onboarding.md` (testers should not skip if they want `recommended` to activate pre-Phase-5).
+
+**Manually verified 2026-07-06:** all 15 issues (14 reported + T1.4) retested end-to-end against
+the fixes above and confirmed working. Issues 3 and 11 confirmed correctly deferred (spec-only,
+not implemented) per the scope decisions. Phase 5 is cleared to start.
 
 ---
 
