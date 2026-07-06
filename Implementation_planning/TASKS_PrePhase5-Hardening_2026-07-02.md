@@ -44,11 +44,11 @@
 - [x] **G6: Student grade/profile + onboarding completeness** — recommended badge activatable from UI; onboarding grade step specced (2026-07-05)
 
 ## G7 [frontend/specs]: Inbox UX targeted polish (issue 12)
-- [ ] T7.1 [frontend]: NotificationBell dropdown (recent unread + mark-read + "View all")
-- [ ] T7.2 [frontend]: Doubt inboxes: status filter + last-message preview excerpt
-- [ ] T7.3 [frontend]: NotificationsPage: unread-only toggle + type/source icon
+- [x] T7.1 [frontend]: NotificationBell dropdown (recent unread + mark-read + "View all") (2026-07-05)
+- [x] T7.2 [frontend]: Doubt inboxes: status filter + last-message preview excerpt (2026-07-05)
+- [x] T7.3 [frontend]: NotificationsPage: unread-only toggle + type/source icon (2026-07-05)
 - [x] T7.4 [specs]: 10_notifications.md + 03_student.md/04_teacher_tutor.md — inbox UX contract ✅ written
-- [ ] **G7: Inbox UX targeted polish** — bell dropdown, status filters, previews shipped + specced
+- [x] **G7: Inbox UX targeted polish** — bell dropdown, status filters, previews shipped + specced (2026-07-05)
 
 ## G8 [backend/specs]: At-risk notification interim fix + deferred-items spec documentation (issues 3, 9, 11)
 - [x] T8.1 [backend]: student_at_risk action_url → null (no broken nav) until view exists (2026-07-05)
@@ -58,7 +58,10 @@
 - [x] **G8: At-risk notification interim fix + deferred-items spec documentation** — no broken nav; 3 deferred items spec'd + backloged (2026-07-05)
 
 ## Ready now (no pending deps)
-T7.1, T7.2, T7.3
+(none — all G1–G8 tasks complete; Pre-Phase-5 hardening pass is closed)
+
+## Pre-Phase-5 status: CLOSED (2026-07-05)
+All goals G1–G8 complete. Per the plan header, Phase 5 (`TASKS.md`) may now start.
 
 ## Already written (specs repo, part of this plan)
 T6.3, T7.4, T8.2, T8.3, T8.4 — spec content committed to target/requirements/* and vision/requirements/backlog.md
