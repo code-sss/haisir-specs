@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-07-06 — Phase 5 plan reconciled (baseline refresh only, no re-decomposition)
+
+- **Trigger:** `/plan` invoked to reconcile `PLAN.md`/`TASKS.md` (Phase 5 — Parent Curriculum
+  Builder + Link Codes) now that Pre-Phase-5 hardening has closed, before starting Phase 5
+  implementation.
+- **Finding:** zero Phase 5 tasks are checked off in `TASKS.md` — nothing in the intervening
+  window (`9532392`/`df7067e`/`98912f8` → `e7e178e`/`a8c348b`/`4252674`) was Phase 5 work; it was
+  entirely the Pre-Phase-5 hardening pass (G1–G8, unrelated scope, closed same day). Diffed every
+  file the Phase 5 plan's tasks reference: backend touched only `user_metadata.py` (no overlap);
+  frontend touched `node-tree-sidebar.tsx`, `student-courses-page.tsx`, `topic-list-panel.tsx` —
+  files that Phase 5's G6 (T6.2/T6.3) will also edit, but already merged cleanly with no live
+  conflict, just a stale line-number reference in T6.2's build note (fixed in-place).
+- **Decision:** skip the full Phase 2–6 re-planning ceremony (fresh SCOPE ranking + challenger
+  rounds) since nothing changed that would alter the existing challenger-approved G1→G7 sequencing
+  or priorities — re-running it would reproduce the same tree already in `PLAN.md` at the cost of
+  a full planning cycle. Did a lightweight refresh instead: bumped the `plan-baseline` watermark in
+  both files, added the stale-reference note to T6.2, left every task/dependency/goal unchanged.
+- Phase 5 is unchanged and ready to start; "Ready now" queue in `TASKS.md` is unaffected: T1.1–T1.4,
+  T3.1, T3.3, T4.2, T5.1, T6.1 [backend]; T2.1, T3.10, T4.7b, T6.2 [frontend].
+
+---
+
 ## 2026-07-06 — Pre-Phase 5 hardening pass closed: manual QA verified
 
 - **Trigger:** all G1–G8 implementation tasks were checked off (2026-07-05) in the sibling repos;

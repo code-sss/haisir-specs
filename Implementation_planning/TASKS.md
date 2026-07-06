@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:9532392 frontend:df7067e deploy:98912f8 (2026-07-02)
+> Last baselined: backend:e7e178e frontend:a8c348b deploy:4252674 (2026-07-06 — refreshed post-Pre-Phase-5, no task status change)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
 - [ ] T1.1 [backend]: Student link-code generation + current-code endpoints

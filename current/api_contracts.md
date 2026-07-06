@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | f6bdf2b (G4-patch-2 + G4-patch-3 — pattern-analysis inline-stream fix + stream-failure hardening, 2026-07-01) |
-| haisir-frontend | 302ac06 (G4-patch — Take Exam nav + streaming review chat + markdown rendering, 2026-07-01) |
-| haisir-deploy | 457de26 (G4-patch — pattern-analysis route timeouts fixed for streaming, 2026-07-01) |
+| haisir-backend | e7e178e (Pre-Phase-5 G3/G6 — topic_id exam filter + grade-only profile upsert, 2026-07-06) |
+| haisir-frontend | a8c348b (Pre-Phase-5 G1-G7 — review nav, bulk topic, deep-link, grade picker, inbox polish, 2026-07-06) |
+| haisir-deploy | 4252674 (Pre-Phase-5 — extended hAITU WAF exclusion, 2026-07-06) |
 
-> Next session: run `git diff f6bdf2b..HEAD` in haisir-backend, `git diff 302ac06..HEAD` in haisir-frontend, and `git diff 457de26..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff e7e178e..HEAD` in haisir-backend, `git diff a8c348b..HEAD` in haisir-frontend, and `git diff 4252674..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -40,9 +40,9 @@
 - Response: `{ onboarding_completed_at: datetime }`
 
 ### POST /api/students/me/profile
-- Purpose: Create student profile
+- Purpose: Create/upsert student profile
 - Auth: student
-- Request: first_name, last_name, phone?, avatar_url?, grade?, subjects?
+- Request: first_name?, last_name?, phone?, avatar_url?, grade?, subjects? — `first_name`/`last_name` are optional (Pre-Phase-5 G6, 2026-07-06) so a grade-only upsert succeeds (used by the onboarding grade picker)
 - Response: id, idp_sub, first_name, last_name, phone, avatar_url, grade, subjects
 
 ### POST /api/parents/me/profile
@@ -390,7 +390,7 @@
 ### GET /api/exams/template
 - Purpose: List exam templates for a node
 - Auth: instructor (outside current target increment)
-- Query: node_id
+- Query: node_id, topic_id? (optional, Pre-Phase-5 G3 — filters to templates having ≥1 question tagged with this topic_id)
 - Response: array of template objects
 
 ### POST /api/exams/template
@@ -445,6 +445,7 @@
 ### GET /api/exams/course/{node_id}
 - Purpose: List active exam templates for a node
 - Auth: student, instructor, admin (any platform role); visibility enforced per BR-DATA-003
+- Query: topic_id? (optional, Pre-Phase-5 G3 — filters to templates having ≥1 question tagged with this topic_id; used by the student "Take Exam" deep-link from a topic)
 - Response: array of `{ id, course_path_node_id, title }`
 
 ### POST /api/exam-sessions/session/create

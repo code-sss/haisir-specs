@@ -411,7 +411,7 @@ ROOT: Phase 5 — Parent curriculum builder + link codes, RAG-connected
 - **Depends on**: None (fixtures).
 
 ##### T6.2 [frontend] — Source-aware empty state in the existing Home Study tree
-- **Build**: The Home Study tab + `"platform" | "parent"` source switcher **already exist** (`student-courses-page.tsx:98–164`) — this task only fixes its empty state: in `NodeTreeSidebar`, when `source === 'parent'` and the tree is empty, show "No Home Study content yet — ask your parent to add topics" instead of the platform empty state ("No courses enrolled." + Browse Courses → `/enroll`).
+- **Build**: The Home Study tab + `"platform" | "parent"` source switcher **already exist** (`student-courses-page.tsx`, line numbers shifted since the Pre-Phase-5 G4 deep-link rework landed on 2026-07-05 — re-read the current file rather than trusting the old `:98–164` reference) — this task only fixes its empty state: in `NodeTreeSidebar`, when `source === 'parent'` and the tree is empty, show "No Home Study content yet — ask your parent to add topics" instead of the platform empty state ("No courses enrolled." + Browse Courses → `/enroll`). Note: `NodeTreeSidebar`'s row markup changed under Pre-Phase-5 (chevron is now a sibling `<button>`, not nested; a new `initialExpandedIds` prop exists) — the empty-state branch this task touches is unaffected, but confirm no incidental collision when editing.
 - **Done when**: Empty Home Study tab renders the parent-specific message with no `/enroll` link.
 - **Test**: `expect(screen.queryByRole("link", { name: /browse courses/i })).toBeNull()` on empty parent source.
 - **Depends on**: None.
@@ -467,4 +467,9 @@ ROOT: Phase 5 — Parent curriculum builder + link codes, RAG-connected
 
 **Sequencing spine:** G1 (links) → G2 (shell) → G3 (builder; V38 → CRUD → adopt → content) → G4 (ingestion lifecycle) → G5 (hAITU access) → G6 (Home Study completion) → G7 (acceptance). G5/G6 backend tasks are fixture-driven and can start in parallel with G1–G3.
 
-<!-- plan-baseline: backend:9532392bbd1553df0f51045cea851e7d2de16a9a frontend:df7067eec7752ba2f2665189cdf93493036c229e deploy:98912f85791c1b3100254ed7493d8ff284a693db -->
+<!-- plan-baseline: backend:e7e178ee56bde003a721853367a840e3a17bd1d5 frontend:a8c348b2c420fb37ed9b08e88e3c10e9416e082e deploy:4252674aa0cb00fa6fc305d1116ff648b52d8edb -->
+<!-- baseline refreshed 2026-07-06: reconciled against the intervening Pre-Phase-5 hardening pass
+     (G1-G8, unrelated scope, closed 2026-07-06). Zero Phase 5 tasks touched; only incidental
+     overlap is node-tree-sidebar.tsx/student-courses-page.tsx/topic-list-panel.tsx reshaped
+     under Pre-Phase-5 G3/G4 (see T6.2 note above). No re-decomposition needed — see
+     decisions.md 2026-07-06. -->
