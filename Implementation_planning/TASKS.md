@@ -1,16 +1,16 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:57ded07 frontend:8087a58 deploy:ee39f9c (2026-07-09 — backend T1.1-T1.4 + V39 migration, frontend T2.1 route guard)
+> Last baselined: backend:57ded07 frontend:8b05a8e deploy:ee39f9c (2026-07-09 — backend T1.1-T1.4 + V39 migration, frontend T2.1 route guard + T1.5 /profile page)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
 - [x] T1.1 [backend]: Student link-code generation + current-code endpoints (2026-07-09)
 - [x] T1.2 [backend]: Student parent-link list + revoke endpoints (2026-07-09)
 - [x] T1.3 [backend]: Parent children list + parent-side revoke endpoints (2026-07-09)
 - [x] T1.4 [backend]: Max-10-children cap on redemption (BR-PAR-016) (2026-07-09)
-- [ ] T1.5 [frontend]: /profile page (new) — link-code + linked-parents sections (depends on T1.1, T1.2)
+- [x] T1.5 [frontend]: /profile page (new) — link-code + linked-parents sections (2026-07-09)
 - [x] T1.6 [specs]: Link-code semantics + physical endpoint paths (2026-07-09)
-- [ ] **G1: Parent–child linking lifecycle** — T1.7 [backend] integration test: full link round-trip (depends on T1.1, T1.2, T1.3, T1.4) — T1.7 written 2026-07-09 (`tests/integration/routes/test_parent_link_round_trip_integration.py`); collects + self-skips clean, round-trip PASS pending a V39 DB env (`INTEGRATION_DB_URL` unset locally → CI verifies); G1 closure also awaits T1.5 [frontend]
+- [ ] **G1: Parent–child linking lifecycle** — T1.7 [backend] integration test: full link round-trip (depends on T1.1, T1.2, T1.3, T1.4) — T1.7 written 2026-07-09 (`tests/integration/routes/test_parent_link_round_trip_integration.py`); collects + self-skips clean, round-trip PASS pending a V39 DB env (`INTEGRATION_DB_URL` unset locally → CI verifies)
 
 ## G2 [frontend/specs]: Parent workspace shell + route guard
 - [x] T2.1 [frontend]: ParentRouteGuard component (2026-07-09)
@@ -76,7 +76,6 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T1.5 [frontend]: /profile page — link-code + linked-parents sections (deps T1.1, T1.2 done)
 - T2.2 [frontend]: /parent layout + P-home dashboard (deps T2.1, T1.3 done)
 - T2.3 [frontend]: /parent/link-child page (deps T2.1, T1.4 done)
 - T3.1 [backend]: V40 migration — source_node_id lineage (no deps)
