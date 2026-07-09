@@ -10,7 +10,7 @@
 - [x] T1.4 [backend]: Max-10-children cap on redemption (BR-PAR-016) (2026-07-09)
 - [ ] T1.5 [frontend]: /profile page (new) — link-code + linked-parents sections (depends on T1.1, T1.2)
 - [x] T1.6 [specs]: Link-code semantics + physical endpoint paths (2026-07-09)
-- [ ] **G1: Parent–child linking lifecycle** — T1.7 [backend] integration test: full link round-trip (depends on T1.1, T1.2, T1.3, T1.4)
+- [ ] **G1: Parent–child linking lifecycle** — T1.7 [backend] integration test: full link round-trip (depends on T1.1, T1.2, T1.3, T1.4) — T1.7 written 2026-07-09 (`tests/integration/routes/test_parent_link_round_trip_integration.py`); collects + self-skips clean, round-trip PASS pending a V39 DB env (`INTEGRATION_DB_URL` unset locally → CI verifies); G1 closure also awaits T1.5 [frontend]
 
 ## G2 [frontend/specs]: Parent workspace shell + route guard
 - [x] T2.1 [frontend]: ParentRouteGuard component (2026-07-09)
@@ -77,7 +77,6 @@
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
 - T1.5 [frontend]: /profile page — link-code + linked-parents sections (deps T1.1, T1.2 done)
-- T1.7 [backend]: G1 integration test — full link round-trip (deps T1.1-T1.4 done)
 - T2.2 [frontend]: /parent layout + P-home dashboard (deps T2.1, T1.3 done)
 - T2.3 [frontend]: /parent/link-child page (deps T2.1, T1.4 done)
 - T3.1 [backend]: V40 migration — source_node_id lineage (no deps)
