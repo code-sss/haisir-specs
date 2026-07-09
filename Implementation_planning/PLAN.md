@@ -467,7 +467,7 @@ ROOT: Phase 5 — Parent curriculum builder + link codes, RAG-connected
 
 **Sequencing spine:** G1 (links) → G2 (shell) → G3 (builder; V38 → CRUD → adopt → content) → G4 (ingestion lifecycle) → G5 (hAITU access) → G6 (Home Study completion) → G7 (acceptance). G5/G6 backend tasks are fixture-driven and can start in parallel with G1–G3.
 
-<!-- plan-baseline: backend:e7e178ee56bde003a721853367a840e3a17bd1d5 frontend:a8c348b2c420fb37ed9b08e88e3c10e9416e082e deploy:4252674aa0cb00fa6fc305d1116ff648b52d8edb -->
+<!-- plan-baseline: backend:da38e8bbab6c089330ec4fafb3b85f4083c39927 frontend:fc78c5fae4f6c55876dd5866d052ce21fc9e6079 deploy:ee39f9cd39659897af35b080d66b4fda8010fbb9 -->
 <!-- baseline refreshed 2026-07-06: reconciled against the intervening Pre-Phase-5 hardening pass
      (G1-G8, unrelated scope, closed 2026-07-06). Zero Phase 5 tasks touched; only incidental
      overlap is node-tree-sidebar.tsx/student-courses-page.tsx/topic-list-panel.tsx reshaped
