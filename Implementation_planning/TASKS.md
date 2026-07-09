@@ -13,7 +13,7 @@
 - [ ] **G1: Parent–child linking lifecycle** — T1.7 [backend] integration test: full link round-trip (depends on T1.1, T1.2, T1.3, T1.4)
 
 ## G2 [frontend/specs]: Parent workspace shell + route guard
-- [ ] T2.1 [frontend]: ParentRouteGuard component
+- [x] T2.1 [frontend]: ParentRouteGuard component (2026-07-09)
 - [ ] T2.2 [frontend]: /parent layout + P-home dashboard (depends on T2.1, T1.3)
 - [ ] T2.3 [frontend]: /parent/link-child page (P-link) (depends on T2.1, T1.4)
 - [ ] T2.4 [frontend]: Parent header nav + redirect-matrix verification (depends on T2.2)
@@ -85,7 +85,7 @@ Tasks with no pending dependencies — can be started immediately:
 - T4.2 [backend]: Outbox upsert-with-reset repository helper (no deps)
 - T5.1 [backend]: Optional enrollment_id in topic-doubt schema (no deps)
 - T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
-- T2.1 [frontend]: ParentRouteGuard component (no deps)
+- T2.5 [specs]: /parent route-guard slice into target 05_parent.md (depends on T2.1)
 - T3.10 [frontend]: Parameterize shared content components (no deps)
 - T4.7b [frontend]: "No notes yet" placeholder in student content viewer (no deps)
 - T6.2 [frontend]: Source-aware empty state in Home Study tree (no deps)
