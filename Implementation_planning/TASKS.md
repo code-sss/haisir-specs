@@ -4,10 +4,10 @@
 > Last baselined: backend:da38e8b frontend:fc78c5f deploy:ee39f9c (2026-07-09 — refreshed pre-Phase-5-start, non-Phase-5 hardening/infra only, no task status change)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
-- [ ] T1.1 [backend]: Student link-code generation + current-code endpoints
-- [ ] T1.2 [backend]: Student parent-link list + revoke endpoints
-- [ ] T1.3 [backend]: Parent children list + parent-side revoke endpoints
-- [ ] T1.4 [backend]: Max-10-children cap on redemption (BR-PAR-016)
+- [x] T1.1 [backend]: Student link-code generation + current-code endpoints (2026-07-09)
+- [x] T1.2 [backend]: Student parent-link list + revoke endpoints (2026-07-09)
+- [x] T1.3 [backend]: Parent children list + parent-side revoke endpoints (2026-07-09)
+- [x] T1.4 [backend]: Max-10-children cap on redemption (BR-PAR-016) (2026-07-09)
 - [ ] T1.5 [frontend]: /profile page (new) — link-code + linked-parents sections (depends on T1.1, T1.2)
 - [ ] T1.6 [specs]: Link-code semantics + physical endpoint paths (depends on T1.1, T1.3)
 - [ ] **G1: Parent–child linking lifecycle** — T1.7 [backend] integration test: full link round-trip (depends on T1.1, T1.2, T1.3, T1.4)
@@ -85,7 +85,6 @@ Tasks with no pending dependencies — can be started immediately:
 - T4.2 [backend]: Outbox upsert-with-reset repository helper (no deps)
 - T5.1 [backend]: Optional enrollment_id in topic-doubt schema (no deps)
 - T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
-- T2.5 [specs]: /parent route-guard slice into target 05_parent.md (depends on T2.1)
 - T3.10 [frontend]: Parameterize shared content components (no deps)
 - T4.7b [frontend]: "No notes yet" placeholder in student content viewer (no deps)
 - T6.2 [frontend]: Source-aware empty state in Home Study tree (no deps)
