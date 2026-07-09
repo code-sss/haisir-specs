@@ -7,7 +7,7 @@
 
 - **Root goal:** A parent can link to their child, build/adopt a private curriculum, upload content that flows through extraction + RAG embedding, and the linked child can study it in Home Study and ask hAITU questions grounded in the parent's notes.
 - **Repos:** `[backend]` haisir-backend, `[frontend]` haisir-frontend, `[specs]` haisir-specs. **`[deploy]` confirmed not needed** — APISIX wildcard `/api/*` routes + route 16 already cover parent extraction upload; no new gateway routes or timeouts this phase.
-- **Migrations:** one new migration, **V38** (adopt lineage). Everything else rides on existing tables (V22/V23 `parent_link_codes` + `parent_child_links`, V26 extraction/outbox, V32/V33 chunks). `topics.status` needs no migration (exists since V18, default `live`, no CHECK constraint — value set enforced at the Pydantic schema layer, recorded in T3.12).
+- **Migrations:** one new migration, **V40** (adopt lineage). Everything else rides on existing tables (V22/V23 `parent_link_codes` + `parent_child_links`, V26 extraction/outbox, V32/V33 chunks). `topics.status` needs no migration (exists since V18, default `live`, no CHECK constraint — value set enforced at the Pydantic schema layer, recorded in T3.12).
 - **Root acceptance (G7):** Student generates a link code → parent redeems it → parent adopts a platform subtree (409 on repeat) → uploads a PDF to an adopted topic → worker extracts + embeds → parent publishes topic `live` → child sees it in the green Home Study section → child asks hAITU (contract-level in CI; grounded-answer assertion ollama-gated) → student revokes the link → Home Study disappears and hAITU returns 403, immediately.
 
 ### Embedded design decisions
@@ -15,7 +15,7 @@
 1. **hAITU authorization for parent-owned topics — parent-link gate, not enrollments.** `HaituTopicDoubtRequest.enrollment_id` becomes optional. `HaituDoubtService._validate_and_build_context` loads the topic **first** and branches: platform-owned topic → existing enrollment-ownership + subtree gate (unchanged, `enrollment_id` required, 403 if absent); parent-owned topic → require an active `parent_child_links` row (`child_sub = caller`, `parent_sub = topic.owner_id`, `revoked_at IS NULL`) **and** `topic.status = 'live'`. This avoids making `student_enrollments` load-bearing on parent nodes (enrollment API is platform-nodes-only by design, `student_enrollment.py:95–107`). The check is per-request with no cache, so revocation severs access immediately. Grade/subject prompt context keeps the existing ancestor walk — parent trees obey the same 3-tier hierarchy. Vector retrieval stays filtered by `topic_id` only; the service-layer gate remains the sole cross-family defense — covered by an explicit cross-family 403 test (T5.3).
 2. **Re-ingestion / delete chunk cleanup.** On content **update**: upsert-with-reset the `rag_indexing_outbox` row (`ON CONFLICT (content_id) DO UPDATE SET status='pending', retry_count=0, last_error=NULL, locked_at=NULL, locked_by=NULL` — `updated_at` handled by the existing `trg_rag_outbox_touch` trigger, V26). The **worker** (`rag_outbox_loop._process_row`) deletes stale chunks by `metadata_->>'content_id'` via raw SQL immediately before `insert_nodes` — idempotent re-embed for both re-enqueue and mid-insert-crash retry. On content **delete**: raw-SQL chunk delete + outbox row delete in the same TX as the content delete. Insert-then-delete-stale ordering NOT required for v1 — the brief retrieval gap is accepted.
 3. **Adopted topics start RAG-empty.** Clone copies `course_path_nodes` + `topics` only — zero `topic_contents`, zero chunks. UI shows per-topic "No notes yet" states (T4.7a/T4.7b).
-4. **Adopt idempotency via lineage column.** V38 adds `course_path_nodes.source_node_id UUID NULL` + partial unique index `(owner_id, source_node_id) WHERE source_node_id IS NOT NULL` (type-safe: `owner_id` is VARCHAR since V23) — repeat-adopt is a DB constraint violation surfaced as 409.
+4. **Adopt idempotency via lineage column.** V40 adds `course_path_nodes.source_node_id UUID NULL` + partial unique index `(owner_id, source_node_id) WHERE source_node_id IS NOT NULL` (type-safe: `owner_id` is VARCHAR since V23) — repeat-adopt is a DB constraint violation surfaced as 409.
 5. **Endpoint-path reconciliation.** The already-live redemption endpoints (`POST /api/parent-child-links`, `GET /api/parent-link-codes/{code}`) are **kept** as-is; the target spec's `POST /api/parent/children/link` alias is corrected in specs. Live error semantics adopted verbatim: **404** unknown code, **410** expired OR already-used code, **409** duplicate parent-child link, **422** (new, T1.4) max-10 cap. Note: the validate GET carries `Depends(validate_csrf)` in live code, so the frontend must send `X-CSRF-Token` even on that GET (m1).
 
 ---
@@ -41,7 +41,7 @@ ROOT: Phase 5 — Parent curriculum builder + link codes, RAG-connected
 │   └── T2.6 [frontend] Onboarding parent-ready CTA dead-link fix
 ├── G3: Parent curriculum builder (structure + content authoring)
 │   ├── G3.1: Curriculum structure API
-│   │   ├── T3.1  [backend] V38 migration — source_node_id lineage
+│   │   ├── T3.1  [backend] V40 migration — source_node_id lineage
 │   │   ├── T3.2a [backend] Parent node CRUD (owner-scoped)
 │   │   ├── T3.2b [backend] Node hierarchy validation for parent trees
 │   │   ├── T3.2c [backend] Node cascade delete + exam-session guard
@@ -57,7 +57,7 @@ ROOT: Phase 5 — Parent curriculum builder + link codes, RAG-connected
 │       ├── T3.9  [frontend] Adopt modal (platform browse, 409 handling)
 │       ├── T3.10 [frontend] Parameterize shared content components (admin↔parent)
 │       ├── T3.11 [frontend] P-topic Topic Content Manager page
-│       └── T3.12 [specs]    05_parent.md + 01_data_model.md builder/V38 updates
+│       └── T3.12 [specs]    05_parent.md + 01_data_model.md builder/V40 updates
 ├── G4: RAG ingestion + re-ingestion lifecycle
 │   ├── T4.1  [backend]  Outbox enqueue on instant text-content create
 │   ├── T4.2  [backend]  Outbox upsert-with-reset repository helper
@@ -191,8 +191,8 @@ ROOT: Phase 5 — Parent curriculum builder + link codes, RAG-connected
 **Subgoal test**: T3.13.
 **Repos**: [backend]
 
-##### T3.1 [backend] — V38 migration: adopt lineage column
-- **Build**: Alembic migration V38: `ALTER TABLE course_path_nodes ADD COLUMN source_node_id UUID NULL;` + partial unique index `ux_course_path_nodes_adopt_lineage ON (owner_id, source_node_id) WHERE source_node_id IS NOT NULL`. Additive; no backfill. Update the imperative-mapped table def in `src/infrastructure/models/course_path_node.py`. Single-purpose migration — no other schema changes.
+##### T3.1 [backend] — V40 migration: adopt lineage column
+- **Build**: Alembic migration V40: `ALTER TABLE course_path_nodes ADD COLUMN source_node_id UUID NULL;` + partial unique index `ux_course_path_nodes_adopt_lineage ON (owner_id, source_node_id) WHERE source_node_id IS NOT NULL`. Additive; no backfill. Update the imperative-mapped table def in `src/infrastructure/models/course_path_node.py`. Single-purpose migration — no other schema changes.
 - **Done when**: `alembic upgrade head` applies cleanly and inserting two rows with the same `(owner_id, source_node_id)` raises IntegrityError.
 - **Test**: `with pytest.raises(IntegrityError): insert_duplicate_lineage_row()`
 - **Depends on**: None.
@@ -228,7 +228,7 @@ ROOT: Phase 5 — Parent curriculum builder + link codes, RAG-connected
 - **Depends on**: T3.1 [backend], T3.2a [backend], T3.3 [backend].
 
 ##### T3.5 [backend] — Parent topic CRUD + draft/live publish
-- **Build**: In `parent_curriculum.py`: `GET /nodes/{id}/topics`, `POST /nodes/{id}/topics` (creates with `owner_type='parent'`, `owner_id=user.sub`, `status='draft'` default), `PATCH /topics/{id}` (title and/or `status` — **enforced via `Literal["draft","live"]` in the Pydantic PATCH schema**; `topics.status` has no DB CHECK constraint and V38 stays single-purpose), `DELETE /topics/{id}`. Owner checks throughout (404 oracle protection). Extend `AbstractTopicRepository` with owner-scoped methods.
+- **Build**: In `parent_curriculum.py`: `GET /nodes/{id}/topics`, `POST /nodes/{id}/topics` (creates with `owner_type='parent'`, `owner_id=user.sub`, `status='draft'` default), `PATCH /topics/{id}` (title and/or `status` — **enforced via `Literal["draft","live"]` in the Pydantic PATCH schema**; `topics.status` has no DB CHECK constraint and V40 stays single-purpose), `DELETE /topics/{id}`. Owner checks throughout (404 oracle protection). Extend `AbstractTopicRepository` with owner-scoped methods.
 - **Done when**: `PATCH /topics/{id}` with `{"status":"live"}` returns 200 and the row's status is `live`; `{"status":"archived"}` → 422; parent B PATCHing parent A's topic gets 404.
 - **Test**: `assert topic_row.status == "live"`
 - **Depends on**: T3.2a [backend].
@@ -284,9 +284,9 @@ ROOT: Phase 5 — Parent curriculum builder + link codes, RAG-connected
 - **Test**: `expect(screen.getByText(/from chapter1.pdf/i)).toBeInTheDocument()` with mocked done-job + contents payload.
 - **Depends on**: T3.10 [frontend], T3.7 [frontend], T3.5 [backend], T3.6 [backend].
 
-##### T3.12 [specs] — Builder + V38 spec updates
-- **Build**: `target/requirements/01_data_model.md`: new "Schema Extensions (Phase 5)" section — V38 `source_node_id` + partial unique index, adopt-idempotency mechanics (BR-DATA-006 now DB-enforced), category rule for scratch roots, sibling-type consistency scoped per-owner, and a note that `topics.status` values are schema-enforced (`Literal["draft","live"]`), no DB CHECK constraint. `target/requirements/05_parent.md`: reconcile the endpoint table with the physical paths shipped (adopt body, topic-content PATCH/DELETE paths, platform-browse access note).
-- **Done when**: Both files describe V38 and the shipped endpoint set with no stale paths.
+##### T3.12 [specs] — Builder + V40 spec updates
+- **Build**: `target/requirements/01_data_model.md`: new "Schema Extensions (Phase 5)" section — V40 `source_node_id` + partial unique index, adopt-idempotency mechanics (BR-DATA-006 now DB-enforced), category rule for scratch roots, sibling-type consistency scoped per-owner, and a note that `topics.status` values are schema-enforced (`Literal["draft","live"]`), no DB CHECK constraint. `target/requirements/05_parent.md`: reconcile the endpoint table with the physical paths shipped (adopt body, topic-content PATCH/DELETE paths, platform-browse access note).
+- **Done when**: Both files describe V40 and the shipped endpoint set with no stale paths.
 - **Test**: 01_data_model.md contains `source_node_id`; 05_parent.md endpoint table matches the OpenAPI paths.
 - **Depends on**: T3.4, T3.6 (contracts final).
 
@@ -465,7 +465,7 @@ ROOT: Phase 5 — Parent curriculum builder + link codes, RAG-connected
 
 **Ready now (no pending dependencies):** T1.1, T1.2, T1.3, T1.4 [backend]; T3.1, T3.3, T4.2, T5.1, T6.1 [backend]; T2.1, T3.10, T4.7b, T6.2 [frontend].
 
-**Sequencing spine:** G1 (links) → G2 (shell) → G3 (builder; V38 → CRUD → adopt → content) → G4 (ingestion lifecycle) → G5 (hAITU access) → G6 (Home Study completion) → G7 (acceptance). G5/G6 backend tasks are fixture-driven and can start in parallel with G1–G3.
+**Sequencing spine:** G1 (links) → G2 (shell) → G3 (builder; V40 → CRUD → adopt → content) → G4 (ingestion lifecycle) → G5 (hAITU access) → G6 (Home Study completion) → G7 (acceptance). G5/G6 backend tasks are fixture-driven and can start in parallel with G1–G3.
 
 <!-- plan-baseline: backend:da38e8bbab6c089330ec4fafb3b85f4083c39927 frontend:fc78c5fae4f6c55876dd5866d052ce21fc9e6079 deploy:ee39f9cd39659897af35b080d66b4fda8010fbb9 -->
 <!-- baseline refreshed 2026-07-06: reconciled against the intervening Pre-Phase-5 hardening pass

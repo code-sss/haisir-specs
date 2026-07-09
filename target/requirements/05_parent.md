@@ -21,6 +21,21 @@ Parents are content creators — they build or adopt a private curriculum for th
 
 ---
 
+## Routing & guard
+
+- `/parent/*` requires the active role to be `parent`. Enforced two ways:
+  - **Server/route-table config:** `ROUTE_ROLE_REQUIREMENTS` in `use-auth.ts` has a `/parent` prefix entry (`requiredRole: "parent"`), consumed by `canAccessRoute`.
+  - **Client component guard:** `ParentRouteGuard` (`src/features/parent/components/parent-route-guard.tsx`) wraps the `/parent` layout. It is a thin binding over a shared `RouteGuard` component (`src/shared/components/route-guard.tsx`, `requiredRole="parent"`) — the same shared component `AdminRouteGuard` binds with `requiredRole="admin"`. The two guard layers are intentionally redundant (mirrors the admin pattern) and are not deduplicated.
+- **Redirect matrix:**
+  - Unauthenticated (`userName` falsy) → `/`.
+  - Authenticated, `currentRole !== "parent"` → `/home`.
+  - Authenticated, `currentRole === "parent"` → renders `/parent/*` children.
+  - While `useAuth` is loading → renders a spinner, no redirect yet.
+- The top-level `/` route also redirects a parent-role user straight to `/parent` (`app/page.tsx`).
+- **Onboarding CTA path:** the parent-ready onboarding screen's View B CTA (`on05-parent-ready.tsx`) currently links to `/link-child`, a route that does not exist — a dead link pending the repoint to `/parent/link-child` (tracked separately as T2.6, not yet shipped).
+
+---
+
 ## P-home — Parent Dashboard
 
 - **Child selector strip** at the top: shows all linked children (name + avatar). Clicking switches the active child context.
@@ -153,25 +168,35 @@ Allowed when `exam_templates.owner_id = parent.idp_sub` (own exams only — BR-S
 
 ## P-link — Link Child
 
-- Input field for the child's link code (`parent_link_codes.code`).
-- "Link" button → `POST /api/parent/children/link` with `{ code }`.
-- On success: child appears in the child selector strip on P-home.
-- On error: "Invalid or expired code" message.
+- Input field for the child's link code (8-char, uppercase `A–Z2–9`, 72h TTL — see `target/requirements/03_student.md` S-profile).
+- On entry, validate via `GET /api/parent-link-codes/{code}` and show the child's name for confirmation. **This GET requires `X-CSRF-Token`** (live route has `Depends(validate_csrf)` despite being a read) — a quirk of the shipped implementation, not a REST convention to follow elsewhere.
+- "Link" button → `POST /api/parent-child-links` with body `{ "invite_code": "<code>" }` (CSRF required).
+- On success (201): child appears in the child selector strip on P-home.
+- Error states, matching live semantics exactly:
+  - **404** — unknown code → "Invalid code".
+  - **410** — code expired or already used → "Code expired or already used".
+  - **409** — this parent is already actively linked to the code's child → "This child is already linked".
+  - **422** — parent already has 10 active child links (BR-PAR-016) → "Maximum of 10 children".
 
 **Business rules:**
-- BR-PAR-014: A link code can only be used once (consumed on first use; or the student can generate a new one).
+- BR-PAR-014: A link code is single-use — redeeming it marks it used. A student may only have one *active* (unused, unexpired) code at a time; generating a new one deactivates the prior one. A revoked parent-child pair can be re-linked via a fresh code.
 - BR-PAR-015: A parent can be linked to multiple children.
-- BR-PAR-016: Maximum 10 children per parent account — 422 if exceeded.
+- BR-PAR-016: Maximum 10 *active* children per parent account — 422 if exceeded on redemption. Revoked links do not count against the cap.
 
 ---
 
 ## Parent API Endpoints
 
+> Link-code redemption lives at its own top-level paths, not nested under the children collection
+> — kept as shipped rather than moved to match an earlier draft's nested-alias shape (see
+> `target/requirements/03_student.md` for the student-side link-code endpoints).
+
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/parent/children` | List linked children |
-| `POST` | `/api/parent/children/link` | Link a child using a link code |
-| `DELETE` | `/api/parent/children/:child_idp_sub/link` | Revoke link to a child |
+| `GET` | `/api/parent-link-codes/:code` | Validate a link code, return child info for confirmation. **Requires `X-CSRF-Token`** even though it's a GET (shipped quirk). 404 unknown / 410 expired-or-used. |
+| `POST` | `/api/parent-child-links` | Redeem a link code — body `{ invite_code }`. 201 on success; 404 unknown code, 410 expired/used, 409 already linked, 422 max-10 (BR-PAR-016) |
+| `GET` | `/api/parent/children` | List active linked children (`[{child_sub, first_name, last_name, linked_at}]`) |
+| `DELETE` | `/api/parent/children/:child_sub/link` | Revoke link to a child (sets `revoked_at`); 404 if no active link |
 | `GET` | `/api/parent/curriculum/nodes` | List parent's curriculum root nodes |
 | `GET` | `/api/parent/curriculum/nodes/:node_id` | Get node detail + children |
 | `POST` | `/api/parent/curriculum/nodes` | Create a new node |

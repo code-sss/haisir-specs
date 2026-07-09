@@ -280,8 +280,9 @@ above):**
 
 - Display name, email (read-only, from IdP).
 - **Parent Link Code** section:
-  - Shows the student's current link code (`parent_link_codes.code`).
-  - "Generate new code" button → `POST /api/student/parent-link-codes` (invalidates previous code).
+  - Shows the student's current link code (`parent_link_codes.code`) via `GET /api/student/parent-link-codes` (404 if none active — no code generated yet).
+  - Code format: 8 characters, uppercase `A–Z` + digits `2–9` (digits `0`/`1` excluded to avoid confusion with letters `O`/`I`, which are included). TTL: 72 hours from issuance.
+  - "Generate new code" button → `POST /api/student/parent-link-codes`. Issuing a new code deactivates (marks `is_used = true`) any prior unused code for this student first — only one code can be active at a time.
   - Copy-to-clipboard button.
   - Instructions: "Share this code with your parent to give them access to your Home Study."
 - **Linked Parents** section:

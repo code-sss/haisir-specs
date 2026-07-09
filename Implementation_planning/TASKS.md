@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:da38e8b frontend:fc78c5f deploy:ee39f9c (2026-07-09 — refreshed pre-Phase-5-start, non-Phase-5 hardening/infra only, no task status change)
+> Last baselined: backend:57ded07 frontend:8087a58 deploy:ee39f9c (2026-07-09 — backend T1.1-T1.4 + V39 migration, frontend T2.1 route guard)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
 - [x] T1.1 [backend]: Student link-code generation + current-code endpoints (2026-07-09)
@@ -9,7 +9,7 @@
 - [x] T1.3 [backend]: Parent children list + parent-side revoke endpoints (2026-07-09)
 - [x] T1.4 [backend]: Max-10-children cap on redemption (BR-PAR-016) (2026-07-09)
 - [ ] T1.5 [frontend]: /profile page (new) — link-code + linked-parents sections (depends on T1.1, T1.2)
-- [ ] T1.6 [specs]: Link-code semantics + physical endpoint paths (depends on T1.1, T1.3)
+- [x] T1.6 [specs]: Link-code semantics + physical endpoint paths (2026-07-09)
 - [ ] **G1: Parent–child linking lifecycle** — T1.7 [backend] integration test: full link round-trip (depends on T1.1, T1.2, T1.3, T1.4)
 
 ## G2 [frontend/specs]: Parent workspace shell + route guard
@@ -17,14 +17,14 @@
 - [ ] T2.2 [frontend]: /parent layout + P-home dashboard (depends on T2.1, T1.3)
 - [ ] T2.3 [frontend]: /parent/link-child page (P-link) (depends on T2.1, T1.4)
 - [ ] T2.4 [frontend]: Parent header nav + redirect-matrix verification (depends on T2.2)
-- [ ] T2.5 [specs]: /parent route-guard slice into target 05_parent.md (depends on T2.1)
+- [x] T2.5 [specs]: /parent route-guard slice into target 05_parent.md (2026-07-09)
 - [ ] T2.6 [frontend]: Onboarding parent-ready CTA dead-link fix (depends on T2.3)
 - [ ] **G2: Parent workspace shell** — redirect-matrix component tests (in T2.4) + browser pass recorded in T7.2 walkthrough
 
 ## G3 [backend/frontend/specs]: Parent curriculum builder
 
 ### G3.1 Curriculum structure API
-- [ ] T3.1 [backend]: V38 migration — source_node_id lineage column + partial unique index
+- [ ] T3.1 [backend]: V40 migration — source_node_id lineage column + partial unique index
 - [ ] T3.2a [backend]: Parent node CRUD endpoints (owner-scoped) (depends on T3.1)
 - [ ] T3.2b [backend]: Node hierarchy validation for parent trees (depends on T3.2a)
 - [ ] T3.2c [backend]: Node cascade delete + exam-session guard (depends on T3.2b)
@@ -43,7 +43,7 @@
 - [ ] T3.9 [frontend]: Adopt modal (depends on T3.7, T3.3, T3.4)
 - [ ] T3.10 [frontend]: Parameterize shared content components (admin↔parent)
 - [ ] T3.11 [frontend]: P-topic Topic Content Manager page (depends on T3.10, T3.7, T3.5, T3.6)
-- [ ] T3.12 [specs]: 05_parent.md + 01_data_model.md builder/V38 updates (depends on T3.4, T3.6)
+- [ ] T3.12 [specs]: 05_parent.md + 01_data_model.md builder/V40 updates (depends on T3.4, T3.6)
 - [ ] **G3.3: Builder UI** — component tests per task + browser journey recorded in T7.2 walkthrough
 
 ## G4 [backend/frontend/specs]: RAG ingestion + re-ingestion lifecycle
@@ -80,7 +80,7 @@ Tasks with no pending dependencies — can be started immediately:
 - T1.2 [backend]: Student parent-link list + revoke endpoints (no deps)
 - T1.3 [backend]: Parent children list + parent-side revoke endpoints (no deps)
 - T1.4 [backend]: Max-10-children cap on redemption (no deps)
-- T3.1 [backend]: V38 migration — source_node_id lineage (no deps)
+- T3.1 [backend]: V40 migration — source_node_id lineage (no deps)
 - T3.3 [backend]: Parent read access to platform tree (no deps)
 - T4.2 [backend]: Outbox upsert-with-reset repository helper (no deps)
 - T5.1 [backend]: Optional enrollment_id in topic-doubt schema (no deps)

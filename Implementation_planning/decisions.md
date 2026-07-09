@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-09 — T3.1's reserved migration renumbered V38 → V40 (collision, HIGH)
+
+- **Trigger:** reviewing the backend commits for T1.1–T1.4 (`718e692`, `57ded07`) before writing
+  T1.6/T2.5 specs. `718e692` adds `V39_partial_unique_parent_child_link.py` with
+  `down_revision = "V38"` — chaining onto `V38_relax_student_profile_name_nullable.py`, an
+  unrelated migration that landed on `main` outside Phase 5 scope and already claims the `V38`
+  revision id.
+- **Problem:** `PLAN.md`'s design decision #4 and T3.1's build step reserve **`V38`** for the
+  Phase 5 adopt-lineage migration (`course_path_nodes.source_node_id`). That slot is now taken.
+  If T3.1 were implemented as literally specced, it would create a second file/revision named
+  `V38`, breaking the Alembic chain (duplicate revision id, and it would need to branch from `V37`
+  instead of the true head `V39` — two heads).
+- **Decision:** renumber every `PLAN.md`/`TASKS.md`/`phases.md`/`phase5_goal_tree.md` reference to
+  T3.1's migration from `V38` to **`V40`** (next id after the now-real `V38`/`V39`), before T3.1
+  implementation starts. No task scope changed, only the reserved revision id.
+- **Not yet fixed:** `src/infrastructure/models/course_path_node.py` and the actual migration file
+  don't exist yet (T3.1 unstarted) — nothing to fix in the backend repo itself, this was caught
+  ahead of time.
+
+---
+
 ## 2026-07-06 — Phase 5 plan reconciled (baseline refresh only, no re-decomposition)
 
 - **Trigger:** `/plan` invoked to reconcile `PLAN.md`/`TASKS.md` (Phase 5 — Parent Curriculum
