@@ -76,10 +76,10 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T1.1 [backend]: Student link-code generation + current-code endpoints (no deps)
-- T1.2 [backend]: Student parent-link list + revoke endpoints (no deps)
-- T1.3 [backend]: Parent children list + parent-side revoke endpoints (no deps)
-- T1.4 [backend]: Max-10-children cap on redemption (no deps)
+- T1.5 [frontend]: /profile page — link-code + linked-parents sections (deps T1.1, T1.2 done)
+- T1.7 [backend]: G1 integration test — full link round-trip (deps T1.1-T1.4 done)
+- T2.2 [frontend]: /parent layout + P-home dashboard (deps T2.1, T1.3 done)
+- T2.3 [frontend]: /parent/link-child page (deps T2.1, T1.4 done)
 - T3.1 [backend]: V40 migration — source_node_id lineage (no deps)
 - T3.3 [backend]: Parent read access to platform tree (no deps)
 - T4.2 [backend]: Outbox upsert-with-reset repository helper (no deps)
