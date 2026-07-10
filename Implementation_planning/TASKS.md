@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:85ba354 frontend:ecf605e deploy:ee39f9c (2026-07-10 — backend T4.9 G4 integration test (content→chunk lifecycle); G4 closed — all tasks complete)
+> Last baselined: backend:93d3cac frontend:cfc6f64 deploy:ee39f9c (2026-07-10 — frontend T6.2 source-aware Home Study empty state + T6.3 Home Study content-viewing verification (markdown rendering in ContentViewer, dashboard→Home-Study-tab deep link fix, green tab/topic-title theme accent); G4 not yet closed, T4.9 [backend] still pending; T6.2+T6.3 changes uncommitted at baselining time)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
 - [x] T1.1 [backend]: Student link-code generation + current-code endpoints (2026-07-09)
@@ -68,8 +68,9 @@
 - [ ] **G5: hAITU on parent topics** — T5.3 [backend] severance + cross-family 403 tests (depends on T5.2)
 
 ## G6 [backend/frontend]: Student Home Study surface complete
-- [ ] T6.2 [frontend]: Source-aware empty state in existing Home Study tree
-- [ ] T6.3 [frontend]: Home Study content viewing verification (depends on T6.2, T3.5, T4.7b)
+- [ ] T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
+- [x] T6.2 [frontend]: Source-aware empty state in existing Home Study tree (2026-07-10)
+- [x] T6.3 [frontend]: Home Study content viewing verification (depends on T6.2, T3.5, T4.7b) (2026-07-10)
 - [ ] **G6: Student Home Study surface** — T6.1 [backend] live-only + visibility enforcement tests (fixture-driven, no deps)
 
 ## G7 [backend/frontend]: Phase acceptance
@@ -80,4 +81,3 @@
 Tasks with no pending dependencies — can be started immediately:
 - T5.1 [backend]: Optional enrollment_id in topic-doubt schema (no deps)
 - T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
-- T6.2 [frontend]: Source-aware empty state in Home Study tree (no deps)
