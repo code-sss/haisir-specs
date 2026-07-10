@@ -519,3 +519,67 @@ The S05 review chat panel must never be blank:
    changes.
 4. **Non-blocking notice:** on error, show a dismissible notice alongside the seed (not instead
    of it); the chat input remains usable.
+
+---
+
+## 9. hAITU access on parent-owned topics (Phase 5 G5)
+
+Phase 5 lets a linked child ask hAITU about topics in the parent's Home Study curriculum
+(`owner_type = 'parent'`), not just platform-enrolled topics. `POST /api/haitu/topic-doubt`
+gains a second authorization branch; the enrollment-based branch is otherwise unchanged.
+
+### 9.1 Request schema — `enrollment_id` becomes optional
+
+`enrollment_id: UUID4 | None = None` on the topic-doubt request. Omitting it is only valid for
+a parent-owned topic (§9.2); a platform-owned topic with no `enrollment_id` is rejected (403,
+same as before this increment — existing callers are unaffected).
+
+### 9.2 Two-branch authorization gate
+
+`HaituDoubtService._validate_and_build_context` loads the topic **first**, then branches on
+`topic.owner_type` before doing anything else. The two branches are mutually exclusive — the
+parent branch never touches enrollments/subtrees, and the platform branch is the pre-Phase-5
+path, unchanged:
+
+| Step | Platform branch (`owner_type='platform'`) | Parent branch (`owner_type='parent'`) |
+|---|---|---|
+| 1. Topic load | `topic_repo.get(topic_id)` — 403 if not found | same |
+| 2. Ownership/link check | `enrollment_id` required (403 if `None`); enrollment must belong to `user_sub` (403) | active, non-revoked `parent_child_links` row with `parent_sub = topic.owner_id`, `child_sub = user_sub` (403 if none) — the same predicate as the BR-DATA-003 visibility clause (`01_data_model.md` §"Content Ownership Rules"), applied here as a service-level gate rather than a query filter |
+| 3. Scope/status check | topic's `course_path_node_id` must be within the enrolled subtree (403) | `topic.status == 'live'` (403 if `draft`) |
+| 4. Rate limit | `HaituRateLimiter` (20/hr, shared) | same |
+| 5. Context assembly | grade/subject from ancestor path (unchanged) | same |
+
+All failures at steps 1–3 raise `HaituAccessDeniedError` → `403`. Step 4 raises
+`RateLimitExceededError` → `429` (orphan-on-429 semantics, §5.1, apply identically to both
+branches — a rate-limited parent-topic request persists nothing).
+
+### 9.3 Exact 403 conditions (severance + cross-family guarantees)
+
+- **Revoked link:** the moment a `parent_child_links` row is revoked (`revoked_at` set), the
+  very next topic-doubt call for that (parent, child) pair 403s — the link check re-reads the
+  table on every request; there is no cache to invalidate.
+- **Cross-family:** a child linked to parent A gets 403 on parent B's topics, even if B is
+  otherwise a valid parent account — the link check matches `topic.owner_id` exactly.
+- **Draft parent topic:** 403 even for a correctly linked child. `live` is required regardless
+  of link status — a parent can hide a topic from hAITU (and from Home Study, §BR-STU-001)
+  simply by leaving it in `draft`.
+- **Platform topic, no `enrollment_id`:** unchanged regression guard — a platform topic always
+  requires an enrollment; a missing `enrollment_id` never falls through to the parent branch
+  regardless of the topic's actual `owner_type`.
+
+### 9.4 Vector scoping is unchanged
+
+Retrieval is still scoped by a `topic_id` filter on the chunk store (§7, unchanged from the
+vision spec's Stage 2 hybrid retrieval). The §9.2 service gate is the **sole** access-control
+layer in front of that filter — there is no per-chunk or per-owner check inside retrieval
+itself. A request that passes §9.2 can retrieve any chunk indexed under that `topic_id`; the
+gate is what prevents an unlinked or cross-family request from reaching retrieval at all.
+
+### 9.5 Adopted topics start RAG-empty
+
+A parent's adopted topic (`BR-DATA-005` clone) has zero `topic_contents` and zero chunks until
+the parent adds/generates content on it (§G4 re-ingestion contract, `12_content_extraction.md`
+§5). A child asking hAITU about a freshly adopted, still-empty topic passes the §9.2 gate (if
+`live`) and reaches retrieval, which returns no chunks — the pipeline answers from the
+system-prompt framing alone, same degraded behavior as any other topic with no indexed content.
+This is a normal, expected state, not an error condition.

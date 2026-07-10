@@ -64,8 +64,8 @@
 - [x] T5.1 [backend]: Optional enrollment_id in topic-doubt schema (2026-07-10)
 - [x] T5.2 [backend]: Parent-link authorization gate in HaituDoubtService (depends on T5.1) (2026-07-10)
 - [ ] T5.4 [frontend]: HaituDoubtPanel enabled for Home Study topics (depends on T5.1, T5.2)
-- [ ] T5.5 [specs]: 11_haitu_ai_layer.md §9 — parent-topic access contract (depends on T5.2)
-- [ ] **G5: hAITU on parent topics** — T5.3 [backend] severance + cross-family 403 tests (depends on T5.2) (2026-07-10: T5.1+T5.2 done — parent-link gate live in HaituDoubtService; T5.3/T5.4/T5.5 still pending)
+- [x] T5.5 [specs]: 11_haitu_ai_layer.md §9 — parent-topic access contract (depends on T5.2) (2026-07-10)
+- [ ] **G5: hAITU on parent topics** — T5.3 [backend] severance + cross-family 403 tests (depends on T5.2) (2026-07-10: T5.1+T5.2+T5.5 done — parent-link gate live in HaituDoubtService, access contract documented; T5.3/T5.4 still pending)
 
 ## G6 [backend/frontend]: Student Home Study surface complete
 - [ ] T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
@@ -82,4 +82,3 @@ Tasks with no pending dependencies — can be started immediately:
 - T5.3 [backend]: Severance + cross-family 403 tests (depends on T5.2 — done)
 - T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
 - T5.4 [frontend]: HaituDoubtPanel enabled for Home Study topics (depends on T5.1, T5.2 — both done)
-- T5.5 [specs]: 11_haitu_ai_layer.md §9 — parent-topic access contract (depends on T5.2 — done)
