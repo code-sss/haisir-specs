@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:c24d17e frontend:a830a83 deploy:ee39f9c (2026-07-10 — backend G3.1/G3.2 parent curriculum + adopt endpoints (T3.1-T3.6, T3.13), frontend G2 parent workspace shell (T2.2-T2.4, T2.6) + /profile page polish — G1, G2 (pending T7.2 walkthrough), G3.1, G3.2 closed)
+> Last baselined: backend:93d3cac frontend:a830a83 deploy:ee39f9c (2026-07-10 — backend G3.1/G3.2 parent curriculum + adopt endpoints (T3.1-T3.6, T3.13) + G4 RAG ingestion lifecycle (T4.1-T4.6), frontend G2 parent workspace shell (T2.2-T2.4, T2.6) + /profile page polish — G1, G2 (pending T7.2 walkthrough), G3.1, G3.2 closed; G4 backend leaf tasks done, pending T4.7/T4.8/T4.9)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
 - [x] T1.1 [backend]: Student link-code generation + current-code endpoints (2026-07-09)
@@ -48,12 +48,12 @@
 - [ ] **G3.3: Builder UI** — component tests per task + browser journey recorded in T7.2 walkthrough
 
 ## G4 [backend/frontend/specs]: RAG ingestion + re-ingestion lifecycle
-- [ ] T4.1 [backend]: Outbox enqueue on instant text-content create (depends on T4.2, T3.6)
-- [ ] T4.2 [backend]: Outbox upsert-with-reset repository helper
-- [ ] T4.3 [backend]: Re-enqueue on content update (depends on T4.2, T3.6)
-- [ ] T4.4 [backend]: Chunk + outbox cleanup on content delete (depends on T3.6)
-- [ ] T4.5 [backend]: Worker delete-stale-chunks-before-insert (depends on T4.2)
-- [ ] T4.6 [backend]: Cascade RAG cleanup on topic/node delete (depends on T4.4, T3.2c, T3.5)
+- [x] T4.1 [backend]: Outbox enqueue on instant text-content create (depends on T4.2, T3.6) (2026-07-10)
+- [x] T4.2 [backend]: Outbox upsert-with-reset repository helper (2026-07-10)
+- [x] T4.3 [backend]: Re-enqueue on content update (depends on T4.2, T3.6) (2026-07-10)
+- [x] T4.4 [backend]: Chunk + outbox cleanup on content delete (depends on T3.6) (2026-07-10)
+- [x] T4.5 [backend]: Worker delete-stale-chunks-before-insert (depends on T4.2) (2026-07-10)
+- [x] T4.6 [backend]: Cascade RAG cleanup on topic/node delete (depends on T4.4, T3.2c, T3.5) (2026-07-10)
 - [ ] T4.7a [frontend]: "No notes yet" hint in parent builder (depends on T3.11)
 - [ ] T4.7b [frontend]: "No notes yet" placeholder in student content viewer
 - [ ] T4.8 [specs]: Re-ingestion contract into 12_content_extraction.md §5 + 01_data_model.md (depends on T4.5)
@@ -78,8 +78,6 @@
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
 - T3.7 [frontend]: features/parent curriculum API client + types (deps T3.2a, T3.5, T3.6 done)
-- T4.2 [backend]: Outbox upsert-with-reset repository helper (no deps)
-- T4.4 [backend]: Chunk + outbox cleanup on content delete (deps T3.6 done)
 - T5.1 [backend]: Optional enrollment_id in topic-doubt schema (no deps)
 - T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
 - T3.10 [frontend]: Parameterize shared content components (no deps)
