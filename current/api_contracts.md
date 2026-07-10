@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | c24d17e (Phase 5 G3.1/G3.2 — parent curriculum + adopt endpoints, V38-V40 migrations, 2026-07-10) |
-| haisir-frontend | a830a83 (Phase 5 G2 — parent workspace shell + /profile page, 2026-07-10) |
+| haisir-backend | 85ba354 (Phase 5 G4 — RAG outbox wiring on content create/update/delete, idempotent re-embed, 2026-07-10) |
+| haisir-frontend | 61610bd (Phase 5 G3.3 — parent curriculum builder UI, 2026-07-10) |
 | haisir-deploy | ee39f9c (rerank client + WAF/dep hardening, 2026-07-09) |
 
-> Next session: run `git diff c24d17e..HEAD` in haisir-backend, `git diff a830a83..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 85ba354..HEAD` in haisir-backend, `git diff 61610bd..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -108,7 +108,7 @@
 
 ---
 
-## Parent Curriculum Builder (Phase 5 G3.1/G3.2 — backend complete, builder UI pending)
+## Parent Curriculum Builder (Phase 5 G3 — backend + builder UI complete, browser walkthrough pending T7.2)
 
 All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped to `owner_type='parent' AND owner_id=user.sub`; a node/topic/content owned by another parent is indistinguishable from missing (404 oracle protection). CSRF required on POST/PATCH/DELETE only.
 
@@ -147,14 +147,18 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 
 ### POST /topics/{topic_id}/content
 - Purpose: Create topic content (instant types) under a caller-owned topic; 404 if topic not found/not owned
+- RAG: text content with non-empty `text` enqueues a `rag_indexing_outbox` row for the worker (T4.1)
 
 ### PATCH /topic-contents/{content_id}
 - Purpose: Update a caller-owned topic content item; 400 on an invalid field combination, 404 if not found/not owned
+- RAG: changing `text` or `title` on a text-type row resets its outbox row to `pending` for re-embed (T4.3)
 
 ### DELETE /topic-contents/{content_id}
 - Purpose: Delete a caller-owned topic content item; 404 if not found/not owned
+- RAG: deletes the content's chunks (`data_topic_content_chunks`) and outbox row in the same transaction (T4.4)
 
-> **Platform-tree browse for adopt:** `GET /api/categories` and `GET /api/course-path-nodes/*` now also permit the `parent` role (new `require_any_platform_role_or_parent()` dependency, browse-only) so a parent can navigate the platform tree to pick an adopt source. Not yet built: the frontend curriculum builder UI that calls all of the above (G3.3, `/parent/curriculum` route).
+> **Platform-tree browse for adopt:** `GET /api/categories` and `GET /api/course-path-nodes/*` now also permit the `parent` role (new `require_any_platform_role_or_parent()` dependency, browse-only) so a parent can navigate the platform tree to pick an adopt source. Frontend builder UI (`/parent/curriculum`) that calls all of the above is now built (G3.3); browser walkthrough sign-off still pending (T7.2).
+> **RAG cascade on delete:** `DELETE /nodes/{node_id}` and `DELETE /topics/{topic_id}` above also cascade-delete RAG chunks + outbox rows for all content in the deleted subtree/topic (T4.6), via the same shared helper used by the platform-tree deletes below.
 
 ---
 
@@ -251,7 +255,7 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 - Auth: admin only
 - Response: 204 No Content
 - Errors: 404 if not found or not platform-owned; **409 if any topic in the subtree has `status = 'live'` (checked first, via recursive CTE)**; 409 if any subtree node has a `pending` or `ongoing` exam session
-- Note: 12-step cascade in a single transaction: `exam_session_questions` → `exam_sessions` → `exam_template_questions` → `exam_templates` → `assessment_answers` → `assessment_attempts` → `assessments` → `topic_contents` → `topics` → `course_path_nodes`.
+- Note: 12-step cascade in a single transaction: `exam_session_questions` → `exam_sessions` → `exam_template_questions` → `exam_templates` → `assessment_answers` → `assessment_attempts` → `assessments` → RAG chunks/outbox (T4.6) → `topic_contents` → `topics` → `course_path_nodes`.
 
 ---
 
@@ -280,7 +284,7 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 - Purpose: Hard-delete a platform-owned topic and all FK-dependent rows
 - Auth: admin only (CSRF required)
 - Response: 204 No Content
-- Errors: 404 if not found or not platform-owned; cascade order: `assessment_answers` → `assessment_attempts` → `assessments` → `topic_contents` → `topics`
+- Errors: 404 if not found or not platform-owned; cascade order: `assessment_answers` → `assessment_attempts` → `assessments` → RAG chunks/outbox (T4.6) → `topic_contents` → `topics`
 
 ---
 
@@ -305,6 +309,7 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 - Response: content object
 - Validation: `url` field — if content_type is `video`: must be `https://` scheme and hostname in allowlist (`youtube.com`, `www.youtube.com`, `youtu.be`, `vimeo.com`, `www.vimeo.com`); local paths (no scheme/netloc) pass through; returns 422 on failure.
 - WAF: OWASP CRS rule 931130 is suppressed for `POST /api/topics-contents/` to allow external video URLs in the body (Coraza SecRule chain in `03-secured-api.json`); SSRF/XSS risk mitigated by backend allowlist.
+- RAG: text content with non-empty `text` enqueues a `rag_indexing_outbox` row for the worker (T4.1)
 
 ### PATCH /api/topics-contents/{content_id}
 - Purpose: Partially update a platform-owned content item
@@ -313,12 +318,14 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 - Response: updated content object (200); empty payload returns current state unchanged
 - Errors: 404 if not found or not platform-owned; 403 if non-admin or missing CSRF; 400 if `url` fails allowlist validation (ValueError → HTTP 400)
 - Validation: same `url` allowlist rules as POST above.
+- RAG: changing `text` or `title` on a text-type row resets its outbox row to `pending` for re-embed — title is embedded in chunk metadata so it also requires re-embed (T4.3)
 
 ### DELETE /api/topics-contents/{content_id}
 - Purpose: Delete a platform-owned content item
 - Auth: admin (X-Current-Role: admin), CSRF required
 - Response: 204 No Content
 - Errors: 404 if not found or not platform-owned; 403 if non-admin or missing CSRF
+- RAG: deletes the content's chunks (`data_topic_content_chunks`) and outbox row in the same transaction, before the content row itself (T4.4)
 
 ---
 

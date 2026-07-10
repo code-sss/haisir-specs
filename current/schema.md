@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | c24d17e (Phase 5 G3.1/G3.2 — parent curriculum + adopt endpoints, V38-V40 migrations, 2026-07-10) |
-| haisir-frontend | a830a83 (Phase 5 G2 — parent workspace shell + /profile page, 2026-07-10) |
+| haisir-backend | 85ba354 (Phase 5 G4 — RAG outbox wiring on content create/update/delete, idempotent re-embed, 2026-07-10) |
+| haisir-frontend | 61610bd (Phase 5 G3.3 — parent curriculum builder UI, 2026-07-10) |
 | haisir-deploy | ee39f9c (rerank client + WAF/dep hardening, 2026-07-09) |
 
-> Next session: run `git diff c24d17e..HEAD` in haisir-backend, `git diff a830a83..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 85ba354..HEAD` in haisir-backend, `git diff 61610bd..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 

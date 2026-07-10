@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | c24d17e (Phase 5 G3.1/G3.2 — parent curriculum + adopt endpoints, V38-V40 migrations, 2026-07-10) |
-| haisir-frontend | a830a83 (Phase 5 G2 — parent workspace shell + /profile page, 2026-07-10) |
+| haisir-backend | 85ba354 (Phase 5 G4 — RAG outbox wiring on content create/update/delete, idempotent re-embed, 2026-07-10) |
+| haisir-frontend | 61610bd (Phase 5 G3.3 — parent curriculum builder UI, 2026-07-10) |
 | haisir-deploy | ee39f9c (rerank client + WAF/dep hardening, 2026-07-09) |
 
-> Next session: run `git diff c24d17e..HEAD` in haisir-backend, `git diff a830a83..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 85ba354..HEAD` in haisir-backend, `git diff 61610bd..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -56,13 +56,28 @@
   - Key behaviour: only rendered for the `student` role; parent/instructor/admin see a placeholder message.
   - API: `GET`/`POST /api/student/parent-link-codes`, `GET /api/student/parent-links`, `DELETE /api/student/parent-links/{id}`.
 
-- Screen: `/parent` (P-home) — Parent dashboard: a child-selector pill strip (`aria-pressed`, persisted in `localStorage`, defaults to the first child) when ≥1 child is linked; an empty-state CTA card ("Link your child") → `/parent/link-child` when none are linked; a nav card to `/parent/curriculum` (curriculum builder route — **not yet built**, G3.3 pending).
+- Screen: `/parent` (P-home) — Parent dashboard: a child-selector pill strip (`aria-pressed`, persisted in `localStorage`, defaults to the first child) when ≥1 child is linked; an empty-state CTA card ("Link your child") → `/parent/link-child` when none are linked; a nav card to `/parent/curriculum` (curriculum builder route).
   - API: `GET /api/parent/children`.
 
 - Screen: `/parent/link-child` (P-link) — 8-character link-code entry form (React Hook Form + Zod, uppercase-normalized on type, `A-Z2-9` charset). Validate → `GET /api/parent-link-codes/{code}` shows the resolved child's name in a `role="alertdialog"` confirm panel (autoFocus on Confirm, Escape-to-cancel via a document-level listener, focus restored to the triggering button on close). Confirm → `POST /api/parent-child-links`, then redirects to `/parent`.
   - Key behaviour: inline field errors map backend statuses to user-facing text (404 invalid code, 410 expired/used, 409 already linked, 422 10-child cap reached).
 
-- Header nav: student role gains a "Profile" link (→ `/profile`); parent role gains "Dashboard" (→ `/parent`) and "Curriculum" (→ `/parent/curriculum`, route not yet implemented — G3.3 pending) links.
+- Header nav: student role gains a "Profile" link (→ `/profile`); parent role gains "Dashboard" (→ `/parent`) and "Curriculum" (→ `/parent/curriculum`) links.
+
+---
+
+## Parent Curriculum Builder (Phase 5 G3.3)
+
+- Screen: `/parent/curriculum` (P-curriculum) — Two-pane builder. Top bar: "Adopt from Platform" / "Build from scratch" actions. Left pane: resizable (`useResize`, 260px default, 180–500px range) `ParentNodeTree` of the caller's owned root nodes with breadcrumb-tracked selection. Right pane: `ParentTopicPanel` — breadcrumb + node name header, topic list (`ParentTopicRow` per topic), "+ Add topic" button opening `ParentAddTopicModal`. Empty state (no root nodes yet): centered "No curriculum yet" message with the same Adopt/Build actions.
+  - Key behaviour: "Build from scratch" opens `ParentAddNodeModal` (same 9-type chip + hierarchy-enforcement rules as the admin `AddNodeModal`, `owner_type` hardcoded to `"parent"`). Selecting a node updates the breadcrumb and topic panel; no node selected shows an "Select a node" placeholder.
+  - API: `GET/POST/PATCH/DELETE /api/parent/curriculum/nodes`, `GET/POST/PATCH/DELETE /api/parent/curriculum/nodes/{id}/topics` and `/topics/{id}`.
+
+- Modal: **AdoptModal** (triggered from `/parent/curriculum`) — focus-trapped (`useFocusTrap`) dialog. A platform-board `<select>` (from `GET /api/categories`) drives a lazy-loaded, expandable platform node tree (`GET /api/course-path-nodes/tree/{category_id}`, only fetched once a board is picked). Clicking a tree row selects it as the adopt source (`aria-pressed`); "Adopt" is disabled until a node is selected. On submit, `POST /api/parent/curriculum/adopt`; a 409 (`AlreadyAdoptedError`) surfaces "You have already adopted this board." inline instead of a generic error.
+  - Key behaviour: platform-tree browse reuses the same `GET /api/categories` / `GET /api/course-path-nodes/*` endpoints as admin, now parent-accessible browse-only via `require_any_platform_role_or_parent()`.
+
+- Screen: `/parent/curriculum/[node_id]/topics/[topic_id]` (P-topic) — Topic Content Manager. Header: inline-editable topic title (`RenameTopicInline`, shared with admin) + "Back to curriculum" link. Body: `TopicContentSection` — the same content-management feature module used by the admin `TopicRow`, parameterized via a `parentContentAdapter` (owner-scoped API calls instead of platform-scoped). Supports the full instant (video/text) + extraction (PDF/image) content flows, extraction job strip, and toast notifications on job completion, identical UX to the admin content manager.
+  - Key behaviour: `content-management` is a new shared feature module (`add-content-modal`, `content-item-row`, `delete-content-dialog`, `jobs-strip`, `topic-content-section`) extracted so admin and parent consume one implementation via an adapter interface rather than two drifting copies.
+  - API: `POST /topics/{topic_id}/content`, `PATCH/DELETE /topic-contents/{content_id}`, `POST/GET/DELETE /api/parent/curriculum/topics/{topic_id}/extraction-jobs` (+ retry).
 
 - Architecture note: `ParentRouteGuard` and `AdminRouteGuard` were both refactored onto one shared generic `RouteGuard({ requiredRole })` component (`@/shared/components/route-guard`) — no behavior change, just de-duplication.
 
