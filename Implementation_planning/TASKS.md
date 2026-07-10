@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:93d3cac frontend:a830a83 deploy:ee39f9c (2026-07-10 — backend G3.1/G3.2 parent curriculum + adopt endpoints (T3.1-T3.6, T3.13) + G4 RAG ingestion lifecycle (T4.1-T4.6), frontend G2 parent workspace shell (T2.2-T2.4, T2.6) + /profile page polish — G1, G2 (pending T7.2 walkthrough), G3.1, G3.2 closed; G4 backend leaf tasks done, pending T4.7/T4.8/T4.9)
+> Last baselined: backend:93d3cac frontend:a830a83 deploy:ee39f9c (2026-07-10 — backend G3.1/G3.2 parent curriculum + adopt endpoints (T3.1-T3.6, T3.13), frontend G2 parent workspace shell (T2.2-T2.4, T2.6) + /profile page polish — G1, G2 (pending T7.2 walkthrough), G3.1, G3.2 closed)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
 - [x] T1.1 [backend]: Student link-code generation + current-code endpoints (2026-07-09)
@@ -39,13 +39,13 @@
 - [x] **G3.2: Content authoring API** — round-trip covered by T3.6 Done-when (2026-07-10)
 
 ### G3.3 Builder UI
-- [ ] T3.7 [frontend]: features/parent curriculum API client + types (depends on T3.2a, T3.5, T3.6)
-- [ ] T3.8 [frontend]: /parent/curriculum builder page (depends on T3.7, T2.1)
-- [ ] T3.9 [frontend]: Adopt modal (depends on T3.7, T3.3, T3.4)
-- [ ] T3.10 [frontend]: Parameterize shared content components (admin↔parent)
-- [ ] T3.11 [frontend]: P-topic Topic Content Manager page (depends on T3.10, T3.7, T3.5, T3.6)
+- [x] T3.7 [frontend]: features/parent curriculum API client + types (depends on T3.2a, T3.5, T3.6) (2026-07-10)
+- [x] T3.8 [frontend]: /parent/curriculum builder page (depends on T3.7, T2.1) (2026-07-10)
+- [x] T3.9 [frontend]: Adopt modal (depends on T3.7, T3.3, T3.4) (2026-07-10)
+- [x] T3.10 [frontend]: Parameterize shared content components (admin↔parent) (2026-07-10)
+- [x] T3.11 [frontend]: P-topic Topic Content Manager page (depends on T3.10, T3.7, T3.5, T3.6) (2026-07-10)
 - [x] T3.12 [specs]: 05_parent.md + 01_data_model.md builder/V40 updates (depends on T3.4, T3.6) (2026-07-09)
-- [ ] **G3.3: Builder UI** — component tests per task + browser journey recorded in T7.2 walkthrough
+- [ ] **G3.3: Builder UI** — component tests per task + browser journey recorded in T7.2 walkthrough (2026-07-10: all G3.3 leaf tasks T3.7–T3.11 + T3.12 done; component tests green — 210 files / 3548 tests, 100% coverage; in-browser walkthrough still pending T7.2)
 
 ## G4 [backend/frontend/specs]: RAG ingestion + re-ingestion lifecycle
 - [x] T4.1 [backend]: Outbox enqueue on instant text-content create (depends on T4.2, T3.6) (2026-07-10)
@@ -77,9 +77,8 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T3.7 [frontend]: features/parent curriculum API client + types (deps T3.2a, T3.5, T3.6 done)
 - T5.1 [backend]: Optional enrollment_id in topic-doubt schema (no deps)
 - T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
-- T3.10 [frontend]: Parameterize shared content components (no deps)
+- T4.7a [frontend]: "No notes yet" hint in parent builder (deps T3.11 done)
 - T4.7b [frontend]: "No notes yet" placeholder in student content viewer (no deps)
 - T6.2 [frontend]: Source-aware empty state in Home Study tree (no deps)
