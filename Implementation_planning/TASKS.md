@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:57ded07 frontend:8b05a8e deploy:ee39f9c (2026-07-09 — backend T1.1-T1.4, T1.7 integration test + V39 migration, frontend T2.1 route guard + T1.5 /profile page — G1 fully closed)
+> Last baselined: backend:57ded07 frontend:be3990b deploy:ee39f9c (2026-07-09 — backend T1.1-T1.4, T1.7 integration test + V39 migration, frontend T2.1 route guard + T1.5 /profile page — G1 fully closed; frontend re-baselined 2026-07-10 with T2.2-T2.4 + T2.6 parent workspace shell on branch feat/parent-workspace-shell)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
 - [x] T1.1 [backend]: Student link-code generation + current-code endpoints (2026-07-09)
@@ -15,12 +15,12 @@
 
 ## G2 [frontend/specs]: Parent workspace shell + route guard
 - [x] T2.1 [frontend]: ParentRouteGuard component (2026-07-09)
-- [ ] T2.2 [frontend]: /parent layout + P-home dashboard (depends on T2.1, T1.3)
-- [ ] T2.3 [frontend]: /parent/link-child page (P-link) (depends on T2.1, T1.4)
-- [ ] T2.4 [frontend]: Parent header nav + redirect-matrix verification (depends on T2.2)
+- [x] T2.2 [frontend]: /parent layout + P-home dashboard (depends on T2.1, T1.3) (2026-07-10)
+- [x] T2.3 [frontend]: /parent/link-child page (P-link) (depends on T2.1, T1.4) (2026-07-10)
+- [x] T2.4 [frontend]: Parent header nav + redirect-matrix verification (depends on T2.2) (2026-07-10)
 - [x] T2.5 [specs]: /parent route-guard slice into target 05_parent.md (2026-07-09)
-- [ ] T2.6 [frontend]: Onboarding parent-ready CTA dead-link fix (depends on T2.3)
-- [ ] **G2: Parent workspace shell** — redirect-matrix component tests (in T2.4) + browser pass recorded in T7.2 walkthrough
+- [x] T2.6 [frontend]: Onboarding parent-ready CTA dead-link fix (depends on T2.3) (2026-07-10)
+- [ ] **G2: Parent workspace shell** — redirect-matrix component tests (in T2.4) + browser pass recorded in T7.2 walkthrough (2026-07-10: all G2 leaf tasks T2.1-T2.6 done; T2.4 redirect-matrix + header-nav component tests green; in-browser walkthrough still pending T7.2)
 
 ## G3 [backend/frontend/specs]: Parent curriculum builder
 
@@ -77,8 +77,6 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T2.2 [frontend]: /parent layout + P-home dashboard (deps T2.1, T1.3 done)
-- T2.3 [frontend]: /parent/link-child page (deps T2.1, T1.4 done)
 - T3.1 [backend]: V40 migration — source_node_id lineage (no deps)
 - T3.3 [backend]: Parent read access to platform tree (no deps)
 - T4.2 [backend]: Outbox upsert-with-reset repository helper (no deps)
