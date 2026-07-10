@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:57ded07 frontend:be3990b deploy:ee39f9c (2026-07-09 — backend T1.1-T1.4, T1.7 integration test + V39 migration, frontend T2.1 route guard + T1.5 /profile page — G1 fully closed; frontend re-baselined 2026-07-10 with T2.2-T2.4 + T2.6 parent workspace shell on branch feat/parent-workspace-shell)
+> Last baselined: backend:57ded07 frontend:8b05a8e deploy:ee39f9c (2026-07-09 — backend T1.1-T1.4, T1.7 integration test + V39 migration, frontend T2.1 route guard + T1.5 /profile page — G1 fully closed)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
 - [x] T1.1 [backend]: Student link-code generation + current-code endpoints (2026-07-09)
@@ -25,18 +25,18 @@
 ## G3 [backend/frontend/specs]: Parent curriculum builder
 
 ### G3.1 Curriculum structure API
-- [ ] T3.1 [backend]: V40 migration — source_node_id lineage column + partial unique index
-- [ ] T3.2a [backend]: Parent node CRUD endpoints (owner-scoped) (depends on T3.1)
-- [ ] T3.2b [backend]: Node hierarchy validation for parent trees (depends on T3.2a)
-- [ ] T3.2c [backend]: Node cascade delete + exam-session guard (depends on T3.2b)
-- [ ] T3.3 [backend]: Parent read access to platform tree (adopt browse)
-- [ ] T3.4 [backend]: Adopt/clone service + endpoint (409 idempotent) (depends on T3.1, T3.2a, T3.3)
-- [ ] T3.5 [backend]: Parent topic CRUD + draft/live publish (depends on T3.2a)
-- [ ] **G3.1: Curriculum structure API** — T3.13 [backend] integration test: cross-owner 404 sweep (depends on T3.2c, T3.4, T3.5)
+- [x] T3.1 [backend]: V40 migration — source_node_id lineage column + partial unique index (2026-07-09)
+- [x] T3.2a [backend]: Parent node CRUD endpoints (owner-scoped) (depends on T3.1) (2026-07-10)
+- [x] T3.2b [backend]: Node hierarchy validation for parent trees (depends on T3.2a) (2026-07-10)
+- [x] T3.2c [backend]: Node cascade delete + exam-session guard (depends on T3.2b) (2026-07-10)
+- [x] T3.3 [backend]: Parent read access to platform tree (adopt browse) (2026-07-10)
+- [x] T3.4 [backend]: Adopt/clone service + endpoint (409 idempotent) (depends on T3.1, T3.2a, T3.3) (2026-07-10)
+- [x] T3.5 [backend]: Parent topic CRUD + draft/live publish (depends on T3.2a) (2026-07-10)
+- [x] **G3.1: Curriculum structure API** — T3.13 [backend] integration test: cross-owner 404 sweep (2026-07-10) — `tests/integration/routes/test_g3_1_cross_owner_404_sweep_integration.py`; collects + self-skips clean locally (no INTEGRATION_DB_URL), full real-DB run pending CI
 
 ### G3.2 Content authoring API
-- [ ] T3.6 [backend]: Parent instant content create + owner-scoped PATCH/DELETE (depends on T3.5)
-- [ ] **G3.2: Content authoring API** — round-trip covered by T3.6 Done-when
+- [x] T3.6 [backend]: Parent instant content create + owner-scoped PATCH/DELETE (depends on T3.5) (2026-07-10)
+- [x] **G3.2: Content authoring API** — round-trip covered by T3.6 Done-when (2026-07-10)
 
 ### G3.3 Builder UI
 - [ ] T3.7 [frontend]: features/parent curriculum API client + types (depends on T3.2a, T3.5, T3.6)
@@ -77,9 +77,10 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T3.1 [backend]: V40 migration — source_node_id lineage (no deps)
-- T3.3 [backend]: Parent read access to platform tree (no deps)
+- T3.7 [frontend]: features/parent curriculum API client + types (deps T3.2a, T3.5, T3.6 done)
+- T3.12 [specs]: 05_parent.md + 01_data_model.md builder/V40 updates (deps T3.4, T3.6 done)
 - T4.2 [backend]: Outbox upsert-with-reset repository helper (no deps)
+- T4.4 [backend]: Chunk + outbox cleanup on content delete (deps T3.6 done)
 - T5.1 [backend]: Optional enrollment_id in topic-doubt schema (no deps)
 - T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
 - T3.10 [frontend]: Parameterize shared content components (no deps)
