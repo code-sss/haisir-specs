@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | e7e178e (Pre-Phase-5 G3/G6 — topic_id exam filter + grade-only profile upsert, 2026-07-06) |
-| haisir-frontend | a8c348b (Pre-Phase-5 G1-G7 — review nav, bulk topic, deep-link, grade picker, inbox polish, 2026-07-06) |
-| haisir-deploy | 4252674 (Pre-Phase-5 — extended hAITU WAF exclusion, 2026-07-06) |
+| haisir-backend | c24d17e (Phase 5 G3.1/G3.2 — parent curriculum + adopt endpoints, V38-V40 migrations, 2026-07-10) |
+| haisir-frontend | a830a83 (Phase 5 G2 — parent workspace shell + /profile page, 2026-07-10) |
+| haisir-deploy | ee39f9c (rerank client + WAF/dep hardening, 2026-07-09) |
 
-> Next session: run `git diff e7e178e..HEAD` in haisir-backend, `git diff a8c348b..HEAD` in haisir-frontend, and `git diff 4252674..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff c24d17e..HEAD` in haisir-backend, `git diff a830a83..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -60,13 +60,101 @@
 - Auth: parent
 - Request: `{ invite_code: string }`
 - Response: id, parent_sub, child_sub, created_at
+- Errors: 404 unknown code, 410 expired or already-used code, 409 this child already linked to this parent, **422 parent has reached the 10-child cap (BR-PAR-016, Phase 5 G1)**
 
 ### GET /api/parent-link-codes/{code}
-- Purpose: Look up a parent link code
+- Purpose: Look up a parent link code (P-link validate step)
 - Auth: parent
+- Request: this GET carries `Depends(validate_csrf)` in live code — frontend must send `X-CSRF-Token` even on this GET
 - Response: id, code, child_sub, created_at, expires_at, is_used
 
-> Note: no endpoint yet to generate a new link code from the student side. /join-school and /link-child UI flows not yet built.
+---
+
+## Student Parent-Link Management (Phase 5 G1)
+
+### POST /api/student/parent-link-codes
+- Purpose: Issue a fresh parent link code for the caller student, deactivating any prior unused one
+- Auth: student; CSRF required
+- Response: `{ code, expires_at }`
+
+### GET /api/student/parent-link-codes
+- Purpose: Fetch the student's current active (unused, unexpired) link code
+- Auth: student
+- Response: `{ code, expires_at }`; 404 if none active
+
+### GET /api/student/parent-links
+- Purpose: List the student's active parent links with parent display names
+- Auth: student
+- Response: list of `{ id, parent_sub, created_at, first_name?, last_name? }`; 503 if the parent-profile repository is not configured
+
+### DELETE /api/student/parent-links/{link_id}
+- Purpose: Revoke a parent link from the student's side (severs Home Study + hAITU access immediately)
+- Auth: student; CSRF required
+- Response: 204; 404 if not found
+
+---
+
+## Parent Children Management (Phase 5 G1)
+
+### GET /api/parent/children
+- Purpose: List the parent's active child links with child display names
+- Auth: parent
+- Response: list of `{ child_sub, linked_at, first_name?, last_name? }`
+
+### DELETE /api/parent/children/{child_sub}/link
+- Purpose: Revoke a child link from the parent's side
+- Auth: parent; CSRF required
+- Response: 204; 404 if not found
+
+---
+
+## Parent Curriculum Builder (Phase 5 G3.1/G3.2 — backend complete, builder UI pending)
+
+All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped to `owner_type='parent' AND owner_id=user.sub`; a node/topic/content owned by another parent is indistinguishable from missing (404 oracle protection). CSRF required on POST/PATCH/DELETE only.
+
+### GET /nodes
+- Purpose: List the caller's curriculum root nodes (`parent_id IS NULL`)
+
+### GET /nodes/{node_id}
+- Purpose: Node detail + direct children; 404 if not found/not owned
+
+### POST /nodes
+- Purpose: Create a parent-owned node; a root node requires `category_id` (400 if missing); a child node derives `category_id` from its (owner-scoped) parent
+- Errors: 409 on hierarchy-rule violation (same ancestor-type-exclusion / sibling-type-consistency rules as the platform tree), 404 if the given parent is not found/not owned
+
+### PATCH /nodes/{node_id}
+- Purpose: Rename a node (name only); 404 if not found/not owned
+
+### DELETE /nodes/{node_id}
+- Purpose: Delete a node + its entire subtree (cascades to child nodes and topics); 409 if an in-progress exam session exists under the subtree; 404 if not found/not owned
+
+### POST /adopt
+- Purpose: Deep-clone a platform subtree (nodes + topics only, topics reset to `draft`; content and exams are not cloned) into the caller's private curriculum
+- Request: `{ source_node_id }`
+- Errors: 409 if the caller already adopted this source node (BR-DATA-006, V40 unique index), 404 if `source_node_id` is not a platform-owned node
+
+### GET /nodes/{node_id}/topics
+- Purpose: List topics under a caller-owned node; 404 if not found/not owned
+
+### POST /nodes/{node_id}/topics
+- Purpose: Create a draft topic under a caller-owned node
+
+### PATCH /topics/{topic_id}
+- Purpose: Update a caller-owned topic's title and/or status (draft → live publish); 400 empty/whitespace title, 404 if not found/not owned
+
+### DELETE /topics/{topic_id}
+- Purpose: Delete a caller-owned topic; 404 if not found/not owned
+
+### POST /topics/{topic_id}/content
+- Purpose: Create topic content (instant types) under a caller-owned topic; 404 if topic not found/not owned
+
+### PATCH /topic-contents/{content_id}
+- Purpose: Update a caller-owned topic content item; 400 on an invalid field combination, 404 if not found/not owned
+
+### DELETE /topic-contents/{content_id}
+- Purpose: Delete a caller-owned topic content item; 404 if not found/not owned
+
+> **Platform-tree browse for adopt:** `GET /api/categories` and `GET /api/course-path-nodes/*` now also permit the `parent` role (new `require_any_platform_role_or_parent()` dependency, browse-only) so a parent can navigate the platform tree to pick an adopt source. Not yet built: the frontend curriculum builder UI that calls all of the above (G3.3, `/parent/curriculum` route).
 
 ---
 

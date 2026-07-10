@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:57ded07 frontend:8b05a8e deploy:ee39f9c (2026-07-09 — backend T1.1-T1.4, T1.7 integration test + V39 migration, frontend T2.1 route guard + T1.5 /profile page — G1 fully closed)
+> Last baselined: backend:c24d17e frontend:a830a83 deploy:ee39f9c (2026-07-10 — backend G3.1/G3.2 parent curriculum + adopt endpoints (T3.1-T3.6, T3.13), frontend G2 parent workspace shell (T2.2-T2.4, T2.6) + /profile page polish — G1, G2 (pending T7.2 walkthrough), G3.1, G3.2 closed)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
 - [x] T1.1 [backend]: Student link-code generation + current-code endpoints (2026-07-09)

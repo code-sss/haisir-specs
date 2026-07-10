@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | e7e178e (Pre-Phase-5 G3/G6 — topic_id exam filter + grade-only profile upsert, 2026-07-06) |
-| haisir-frontend | a8c348b (Pre-Phase-5 G1-G7 — review nav, bulk topic, deep-link, grade picker, inbox polish, 2026-07-06) |
-| haisir-deploy | 4252674 (Pre-Phase-5 — extended hAITU WAF exclusion, 2026-07-06) |
+| haisir-backend | c24d17e (Phase 5 G3.1/G3.2 — parent curriculum + adopt endpoints, V38-V40 migrations, 2026-07-10) |
+| haisir-frontend | a830a83 (Phase 5 G2 — parent workspace shell + /profile page, 2026-07-10) |
+| haisir-deploy | ee39f9c (rerank client + WAF/dep hardening, 2026-07-09) |
 
-> Next session: run `git diff e7e178e..HEAD` in haisir-backend, `git diff a8c348b..HEAD` in haisir-frontend, and `git diff 4252674..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff c24d17e..HEAD` in haisir-backend, `git diff a830a83..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -43,10 +43,28 @@
 - Screen: `/onboarding/parent-ready` View A — Same pattern as student View A. "Relogin" → `/auth/logout`.
 
 - Screen: `/onboarding/parent-ready` View B (`?next=proceed`) — One CTA:
-  - "Link your child" → `/link-child` (not yet built)
+  - "Link your child" → `/parent/link-child` (fixed Phase 5 G2 T2.6 — was a dead `/link-child` link)
   - "Skip — link later from dashboard" → `/home`
   - All exits call `PATCH /api/users/me/onboarding-complete` before navigating.
-  - Key behaviour: No inline code entry on this screen (BR-ON-015); deferred to `/link-child`.
+  - Key behaviour: No inline code entry on this screen (BR-ON-015); deferred to `/parent/link-child`.
+
+---
+
+## Parent Workspace (Phase 5 G1/G2 — linking + shell complete; G3.3 builder UI pending)
+
+- Screen: `/profile` (student, S-profile) — "My Profile" page: header card (name/email); "Parent Access" card with the student's link code (generate/regenerate button, copy-to-clipboard with an `execCommand` fallback for browsers without the Clipboard API, expiry date); "Linked Parents" list with inline confirm-then-revoke per row.
+  - Key behaviour: only rendered for the `student` role; parent/instructor/admin see a placeholder message.
+  - API: `GET`/`POST /api/student/parent-link-codes`, `GET /api/student/parent-links`, `DELETE /api/student/parent-links/{id}`.
+
+- Screen: `/parent` (P-home) — Parent dashboard: a child-selector pill strip (`aria-pressed`, persisted in `localStorage`, defaults to the first child) when ≥1 child is linked; an empty-state CTA card ("Link your child") → `/parent/link-child` when none are linked; a nav card to `/parent/curriculum` (curriculum builder route — **not yet built**, G3.3 pending).
+  - API: `GET /api/parent/children`.
+
+- Screen: `/parent/link-child` (P-link) — 8-character link-code entry form (React Hook Form + Zod, uppercase-normalized on type, `A-Z2-9` charset). Validate → `GET /api/parent-link-codes/{code}` shows the resolved child's name in a `role="alertdialog"` confirm panel (autoFocus on Confirm, Escape-to-cancel via a document-level listener, focus restored to the triggering button on close). Confirm → `POST /api/parent-child-links`, then redirects to `/parent`.
+  - Key behaviour: inline field errors map backend statuses to user-facing text (404 invalid code, 410 expired/used, 409 already linked, 422 10-child cap reached).
+
+- Header nav: student role gains a "Profile" link (→ `/profile`); parent role gains "Dashboard" (→ `/parent`) and "Curriculum" (→ `/parent/curriculum`, route not yet implemented — G3.3 pending) links.
+
+- Architecture note: `ParentRouteGuard` and `AdminRouteGuard` were both refactored onto one shared generic `RouteGuard({ requiredRole })` component (`@/shared/components/route-guard`) — no behavior change, just de-duplication.
 
 ---
 

@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | d612a66 (G4-patch — S05 SSE streaming + IDOR fix + has_exam wired, 2026-07-01) |
-| haisir-frontend | 302ac06 (G4-patch — Take Exam nav + streaming review chat + markdown rendering, 2026-07-01) |
-| haisir-deploy | 457de26 (G4-patch — pattern-analysis route timeouts fixed for streaming, 2026-07-01) |
+| haisir-backend | c24d17e (Phase 5 G3.1/G3.2 — parent curriculum + adopt endpoints, V38-V40 migrations, 2026-07-10) |
+| haisir-frontend | a830a83 (Phase 5 G2 — parent workspace shell + /profile page, 2026-07-10) |
+| haisir-deploy | ee39f9c (rerank client + WAF/dep hardening, 2026-07-09) |
 
-> Next session: run `git diff d612a66..HEAD` in haisir-backend, `git diff 302ac06..HEAD` in haisir-frontend, and `git diff 457de26..HEAD` in haisir-deploy to see only what changed since this snapshot. No schema/migration changes in the G4-patch cycle (2026-06-29 → 2026-07-01).
+> Next session: run `git diff c24d17e..HEAD` in haisir-backend, `git diff a830a83..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -30,6 +30,9 @@
 | V35_doubts | Creates `doubts` table (UUID PK, `student_sub TEXT`, `topic_id`/`course_path_node_id` UUID FK nullable, `title TEXT`, `status VARCHAR(20)` CHECK 6-value enum default `'new'`, `escalated_to TEXT`, `haitu_attempted BOOLEAN`, `auto_close_at TIMESTAMPTZ` default `now() + interval '7 days'`, `resolved_at`, `created_at`/`updated_at`; partial index on `auto_close_at WHERE status != 'resolved'`) and `doubt_messages` table (UUID PK, `doubt_id` FK→doubts CASCADE, `sender_type VARCHAR(10)` CHECK 4-value enum, `content TEXT`, `created_at`; index on `doubt_id`). |
 | V36_notifications | Creates `notifications` table (UUID PK, `recipient_idp_sub TEXT` nullable, `recipient_role VARCHAR(20)`, `type VARCHAR(40)`, `title TEXT`, `body TEXT` nullable, `action_url TEXT` nullable, `read BOOLEAN` default false, `created_at TIMESTAMPTZ` default now()). Four indexes: `idx_notifications_recipient (recipient_idp_sub)`; `idx_notifications_role_unread (recipient_role, read)`; `idx_notifications_unread_personal (recipient_idp_sub) WHERE read=false AND recipient_idp_sub IS NOT NULL` (partial); `idx_notifications_shared_unread (recipient_role) WHERE read=false AND recipient_idp_sub IS NULL` (partial). |
 | V37_mastery_enrollment_topics | Adds `questions.topic_id UUID NULL` + `ix_questions_topic_id` index. Creates `enrollment_topics` table (UUID PK gen_random_uuid(), `student_enrollment_id UUID FK→student_enrollments CASCADE`, `topic_id UUID FK→topics`, `status VARCHAR(20)` CHECK 4-value enum `not_started\|in_progress\|completed\|weak`, `mastery_score FLOAT NULL` CHECK 0–100, `last_studied_at TIMESTAMPTZ NULL`, `created_at`/`updated_at TIMESTAMPTZ`; UNIQUE `uq_enrollment_topics_enrollment_topic (student_enrollment_id, topic_id)`; index `idx_enrollment_topics_enrollment` on `student_enrollment_id`; index `idx_enrollment_topics_topic_status` on `(topic_id, status)`). Creates `student_risk_state` table (`student_sub TEXT PK`, `at_risk_active BOOLEAN` default false, `last_fired_at TIMESTAMPTZ NULL`). Status column size set to `VARCHAR(20)` (follow-up fix in 7fd5cd7 after initial `VARCHAR(10)`). |
+| V38_relax_student_profile_name_nullable | Alters `student_profiles.first_name`/`last_name` from `NOT NULL` → nullable, enabling a grade-only profile upsert (Pre-Phase-5 G6 onboarding grade picker). |
+| V39_partial_unique_parent_child_link | Drops the blanket unique constraint `uq_parent_child` on `parent_child_links(parent_sub, child_sub)`; replaces it with a partial unique index `uq_parent_child_active` on the same columns scoped to `WHERE revoked_at IS NULL` — a revoked pair can be re-linked via a fresh code (BR-PAR-014) while at most one active link per pair is still enforced. |
+| V40_adopt_lineage_source_node_id | Adds `course_path_nodes.source_node_id UUID NULL` + partial unique index `ux_course_path_nodes_adopt_lineage` on `(owner_id, source_node_id) WHERE source_node_id IS NOT NULL` — enforces adopt idempotency (BR-DATA-006): a parent adopting the same platform subtree twice hits the DB constraint, surfaced as 409. |
 
 ---
 
@@ -40,8 +43,8 @@
 ## student_profiles
 - `id` (UUID, PK)
 - `idp_sub` (String, UNIQUE) — links to user_metadata
-- `first_name` (String)
-- `last_name` (String)
+- `first_name` (String, nullable as of V38 — was `NOT NULL`; enables a grade-only profile upsert)
+- `last_name` (String, nullable as of V38 — was `NOT NULL`)
 - `phone` (String, nullable)
 - `avatar_url` (String, nullable)
 - `grade` (String, nullable)
@@ -69,15 +72,16 @@
 - `expires_at` (DateTime TZ)
 - `is_used` (Boolean, default false)
 
-> Note: no endpoint yet to generate new codes from the student side; table is write-orphaned until /join-school is built.
+> As of Phase 5 G1: `POST /api/student/parent-link-codes` generates codes from the student side (deactivating any prior unused code); `GET /api/student/parent-link-codes` fetches the current one.
 
 ## parent_child_links
 - `id` (UUID, PK)
 - `parent_sub` (String) — parent's idp_sub
 - `child_sub` (String) — child's idp_sub
 - `created_at` (DateTime TZ)
-- `revoked_at` (DateTime TZ, nullable) — NULL = active link; set to revoke (future endpoint — Phase 1c+)
-- UNIQUE constraint on (parent_sub, child_sub)
+- `revoked_at` (DateTime TZ, nullable) — NULL = active link; revoked from either side (`DELETE /api/student/parent-links/{id}` or `DELETE /api/parent/children/{child_sub}/link`)
+- Partial UNIQUE index `uq_parent_child_active` on `(parent_sub, child_sub) WHERE revoked_at IS NULL` (as of V39, replacing a blanket unique constraint) — a revoked pair may be re-linked via a fresh code; at most one active link per pair is enforced
+- Max 10 active links per parent (BR-PAR-016) enforced at redemption time (`POST /api/parent-child-links` → 422 over cap)
 
 > **Column name note:** Physical columns are `parent_sub` / `child_sub`. The data-model spec (target/requirements/01_data_model.md) uses the logical aliases `parent_idp_sub` / `child_idp_sub`. Schema is sacred — the physical names will not change; the spec alias is documenting intent only.
 
@@ -105,6 +109,7 @@
 - `order` (Integer, nullable)
 - `owner_type` (String, default "platform") — discriminator: "platform" or "parent"; enforced via `OwnerType(StrEnum)` in domain layer
 - `owner_id` (String, nullable) — parent's `idp_sub` for parent-owned nodes, NULL for platform nodes
+- `source_node_id` (UUID, nullable, self-FK → course_path_nodes) — set on a parent-adopted node to the platform node it was cloned from (V40); NULL for platform nodes and parent nodes built from scratch. Partial unique index on `(owner_id, source_node_id) WHERE source_node_id IS NOT NULL` enforces one adopt per parent per source (BR-DATA-006, 409 on repeat).
 
 > **Visibility enforced (as of V23 / commit aa5ddf7):** BR-DATA-003 and BR-SEC-005 are fully enforced on all GET endpoints. Students see platform nodes + parent-owned nodes where an active (non-revoked) `parent_child_links` record exists. Admins see platform-only nodes.
 
