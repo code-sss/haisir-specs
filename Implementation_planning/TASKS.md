@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:93d3cac frontend:ecf605e deploy:ee39f9c (2026-07-10 — frontend T4.7a/T4.7b "No notes yet" empty states (parent builder hint chip + student Home Study placeholder); G4 not yet closed, T4.9 [backend] still pending)
+> Last baselined: backend:85ba354 frontend:ecf605e deploy:ee39f9c (2026-07-10 — backend T4.9 G4 integration test (content→chunk lifecycle); G4 closed — all tasks complete)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
 - [x] T1.1 [backend]: Student link-code generation + current-code endpoints (2026-07-09)
@@ -57,7 +57,8 @@
 - [x] T4.7a [frontend]: "No notes yet" hint in parent builder (depends on T3.11) (2026-07-10)
 - [x] T4.7b [frontend]: "No notes yet" placeholder in student content viewer (2026-07-10)
 - [x] T4.8 [specs]: Re-ingestion contract into 12_content_extraction.md §5 + 01_data_model.md (depends on T4.5) (2026-07-10)
-- [ ] **G4: RAG ingestion lifecycle** — T4.9 [backend] integration test: content→chunk lifecycle (ollama-gated + non-gated companion) (depends on T4.1, T4.3, T4.4, T4.5)
+- [x] T4.9 [backend]: G4 integration test — content→chunk lifecycle (ollama-gated + non-gated companion) (depends on T4.1, T4.3, T4.4, T4.5) (2026-07-10) — `tests/integration/worker/test_content_chunk_lifecycle_integration.py`; gated create→drain→patch→drain→delete lifecycle + extraction-materialized-row drain, non-gated outbox state-transition companion (BR-DATA-020 reset); collects clean (6 items via anyio param), self-skips without INTEGRATION_DB_URL, full real-DB run pending CI; full unit suite 4605 passed/42 skipped/100% coverage
+- [x] **G4: RAG ingestion lifecycle** — all tasks complete (2026-07-10)
 
 ## G5 [backend/frontend/specs]: hAITU answers on parent-owned topics
 - [ ] T5.1 [backend]: Optional enrollment_id in topic-doubt schema
@@ -79,5 +80,4 @@
 Tasks with no pending dependencies — can be started immediately:
 - T5.1 [backend]: Optional enrollment_id in topic-doubt schema (no deps)
 - T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
-- T4.9 [backend]: G4 integration test — content→chunk lifecycle (deps T4.1, T4.3, T4.4, T4.5 done)
 - T6.2 [frontend]: Source-aware empty state in Home Study tree (no deps)
