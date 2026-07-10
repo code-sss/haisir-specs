@@ -44,7 +44,7 @@
 - [ ] T3.9 [frontend]: Adopt modal (depends on T3.7, T3.3, T3.4)
 - [ ] T3.10 [frontend]: Parameterize shared content components (admin↔parent)
 - [ ] T3.11 [frontend]: P-topic Topic Content Manager page (depends on T3.10, T3.7, T3.5, T3.6)
-- [ ] T3.12 [specs]: 05_parent.md + 01_data_model.md builder/V40 updates (depends on T3.4, T3.6)
+- [x] T3.12 [specs]: 05_parent.md + 01_data_model.md builder/V40 updates (depends on T3.4, T3.6) (2026-07-09)
 - [ ] **G3.3: Builder UI** — component tests per task + browser journey recorded in T7.2 walkthrough
 
 ## G4 [backend/frontend/specs]: RAG ingestion + re-ingestion lifecycle
@@ -78,7 +78,6 @@
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
 - T3.7 [frontend]: features/parent curriculum API client + types (deps T3.2a, T3.5, T3.6 done)
-- T3.12 [specs]: 05_parent.md + 01_data_model.md builder/V40 updates (deps T3.4, T3.6 done)
 - T4.2 [backend]: Outbox upsert-with-reset repository helper (no deps)
 - T4.4 [backend]: Chunk + outbox cleanup on content delete (deps T3.6 done)
 - T5.1 [backend]: Optional enrollment_id in topic-doubt schema (no deps)

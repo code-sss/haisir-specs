@@ -106,7 +106,7 @@ ALTER TABLE topics
 |---|---|---|---|
 | `owner_type` | VARCHAR | NOT NULL, DEFAULT `'platform'` | `'platform'` or `'parent'` |
 | `owner_id` | UUID | NULL | `NULL` for platform; parent `idp_sub` for parent-owned |
-| `status` | VARCHAR | NOT NULL, DEFAULT `'live'` | `'draft'` \| `'live'` \| `'archived'` |
+| `status` | VARCHAR | NOT NULL, DEFAULT `'live'` | `'draft'` \| `'live'` — value set enforced at the Pydantic schema layer (`Literal["draft", "live"]`), no DB `CHECK` constraint |
 
 **Migration:** `UPDATE topics SET owner_type = 'platform', owner_id = NULL, status = 'live';`
 
@@ -164,8 +164,8 @@ When a parent adopts a platform board subtree:
 - **Not cloned:** `topic_contents`, `data_topic_content_chunks`, `questions`, `exam_templates`, `exam_template_questions`. Parent populates their own content and exams after adoption.
 - Platform updates to the original board do **not** propagate to parent copies. Each parent copy is independent.
 
-**BR-DATA-006 — Adopt is idempotent per grade-subject:**
-If a parent has already adopted the same subtree, a second adopt request returns 409 Conflict rather than creating duplicate nodes.
+**BR-DATA-006 — Adopt is idempotent per source node, DB-enforced (V40):**
+If a parent has already adopted a given platform subtree root, a second adopt request for the same `source_node_id` returns 409 Conflict rather than creating duplicate nodes. Enforced by a partial unique index on `course_path_nodes(owner_id, source_node_id) WHERE source_node_id IS NOT NULL` — see "Schema Extensions (Phase 5 — Parent Curriculum Builder)" below.
 
 ---
 
@@ -860,3 +860,35 @@ BR-PROGRESS-001/002; scores in [60, 75) set `'in_progress'`.
   unlinked rows).
 - (d) Multi-topic exams attribute each question via `questions.topic_id` — each question's
   earned/max points feed the per-topic score of its own topic, not a single session-wide score.
+
+---
+
+## Schema Extensions (Phase 5 — Parent Curriculum Builder)
+
+Migration **V40**. Additive only — no backfill, nothing dropped or renamed.
+> Behaviour in `target/requirements/05_parent.md` (Adopt modal, P-curriculum, P-topic).
+
+### New column on `course_path_nodes` (V40)
+
+```sql
+ALTER TABLE course_path_nodes ADD COLUMN source_node_id UUID NULL;
+
+CREATE UNIQUE INDEX ux_course_path_nodes_adopt_lineage
+  ON course_path_nodes (owner_id, source_node_id)
+  WHERE source_node_id IS NOT NULL;
+```
+
+| Column | Type | Constraint | Notes |
+|---|---|---|---|
+| `source_node_id` | UUID | NULL | Set only on the root node of a cloned subtree — points at the platform `course_path_nodes.id` it was adopted from. NULL for every other row (platform rows, non-root clones, scratch-built parent nodes). |
+
+**Adopt-idempotency mechanics (BR-DATA-006):** only the cloned root carries `source_node_id`; the rest of the cloned subtree (and its topics) carries none. The partial unique index on `(owner_id, source_node_id)` means a given parent can adopt a given platform source node exactly once — a repeat `POST /api/parent/curriculum/adopt` with the same `source_node_id` hits the index and the service raises `AlreadyAdoptedError`, mapped to `409 Conflict` at the route. No application-side existence check races the DB — the index is the source of truth.
+
+### Parent-tree hierarchy rules (application layer, `ParentCurriculumService`)
+
+Not new columns, but validation rules load-bearing for `POST /api/parent/curriculum/nodes` and worth recording alongside V40 since they gate what adopt/scratch-build can produce:
+
+- **Category rule for scratch roots:** a root node (`parent_id IS NULL`) must have `node_type = 'grade'` and requires a `category_id` (`400` if missing on a root create). Child nodes derive `category_id` from their owner-scoped parent — never supplied directly.
+- **Depth-typing:** a node directly under a `grade` must be `node_type = 'subject'`; deeper nodes must not repeat any ancestor's `node_type` (checked via `get_path_to_root`).
+- **Sibling-type consistency, scoped per-owner:** among a parent's existing children of the same node, all must share one established `node_type` — a create that would introduce a second type among siblings is rejected (`409`, `NodeHierarchyError`). This check is scoped to the caller's own rows (`get_children_by_parent_and_owner`) and is independent of whatever sibling types might exist under the same parent node for other owners.
+- These rules apply only to parent-owned trees built via `POST /api/parent/curriculum/nodes`; adopted subtrees are cloned verbatim from an already-valid platform subtree and are not re-validated node-by-node.

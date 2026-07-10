@@ -66,6 +66,7 @@ Two entry paths:
 
 ### Adopt modal (Import from Platform)
 - Browseable tree of platform `course_path_nodes`.
+- **Platform-browse access:** the browse tree is fetched via the existing shared endpoints — `GET /api/categories`, `GET /api/course-path-nodes/category/:category_id`, `GET /api/course-path-nodes/parent/:parent_id`, `GET /api/course-path-nodes/:node_id` — not a parent-specific browse endpoint. These routes accept `parent` role via `require_any_platform_role_or_parent()` and, when the caller's role is `parent` (or `admin`), transparently filter to platform-owned rows only (same code path admin uses to browse the platform tree, not the student visibility filter). Like the P-link code-check GET, these GETs also require `X-CSRF-Token` (shipped quirk, not a REST convention).
 - Parent selects a subtree root (e.g., a Grade node).
 - "Adopt" button → `POST /api/parent/curriculum/adopt` with `source_node_id`.
 - On success: deep copy of the selected subtree + attached topics is created under the parent's curriculum with `owner_type = 'parent'`, topics at `status = 'draft'`.
@@ -208,7 +209,9 @@ Allowed when `exam_templates.owner_id = parent.idp_sub` (own exams only — BR-S
 | `PATCH` | `/api/parent/curriculum/topics/:topic_id` | Update topic (title, status) |
 | `DELETE` | `/api/parent/curriculum/topics/:topic_id` | Delete a topic |
 | `POST` | `/api/parent/curriculum/topics/:topic_id/content` | Create video URL or text content (instant) |
-| `POST` | `/api/parent/curriculum/topics/:topic_id/extraction-jobs` | Upload PDF/image for extraction (multipart, ≤50MB, 1 file/request, parent-quota gated) |
+| `PATCH` | `/api/parent/curriculum/topic-contents/:content_id` | Update a content item (title/order/description/url/text) — note the path is `topic-contents`, not nested under `topics/:topic_id` |
+| `DELETE` | `/api/parent/curriculum/topic-contents/:content_id` | Delete a content item |
+| `POST` | `/api/parent/curriculum/topics/:topic_id/extraction-jobs` | Upload PDF/image for extraction (multipart, ≤50MB, 1 file/request, parent-quota gated, requires `Idempotency-Key` header) |
 | `GET` | `/api/parent/curriculum/topics/:topic_id/extraction-jobs` | List active + recent extraction jobs |
 | `GET` | `/api/parent/curriculum/extraction-jobs/:job_id` | Job detail |
 | `DELETE` | `/api/parent/curriculum/extraction-jobs/:job_id` | Cancel job |
