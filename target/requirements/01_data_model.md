@@ -444,6 +444,15 @@ The worker re-reads `topics.owner_type` and `topics.owner_id` inside the finaliz
 **BR-DATA-012 — `topic_contents.content_order` is base-shifted:**
 On finalize, the worker computes `base = COALESCE(MAX(content_order), 0) FROM topic_contents WHERE topic_id = :t FOR UPDATE` and inserts new rows at `base + page_no`. Prevents collision with manually-added content and re-runs.
 
+**BR-DATA-020 — Outbox re-enqueue is upsert-with-reset, not insert-only:**
+Any code path that needs a `topic_contents` row (re-)embedded — instant text create, extraction finalize, or a `text`/`title` edit on a `text` row — calls the same helper: `INSERT INTO rag_indexing_outbox (content_id, status) VALUES (:id, 'pending') ON CONFLICT (content_id) DO UPDATE SET status='pending', retry_count=0, last_error=NULL, locked_at=NULL, locked_by=NULL`. This resolves the PK collision when a `done`/`failed` row still exists for that `content_id` (the purge sweep only clears `done` rows after 24h, so a same-day re-edit would otherwise hit the PK). `updated_at` is not in the `SET` list — the existing `trg_rag_outbox_touch` BEFORE UPDATE trigger (V26) stamps it. Non-text content types (`video`, `url`) are never enqueued.
+
+**BR-DATA-021 — Chunk cleanup is delete-before-insert, not update-in-place:**
+`data_topic_content_chunks` has no per-row update path — a re-embed always deletes the existing chunk set for a `content_id` (`DELETE FROM data_topic_content_chunks WHERE metadata_->>'content_id' = :cid`, raw SQL against the LlamaIndex-owned table) before `index.insert_nodes()` writes the new set. This applies both when the worker drains a re-enqueued (BR-DATA-020) outbox row and when a `topic_contents` row is deleted outright, in which case the outbox row for that `content_id` is deleted alongside the chunks (same TX as the content delete) instead of being left to drain. **Accepted v1 gap:** between the delete and the subsequent insert, a concurrent hAITU retrieval against that `content_id` sees zero chunks rather than the old or new set — a brief availability gap, not a correctness gap (no duplicate/orphaned vectors ever visible). No retry-side special-casing; re-running a drain against a `content_id` that already has chunks is idempotent because the delete always runs first.
+
+**BR-DATA-022 — RAG cleanup cascades with the owning topic/node:**
+Deleting a topic, or a `course_path_nodes` subtree, deletes every embedded `topic_contents` row's chunks and outbox row (BR-DATA-021's cleanup, applied per `content_id` in the subtree) inside the same cascade transaction as the topic/node delete. No orphaned chunks or outbox rows can outlive their owning topic.
+
 ---
 
 ## Schema Extensions (Essay AI Grading)

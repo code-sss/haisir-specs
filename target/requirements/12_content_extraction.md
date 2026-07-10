@@ -356,6 +356,47 @@ After materialization, every `topic_contents` row supports two edit affordances:
 
 **Delete preserves audit.** `DELETE /api/topic-contents/{id}` removes the row but does NOT cascade to `extraction_job_audit` (BR-DATA-010). The audit retains "this job extracted N pages on date X" indefinitely.
 
+### Outbox handoff — re-ingestion contract (Phase 5)
+
+The extraction finalize TX (above) is one of three producers into `rag_indexing_outbox`. Instant text-content create (`POST /api/topic-contents` with `content_type='text'`) and edits to a `text` row's `title`/`text` (`PATCH /api/topic-contents/{id}`) enqueue the same way. All three share one repository helper and one worker cleanup path, so the lifecycle is identical regardless of how the content was created.
+
+**Upsert-with-reset (BR-DATA-020).** The enqueue helper is `ON CONFLICT (content_id) DO UPDATE`, not a bare `INSERT`:
+
+```sql
+INSERT INTO rag_indexing_outbox (content_id, status)
+VALUES (:content_id, 'pending')
+ON CONFLICT (content_id) DO UPDATE
+  SET status = 'pending', retry_count = 0, last_error = NULL,
+      locked_at = NULL, locked_by = NULL;
+-- updated_at is NOT in the SET list — trg_rag_outbox_touch (V26) stamps it.
+```
+
+This is required because the purge sweep only clears `status='done'` rows after 24h — a same-day edit to a row that already embedded successfully would otherwise collide on the `content_id` primary key. A plain `INSERT` would fail; the upsert instead resets the row to `pending` so the worker re-drains it. Non-text content types (`video`, `url`) are never enqueued — only `text` rows carry embeddable body content.
+
+**Worker delete-before-insert (BR-DATA-021).** `worker/rag_outbox_loop.py::_process_row` deletes the existing chunk set for `content_id` before calling `index.insert_nodes()`:
+
+```python
+# _process_row(row) — see worker/rag_outbox_loop.py
+DELETE FROM data_topic_content_chunks WHERE metadata_->>'content_id' = :content_id  # raw SQL, LlamaIndex-owned table
+index.insert_nodes(build_nodes(row.content_id, latest_text, latest_title))
+_write_status(row, 'done')  # guarded: UPDATE ... WHERE status='processing' AND locked_by=:host
+```
+
+`data_topic_content_chunks` has no update-in-place path, so every drain — first embed or re-embed after an edit — deletes then inserts. This makes re-draining a `content_id` that already has chunks idempotent (no duplicate vectors), and also makes retry-after-partial-insert safe (a half-written chunk set from a crashed worker is deleted, not left to accumulate alongside the retry's new set).
+
+`_write_status`'s `expected_locked_by` guard exists for the same reason a delete-first design needs care: if a content edit re-enqueues a row (upsert-with-reset, above) while a stale worker still holds a finalize write in flight for the *previous* text, that stale write is dropped instead of overwriting the fresh `pending` status — the row re-drains with the new text on the next pass.
+
+**Accepted v1 gap — brief retrieval window.** Between the delete and the insert, a concurrent hAITU retrieval against that `content_id` sees zero chunks (not the old set, not the new set) for the duration of one worker batch. This is an availability gap, not a correctness gap: no duplicate or orphaned vectors are ever visible, and the window is bounded by one `insert_nodes()` call. Accepted for v1 — parent-authored edits are low-frequency and the gap is not user-visible in the UI (content shows as "indexing" via the outbox row, not "gone"). Locked decision; see `decisions.md` 2026-07-02.
+
+**Delete-path cleanup.** `DELETE /api/topic-contents/{id}` on an embedded row deletes both the chunk set and the outbox row in the same TX as the content delete (not left for the worker to drain):
+
+```sql
+DELETE FROM data_topic_content_chunks WHERE metadata_->>'content_id' = :cid;
+DELETE FROM rag_indexing_outbox WHERE content_id = :cid;
+```
+
+Topic delete and `course_path_nodes` subtree delete (parent and admin paths) run this same cleanup for every `content_id` under the deleted subtree, inside the cascade TX (BR-DATA-022) — no orphaned chunks or outbox rows survive their owning topic.
+
 ---
 
 ## 6 — Frontend Behaviour

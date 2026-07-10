@@ -56,7 +56,7 @@
 - [x] T4.6 [backend]: Cascade RAG cleanup on topic/node delete (depends on T4.4, T3.2c, T3.5) (2026-07-10)
 - [ ] T4.7a [frontend]: "No notes yet" hint in parent builder (depends on T3.11)
 - [ ] T4.7b [frontend]: "No notes yet" placeholder in student content viewer
-- [ ] T4.8 [specs]: Re-ingestion contract into 12_content_extraction.md §5 + 01_data_model.md (depends on T4.5)
+- [x] T4.8 [specs]: Re-ingestion contract into 12_content_extraction.md §5 + 01_data_model.md (depends on T4.5) (2026-07-10)
 - [ ] **G4: RAG ingestion lifecycle** — T4.9 [backend] integration test: content→chunk lifecycle (ollama-gated + non-gated companion) (depends on T4.1, T4.3, T4.4, T4.5)
 
 ## G5 [backend/frontend/specs]: hAITU answers on parent-owned topics
