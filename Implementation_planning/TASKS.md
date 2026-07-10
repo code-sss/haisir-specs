@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:93d3cac frontend:cfc6f64 deploy:ee39f9c (2026-07-10 — frontend T6.2 source-aware Home Study empty state + T6.3 Home Study content-viewing verification (markdown rendering in ContentViewer, dashboard→Home-Study-tab deep link fix, green tab/topic-title theme accent); G4 not yet closed, T4.9 [backend] still pending; T6.2+T6.3 changes uncommitted at baselining time)
+> Last baselined: backend:93d3cac frontend:cfc6f64 deploy:ee39f9c (2026-07-10 — frontend T6.2 source-aware Home Study empty state + T6.3 Home Study content-viewing verification (markdown rendering in ContentViewer, dashboard→Home-Study-tab deep link fix, green tab/topic-title theme accent); G4 not yet closed T6.2+T6.3 changes uncommitted at baselining time, backend T5.1+T5.2 parent-link hAITU gate)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
 - [x] T1.1 [backend]: Student link-code generation + current-code endpoints (2026-07-09)
@@ -61,11 +61,11 @@
 - [x] **G4: RAG ingestion lifecycle** — all tasks complete (2026-07-10)
 
 ## G5 [backend/frontend/specs]: hAITU answers on parent-owned topics
-- [ ] T5.1 [backend]: Optional enrollment_id in topic-doubt schema
-- [ ] T5.2 [backend]: Parent-link authorization gate in HaituDoubtService (depends on T5.1)
+- [x] T5.1 [backend]: Optional enrollment_id in topic-doubt schema (2026-07-10)
+- [x] T5.2 [backend]: Parent-link authorization gate in HaituDoubtService (depends on T5.1) (2026-07-10)
 - [ ] T5.4 [frontend]: HaituDoubtPanel enabled for Home Study topics (depends on T5.1, T5.2)
 - [ ] T5.5 [specs]: 11_haitu_ai_layer.md §9 — parent-topic access contract (depends on T5.2)
-- [ ] **G5: hAITU on parent topics** — T5.3 [backend] severance + cross-family 403 tests (depends on T5.2)
+- [ ] **G5: hAITU on parent topics** — T5.3 [backend] severance + cross-family 403 tests (depends on T5.2) (2026-07-10: T5.1+T5.2 done — parent-link gate live in HaituDoubtService; T5.3/T5.4/T5.5 still pending)
 
 ## G6 [backend/frontend]: Student Home Study surface complete
 - [ ] T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
@@ -79,5 +79,7 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T5.1 [backend]: Optional enrollment_id in topic-doubt schema (no deps)
+- T5.3 [backend]: Severance + cross-family 403 tests (depends on T5.2 — done)
 - T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
+- T5.4 [frontend]: HaituDoubtPanel enabled for Home Study topics (depends on T5.1, T5.2 — both done)
+- T5.5 [specs]: 11_haitu_ai_layer.md §9 — parent-topic access contract (depends on T5.2 — done)
