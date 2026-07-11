@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 85ba354 (Phase 5 G4 — RAG outbox wiring on content create/update/delete, idempotent re-embed, 2026-07-10) |
-| haisir-frontend | 61610bd (Phase 5 G3.3 — parent curriculum builder UI, 2026-07-10) |
+| haisir-backend | 6126287 (Phase 5 G5/G6/G7 close — parent-topic hAITU gate, Home Study visibility bug fix, E2E journey tests, 2026-07-11) |
+| haisir-frontend | ff4bf88 (Phase 5 G5/G6 close — Home Study tab experience + hAITU panel parent-topic support, 2026-07-11) |
 | haisir-deploy | ee39f9c (rerank client + WAF/dep hardening, 2026-07-09) |
 
-> Next session: run `git diff 85ba354..HEAD` in haisir-backend, `git diff 61610bd..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 6126287..HEAD` in haisir-backend, `git diff ff4bf88..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -50,7 +50,7 @@
 
 ---
 
-## Parent Workspace (Phase 5 G1/G2 — linking + shell complete; G3.3 builder UI pending)
+## Parent Workspace (Phase 5 G1–G6 leaf tasks all complete; G7 manual walkthrough sign-off pending)
 
 - Screen: `/profile` (student, S-profile) — "My Profile" page: header card (name/email); "Parent Access" card with the student's link code (generate/regenerate button, copy-to-clipboard with an `execCommand` fallback for browsers without the Clipboard API, expiry date); "Linked Parents" list with inline confirm-then-revoke per row.
   - Key behaviour: only rendered for the `student` role; parent/instructor/admin see a placeholder message.
@@ -69,6 +69,7 @@
 ## Parent Curriculum Builder (Phase 5 G3.3)
 
 - Screen: `/parent/curriculum` (P-curriculum) — Two-pane builder. Top bar: "Adopt from Platform" / "Build from scratch" actions. Left pane: resizable (`useResize`, 260px default, 180–500px range) `ParentNodeTree` of the caller's owned root nodes with breadcrumb-tracked selection. Right pane: `ParentTopicPanel` — breadcrumb + node name header, topic list (`ParentTopicRow` per topic), "+ Add topic" button opening `ParentAddTopicModal`. Empty state (no root nodes yet): centered "No curriculum yet" message with the same Adopt/Build actions.
+  - Key behaviour (Phase 5 G4, `cfc6f64`): `ParentTopicRow` shows a "no notes yet" chip (via `useParentTopicContents`) when a topic has zero content items, so a parent can spot empty topics without opening each one.
   - Key behaviour: "Build from scratch" opens `ParentAddNodeModal` (same 9-type chip + hierarchy-enforcement rules as the admin `AddNodeModal`, `owner_type` hardcoded to `"parent"`). Selecting a node updates the breadcrumb and topic panel; no node selected shows an "Select a node" placeholder.
   - API: `GET/POST/PATCH/DELETE /api/parent/curriculum/nodes`, `GET/POST/PATCH/DELETE /api/parent/curriculum/nodes/{id}/topics` and `/topics/{id}`.
 
@@ -85,10 +86,7 @@
 
 ## Home Dashboard
 
-- Screen: `/home` — Category grid; hierarchical node navigation (grade → subject → course); topics list for the selected terminal node; inline PDF viewer when a content item is opened. Links to `/exam` and `/assess` per node/topic.
-  - Key behaviour: Onboarding guard redirects unauthenticated or non-onboarded users. Breadcrumb tracks navigation path.
-  - NOT yet built: two-section layout (Platform Board / Home Study split). Currently shows a single unified content tree with no owner_type filtering.
-  - API: `GET /api/categories`, `GET /api/course-path-nodes/*`, `GET /api/topics/{node_id}`, PDF file fetch
+> Superseded by **Student Dashboard** below (Platform Board / Home Study split has been built since Phase 2 and is complete as of Phase 5 G6). This section is retained only as a pointer — see "Student Dashboard" for the current `/home` and `/courses` behaviour for the `student` role. Non-student roles are redirected away from `/home` (see "Auth & Root" above).
 
 ---
 
@@ -229,7 +227,7 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 
 ---
 
-## Student Dashboard (Phase 2 complete — enrollment filtering live, G3 done, G4.4 weak-topics done)
+## Student Dashboard (Phase 2 complete — enrollment filtering live, G3 done, G4.4 weak-topics done; Phase 5 G6 — Home Study surface complete)
 
 ### Screen: `/home` (StudentHomePage — student role only)
 `app/home/page.tsx` branches on `currentRole === "student"` → renders `StudentHomePage`.
@@ -237,26 +235,26 @@ Route guard: `AdminRouteGuard` in `src/app/admin/layout.tsx` shows a spinner whi
 Data from `useStudentDashboard` (`GET /api/student/dashboard`). Three sections in order:
 - **FocusAreasStrip** (G4.4) — rendered above all boards when `weak_topics` is non-empty. Orange-themed chip row; each chip shows topic title + mastery score badge (red pill) and links to `/home/topics/{enrollment_id}`. Hidden when no weak topics.
 - **Platform Board** — grid of root platform node cards (name, topic_count badge, "Start" → `/courses?source=platform&nodeId=…`). When no nodes returned (unenrolled): **empty state** with dashed border — "You haven't enrolled in any courses yet." + "Browse Courses" CTA → `/enroll`.
-- **Home Study** — if `has_parent_link=true`, grid of parent-owned root node cards with "Start" CTAs; else dashed-border placeholder "No Home Study content yet — ask your parent to link their account."
+- **Home Study** — if `has_parent_link=true`, grid of parent-owned root node cards with "Start" CTAs; else dashed-border placeholder "No Home Study content yet — ask your parent to link their account." Card deep-links (Phase 5 G6, `afacb33`) validate the target node id against the loaded tree before selecting it, since it now arrives via a URL query param rather than internal state — lands on the Home Study tab with the right node pre-selected instead of the Platform tab with nothing selected.
 
 ### Screen: `/courses` (StudentCoursesPage — student role)
 Full-page three-panel layout. Data managed by `useStudentNav` + `useStudentCatalog`.
 
-- **Tab bar** — "Platform" (always enabled) / "Home Study" (disabled when `has_parent_link=false`). ArrowLeft/ArrowRight keyboard navigation; switching source resets node/topic/content + `selectedTopicId`/`selectedRootNodeId`.
-- **NodeTreeSidebar** (left `<aside>`) — renders `StudentNode[]` from `GET /api/student/nodes?owner_type={source}`. **Row interaction fixed (Pre-Phase-5 G4, 2026-07-05):** the chevron is now a separate sibling `<button>` (`aria-expanded`, toggle-only — collapses or expands) rather than nested inside the row button (a11y fix); clicking the node **label** always `selectNode(id)` **and** expands (never collapses) when the node has children. Leaf nodes have a chevron placeholder (no button) and just select on label click. **Empty state** (when tree is empty — unenrolled): "No courses enrolled." + "Browse Courses" link → `/enroll`. Accepts an `initialExpandedIds` prop (set of ancestor ids) to pre-expand on the deep-link path below; applied at most once via a one-shot ref guard.
+- **Tab bar** — "Platform" (always enabled) / "Home Study" (disabled when `has_parent_link=false`). ArrowLeft/ArrowRight keyboard navigation; switching source resets node/topic/content + `selectedTopicId`/`selectedRootNodeId`. Active tab + selected topic title get a green accent when `source==='parent'` (Phase 5 G6, `afacb33`).
+- **NodeTreeSidebar** (left `<aside>`) — renders `StudentNode[]` from `GET /api/student/nodes?owner_type={source}`. **Row interaction fixed (Pre-Phase-5 G4, 2026-07-05):** the chevron is now a separate sibling `<button>` (`aria-expanded`, toggle-only — collapses or expands) rather than nested inside the row button (a11y fix); clicking the node **label** always `selectNode(id)` **and** expands (never collapses) when the node has children. Leaf nodes have a chevron placeholder (no button) and just select on label click. **Empty state** (when tree is empty): Platform source shows "No courses enrolled." + "Browse Courses" link → `/enroll`; Home Study source shows "No Home Study content yet — ask your parent to add topics" with no CTA link (Phase 5 G6, `afacb33`). Accepts an `initialExpandedIds` prop (set of ancestor ids) to pre-expand on the deep-link path below; applied at most once via a one-shot ref guard.
 - **Deep-link resolution** (`/courses?topic={topic_id}`, Pre-Phase-5 G4, 2026-07-05) — `StudentCoursesPage` reads `initialTopicId` from the `topic` search param (server component wrapper in `app/courses/page.tsx` awaits `searchParams`). On tree load, `useStudentNav.findNodeIdForTopic(topicId)` does a DFS over the loaded tree, using a per-node topics cache (populated by prior `selectNode` calls) and fetching+caching `GET /api/student/nodes/{id}/topics` per-node on cache miss (per-node error isolation — a failed node fetch doesn't abort the probe). Once the owning node is found: `selectNode` + `selectTopic` fire, and `findAncestorIds` (new pure `tree-traversal.ts` module: `findNodePath`/`findAncestorIds`) computes the ancestor chain to pass as `initialExpandedIds`. A stale/unresolvable topic id fails silently (collapsed tree, no error UI) — this is what makes the dashboard's `FocusAreasStrip` weak-topic chip links (previously dead) actually land on the right topic.
 - **TopicListPanel** (centre `<section>`) — `StudentTopic[]` from `GET /api/student/nodes/{id}/topics`. Fires `selectTopic(id)` on click; sets `selectedTopicId` state. Each topic row with `has_exam=true` renders a **"Take Exam"** button routing to `/exam?node_id={selectedNodeId}&topic_id={topicId}` (Pre-Phase-5 G3, 2026-07-05 — topic_id now included so the exam list is pre-filtered to that topic's exams only; previously routed with `node_id` alone).
-- **ContentViewer** (right) — `StudentTopicContent[]` from `GET /api/student/topics/{id}/content`. Shows "No content available" when `contents` is empty. When a topic is selected (`topicId != null`), renders **HaituDoubtPanel** below the content.
+- **ContentViewer** (right) — `StudentTopicContent[]` from `GET /api/student/topics/{id}/content`. Text content renders through the shared `MarkdownText` renderer (Phase 5 G6, `afacb33`) instead of raw text, so parent notes display formatted. Empty state (Phase 5 G6, `cfc6f64`): Platform source shows "No content available"; Home Study source (`source==='parent'`) shows a parent-specific "no notes yet" message instead. When a topic is selected (`topicId != null`), renders **HaituDoubtPanel** below the content, passed the current `source`.
 - `selectedRootNodeId` is resolved via `findNodePath(nodeTree, nodeId)?.[0]` (root of the returned root→target path) on node selection; `selectedEnrollmentId` is looked up in the catalog (`catalogNodes.find(n => n.id === selectedRootNodeId)?.enrollment_id`).
 
 ### Component: HaituDoubtPanel
 Rendered at the bottom of `ContentViewer` whenever a topic is selected.
 
-- **Enrollment guard** — if `enrollmentId === null`, shows grey italic "Enroll in this course to ask hAITU questions." (no chat UI).
+- **Enrollment/access guard** — if not `isEnabled` (no real enrollment and `source !== 'parent'`) or `accessDenied` is set, shows grey italic notice instead of chat UI: platform source → "Enroll in this course to ask hAITU questions."; parent source → "Your Home Study access has changed. Ask your parent to check the link, or refresh this page." (Phase 5 G5, `dd8a6a4`). Heading gets a distinct style when `source==='parent'`.
 - **Chat UI** — scrollable bubble list (`role="log" aria-live="polite"`): student messages right-aligned (blue), AI messages left-aligned (grey). Spinner bubble while `isLoading`. Input textarea (Enter = send, Shift+Enter = newline), disabled while loading. Send button disabled when input empty or loading.
 - **Error banner** — 429 rate-limit → "You've reached the AI limit for this hour. Try again later."; other errors → "Something went wrong. Please try again."
 - **Escalation** — "Ask your teacher" button shown when `escalation_ready=true` AND `!isEscalated`. Clicking calls `POST /api/doubts/{doubtId}/escalate`; button is disabled if `doubtId` is null (not yet set by the `doubt_id` SSE event) or while the mutation is pending. On success `isEscalated` is set (client mutation state) and the button hides. Escalation error shown inline.
-- `useHaituDoubt(topicId, enrollmentId)` hook — client-side message history (last 5 sent as `history` to API), loading/error state, 429 detection. Resets on `topicId` change. Calls `POST /api/haitu/topic-doubt` and consumes the **SSE stream** via `ReadableStream`/`TextDecoder`, appending `{"token"}` frames to the live assistant bubble; on stream/network failure, resends the last message (resend-on-failure).
+- `useHaituDoubt(topicId, enrollmentId, source?)` hook — client-side message history (last 5 sent as `history` to API), loading/error state, 429 detection. Resets on `topicId` change. Calls `POST /api/haitu/topic-doubt`, omitting `enrollment_id` from the body when null (Home Study topics have no enrollment), and consumes the **SSE stream** via `ReadableStream`/`TextDecoder`, appending `{"token"}` frames to the live assistant bubble; on stream/network failure, resends the last message (resend-on-failure). Exposes `isEnabled` (real enrollment, or `source==='parent'`) and `accessDenied` (set on a 403 from a parent-context request — e.g. a revoked Home Study link mid-session).
 
 > **Backend note (G1 update):** `POST /api/haitu/topic-doubt` now persists doubts. Before the stream starts, a `doubts` row and student `doubt_messages` row are created. The SSE stream emits `event: doubt_id` (payload `{"doubt_id":"<uuid>"}`) as the very first frame; after the stream ends a background task persists the AI reply. On 429 no row is created (no orphan). `HaituDoubtPanel` consumes `doubt_id` from the SSE and shows a "View thread" link to `/doubts/{doubtId}`. On panel re-open for the same topic (not yet resolved/closed), the hook pre-loads the existing thread from `GET /api/students/me/doubts` and restores chat history.
 
