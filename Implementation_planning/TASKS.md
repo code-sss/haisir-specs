@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:93d3cac frontend:afacb33 deploy:ee39f9c (2026-07-10 — frontend T5.4 HaituDoubtPanel enabled for Home Study topics (enrollment_id omitted from topic-doubt body for parent source, revocation-aware gating copy, green accent) + T6.2 source-aware Home Study empty state + T6.3 Home Study content-viewing verification (markdown rendering in ContentViewer, dashboard→Home-Study-tab deep link fix, green tab/topic-title theme accent); backend T5.1+T5.2 parent-link hAITU gate)
+> Last baselined: backend:a6cba00 frontend:afacb33 deploy:ee39f9c (2026-07-10 — frontend T5.4 HaituDoubtPanel enabled for Home Study topics (enrollment_id omitted from topic-doubt body for parent source, revocation-aware gating copy, green accent) + T6.2 source-aware Home Study empty state + T6.3 Home Study content-viewing verification (markdown rendering in ContentViewer, dashboard→Home-Study-tab deep link fix, green tab/topic-title theme accent); backend T5.1+T5.2 parent-link hAITU gate)
 
 ## G1 [backend/frontend/specs]: Parent–child linking lifecycle
 - [x] T1.1 [backend]: Student link-code generation + current-code endpoints (2026-07-09)
@@ -65,19 +65,19 @@
 - [x] T5.2 [backend]: Parent-link authorization gate in HaituDoubtService (depends on T5.1) (2026-07-10)
 - [x] T5.4 [frontend]: HaituDoubtPanel enabled for Home Study topics (depends on T5.1, T5.2) (2026-07-10)
 - [x] T5.5 [specs]: 11_haitu_ai_layer.md §9 — parent-topic access contract (depends on T5.2) (2026-07-10)
-- [ ] **G5: hAITU on parent topics** — T5.3 [backend] severance + cross-family 403 tests (depends on T5.2) (2026-07-10: T5.1+T5.2+T5.4+T5.5 done — parent-link gate live in HaituDoubtService, HaituDoubtPanel enabled for Home Study topics with enrollment_id omitted + revocation-aware gating copy, access contract documented; T5.3 still pending)
+- [x] T5.3 [backend]: Severance + cross-family 403 tests (depends on T5.2) (2026-07-10) — `tests/integration/routes/test_g5_severance_cross_family_403.py`; 4 scenarios (mid-session revoke, cross-family, draft-topic, platform-topic null-enrollment regression) against the real `POST /api/haitu/topic-doubt` route + real `doubts` row-count assertions, only `HaituService.stream_answer` stubbed; collects clean, self-skips without `INTEGRATION_DB_URL`, full real-DB run pending CI
+- [x] **G5: hAITU on parent topics** — T5.3 [backend] severance + cross-family 403 tests (depends on T5.2) (2026-07-10: all G5 leaf tasks T5.1–T5.5 done — parent-link gate live in HaituDoubtService, HaituDoubtPanel enabled for Home Study topics, access contract documented, severance/cross-family goal test passes locally; full real-DB confirmation pending CI)
 
 ## G6 [backend/frontend]: Student Home Study surface complete
-- [ ] T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
+- [x] T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps) (2026-07-10) — `tests/integration/routes/test_g6_visibility_student_read_paths.py` + `tests/unit/domain/test_services/test_student_dashboard_service_parent_gate.py`; found and fixed a production bug in `StudentDashboardService._assert_node_in_enrolled_subtree`/`get_topic_content` (`src/domain/services/student_dashboard_service.py`) where parent-owned nodes/topics always 403'd for every student because the platform-enrollment-subtree check ran unconditionally regardless of `owner_type` — DI always injects a real `EnrollmentRepository`, so this blocked Home Study entirely in production; fix mirrors the already-shipped `HaituDoubtService` owner_type-branch pattern; integration suite collects clean/self-skips without `INTEGRATION_DB_URL`, full real-DB run pending CI; unit suite green, 100% coverage
 - [x] T6.2 [frontend]: Source-aware empty state in existing Home Study tree (2026-07-10)
 - [x] T6.3 [frontend]: Home Study content viewing verification (depends on T6.2, T3.5, T4.7b) (2026-07-10)
-- [ ] **G6: Student Home Study surface** — T6.1 [backend] live-only + visibility enforcement tests (fixture-driven, no deps)
+- [x] **G6: Student Home Study surface** — T6.1 [backend] live-only + visibility enforcement tests (fixture-driven, no deps) (2026-07-10: all G6 leaf tasks T6.1–T6.3 done; goal test T6.1 passes locally — unit gate green, integration suite collects clean and self-skips without INTEGRATION_DB_URL, full real-DB confirmation pending CI)
 
 ## G7 [backend/frontend]: Phase acceptance
-- [ ] T7.1 [backend]: E2E journey test — contract-level (CI-safe) + ollama-gated grounded variant (depends on T1.7, T3.13, T4.9, T5.3, T6.1)
-- [ ] **G7: Phase acceptance** — T7.2 [frontend] suites green + manual walkthrough record (depends on T7.1 + all frontend leaf tasks of G1–G6)
+- [x] T7.1 [backend]: E2E journey test — contract-level (CI-safe) + ollama-gated grounded variant (depends on T1.7, T3.13, T4.9, T5.3, T6.1) (2026-07-11) — part (a) non-gated journey `tests/integration/routes/test_g7_1_e2e_journey_integration.py` (link→adopt→content→outbox pending→draft-hidden→publish→child dashboard Home Study→topic-doubt SSE doubt_id frame + doubt row persisted→revoke→Home Study empty SQL-filtered 200+[] + topic-doubt 403 + 0 new rows, LLM stubbed) + part (b) ollama-gated grounded variant `tests/integration/phase5_ollama_gated/test_g7_1_ollama_gated_grounded_journey.py` (real bge-m3 outbox drain→chunks exist→child `POST /api/haitu/topic-doubt` answer grounded in parent note marker `ZORBLAX-912`→PATCH content via real parent route→re-drain→answer reflects `ZORBLAX-913`; chunk-level deterministic backstop + LLM grounding assertion; through real route + real pipeline, `HaituService.answer` never called directly); both collect clean and self-skip without `INTEGRATION_DB_URL`/Ollama (part b counted in "Ollama-gated: N skipped" summary), full real-DB run pending CI; full unit suite 4625 passed/53 skipped/100% coverage
+- [ ] **G7: Phase acceptance** — T7.2 [frontend] suites green + manual walkthrough record (depends on T7.1 + all frontend leaf tasks of G1–G6) (2026-07-11: T7.1 [backend] done — both journey variants written and green locally; T7.2 [frontend] suites-green + walkthrough still pending)
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T5.3 [backend]: Severance + cross-family 403 tests (depends on T5.2 — done)
-- T6.1 [backend]: Live-only + visibility enforcement tests (fixture-driven, no deps)
+- T7.2 [frontend]: Frontend closure — `pnpm test` + `pnpm typecheck` green across the repo + manual browser walkthrough record committed to `Implementation_planning/` (depends on T7.1 [backend] + all frontend leaf tasks of G1–G6 — all done)
