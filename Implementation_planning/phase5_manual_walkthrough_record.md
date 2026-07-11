@@ -13,11 +13,11 @@
 
 | # | Requirement | Status |
 |---|---|---|
-| P1 | Full stack up via `haisir-deploy` docker compose (backend, worker, frontend, APISIX, Postgres pgvector) | ☐ |
-| P2 | Worker running with RAG outbox + embedding configured (`bge-m3` reachable) — needed for Part D/G | ☐ |
-| P3 | Two browser sessions (or one normal + one incognito) so you can be logged in as **Parent A** and **Student A** at once | ☐ |
-| P4 | A second parent account (**Parent B**) for the cross-family check in Part H | ☐ |
-| P5 | A platform board with at least one live topic exists (Admin-created), for the "Adopt from Platform" step | ☐ |
+| P1 | Full stack up via `haisir-deploy` docker compose (backend, worker, frontend, APISIX, Postgres pgvector) | ☑ |
+| P2 | Worker running with RAG outbox + embedding configured (`bge-m3` reachable) — needed for Part D/G | ☑ |
+| P3 | Two browser sessions (or one normal + one incognito) so you can be logged in as **Parent A** and **Student A** at once | ☑ |
+| P4 | A second parent account (**Parent B**) for the cross-family check in Part H | ☑ |
+| P5 | A platform board with at least one live topic exists (Admin-created), for the "Adopt from Platform" step | ☑ |
 
 ---
 
@@ -25,13 +25,17 @@
 
 | Step | Action | Expected | Observed | Pass/Fail |
 |---|---|---|---|---|
-| A1 | Log in as **Student A** → `/profile` → "Parent Access" card → generate/copy link code | 8-char code shown, copy-to-clipboard works | | ☐ |
-| A2 | Log in as **Parent A** → onboarding "Parent Ready" screen → "Link your child" CTA | Lands on `/parent/link-child`, **not** a dead link (this was the G2 T2.6 fix) | | ☐ |
-| A3 | On `/parent/link-child`, enter the code (auto-uppercased as you type) | Confirm dialog shows the correct child's name; Escape cancels it, focus returns to the trigger button | | ☐ |
-| A4 | Confirm the link | Redirects to `/parent`, child appears in the child-selector strip | | ☐ |
-| A5 | Reload `/parent` | Selected child persists (localStorage) | | ☐ |
-| A6 | Check header nav as Parent A | "Dashboard" and "Curriculum" links present; as Student A, "Profile" link present | | ☐ |
-| A7 | Try `/parent` while logged in as Student A (URL bar) | Redirected away (route guard) | | ☐ |
+| A1 | Log in as **Student A** → `/profile` → "Parent Access" card → generate/copy link code | 8-char code shown, copy-to-clipboard works | Code section renders correctly; Linked Parents row initially showed blank name + "Invalid Date" (field-name mismatch bug), fixed and re-verified | ☑ |
+| A2 | Log in as **Parent A** → onboarding "Parent Ready" screen → "Link your child" CTA | Lands on `/parent/link-child`, **not** a dead link (this was the G2 T2.6 fix) | Confirmed | ☑ |
+| A3 | On `/parent/link-child`, enter the code (auto-uppercased as you type) | Confirm dialog shows the correct child's name; Escape cancels it, focus returns to the trigger button | Confirmed | ☑ |
+| A4 | Confirm the link | Redirects to `/parent`, child appears in the child-selector strip | Confirmed; child chip name correct (test data first_name = "Student") | ☑ |
+| A5 | Reload `/parent` | Selected child persists (localStorage) | Confirmed | ☑ |
+| A6 | Check header nav as Parent A | "Dashboard" and "Curriculum" links present; as Student A, "Profile" link present | Confirmed | ☑ |
+| A7 | Try `/parent` while logged in as Student A (URL bar) | Redirected away (route guard) | Confirmed | ☑ |
+
+**Additional defects found (outside scripted steps), filed as `TASKS.md` G7-patch:**
+- G7-patch-3 (fixed, re-verified): once a parent had ≥1 child linked, there was no UI path to link a second child — `parent-dashboard.tsx`'s "Link your child" card only rendered when `children.length === 0`. Fixed with a persistent "+ Add another child" affordance; second-child link tested successfully.
+- G7-patch-4 (open): the second linked child then rendered as a blank, unlabeled circle in the child-selector strip instead of a name chip — same root cause class as G7-patch-2 (child's `student_profiles` row never populated, no fallback), plus a frontend defensive-fallback/`aria-label` gap on the pill itself. Not yet fixed.
 
 ---
 
