@@ -122,12 +122,17 @@
 
 | Step | Action | Expected | Observed | Pass/Fail |
 |---|---|---|---|---|
-| H1 | Parent A → `/parent` → revoke the link to Student A | Confirm-then-revoke UI; child removed from Parent A's list | | ☐ |
-| H2 | Student A → `/home` | Home Study section reverts to the "no parent linked" placeholder | | ☐ |
-| H3 | Student A → `/courses`, Home Study tab | Tab disabled again | | ☐ |
-| H4 | Student A tries to re-ask hAITU on the previously-accessible topic (e.g. via a stale bookmark/back button landing on the content) | Panel shows "Your Home Study access has changed…" notice, not a chat UI | | ☐ |
-| H5 | Log in as **Parent B** (unrelated) → try to browse/adopt Parent A's private curriculum via URL manipulation (guess a node id) | 404 (cross-owner sweep — content isn't just hidden from nav, it's inaccessible by id) | | ☐ |
-| H6 | Re-link Student A to Parent A with a **fresh** code | Re-link succeeds (a revoked pair can re-link) | | ☐ |
+| H1 | Parent A → `/parent` → revoke the link to Student A | Confirm-then-revoke UI; child removed from Parent A's list | Initially failed: no revoke/remove affordance existed anywhere on `/parent` — `parent-dashboard.tsx`'s child strip only rendered a selectable pill per child, with no way to invoke the already-existing backend `DELETE /api/parent/children/{child_sub}/link` (T1.3). Fixed (G7-patch-18) and re-verified: "Revoke" control added per child pill with confirm/cancel inline prompt, mirroring the student-side `/profile` "Remove" pattern | ☑ |
+| H2 | Student A → `/home` | Home Study section reverts to the "no parent linked" placeholder | Confirmed | ☑ |
+| H3 | Student A → `/courses`, Home Study tab | Tab disabled again | Confirmed | ☑ |
+| H4 | Student A tries to re-ask hAITU on the previously-accessible topic (e.g. via a stale bookmark/back button landing on the content) | Panel shows "Your Home Study access has changed…" notice, not a chat UI | Confirmed | ☑ |
+| H5 | Log in as **Parent B** (unrelated) → try to browse/adopt Parent A's private curriculum via URL manipulation (guess a node id) | 404 (cross-owner sweep — content isn't just hidden from nav, it's inaccessible by id) | Confirmed — direct topic-content-page URL for a Parent-A-owned node returned 404 (devtools) and rendered a generic "Failed to load topic." + Retry/Back-to-curriculum, not a distinct "access denied" message. This is the *safer* choice (doesn't leak node-existence to a prober) and is backed by the existing automated `test_g3_1_cross_owner_404_sweep_integration.py` (T3.13) at the API level; the "Retry" affordance reads a little oddly for a permanent 404 but that's cosmetic, not a security gap — not filed as a patch | ☑ |
+| H6 | Re-link Student A to Parent A with a **fresh** code | Re-link succeeds (a revoked pair can re-link) | Initially failed: `GET /api/parent-link-codes/{code}` (validate-before-link) has never returned the child's name — its domain model/schema only ever carried `code`/`child_sub`/`expires_at` — but the frontend's Zod schema required `first_name`/`last_name`, which don't exist on that endpoint. Every validate call therefore failed client-side (502 Zod parse failure, surfaced as "Something went wrong"), silently blocking the confirm-dialog step of *every* link (not just re-link — this predates this walkthrough entirely; Part A3's earlier "Confirmed" was not actually exercising this path correctly). Fixed (G7-patch-19) and re-verified: backend `get_link_code_preview` resolves the child's display name via the existing Keycloak-fallback pattern (`_resolve_identity`/`build_display_name`, same as `/parent/children` and `/student/parent-links`) and returns `child_display_name`; frontend consumes `displayName` instead of the nonexistent `firstName`/`lastName`. Re-link then succeeded, but Home Study came back empty — see the note below | ☑ |
+
+**Additional defects found (outside scripted steps), filed as `TASKS.md` G7-patch entries:**
+- G7-patch-18 (fixed, re-verified): H1 — no revoke UI existed at all on `/parent`. See G7-patch-18 in `TASKS.md`.
+- G7-patch-19 (fixed, re-verified): H6 — parent link-code validate response never carried the child's name; see above and `TASKS.md`.
+- G7-patch-20 (fixed, re-verified): after H6's re-link, Student User's Home Study still showed no content. Root cause: the student had a second, older active parent link (from a prior, unrelated test pass with a different parent account) that was never revoked. `get_node_tree`'s owner-resolution (G7-patch-12) picked the single *oldest* active parent link when the frontend omits `owner_id` (which it always does) — so it silently resolved to the stray, content-less parent instead of the actual one with curriculum, with no signal to the student that a second parent link even existed. Fixed: aggregates content from **every** actively-linked parent instead of just the first, matching how Home Study cards already render as a flat list with no per-parent grouping. See `TASKS.md` for full detail.
 
 ---
 
@@ -135,14 +140,14 @@
 
 | Step | Action | Expected | Observed | Pass/Fail |
 |---|---|---|---|---|
-| I1 | Parent A creates a new topic, leaves it in **draft** | Topic exists in the builder | | ☐ |
-| I2 | Student A checks Home Study | Draft topic does **not** appear anywhere (list, deep-link, or hAITU) | | ☐ |
+| I1 | Parent A creates a new topic, leaves it in **draft** | Topic exists in the builder | Confirmed | ☑ |
+| I2 | Student A checks Home Study | Draft topic does **not** appear anywhere (list, deep-link, or hAITU) | Confirmed | ☑ |
 
 ---
 
 ## Sign-off
 
-- [ ] All steps above pass (or defects filed as a `TASKS.md` G7-patch entry with repro steps).
-- [ ] No Redux/Axios/React-Query-outside-existing-precedent introduced.
-- [ ] All mutations carried a valid `X-CSRF-Token` (spot-check devtools network tab on at least one POST/PATCH/DELETE).
-- [ ] Once green: mark T7.2 `[x]` in `TASKS.md`, close G7, and mark Phase 5 complete in `progress.md` (move it under "Completed Phases" following the Phase 3/Phase 4 precedent).
+- [x] All steps above pass (or defects filed as a `TASKS.md` G7-patch entry with repro steps).
+- [x] No Redux/Axios/React-Query-outside-existing-precedent introduced (spot-checked `features/parent`/`features/student` for `axios`/`react-redux`/`@reduxjs` — none found).
+- [x] All mutations carried a valid `X-CSRF-Token` (spot-checked in devtools network tab, e.g. on the revoke `DELETE` and re-link `POST`).
+- [x] Once green: mark T7.2 `[x]` in `TASKS.md`, close G7, and mark Phase 5 complete in `progress.md` (move it under "Completed Phases" following the Phase 3/Phase 4 precedent).
