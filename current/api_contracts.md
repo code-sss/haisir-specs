@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 85ba354 (Phase 5 G4 — RAG outbox wiring on content create/update/delete, idempotent re-embed, 2026-07-10) |
-| haisir-frontend | 61610bd (Phase 5 G3.3 — parent curriculum builder UI, 2026-07-10) |
-| haisir-deploy | ee39f9c (rerank client + WAF/dep hardening, 2026-07-09) |
+| haisir-backend | 3c53b1a (Phase 5 close — G7-patch-6/12/15/17/19/20 fixes + cognitive-complexity refactor, 2026-07-14) |
+| haisir-frontend | 816194d (Phase 5 close — G7-patch-3/5/7/8/9/13/14/15/17/18 fixes, 2026-07-14) |
+| haisir-deploy | b8f650d (rootless-dockerd network reconcile script, unrelated to Phase 5, 2026-07-14) |
 
-> Next session: run `git diff 85ba354..HEAD` in haisir-backend, `git diff 61610bd..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 3c53b1a..HEAD` in haisir-backend, `git diff 816194d..HEAD` in haisir-frontend, and `git diff b8f650d..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -66,7 +66,7 @@
 - Purpose: Look up a parent link code (P-link validate step)
 - Auth: parent
 - Request: this GET carries `Depends(validate_csrf)` in live code — frontend must send `X-CSRF-Token` even on this GET
-- Response: id, code, child_sub, created_at, expires_at, is_used
+- Response: id, code, child_sub, created_at, expires_at, is_used, **child_display_name: str (Phase 5 G7-patch-19)** — resolved via `UserMetadataService.get_link_code_preview`, same Keycloak-fallback pattern as `/parent/children` and `/student/parent-links`; the response previously carried no name data at all, so the confirm-before-link dialog's Zod parse always threw client-side (the link flow — first link *and* re-link — was never actually reachable through the UI until this fix)
 
 ---
 
@@ -108,7 +108,7 @@
 
 ---
 
-## Parent Curriculum Builder (Phase 5 G3 — backend + builder UI complete, browser walkthrough pending T7.2)
+## Parent Curriculum Builder (Phase 5 G3 — complete, browser walkthrough signed off T7.2 2026-07-13)
 
 All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped to `owner_type='parent' AND owner_id=user.sub`; a node/topic/content owned by another parent is indistinguishable from missing (404 oracle protection). CSRF required on POST/PATCH/DELETE only.
 
@@ -144,6 +144,10 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 
 ### DELETE /topics/{topic_id}
 - Purpose: Delete a caller-owned topic; 404 if not found/not owned
+
+### GET /topics/{topic_id}/content
+- Purpose: List content under a caller-owned topic (Phase 5 G7-patch-6 — previously missing entirely; only `POST` existed at this path, so the frontend's list call 405'd and adding text content appeared to silently fail)
+- Response: `list[TopicContentRead]`; empty list if topic not found/not owned (oracle protection)
 
 ### POST /topics/{topic_id}/content
 - Purpose: Create topic content (instant types) under a caller-owned topic; 404 if topic not found/not owned
@@ -653,9 +657,9 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 ### GET /api/student/nodes
 - Purpose: Return the node tree for a given owner (platform or parent), enforcing parent-link access
 - Auth: student
-- Query params: `owner_type: str` (required), `owner_id: str` (required when `owner_type=parent`)
+- Query params: `owner_type: str` (required), `owner_id: str` (**optional** for `owner_type=parent`, Phase 5 G7-patch-12/20 — the frontend has no source for a parent's raw `idp_sub`, deliberately excluded from `GET /api/student/parent-links`; when omitted, `StudentDashboardService._resolve_parent_nodes` aggregates nodes from **every** actively-linked parent, since a student can have more than one active link, e.g. both parents — the original design only resolved the single oldest link and silently showed the wrong, possibly-empty parent's content when a student had a second, unrelated link)
 - Response: `list[PlatformNodeCard]` — fully nested tree; each card carries `children: list[PlatformNodeCard]` recursively
-- Errors: 400 if `owner_type=parent` and `owner_id` absent; 403 if no active `parent_child_links` row for the requested parent
+- Errors: 403 if the student has no active link to the requested parent, or no active parent link at all when `owner_id` is omitted (the prior 400-when-`owner_id`-missing behavior was removed — it was unreachable correctly by the frontend, which never had an `owner_id` to send)
 - `topic_count` computed via **recursive CTE subtree sum** — parent nodes (grade/subject) aggregate live topic counts from all descendants, not just direct children
 
 ### GET /api/student/nodes/{node_id}/topics
@@ -709,6 +713,7 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 - Purpose: Return a single doubt thread for the authenticated student
 - Auth: `X-Current-Role: student`; no CSRF
 - Response: `DoubtThreadResponse { doubt: DoubtSummaryRead, messages: list[DoubtMessageRead] }` (messages in `created_at` order)
+  - `DoubtSummaryRead` gains `topic_owner_type: "platform" | "parent" | null` on this single-thread fetch only (Phase 5 G7-patch-17) — `null` when `topic_id` is null or the topic row is missing; used by the frontend to hide the escalate-to-teacher action on Home Study (parent-owned) topic threads, which have no instructor oversight in this increment
 - Errors: 404 if doubt doesn't exist or `student_sub` doesn't match the caller (oracle-protected)
 
 ### POST /api/students/me/doubts/{doubt_id}/messages
@@ -727,7 +732,7 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 - Auth: `X-Current-Role: student`; CSRF required
 - Request: no body required
 - Response: `DoubtThreadResponse` with status='escalated' and a new system message appended
-- Errors: 404 if doubt doesn't exist or not owned by caller; 409 if status not `new` or `ai_answered`
+- Errors: 404 if doubt doesn't exist or not owned by caller; 409 if status not `new` or `ai_answered`, **or the doubt's topic is parent-owned (Home Study — BR-SEC-005, Phase 5 G7-patch-15)**. Both conditions share the same generic 409 to avoid leaking topic-ownership/status details. Previously the "Ask your teacher" action rendered and functioned identically on Home Study topics as platform ones, with no ownership check anywhere in the chain — it notified `recipient_role='instructor'` (nobody, in this increment's scope for parent content) and never notified the parent; `list_for_teacher_queue` also had no `owner_type` filter, so a real instructor account could have seen a parent's private topic/student/doubt content. Both gaps are closed by this check.
 - **Side effect (G3):** emits a `new_doubt_escalated` notification to the instructor shared queue (`recipient_role='instructor'`, `recipient_idp_sub=NULL`), body includes the student name resolved from `student_profiles`.
 
 ### GET /api/teachers/me/doubts
