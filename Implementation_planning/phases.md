@@ -163,3 +163,33 @@ role-switcher metadata, `/institution` route guards); RAG ops backlog (external 
 the stubbed Stage 3, bundled inference service in deploy, hAITU Prometheus monitoring — still
 blocked on Chainguard licensing); per-child audience scoping of parent content; parent-facing
 hAITU endpoints (vision §3.5–3.7).
+
+---
+
+## Phase 5.5 — Secrets Management Closeout (OpenBao) (planned 2026-07-14)
+
+> Root goal: OpenBao is live as hAIsir's secrets authority — no plaintext secrets in `.env`/
+> `docker-compose.yml`, machines authenticate by mTLS-bound identity, humans by Keycloak OIDC,
+> every secret read audited, the backend fails fast rather than silently running with dummy
+> secret defaults. Reconciles a 5-week-parked branch (`feature/secrets-management-openbao`,
+> `haisir-deploy`, Phase 0-4 coded 2026-06-05) onto current `main`, rather than continuing
+> straight into Phase 6 — an explicit user reprioritization, not a Phase 6 blocker. Full goal
+> tree: `PLAN.md` / `TASKS.md`.
+
+| Sub-goal | Concern | Repos |
+|---|---|---|
+| **G1** — Deploy-side reconciliation | Land the parked branch's OpenBao stack correctly onto current main; two design changes (static seal replacing two-instance transit-unseal, version pin 2.2.0→2.6.0 for a CVE fix); close the 3-secret gap (`EMBEDDING__`/`HAITU__`/`GRADING__OLLAMA_API_KEY`) on both the KV and compose sides; stack bring-up ordering; dynamic-Postgres-engine compat with the current pgvector image | deploy |
+| **G2** — HARD GATE: first-ever live verification | Nothing in G3/G4 starts until this passes in full. Bring-up, mTLS auth, audit logging, static-seal auto-unseal after restart (the one truly novel/untested claim), dynamic Postgres credentials, Ollama secrets served via templating | deploy |
+| **G3** — Backend fails fast | Remove `default="dummy"`/`default=""` fallbacks on CSRF secret, `database_url`, Keycloak admin creds (BR-SEC-019); regression test; correct the stale header comment | backend |
+| **G4** — Close-out and merge | Combined smoke test; ops runbooks (`.env` cutover, secret rotation at cutover — not before); two independent security-review passes per repo (symmetric depth); merge deploy before backend (backend cannot release ahead of the stack that supplies its secrets) | deploy, backend, specs |
+
+DAG spine: G1 (21 tasks, parallel) → G2 (hard gate, 7 tasks) → G3 (6 tasks) → G4 (10 tasks,
+deploy-before-backend merge order enforced as an explicit dependency). Two challenger rounds run
+on the goal tree (round 1: 2 Blockers + 4 Majors, all resolved; round 2: verified, one item
+downgraded to a documented `<!-- UNRESOLVED -->` limitation). Baseline:
+backend `3c53b1a`, frontend `816194d`, deploy `b8f650d`. Work lands on `feature/secrets-openbao-v2`
+in `haisir-specs` and `haisir-deploy` (fresh branches, not the stale parked one).
+
+**Carried forward, unchanged:** everything Phase 5 deferred to Phase 6 (role migration, RAG ops
+backlog, per-child audience scoping, parent-facing hAITU endpoints) — this phase doesn't touch
+that scope, it's inserted ahead of it by explicit priority choice.

@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-14 — Phase 5.5 plan: OpenBao closeout sequencing (Option 4 hybrid)
+
+> Spec: `target/requirements/13_secrets_management.md`. Plan: `Implementation_planning/PLAN.md` / `TASKS.md` (44 tasks, G1-G4, two challenger rounds). Cross-cutting infra hardening — inserted as Phase 5.5 in `phases.md`, between Phase 5 (just closed) and Phase 6, ahead of the RAG/role-migration backlog by explicit user priority call, not because Phase 6 was blocked.
+
+**Problem.** `feature/secrets-management-openbao` (`haisir-deploy`, 5 commits, Phase 0-4 coded 2026-06-05) was parked for 5+ weeks while `main` moved ~49 commits. A pre-plan challenger round found it couldn't be bulk-rebased (semantic `docker-compose.yml` conflict — 3 new plaintext secrets added to main since the branch was built aren't covered by its Vault Agent templates; `haisir-specs`'s side had a structural `TASKS.md` conflict, no longer resolvable by merge). An independent design-validation pass (separate model, live web research) confirmed OpenBao is still the right tool but found two corrections: a CVE patched after the branch was built (pin to ≥v2.5.5), and the two-instance transit-auto-unseal design is unnecessary complexity for a single-VM topology (replace with the built-in static seal).
+
+### Decisions
+
+- **Option 4 (hybrid) over a plain single-pass reconciliation.** A second challenger round on the ranked scope options found the "just reconcile everything in one pass" framing understated real risk: the Vault Agent sidecars gate `backend`/`worker` startup via a hard `service_healthy` dependency (an OpenBao problem becomes a full outage, not degraded mode), and the first live run would validate three compounding unknowns at once (never-tested Phase 0-4 code, the brand-new untested static seal, a 4-minor-version image jump) with no way to isolate a failure. Resolved by structuring the plan as: do all mechanical reconciliation + both design changes together (G1, cheap and low-risk individually), then a **hard gate** — a live smoke test (G2) that must pass in full before anything touches `haisir-backend` (G3) or heads toward `main` (G4). Same one-`/plan`-cycle efficiency as a single pass, but the riskiest untested piece is proven in isolation first.
+- **The hard gate is a real dependency-graph property.** Every G3 task and G4's entry point has the full, explicitly-enumerated G2 task list in its `Depends on:` — not a "depends on G2" shorthand. A decomposition-level challenger round (round 1) caught that shorthand notation isn't machine-resolvable for `TASKS.md`'s "Ready now" computation, and would have silently mis-scoped the gate.
+- **Backend cannot merge/release ahead of deploy.** `T4.6.2 [backend]` depends explicitly on `T4.6.1 [deploy]`, not just its own security review. Round 1 caught that without this edge, the fail-fast backend could theoretically ship before the OpenBao stack that's supposed to supply its secrets — recreating the exact failure mode this migration exists to prevent, just triggered by merge-order instead of by the removed dummy defaults.
+- **The 3-secret gap (`EMBEDDING__`/`HAITU__`/`GRADING__OLLAMA_API_KEY`) must close on both sides.** Adding them to OpenBao's KV/templates without removing the plaintext lines from `docker-compose.yml` would leave them in both places — worse than the current state, since it would read as closed in tracking while still leaking via `docker inspect`. Also added an explicit live-verification task (`G2.6`/`T2.6.1`) for this secret category — round 1 found the original draft verified the analogous dynamic-Postgres-secrets gap (`G2.5`) live but not this one.
+- **Security review depth made symmetric across repos.** The original draft gave `haisir-deploy` two independent review passes but `haisir-backend` only one, despite backend's secret-handling logic (the fail-fast changes) being exactly what changed. Added `T4.4.2 [backend]` to match.
+- **G1.6's live-instance dependency accepted as a documented limitation, not fixed.** Round 2 ruled that "verify dynamic Postgres credentials work" has no meaningful static/dry-run equivalent (unlike G1.2-G1.5, which do), and its live check only needs a narrow OpenBao+Postgres subset rather than the full 21-task G1 stack G2's gate requires — still materially cheaper, still serves early failure isolation. Flagged as `<!-- UNRESOLVED -->` in `PLAN.md` rather than forced into a shape it doesn't fit.
+- **Rotation still gated on both cutover and the dynamic-secrets-engine proof.** Preserved from the original branch's task graph: `T4.2.2` (rotate every secret) depends on both `T4.2.1` (KV-only cutover) and `T2.5.2` (dynamic-Postgres-lease-revocation proof) — rotation isn't meaningful until both hold.
+
+### Out of scope / follow-up
+
+- Frontend: no changes — this is deploy+backend infra, no UI surface.
+- SPIFFE/SPIRE workload attestation remains the documented future north-star (unchanged from the original 2026-06-05 decision) — not in scope for this closeout.
+- The two G7-patch-4/11/16 Phase 5 backlog items (unrelated to secrets) remain deferred, tracked in `progress.md`.
+
+---
+
 ## 2026-07-09 — T3.1's reserved migration renumbered V38 → V40 (collision, HIGH)
 
 - **Trigger:** reviewing the backend commits for T1.1–T1.4 (`718e692`, `57ded07`) before writing

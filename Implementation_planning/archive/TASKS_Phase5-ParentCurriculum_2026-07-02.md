@@ -20,7 +20,7 @@
 - [x] T2.4 [frontend]: Parent header nav + redirect-matrix verification (depends on T2.2) (2026-07-10)
 - [x] T2.5 [specs]: /parent route-guard slice into target 05_parent.md (2026-07-09)
 - [x] T2.6 [frontend]: Onboarding parent-ready CTA dead-link fix (depends on T2.3) (2026-07-10)
-- [ ] **G2: Parent workspace shell** — redirect-matrix component tests (in T2.4) + browser pass recorded in T7.2 walkthrough (2026-07-10: all G2 leaf tasks T2.1-T2.6 done; T2.4 redirect-matrix + header-nav component tests green; in-browser walkthrough still pending T7.2)
+- [x] **G2: Parent workspace shell** — redirect-matrix component tests (in T2.4) + browser pass recorded in T7.2 walkthrough (2026-07-13: T7.2's manual walkthrough Part A confirmed the route guard, P-home, P-link, and header nav live — closing the browser-pass this line was waiting on)
 
 ## G3 [backend/frontend/specs]: Parent curriculum builder
 
@@ -45,7 +45,7 @@
 - [x] T3.10 [frontend]: Parameterize shared content components (admin↔parent) (2026-07-10)
 - [x] T3.11 [frontend]: P-topic Topic Content Manager page (depends on T3.10, T3.7, T3.5, T3.6) (2026-07-10)
 - [x] T3.12 [specs]: 05_parent.md + 01_data_model.md builder/V40 updates (depends on T3.4, T3.6) (2026-07-09)
-- [ ] **G3.3: Builder UI** — component tests per task + browser journey recorded in T7.2 walkthrough (2026-07-10: all G3.3 leaf tasks T3.7–T3.11 + T3.12 done; component tests green — 210 files / 3548 tests, 100% coverage; in-browser walkthrough still pending T7.2)
+- [x] **G3.3: Builder UI** — component tests per task + browser journey recorded in T7.2 walkthrough (2026-07-13: T7.2's manual walkthrough Parts B/C confirmed the full builder journey live — build-from-scratch, adopt-from-platform, topic content — closing the browser-pass this line was waiting on)
 
 ## G4 [backend/frontend/specs]: RAG ingestion + re-ingestion lifecycle
 - [x] T4.1 [backend]: Outbox enqueue on instant text-content create (depends on T4.2, T3.6) (2026-07-10)
