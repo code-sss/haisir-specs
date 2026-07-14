@@ -92,10 +92,30 @@ Two entry paths:
 - All endpoints under `/api/parent/curriculum/...`.
 - See `target/requirements/12_content_extraction.md` for full extraction behaviour.
 
+### Indexing status & retry (RAG embedding — Phase 6)
+
+Extraction (above) is a separate, already-visible pipeline from **embedding**: once a `text`-type content item exists (whether typed instantly or materialized by extraction), it is queued in `rag_indexing_outbox` for chunking + `bge-m3` embedding by the worker (`rag_outbox_loop`) before hAITU can ground answers in it. Before this section, that step had zero parent-facing visibility and no retry action — a row that failed 3 times sat permanently and silently stuck. Fixed by mirroring the existing extraction-job status-pill pattern, one level down the pipeline:
+
+- **Grain:** per content item (`content_id`), matching `rag_indexing_outbox`'s primary key — a topic with multiple content items shows one independent pill per item, not one per topic.
+- **Status → pill**, sourced directly from `rag_indexing_outbox.status` (5 real states — see `target/requirements/01_data_model.md` BR-DATA-023 / status lifecycle note; do **not** infer "processing" from `locked_at`, and do **not** collapse `retry` into a silent no-pill state, which would reproduce the same invisibility bug this fixes):
+
+  | `rag_indexing_outbox.status` | Pill |
+  |---|---|
+  | `pending` | Grey "⏱ Queued for indexing" |
+  | `processing` | Purple pulsing "🌀 Indexing" (indeterminate activity bar — unlike extraction's upload step, there is no page count to show a real percentage here) |
+  | `retry` | "🔁 Retrying (`retry_count`/3)" — visible, not folded into "Indexing" |
+  | `failed` | Red "✕ Indexing failed" + a **Retry** button |
+  | `done` | Pill clears — content shows with no persistent badge, same as today |
+
+- **Retry action:** `POST /api/parent/curriculum/topic-contents/{content_id}/retry-indexing` (see BR-DATA-023) — visible only on `failed` rows, mirrors the extraction retry button's placement.
+- **Polling:** same cadence as the extraction status strip — 2s while any content item in the topic is `pending`/`processing`/`retry`, back off to 10s once idle, stop after 60s once every item is `done` or `failed`.
+- **Not in scope:** Platform Admin content has the identical invisible-permanent-failure gap and is not addressed here — tracked as a follow-up for `target/requirements/07_platform_admin.md`, not silently dropped.
+
 **Business rules:**
 - BR-PAR-006: Parent can upload to their own topics only (`owner_id = parent.idp_sub`). Wrong owner → 404 (oracle protection).
 - BR-PAR-007: File uploads go through the same `StorageBackend` interface as platform content (local disk v1).
 - BR-PAR-008a: Parent extraction quota — max 5 concurrent jobs (`status IN ('pending','extracting')`) and max 100 jobs/day. Enforced application-layer via `parent_quota_counters` row lock inside the POST handler TX. APISIX rate limit (50/day per parent token) is a coarse second-line defence.
+- BR-PAR-020: Parent can view indexing status and trigger a manual retry only for content under their own topics (`owner_id = parent.idp_sub`) — same 404-oracle ownership pattern as BR-PAR-006. See BR-DATA-023 for the retry mechanics and the cooldown-window abuse guard.
 
 ---
 
@@ -208,9 +228,11 @@ Allowed when `exam_templates.owner_id = parent.idp_sub` (own exams only — BR-S
 | `POST` | `/api/parent/curriculum/nodes/:node_id/topics` | Create a topic |
 | `PATCH` | `/api/parent/curriculum/topics/:topic_id` | Update topic (title, status) |
 | `DELETE` | `/api/parent/curriculum/topics/:topic_id` | Delete a topic |
+| `GET` | `/api/parent/curriculum/topics/:topic_id/content` | List content items for a topic, each including its RAG indexing `status`/`last_error` joined from `rag_indexing_outbox` (drives the status pills in P-topic) |
 | `POST` | `/api/parent/curriculum/topics/:topic_id/content` | Create video URL or text content (instant) |
 | `PATCH` | `/api/parent/curriculum/topic-contents/:content_id` | Update a content item (title/order/description/url/text) — note the path is `topic-contents`, not nested under `topics/:topic_id` |
 | `DELETE` | `/api/parent/curriculum/topic-contents/:content_id` | Delete a content item |
+| `POST` | `/api/parent/curriculum/topic-contents/:content_id/retry-indexing` | Reset a `failed` (or stuck) indexing row to `pending` via the BR-DATA-020 upsert-with-reset (BR-PAR-020 / BR-DATA-023); 404 if not owned, 429 inside the cooldown window |
 | `POST` | `/api/parent/curriculum/topics/:topic_id/extraction-jobs` | Upload PDF/image for extraction (multipart, ≤50MB, 1 file/request, parent-quota gated, requires `Idempotency-Key` header) |
 | `GET` | `/api/parent/curriculum/topics/:topic_id/extraction-jobs` | List active + recent extraction jobs |
 | `GET` | `/api/parent/curriculum/extraction-jobs/:job_id` | Job detail |

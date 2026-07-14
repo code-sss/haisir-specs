@@ -382,7 +382,7 @@ Async embedding queue (challenger #3). Decouples user-visible content materializ
 ```sql
 CREATE TABLE rag_indexing_outbox (
     content_id    UUID PRIMARY KEY,                     -- soft FK to topic_contents.id
-    status        VARCHAR NOT NULL DEFAULT 'pending',   -- 'pending' | 'done' | 'failed'
+    status        VARCHAR NOT NULL DEFAULT 'pending',   -- 'pending' | 'processing' | 'retry' | 'done' | 'failed'
     retry_count   SMALLINT NOT NULL DEFAULT 0,
     last_error    TEXT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -397,6 +397,8 @@ CREATE INDEX ix_rag_outbox_pending
 ```
 
 `status='done'` rows are deleted by the same hourly purge sweep.
+
+**Status lifecycle (corrects a prior doc/code drift — this is what `worker/rag_outbox_loop.py` actually does):** `_claim_batch` atomically sets `status='processing'` in the same UPDATE that sets `locked_at`/`locked_by` (a row is never left `pending` with a lock — "processing" is a real, directly-readable state, not something to infer). On failure, `_process_row` sets `status='retry'` (with `retry_count` incremented) while `retry_count < 3`, and only reaches `status='failed'` once `retry_count >= 3` — at which point `_claim_batch`'s `WHERE retry_count < 3` permanently excludes the row from ever being reclaimed automatically. No DB CHECK constrains these values (plain `VARCHAR`); the 5-state set (`pending`/`processing`/`retry`/`done`/`failed`) is enforced only by the worker/service code, matching `tests/unit/worker/test_rag_outbox_loop.py`.
 
 ### New table — `worker_heartbeats`
 
@@ -446,6 +448,9 @@ On finalize, the worker computes `base = COALESCE(MAX(content_order), 0) FROM to
 
 **BR-DATA-020 — Outbox re-enqueue is upsert-with-reset, not insert-only:**
 Any code path that needs a `topic_contents` row (re-)embedded — instant text create, extraction finalize, or a `text`/`title` edit on a `text` row — calls the same helper: `INSERT INTO rag_indexing_outbox (content_id, status) VALUES (:id, 'pending') ON CONFLICT (content_id) DO UPDATE SET status='pending', retry_count=0, last_error=NULL, locked_at=NULL, locked_by=NULL`. This resolves the PK collision when a `done`/`failed` row still exists for that `content_id` (the purge sweep only clears `done` rows after 24h, so a same-day re-edit would otherwise hit the PK). `updated_at` is not in the `SET` list — the existing `trg_rag_outbox_touch` BEFORE UPDATE trigger (V26) stamps it. Non-text content types (`video`, `url`) are never enqueued.
+
+**BR-DATA-023 — Manual indexing retry reuses BR-DATA-020's upsert-with-reset, not a new insert path (Phase 6 — Parent Indexing Visibility):**
+Before this rule, the only way to escape a permanently `failed` (`retry_count >= 3`) outbox row was the side-effect of re-saving the content's `text`/`title`. `POST /api/parent/curriculum/topic-contents/{content_id}/retry-indexing` exposes that same upsert-with-reset SQL as an explicit, owner-scoped, user-triggered action — no new enqueue logic, no new columns. Owner-scoped: 404 if `content_id` does not resolve to a `topic_contents` row under a topic owned by the calling parent (oracle protection, same pattern as BR-PAR-006). Abuse guard: reject with 429 if `rag_indexing_outbox.updated_at` for this `content_id` is inside a short cooldown window (e.g. 30s) — deliberately not routed through `parent_quota_counters`, which is scoped to `extraction_jobs` concurrency, a different resource. See `target/requirements/05_parent.md` P-topic for the parent-facing status-pill UI this unblocks. Platform-owned content has the identical invisible-failure gap and is **not** addressed by this rule — tracked as a follow-up for `target/requirements/07_platform_admin.md`.
 
 **BR-DATA-021 — Chunk cleanup is delete-before-insert, not update-in-place:**
 `data_topic_content_chunks` has no per-row update path — a re-embed always deletes the existing chunk set for a `content_id` (`DELETE FROM data_topic_content_chunks WHERE metadata_->>'content_id' = :cid`, raw SQL against the LlamaIndex-owned table) before `index.insert_nodes()` writes the new set. This applies both when the worker drains a re-enqueued (BR-DATA-020) outbox row and when a `topic_contents` row is deleted outright, in which case the outbox row for that `content_id` is deleted alongside the chunks (same TX as the content delete) instead of being left to drain. **Accepted v1 gap:** between the delete and the subsequent insert, a concurrent hAITU retrieval against that `content_id` sees zero chunks rather than the old or new set — a brief availability gap, not a correctness gap (no duplicate/orphaned vectors ever visible). No retry-side special-casing; re-running a drain against a `content_id` that already has chunks is idempotent because the delete always runs first.

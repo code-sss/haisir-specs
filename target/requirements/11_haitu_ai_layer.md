@@ -153,6 +153,15 @@ v1 uses a **shared instructor queue** with no orgs/classes model:
 membership) is deferred to a future phase. `escalated_to` is stored so routing can be refined
 without a schema change once orgs/classes exist.
 
+> **BR-AI-011 (Phase 6 — no escalation for Home Study topics):** `POST /api/doubts/{id}/escalate`
+> rejects (409) when the doubt's topic has `owner_type='parent'`. This queue was designed
+> entirely around platform topics — there is no instructor overseeing parent-owned content in
+> this increment (BR-SEC-005; `05_parent.md`'s "no instructor oversight" scope), so routing a
+> Home Study student's doubt into the shared instructor queue would expose that private
+> topic/student/question to an instructor with no legitimate relationship to it. This is a block,
+> not a redesign: whether Home Study doubts should have an alternative escalation path (e.g.
+> notifying the parent instead) is an open question, tracked separately (`TASKS.md` G7-patch-16).
+
 ---
 
 ## 4. Persistence contract
@@ -254,7 +263,7 @@ two identical successful queries yield **one** thread with **two** `student` mes
 
 | Method | Path | Guard | Effect |
 |---|---|---|---|
-| `POST` | `/api/doubts/{doubt_id}/escalate` | `student` + CSRF + ownership | sets `status='escalated'`, `escalated_to=NULL`; emits `new_doubt_escalated` notification (G3.4) |
+| `POST` | `/api/doubts/{doubt_id}/escalate` | `student` + CSRF + ownership | sets `status='escalated'`, `escalated_to=NULL`; emits `new_doubt_escalated` notification (G3.4); 409 if the topic is `owner_type='parent'` (BR-AI-011) |
 | `GET` | `/api/teachers/me/doubts` | `instructor` | shared queue — unclaimed escalated doubts + this instructor's claimed doubts |
 | `POST` | `/api/teachers/me/doubts/{doubt_id}/claim` | `instructor` + CSRF | sets `escalated_to=user.sub`; 409 if already claimed by another |
 | `POST` | `/api/teachers/me/doubts/{doubt_id}/messages` | `instructor` + CSRF | appends a `teacher` message; sets `status='answered'`; emits `doubt_teacher_replied` notification (G3.4) |
@@ -583,3 +592,14 @@ the parent adds/generates content on it (§G4 re-ingestion contract, `12_content
 `live`) and reaches retrieval, which returns no chunks — the pipeline answers from the
 system-prompt framing alone, same degraded behavior as any other topic with no indexed content.
 This is a normal, expected state, not an error condition.
+
+> **Note (Phase 6):** the `topic-doubt` route's own pending/no-chunks handling
+> (`vision/requirements/08_haitu_ai_layer.md` — 202 + `retry_after` while any relevant
+> `rag_indexing_outbox` row is `pending`/`processing`/`retry`; silent raw-text fallback once
+> `done` or `failed` with no chunks) is unchanged by the new parent-facing indexing status/retry
+> feature in `target/requirements/05_parent.md` P-topic. That feature only adds *visibility* and a
+> *manual retry trigger* for the parent — it does not change hAITU's degrade-gracefully behavior on
+> the student side, which already treats "failed" and "done with nothing to embed" as the same
+> steady state by design. (Scope note: this `topic-doubt` 202 gate is unrelated to the separate
+> "202 is retired" corrections elsewhere in this file, which apply only to the
+> `exam-review-chat`/`pattern-analysis` endpoints — not to `topic-doubt`.)
