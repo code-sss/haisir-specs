@@ -644,6 +644,38 @@ The `rag_indexing_outbox` table has been populated since Phase 1d-real but nothi
 
 ---
 
+## 2026-06-05 — Secrets management: OpenBao (Era-4, identity-bound)
+
+> **Landed retroactively 2026-07-14** — this decision was made and Phase 0–4 was coded against it on `feature/secrets-management-openbao` in `haisir-deploy` (2 specs commits, 5 deploy commits, all dated 2026-06-05), but the branch was parked and never merged while `main` moved ~5 weeks ahead. It is being reconciled now via a "Phase 5.5 — Secrets Management Closeout" plan cycle rather than rebased wholesale. See the 2026-07-14 addendum below for what changed in that reconciliation.
+>
+> Spec: `target/requirements/13_secrets_management.md` (renumbered from the originally-planned `08_...` — that slot was claimed by essay AI grading in the interim) + BR-SEC-011..019. Task breakdown: Phase 5.5 `PLAN.md`/`TASKS.md` (once written). Implementation: `haisir-deploy/common/openbao/` + `common/scripts/certs/generate-certs-openbao.sh`; backend seam in `haisir-backend/src/shared/config.py`. Cross-cutting infra hardening (not a persona phase). Phase 0 coded directly (deploy repo, feature branch) ahead of this record — spec written retroactively to match house flow.
+
+**Problem.** Secrets live as plaintext in per-env `.env` / `.env.config.sh` / `.env_info` and are injected as container env vars (visible in `docker inspect` / `/proc`). No read-audit, no rotation, no machine-identity gate — anything on the host reads every secret (Era 1/2 of `IdentityManagement.md`).
+
+### Decisions
+
+- **OpenBao, not a custom manager or SOPS-only (challenged).** Custom secret managers are the textbook "don't roll your own". SOPS+age (encrypt-at-rest) was rejected as the primary because it has no runtime API, no machine-identity gate, no audit, no rotation — it fails the Era-4 goal (kept as a documented fallback if priorities collapse to "just no plaintext, minimal ops"). OpenBao chosen over HashiCorp Vault CE to avoid the BSL license while keeping 1:1 skill/API transfer; over Infisical for deeper dynamic-secrets/mTLS/audit. The "overengineering for single-box edtech?" challenge was accepted explicitly: the user is treating this as a financial-grade learning ground and future-proofing, so the heavier-but-standard option is intentional.
+- **Era-4 = mTLS cert auth ("fingerprint").** Machines authenticate with a CA-signed client cert (reusing the existing Haisir CA + the etcd mTLS precedent). Listener sets `tls_require_and_verify_client_cert=true`, so a leaked token without the host cert is useless. Keycloak-JWT auth into OpenBao (single-authority variant) deferred to avoid a client_secret secret-zero.
+- **Self-hosted auto-unseal via a transit instance.** No cloud KMS (user constraint). The main server auto-unseals against a second minimal OpenBao's transit key — hands-off on main-server restart. Residual secret-zero bounded to the transit instance's offline Shamir keys + a scoped auto-unseal token kept in a root-only file volume (never in compose env). **Superseded 2026-07-14 — see addendum below.**
+- **Two consumption paths, one source.** Runtime: a **Vault Agent sidecar** renders secrets to tmpfs; backend reads via the existing `SETTINGS_ENV_FILE` hook (minimal code change). Deploy-time: `template-configs.sh`/`deploy.sh` read from OpenBao instead of `.env.config.sh`. `.env*` reduced to non-secret config.
+- **Humans via Keycloak OIDC; root token revoked after.** Single identity authority for people; admin reach gated to Tailscale.
+- **Rotation designed-in, executed at cutover (Phase 3).** Postgres switches to dynamic short-lived credentials; static KV secrets rotated when the solution is proven (current secrets are not exposed, so no emergency rotation).
+- **Modular + dedicated-VM-ready.** OpenBao ships as its own `docker-compose.openbao.yml` so it can run on a separate host for real blast-radius isolation (on a single box the gain is audit/rotation/no-plaintext, acknowledged).
+
+### Out of scope / follow-up
+
+- Jenkins CI credentials stay in the Jenkins store (optional later AppRole migration).
+- APISIX-native Vault secret backend vs. deploy-time templating — templating first (fewer moving parts).
+- SPIFFE/SPIRE workload attestation as the scale/K8s north-star.
+
+### 2026-07-14 addendum — challenger + independent design-validation findings, before reconciliation starts
+
+- **Challenger review (plan-quality stress test) found the branch cannot be bulk-rebased.** `haisir-specs`'s `TASKS.md` edit target (a `## G16` section) no longer exists on `main` after 2+ archive cycles — the fix is to let the Phase 5.5 `/plan` cycle generate a fresh task tree, not hand-merge the old one. More importantly: `common/docker-compose.yml` has a **semantic**, not textual, conflict — `main` added three new plaintext secrets since the branch was built (`EMBEDDING__OLLAMA_API_KEY`, `HAITU__OLLAMA_API_KEY`, `GRADING__OLLAMA_API_KEY`) that don't exist in the branch's Vault Agent templates/policies; a naive merge would apply cleanly while silently leaving those three outside the secrets authority. 9 of 13 original G16 tasks were self-certified `[x]` with the one task that would have exercised any of it (a live smoke test) never run — treat that as a first discovery step likely to surface real bugs, not a formality. `BR-SEC-019` (backend fail-fast) is confirmed unstarted on current `haisir-backend` main (`config.py` still has `default="dummy"`), not merely "partial" as the branch's own TASKS.md claimed.
+- **Independent design-validation pass (separate model, live web research, 2026-07-14) confirms OpenBao is still the right choice** — every original rejection reason for Vault CE (BSL license, unchanged under IBM ownership), Infisical (dynamic secrets still Enterprise-only even self-hosted), and SOPS (no machine-identity/audit) still holds, and OpenBao's 2026 adoption trajectory strengthened (Nvidia, SUSE Rancher certification, EdgeX 4.0 default). Two concrete corrections found: (1) a High-severity CVE (CVE-2025-54996, namespace-path privilege escalation) was patched in v2.5.5 (2026-06-17), 12 days after this decision — pin to ≥ v2.5.5 (v2.6.0 shipped 2026-07-14); (2) the two-instance transit-auto-unseal design above is unnecessary complexity for a single-VM topology — OpenBao's built-in **static seal** (a `file://`-sourced key, same host, with rotation support) gives equivalent threat-model coverage with one fewer always-on service to run and patch. **Decision: drop the transit-unseal instance, adopt the static seal, supersedes the "Self-hosted auto-unseal via a transit instance" bullet above.**
+- **Sequencing decision:** land this spec + decision entry on `main` directly (done, this commit) so the Phase 5.5 `/plan` cycle's context-gathering phase sees this domain; do the actual per-commit branch reconciliation as tracked plan tasks, not as a manual pre-planning rebase.
+
+---
+
 ## 2026-06-02 — Backend OAuth2 token introspection (RFC 7662)
 
 > Spec: `target/requirements/02_auth_and_roles.md` § "Token Introspection (backend, RFC 7662)" + BR-SEC-009/010; invariant added to `target/requirements/00_overview.md`. Task breakdown: TASKS.md G14. Cross-cutting security hardening (not tied to a persona phase). Specs updated this cycle; backend + deploy implementation queued.
