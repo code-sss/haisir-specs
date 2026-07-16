@@ -6,27 +6,27 @@
 ## G1 [deploy]: Fail-closed foundations
 
 ### G1.1 [deploy]: Render pipeline fails closed per required key
-- [ ] T1.1.1 [deploy]: Required-keys manifest + per-key fail-closed render
-- [ ] T1.1.2 [deploy]: Unresolved-placeholder guard in template-configs.sh
-- [ ] T1.1.3 [deploy]: On-disk render-residue hardening (0700, .env.runtime gitignore, env-template annotations)
-- [ ] **G1.1: Render pipeline fails closed per required key** — integration test
+- [x] T1.1.1 [deploy]: Required-keys manifest + per-key fail-closed render (2026-07-16)
+- [x] T1.1.2 [deploy]: Unresolved-placeholder guard in template-configs.sh (2026-07-16)
+- [x] T1.1.3 [deploy]: On-disk render-residue hardening (0700, .env.runtime gitignore, env-template annotations) (2026-07-16)
+- [x] **G1.1: Render pipeline fails closed per required key** — integration test (2026-07-16; PASS: render self-test + SESSION_SECRET-unset guard fires → exit 1, set → exit 0)
 
 ### G1.2 [deploy]: Un-rendered compose invocations fail loudly
-- [ ] T1.2.1 [deploy]: ${VAR:?} guards in common/docker-compose.yml
-- [ ] T1.2.2 [deploy]: ${VAR:?} guards in dev/docker-compose.yml
-- [ ] **G1.2: Un-rendered compose invocations fail loudly** — integration test
+- [x] T1.2.1 [deploy]: ${VAR:?} guards in common/docker-compose.yml (2026-07-16)
+- [x] T1.2.2 [deploy]: ${VAR:?} guards in dev/docker-compose.yml (2026-07-16)
+- [x] **G1.2: Un-rendered compose invocations fail loudly** — integration test (2026-07-16; PASS: both compose files `config` exit 1 naming the guarded var when env/.env unset)
 
 ### G1.3 [deploy]: Every provisioning entry point can render from KV
-- [ ] T1.3.1 [deploy]: setup.sh render hook (depends on T1.1.1)
-- [ ] T1.3.2 [deploy]: setup-keycloak.sh render hook (depends on T1.1.1)
-- [ ] T1.3.3 [deploy]: APISIX helper-script key-inheritance audit/hook (depends on T1.3.1)
-- [ ] **G1.3: Every provisioning entry point can render from KV** — integration test
+- [x] T1.3.1 [deploy]: setup.sh render hook (depends on T1.1.1) (2026-07-16)
+- [x] T1.3.2 [deploy]: setup-keycloak.sh render hook (depends on T1.1.1) (2026-07-16)
+- [x] T1.3.3 [deploy]: APISIX helper-script key-inheritance audit/hook (depends on T1.3.1) (2026-07-16)
+- [ ] **G1.3: Every provisioning entry point can render from KV** — integration test (BLOCKED: requires live dev KV via working deploy cert-auth — the pre-existing cert-auth 403 / T2.1.1-G3 blocker. All 3 children's hook code is validated hermetically + via live fail-closed; the full e2e "setup.sh --wait / setup-keycloak.sh complete under OPENBAO_DEPLOY_SECRETS=true" test cannot run until cert-auth is fixed)
 
 ### G1.4 [deploy]: Class B mechanism spikes (pre-decision, load-bearing)
-- [ ] T1.4.1 [deploy]: Spike — haisir-postgres POSTGRES_PASSWORD_FILE support
-- [ ] T1.4.2 [deploy]: Spike — chainguard keycloak-db POSTGRES_PASSWORD_FILE support
-- [ ] T1.4.3 [deploy]: Spike — Keycloak 26 file-based bootstrap/db passwords
-- [ ] **G1.4: Class B mechanism spikes** — integration test
+- [x] T1.4.1 [deploy]: Spike — haisir-postgres POSTGRES_PASSWORD_FILE support (2026-07-16)
+- [x] T1.4.2 [deploy]: Spike — chainguard keycloak-db POSTGRES_PASSWORD_FILE support (2026-07-16)
+- [x] T1.4.3 [deploy]: Spike — Keycloak 26 file-based bootstrap/db passwords (2026-07-16)
+- [x] **G1.4: Class B mechanism spikes** — integration test (2026-07-16; PASS: all 3 verdicts WORKS + repro commands recorded in common/openbao/class-b-mechanism-spikes.md)
 
 - [ ] **G1: Fail-closed foundations** — end-to-end test
 
@@ -53,7 +53,7 @@
 - [ ] **G2.4: Backend-admin single KV source of record** — integration test
 
 ### G2.5 [deploy]: Test-user credential — KV for dev/staging, gone from prod
-- [ ] T2.5.1 [deploy]: Skip test-user provisioning when APP_ENV=prod
+- [x] T2.5.1 [deploy]: Skip test-user provisioning when APP_ENV=prod (2026-07-16)
 - [ ] T2.5.2 [deploy]: Seed TEST_USER_PASSWORD (dev; staging via runbook) (depends on T2.1.1)
 - [ ] T2.5.3 [deploy]: Remove TEST_USER_PASSWORD plaintext + env-conditional manifest entry (atomic) (depends on T2.5.1, T2.5.2, T1.3.2)
 - [ ] **G2.5: Test-user credential** — integration test
@@ -143,12 +143,4 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T1.1.1 [deploy]: Required-keys manifest + per-key fail-closed render (no deps)
-- T1.1.2 [deploy]: Unresolved-placeholder guard in template-configs.sh (no deps)
-- T1.1.3 [deploy]: On-disk render-residue hardening (no deps)
-- T1.2.1 [deploy]: ${VAR:?} guards in common/docker-compose.yml (no deps)
-- T1.2.2 [deploy]: ${VAR:?} guards in dev/docker-compose.yml (no deps)
-- T1.4.1 [deploy]: Spike — haisir-postgres POSTGRES_PASSWORD_FILE (no deps)
-- T1.4.2 [deploy]: Spike — chainguard keycloak-db POSTGRES_PASSWORD_FILE (no deps)
-- T1.4.3 [deploy]: Spike — Keycloak 26 file-based passwords (no deps)
-- T2.5.1 [deploy]: Skip test-user provisioning when APP_ENV=prod (no deps)
+- T2.1.1 [deploy]: Flip OPENBAO_DEPLOY_SECRETS=true in all three envs (depends on T1.1.1 ✓, T1.3.1 ✓, T1.3.2 ✓, T1.3.3 ✓)
