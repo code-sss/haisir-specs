@@ -96,8 +96,6 @@
 
 - [x] **G3: Backend fails fast** — end-to-end test (2026-07-15) <!-- Goal test: "Starting the backend with CSRF_SECRET/DATABASE_URL/Keycloak admin env vars unset causes Settings() instantiation to raise immediately at import time; starting it with vault-agent-rendered values present succeeds." Verified BOTH directions by direct reproduction: (1) all 4 vars unset + dotenv disabled -> Settings() raises pydantic.ValidationError; (2) all 4 vars set to valid values -> Settings() constructs successfully. All 6 G3 tasks done (G3.1: T3.1.1+T3.1.2; G3.2: T3.2.1+T3.2.2; G3.3: T3.3.1+T3.3.2). BR-SEC-019 closed: haisir-backend no longer runs with dummy/empty-string secret defaults for CSRF, database, or Keycloak admin credentials. -->
 
-- [ ] **G3: Backend fails fast** — end-to-end test
-
 ## G4: Close-out and merge
 *(entry point T4.1.1 depends on all 7 G2 tasks + all 6 G3 tasks)*
 
@@ -121,31 +119,25 @@
 - [x] **G4.4: Security review pass 2** — integration test (2026-07-15) <!-- Subgoal test: no unresolved finding in any focus area, either repo. Deploy: 1 Low finding, fixed as root cause (TOCTOU). Backend: 1 High finding, fixed as root cause (secret leak via uncaught ValidationError) + regression test added. Both reviews ran independently of T4.3's findings per decisions.md. Both G4.4 children done, zero unresolved findings remain. -->
 
 ### G4.5 [specs]: Close-out documentation
-- [ ] T4.5.1 [specs]: Add progress.md entry for OpenBao cutover (depends on T4.6.1, T4.6.2)
-- [ ] **G4.5: Close-out documentation** — integration test
+- [x] T4.5.1 [specs]: Add progress.md entry for OpenBao cutover (depends on T4.6.1, T4.6.2) (2026-07-15)
+- [x] **G4.5: Close-out documentation** — integration test (2026-07-15) <!-- progress.md snapshot entry added recording the OpenBao cutover and new main baselines (haisir-deploy 613c092, haisir-backend ee3a79e). -->
 
 ### G4.6: Merge to main
-- [ ] T4.6.1 [deploy]: Merge feature/secrets-openbao-v2 → haisir-deploy main (depends on T4.2.1, T4.2.2, T4.3.1, T4.4.1)
-- [ ] T4.6.2 [backend]: Merge backend fail-fast branch → haisir-backend main (depends on T4.3.2, T4.4.2, T4.6.1 [deploy] — backend cannot merge ahead of deploy)
-- [ ] **G4.6: Merge to main** — integration test
+- [x] T4.6.1 [deploy]: Merge feature/secrets-openbao-v2 → haisir-deploy main (depends on T4.2.1, T4.2.2, T4.3.1, T4.4.1) (2026-07-15) <!-- Rebased feature/secrets-openbao-v2 onto main (clean, no conflicts), fast-forwarded main to 613c092, pushed to origin/main. Linear history, no merge commit. -->
+- [x] T4.6.2 [backend]: Merge backend fail-fast branch → haisir-backend main (depends on T4.3.2, T4.4.2, T4.6.1 [deploy] — backend cannot merge ahead of deploy) (2026-07-15) <!-- main already contained the full commit ancestry (rebase no-op), fast-forwarded main to ee3a79e, pushed to origin/main after T4.6.1 landed. -->
+- [x] **G4.6: Merge to main** — integration test (2026-07-15) <!-- Both repos' main now fast-forwarded (no merge commits) and pushed to origin: haisir-deploy a4a88d6->613c092, haisir-backend 3c53b1a->ee3a79e. -->
 
-- [ ] **G4: Close-out and merge** — end-to-end test
+- [x] **G4: Close-out and merge** — end-to-end test (2026-07-15) <!-- All G4 subgoals (G4.1-G4.6) complete. OpenBao secrets phase fully merged to main in both haisir-deploy and haisir-backend. -->
 
-- [ ] **ROOT: OpenBao live as hAIsir's secrets authority** — acceptance test
+- [x] **ROOT: OpenBao live as hAIsir's secrets authority** — acceptance test (2026-07-15) <!-- G1-G4 all complete. OpenBao is live in dev (static seal auto-unseal, mTLS-bound clients, audit logging, dynamic Postgres creds, Ollama keys via templating), haisir-backend fails fast on missing secrets without leaking sibling values, and both feature branches are merged to main. Phase 5.6 (full .env elimination for apisix/keycloak/postgres-server/session/google-oauth) is scoped out as a follow-up phase, not part of this phase's completion criteria. -->
 
 ## Ready now
-Tasks with no pending dependencies — can be started immediately:
-- T4.2.1 [deploy]: Reduce per-env `.env` files to non-secret config only (deps: T4.1.1 ✓ — done 2026-07-15). Scope note: an inventory pass (2026-07-15, during the T4.1.1 mid-course scope discussion) found this phase's OpenBao migration only ever covered `secret/haisir/{backend,worker,db}` — `staging/.env`/`prod/.env` still carry plaintext duplicates of the now-OpenBao-sourced backend/worker keys (`CSRF__SECRET`, `OAUTH__KEYCLOAK__ADMIN_CLIENT_ID`/`_SECRET`, the 4 `*_OLLAMA_API_KEY` vars) — that cleanup is T4.2.1's real scope. apisix/keycloak/postgres-server/pgadmin/session/google-oauth secrets were **never in this phase's scope at all** (no KV paths, no templates exist for them) — carved out to a new Phase 5.6, see `phases.md`. **Still needs your explicit go-ahead before touching real per-env files, per our earlier agreement** — I'll show the diff first.
+No pending tasks — **this phase is complete.**
 
-All of G1, G2, G3 are fully complete. **G4.1 done** (2026-07-15) — combined smoke test found and fixed 2 cross-repo integration gaps (missing vault-agent template coverage for G3's 3 new required fields; a DNS-alias mismatch on the `db` compose service name). **G4.3 done** (2026-07-15) — automated security review: 0 findings backend, 1 finding deploy (static-seal host-compromise risk) formally accepted as documented risk, not a blocker — see decisions.md. **G4.4 done** (2026-07-15) — independent adversarial review, run without reference to G4.3's findings: deploy got 1 Low finding (TOCTOU on `deploy-lib.sh`'s remote `.env.runtime` creation), backend got 1 HIGH finding (pydantic `ValidationError` on a *partial* missing-secret misconfiguration leaks sibling secrets' plaintext values via `e.json()`/into the default uncaught-exception traceback — a genuine diff-introduced regression, since before this diff none of the 4 fields could ever raise `ValidationError`). Both fixed as root cause, not deferred: `deploy-lib.sh` now creates the runtime env file at mode 600 atomically before writing; `haisir-backend`'s `src/shared/config.py` now wraps the module-level `Settings()` singleton in try/except, re-raising with only field names via `RuntimeError(...) from None` (suppresses the secret-laden original exception from the traceback chain) — verified via 3 direct reproductions + a new subprocess-based regression test, full suite 43 passed, ruff+mypy clean. **Both G4.3 and G4.4 ran independently of each other, satisfying the "symmetric depth, not anchored" requirement.** Zero unresolved findings remain across both review passes.
+All of G1-G4 are done, both feature branches merged to `main` and pushed:
+- `haisir-deploy`: `a4a88d6` → `613c092` (fast-forward, no merge commit).
+- `haisir-backend`: `3c53b1a` → `ee3a79e` (fast-forward, no merge commit).
 
-**G4.2 done** (2026-07-15) — see its note above: real `staging`/`prod` `.env` files cleaned, all 9 backend/worker secrets rotated with a live-proven DB-credential rotation (old rejected, new accepted, real app traffic running on the new credential).
+**Scope decision (2026-07-15):** the apisix/keycloak/postgres-server/session/google-oauth secrets gap was deliberately NOT part of this phase — scoped out to **Phase 5.6** (full `.env` elimination, all remaining services) per user direction, inserted between this phase and the existing Phase 6 backlog. See `phases.md` Phase 5.6 entry.
 
-**G4.1, G4.2, G4.3, G4.4 are ALL now done.** Only `G4.6` (merge to main) and `G4.5` (close-out doc, depends on `G4.6`) remain. `T4.6.1` [deploy] deps (`T4.2.1`✓, `T4.2.2`✓, `T4.3.1`✓, `T4.4.1`✓) are all satisfied — **ready now**, blocked only on committing the uncommitted work below and getting explicit user go-ahead to merge (standing policy, not autonomous). `T4.6.2` [backend] then follows once `T4.6.1` lands.
-
-**Scope decision (2026-07-15):** the apisix/keycloak/postgres-server/session/google-oauth secrets gap is deliberately NOT part of this phase — scoped out to **Phase 5.6** (full `.env` elimination, all remaining services) per user direction, inserted between this phase and the existing Phase 6 backlog. See `phases.md` Phase 5.6 entry and the `/plan` prompt saved for that cycle.
-
-**Uncommitted changes, both repos** (not yet committed — this session did live fixes as findings surfaced, per this phase's established root-cause-fix pattern; T4.6.1/T4.6.2 need these committed first):
-- `haisir-deploy` (on `feature/secrets-openbao-v2`): `common/openbao/agent/templates/{backend,worker}.env.ctmpl` + both `.dynamic.ctmpl` (T4.1.1's missing-template-stanza fix), `common/scripts/deploy-lib.sh` (T4.4.1's TOCTOU fix). `dev/.env` and real `staging/.env`/`prod/.env` also have uncommitted T4.2.1/T4.2.2 changes (dev-only `EXTRACTION__MODEL_SPEC` placeholder + Keycloak-admin-creds removal; staging/prod's 9-line secret cleanup) — note per-env `.env` files are typically gitignored in this repo, confirm before assuming these need a commit at all vs. being purely runtime state.
-- `haisir-backend`: the real target is the **`backend` devcontainer** (`/workspaces/haisir-backend`, not the host clone at `/home/gulzar/Workspace/haisir-backend` — skills/tools must run there). `src/shared/config.py` + `tests/unit/shared/test_config.py` are uncommitted there on top of `216d0f4` (T4.4.2's secret-leak fix + regression test, verified passing in-container: 43 tests, ruff+mypy clean).
-- Live dev stack (openbao-dev, haisir-db-dev, vault-agent-backend/worker, haisir-backend-dev, haisir-worker-dev) is running the `openbao-failfast` image built from host-clone commit `216d0f4` — does NOT include the T4.4.2 config.py fix (that fix only exists in the `backend` devcontainer so far, never rebuilt into a running image). Not blocking — T4.4.2 only changes failure-path log hygiene, not anything T4.1.1/T4.2.2 already proved live. Also now running on rotated secrets per T4.2.2.
+Next phase to plan: Phase 5.6, or whatever the user prioritizes next via `/plan`.
