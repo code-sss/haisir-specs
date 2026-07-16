@@ -193,3 +193,20 @@ in `haisir-specs` and `haisir-deploy` (fresh branches, not the stale parked one)
 **Carried forward, unchanged:** everything Phase 5 deferred to Phase 6 (role migration, RAG ops
 backlog, per-child audience scoping, parent-facing hAITU endpoints) — this phase doesn't touch
 that scope, it's inserted ahead of it by explicit priority choice.
+
+---
+
+## Phase 5.6 — Full .env Secrets Elimination (OpenBao, all remaining services) (not yet planned)
+
+> Root goal: every remaining secret-shaped value in `dev/.env`/`staging/.env`/`prod/.env` and
+> their `.env.config.sh` companions — apisix admin key, Keycloak's own bootstrap admin creds +
+> its Postgres DB password, the main Postgres server's own bootstrap password, pgadmin, session
+> secret, CrowdSec bouncer key, Google OAuth client secret — moves onto OpenBao, closing the gap
+> Phase 5.5's root-goal wording claimed but its actual task list never covered (Phase 5.5 only
+> ever migrated `haisir-backend`/`haisir-worker`'s own secrets). Found during Phase 5.5's G4.1
+> combined smoke test (2026-07-15) when the user asked directly whether the full `.env`
+> elimination goal had actually been met — it hadn't. A ready-to-paste `/plan` prompt for this
+> phase (full variable inventory by name, per-service technical constraints, the
+> postgres/keycloak cold-start chicken-and-egg design question) is saved from that session;
+> ask to have it regenerated if not otherwise available. Sits between Phase 5.5 and Phase 6 —
+> does not block or reorder Phase 6's backlog.

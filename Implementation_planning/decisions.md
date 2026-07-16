@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-07-15 — Phase 5.5 G4.3: static-seal host-compromise risk accepted, not redesigned
+
+> Context: `T4.3.1`'s automated `security-review` pass against `haisir-deploy`'s full
+> `feature/secrets-openbao-v2` diff.
+
+**Finding.** The static-seal design (chosen 2026-06-05/07-14, see the entry below) wraps the
+OpenBao master key with a key stored in the `openbao-seal` volume, on the same host as the
+`openbao-data` raft store it protects. Anyone with raw host/Docker-volume-level access (not a
+stolen mTLS cert or OpenBao token — an actual host/VM compromise, root/docker-group access, or a
+disk/snapshot backup that captures both volumes) can offline-decrypt the entire secrets store,
+bypassing the per-identity mTLS + policy ACL model entirely. Verified `common/openbao/backup.sh`
+does NOT compound this — it takes an encrypted `bao operator raft snapshot save` via the API, not
+a raw volume copy, so the project's own backup tooling doesn't accidentally bundle the seal key
+with the data.
+
+**Decision: accept this as an inherent, already-considered trade-off — do not redesign.** This is
+not a bug introduced by the diff; it's the well-known cost of static seal vs. an external KMS or
+the original two-instance transit-unseal design, and the 2026-06-05/07-14 decision to use static
+seal already reasoned through exactly this: "on a single-VM topology the two-instance design added
+a failure mode without adding a real trust boundary (the unseal instance's own keys sit on the
+same host anyway)." Reopening it now would mean redesigning and re-live-testing `G1.2`/`G2.4`
+(the static-seal auto-unseal proof, the single riskiest live-verification item in the whole
+phase) from scratch, this late in close-out, for a risk that was already implicitly accepted when
+static seal was chosen — host-level compromise defeats *any* colocated-key seal design, transit
+or static, on a single-VM topology.
+
+**Follow-up (not a code fix):** add a host-hardening note to the `G4.2` ops runbook — restrict
+host/Docker-volume access on staging/prod to the same tier as direct database-admin access, and
+explicitly exclude `openbao-seal-<env>` from any host-level or disk-snapshot backup scope (only
+`backup.sh`'s API-driven raft snapshot is sanctioned). Revisit an external KMS auto-unseal if/when
+the topology moves beyond a single VM.
+
+---
+
 ## 2026-07-14 — Phase 5.5 plan: OpenBao closeout sequencing (Option 4 hybrid)
 
 > Spec: `target/requirements/13_secrets_management.md`. Plan: `Implementation_planning/PLAN.md` / `TASKS.md` (44 tasks, G1-G4, two challenger rounds). Cross-cutting infra hardening — inserted as Phase 5.5 in `phases.md`, between Phase 5 (just closed) and Phase 6, ahead of the RAG/role-migration backlog by explicit user priority call, not because Phase 6 was blocked.
