@@ -166,7 +166,7 @@ hAITU endpoints (vision §3.5–3.7).
 
 ---
 
-## Phase 5.5 — Secrets Management Closeout (OpenBao) (planned 2026-07-14)
+## Phase 5.5 — Secrets Management Closeout (OpenBao) ✓ (completed 2026-07-15)
 
 > Root goal: OpenBao is live as hAIsir's secrets authority — no plaintext secrets in `.env`/
 > `docker-compose.yml`, machines authenticate by mTLS-bound identity, humans by Keycloak OIDC,
@@ -187,8 +187,11 @@ DAG spine: G1 (21 tasks, parallel) → G2 (hard gate, 7 tasks) → G3 (6 tasks) 
 deploy-before-backend merge order enforced as an explicit dependency). Two challenger rounds run
 on the goal tree (round 1: 2 Blockers + 4 Majors, all resolved; round 2: verified, one item
 downgraded to a documented `<!-- UNRESOLVED -->` limitation). Baseline:
-backend `3c53b1a`, frontend `816194d`, deploy `b8f650d`. Work lands on `feature/secrets-openbao-v2`
-in `haisir-specs` and `haisir-deploy` (fresh branches, not the stale parked one).
+backend `3c53b1a`, frontend `816194d`, deploy `b8f650d`. Work landed on `feature/secrets-openbao-v2`
+in `haisir-specs` and `haisir-deploy` (fresh branches, not the stale parked one), fast-forward
+merged to `main` in all three repos 2026-07-15: backend `ee3a79e`, deploy `613c092`, specs
+`c096504`. Feature branches deleted (local + remote) post-merge. See progress.md's "Phase 5.5"
+completed-phase entry for the full close-out narrative.
 
 **Carried forward, unchanged:** everything Phase 5 deferred to Phase 6 (role migration, RAG ops
 backlog, per-child audience scoping, parent-facing hAITU endpoints) — this phase doesn't touch
