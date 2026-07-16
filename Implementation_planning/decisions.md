@@ -4,6 +4,70 @@
 
 ---
 
+## 2026-07-16 — Phase 5.6 planning: full .env secrets elimination (OpenBao, all remaining services)
+
+> Context: `/plan` cycle for Phase 5.6. Two challenger rounds (round 1 run inline due to a
+> transient subagent-launcher outage — same checklist, findings incorporated; round 2 by
+> independent subagent: READY TO WRITE). Investigation findings below were established by a
+> names/hashes-only sweep of `haisir-deploy` — no secret values were read or printed.
+
+- **The phase activates Phase 5.5's dormant deploy-time mechanism rather than building anything
+  new.** `render-deploy-secrets.sh`, the `OPENBAO_DEPLOY_SECRETS=true` hooks in
+  `env-setup.sh`/`deploy-lib.sh`/`template-configs.sh`, and `deploy.hcl`'s read grants on
+  `secret/haisir/{gateway,keycloak,db,infra,shared}` were all built in 5.5 and never switched on.
+  The plan seeds the paths, wires the two missing provisioning-script hooks (`setup.sh`,
+  `setup-keycloak.sh`), flips the flag, and deletes plaintext — least new moving infrastructure,
+  per the 5.5 static-seal precedent.
+- **Class A before Class B, as graph-enforced hard gates.** Deploy-time templated secrets
+  (`.env.config.sh` class) land and pass a live dev gate (G3) before any cold-start database
+  password (`.env` compose class) moves (G4/G5). Rationale (challenger round on scope options):
+  the highest-blast-radius change must not be the first live test of the dormant mechanism.
+- **Postgres/keycloak chicken-and-egg resolution:** the deploy host renders secrets from OpenBao
+  *before* `docker compose up` (into tmpfs env-files / file-based delivery), with
+  `check_openbao_ready()` gating bring-up — OpenBao becomes cold-start-critical for Keycloak
+  (`KC_DB_PASSWORD` is consulted every boot). Accepted, with a written break-glass runbook
+  (T4.4.1) drilled live under a sealed OpenBao (T5.5). First-init-only semantics
+  (`POSTGRES_PASSWORD`, `KEYCLOAK_POSTGRES_PASSWORD`, `KC_BOOTSTRAP_ADMIN_*`) are documented:
+  KV rotation alone does not rotate live DB auth (ALTER ROLE required, 5.5 T4.2.2 method).
+- **`KC_DB_PASSWORD` ≠ `KEYCLOAK_POSTGRES_PASSWORD` — hash-verified different values, different
+  roles.** The former is Keycloak's DB *client* credential (every boot), the latter the
+  keycloak-db *superuser* bootstrap (first init only). Additionally, no script provisions the
+  `KC_DB_USERNAME` role — live auth is whatever the persisted volume holds. T4.2.1 verifies the
+  live truth before seeding; T4.2.2 closes the provisioning gap.
+- **`KEYCLOAK_BACKEND_ADMIN_CLIENT_ID/_SECRET` is not a legacy duplicate** — it is the
+  provisioning-side (templated into Keycloak client JSON by `setup-keycloak.sh`) of the same
+  logical credential whose runtime side lives in `secret/haisir/backend`. Deduped via a new
+  dedicated `secret/haisir/keycloak-clients` path readable by both `backend` (its own client
+  cred — BR-SEC-014 preserved) and `deploy` (provisioning). Rejected: widening `backend.hcl` to
+  all of `secret/haisir/keycloak` (would expose Class B passwords to backend after G4);
+  rejected: permanent dual-write (ongoing drift failure mode vs one-time plumbing).
+- **Seeding is dev-now; staging/prod seeding is a bring-up runbook.** Staging/prod OpenBao
+  instances have never been brought up, and `render-deploy-secrets.sh` execs into the local
+  `openbao-<env>` container — "seed staging/prod" is not executable today. Accepted consequence,
+  recorded deliberately: once plaintext leaves staging/prod env files, those hosts cannot deploy
+  until their OpenBao is stood up and seeded (fail-loud by design; the required-keys manifest +
+  `${VAR:?}` compose guards make silent-empty-secret states unrepresentable). Same
+  documented-limitation pattern as 5.5's staging/prod verification deferral.
+- **Class B delivery mechanism is decided from spike evidence, not assumption** (T1.4.1–3:
+  does the chainguard-based `haisir-postgres` image honor `POSTGRES_PASSWORD_FILE`; does
+  `cgr.dev/chainguard/postgres`; does Keycloak 26 accept file-based db/bootstrap passwords).
+  Fallback where a spike fails: tmpfs env-file delivery with the docker-inspect exposure
+  accepted as documented risk.
+- **Scope decisions (user-confirmed):** pgadmin credentials OUT of scope (dev-only convenience,
+  absent from staging/prod entirely). `TEST_USER_PASSWORD` migrates to KV for dev/staging, the
+  test user is **no longer provisioned in the prod realm** (setup-keycloak prod-skip guard +
+  one-time manual deletion runbook item), and Jenkins CI keeps its own copy in Jenkins
+  credentials (documented dual-store — Jenkins has no OpenBao identity). `TUNNEL_TOKEN` is IN
+  scope via `secret/haisir/infra` (the render path already reads it — cheaper than documenting
+  an exclusion). Rotation of migrated secrets is *executed* on dev (T6.4, gates the merge), not
+  just documented.
+- **`.templated/<env>/` render residue stays on disk, hardened (0700) and accepted** — moving it
+  to tmpfs would break dev's bind-mount (`dev/docker-compose.yml:102`) and post-reboot restarts;
+  host-disk compromise is already accepted risk per the 2026-07-15 seal-key colocation decision.
+- **Phase 5.5's open T4.2.1 question resolved:** no pull-forward needed — 5.5 already removed the
+  9 backend/worker keys from staging/prod `.env`; this phase's cleanup covers the remaining 4
+  `.env` passwords and 11 `.env.config.sh` secrets as its own scope.
+
 ## 2026-07-15 — Phase 5.5 G4.3: static-seal host-compromise risk accepted, not redesigned
 
 > Context: `T4.3.1`'s automated `security-review` pass against `haisir-deploy`'s full
