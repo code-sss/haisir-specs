@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:ee3a79e frontend:816194d deploy:3abeda3 (2026-07-16)
+> Last baselined: backend:ee3a79e frontend:816194d deploy:9cf91f2 (2026-07-17)
 
 ## G1 [deploy]: Fail-closed foundations
 
@@ -49,7 +49,7 @@
 ### G2.4 [deploy]: Backend-admin client credential has ONE KV source of record
 - [x] T2.4.1 [deploy]: Create keycloak-clients path + policy/render plumbing (depends on T2.1.1) (2026-07-16)
 - [x] T2.4.2 [deploy]: Repoint backend vault-agent template to the single source (depends on T2.4.1) (2026-07-17)
-- [ ] T2.4.3 [deploy]: Remove backend-admin plaintext + manifest entry (atomic) (depends on T2.4.2, T1.3.2)
+- [x] T2.4.3 [deploy]: Remove backend-admin plaintext + manifest entry (atomic) (depends on T2.4.2, T1.3.2) (2026-07-17)
 - [ ] **G2.4: Backend-admin single KV source of record** — integration test
 
 ### G2.5 [deploy]: Test-user credential — KV for dev/staging, gone from prod
@@ -143,4 +143,4 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T2.4.3 [deploy]: Remove backend-admin plaintext + manifest entry (atomic) (depends on T2.4.2 ✓, T1.3.2 ✓) — touches .env.config.sh (the OAUTH__KEYCLOAK__ADMIN_CLIENT_ID/_SECRET pair). After T2.4.3, the G3 gate root T3.1 unblocks (all Class A cutovers T2.2.2/T2.3.2/T2.4.3/T2.5.3/T2.6.2/T2.7.2 + guards T1.2.1/T1.2.2 done).
+- T3.1 [deploy]: Cold fresh-install bring-up on dev (GATE ROOT) (depends on T2.2.2 ✓, T2.3.2 ✓, T2.4.3 ✓, T2.5.3 ✓, T2.6.2 ✓, T2.7.2 ✓, T1.2.1 ✓, T1.2.2 ✓ — all satisfied) — all 6 Class A remove-plaintext cutovers are now done; this is the G3 HARD GATE root (from stopped containers, volumes preserved, run the full dev fresh-install path with `OPENBAO_DEPLOY_SECRETS=true` end-to-end: OpenBao up → render → compose up → provisioning). T3.2–T3.9 all depend on T3.1 and become ready once it passes.
