@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:ee3a79e frontend:816194d deploy:613c092 (2026-07-16)
+> Last baselined: backend:ee3a79e frontend:816194d deploy:3abeda3 (2026-07-16)
 
 ## G1 [deploy]: Fail-closed foundations
 
@@ -20,7 +20,7 @@
 - [x] T1.3.1 [deploy]: setup.sh render hook (depends on T1.1.1) (2026-07-16)
 - [x] T1.3.2 [deploy]: setup-keycloak.sh render hook (depends on T1.1.1) (2026-07-16)
 - [x] T1.3.3 [deploy]: APISIX helper-script key-inheritance audit/hook (depends on T1.3.1) (2026-07-16)
-- [ ] **G1.3: Every provisioning entry point can render from KV** — integration test (BLOCKED: requires live dev KV via working deploy cert-auth — the pre-existing cert-auth 403 / T2.1.1-G3 blocker. All 3 children's hook code is validated hermetically + via live fail-closed; the full e2e "setup.sh --wait / setup-keycloak.sh complete under OPENBAO_DEPLOY_SECRETS=true" test cannot run until cert-auth is fixed)
+- [ ] **G1.3: Every provisioning entry point can render from KV** — integration test (RE-VERIFIED 2026-07-16: the prior "403" was a `bao read` probe hitting the v1 endpoint `/v1/secret/haisir/X` instead of the KV-v2 `data/` endpoint the render code uses (`bao kv get`). ⚠ OpenBao does NOT do implicit cert-auth: a cert-only `bao kv get` (no token) 403s. RENDER-AUTH GAP — FIXED 2026-07-16: `render-deploy-secrets.sh` now acquires a deploy token via `bao login -method=cert name=deploy` (captured from `-format=json`, forwarded by name `-e BAO_TOKEN` so it never hits argv/ps) before the kv reads — mirroring the agents' auto_auth. Verified live from a fresh state (no cached `~/.bao_token`): render emits all 15 keys across db/keycloak/gateway/infra/shared/keycloak-clients, exit 0; unreachable container fails closed with a clear message, exit 1. All 3 children's hook code validated hermetically + live fail-closed. Remaining: run the full e2e `setup.sh --wait` + `setup-keycloak.sh` under `OPENBAO_DEPLOY_SECRETS=true`.)
 
 ### G1.4 [deploy]: Class B mechanism spikes (pre-decision, load-bearing)
 - [x] T1.4.1 [deploy]: Spike — haisir-postgres POSTGRES_PASSWORD_FILE support (2026-07-16)
@@ -33,39 +33,39 @@
 ## G2 [deploy]: Class A secrets from KV (dev-seeded; staging/prod via bring-up runbook)
 
 ### G2.1 [deploy]: Render activation
-- [ ] T2.1.1 [deploy]: Flip OPENBAO_DEPLOY_SECRETS=true in all three envs (depends on T1.1.1, T1.3.1, T1.3.2, T1.3.3)
+- [x] T2.1.1 [deploy]: Flip OPENBAO_DEPLOY_SECRETS=true in all three envs (depends on T1.1.1, T1.3.1, T1.3.2, T1.3.3) (2026-07-16)
 - [ ] **G2.1: Render activation** — integration test
 
 ### G2.2 [deploy]: Gateway secrets from KV
-- [ ] T2.2.1 [deploy]: Seed secret/haisir/gateway (dev; env-agnostic helper) (depends on T2.1.1)
-- [ ] T2.2.2 [deploy]: Remove gateway plaintext + manifest entry (atomic) (depends on T2.2.1, T1.1.2, T1.1.3)
+- [x] T2.2.1 [deploy]: Seed secret/haisir/gateway (dev; env-agnostic helper) (depends on T2.1.1) (2026-07-16)
+- [x] T2.2.2 [deploy]: Remove gateway plaintext + manifest entry (atomic) (depends on T2.2.1, T1.1.2, T1.1.3) (2026-07-17)
 - [ ] **G2.2: Gateway secrets from KV** — integration test
 
 ### G2.3 [deploy]: Keycloak realm/OIDC secrets from KV
-- [ ] T2.3.1 [deploy]: Seed keycloak path — OIDC trio (dev) (depends on T2.1.1)
-- [ ] T2.3.2 [deploy]: Remove OIDC-trio plaintext + manifest entry (atomic) (depends on T2.3.1, T1.1.2)
+- [x] T2.3.1 [deploy]: Seed keycloak path — OIDC trio (dev) (depends on T2.1.1) (2026-07-16)
+- [x] T2.3.2 [deploy]: Remove OIDC-trio plaintext + manifest entry (atomic) (depends on T2.3.1, T1.1.2) (2026-07-17)
 - [ ] **G2.3: Keycloak realm/OIDC secrets from KV** — integration test
 
 ### G2.4 [deploy]: Backend-admin client credential has ONE KV source of record
-- [ ] T2.4.1 [deploy]: Create keycloak-clients path + policy/render plumbing (depends on T2.1.1)
-- [ ] T2.4.2 [deploy]: Repoint backend vault-agent template to the single source (depends on T2.4.1)
+- [x] T2.4.1 [deploy]: Create keycloak-clients path + policy/render plumbing (depends on T2.1.1) (2026-07-16)
+- [x] T2.4.2 [deploy]: Repoint backend vault-agent template to the single source (depends on T2.4.1) (2026-07-17)
 - [ ] T2.4.3 [deploy]: Remove backend-admin plaintext + manifest entry (atomic) (depends on T2.4.2, T1.3.2)
 - [ ] **G2.4: Backend-admin single KV source of record** — integration test
 
 ### G2.5 [deploy]: Test-user credential — KV for dev/staging, gone from prod
 - [x] T2.5.1 [deploy]: Skip test-user provisioning when APP_ENV=prod (2026-07-16)
-- [ ] T2.5.2 [deploy]: Seed TEST_USER_PASSWORD (dev; staging via runbook) (depends on T2.1.1)
-- [ ] T2.5.3 [deploy]: Remove TEST_USER_PASSWORD plaintext + env-conditional manifest entry (atomic) (depends on T2.5.1, T2.5.2, T1.3.2)
+- [x] T2.5.2 [deploy]: Seed TEST_USER_PASSWORD (dev; staging via runbook) (depends on T2.1.1) (2026-07-16)
+- [x] T2.5.3 [deploy]: Remove TEST_USER_PASSWORD plaintext + env-conditional manifest entry (atomic) (depends on T2.5.1, T2.5.2, T1.3.2) (2026-07-17)
 - [ ] **G2.5: Test-user credential** — integration test
 
 ### G2.6 [deploy]: Keycloak admin password sourced from KV (provisioning side)
-- [ ] T2.6.1 [deploy]: Seed KEYCLOAK_ADMIN_PASSWORD (dev, live-verified value) (depends on T2.1.1)
-- [ ] T2.6.2 [deploy]: Remove KEYCLOAK_ADMIN_PASSWORD from .env.config.sh + manifest (atomic) (depends on T2.6.1, T1.3.2)
+- [x] T2.6.1 [deploy]: Seed KEYCLOAK_ADMIN_PASSWORD (dev, live-verified value) (depends on T2.1.1) (2026-07-16)
+- [x] T2.6.2 [deploy]: Remove KEYCLOAK_ADMIN_PASSWORD from .env.config.sh + manifest (atomic) (depends on T2.6.1, T1.3.2) (2026-07-17)
 - [ ] **G2.6: Keycloak admin password (provisioning side)** — integration test
 
 ### G2.7 [deploy]: Tunnel token sourced from KV
-- [ ] T2.7.1 [deploy]: Seed secret/haisir/infra TUNNEL_TOKEN (dev) (depends on T2.1.1)
-- [ ] T2.7.2 [deploy]: cftunnel render wrapper + plaintext removal (atomic) (depends on T2.7.1)
+- [x] T2.7.1 [deploy]: Seed secret/haisir/infra TUNNEL_TOKEN (dev) (depends on T2.1.1) (2026-07-16)
+- [x] T2.7.2 [deploy]: cftunnel render wrapper + plaintext removal (atomic) (depends on T2.7.1) (2026-07-17)
 - [ ] **G2.7: Tunnel token sourced from KV** — integration test
 
 - [ ] **G2: Class A secrets from KV** — end-to-end test
@@ -143,4 +143,4 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T2.1.1 [deploy]: Flip OPENBAO_DEPLOY_SECRETS=true in all three envs (depends on T1.1.1 ✓, T1.3.1 ✓, T1.3.2 ✓, T1.3.3 ✓)
+- T2.4.3 [deploy]: Remove backend-admin plaintext + manifest entry (atomic) (depends on T2.4.2 ✓, T1.3.2 ✓) — touches .env.config.sh (the OAUTH__KEYCLOAK__ADMIN_CLIENT_ID/_SECRET pair). After T2.4.3, the G3 gate root T3.1 unblocks (all Class A cutovers T2.2.2/T2.3.2/T2.4.3/T2.5.3/T2.6.2/T2.7.2 + guards T1.2.1/T1.2.2 done).
