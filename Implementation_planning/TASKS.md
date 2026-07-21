@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:ee3a79e frontend:816194d deploy:5a1a661 (2026-07-21)
+> Last baselined: backend:ee3a79e frontend:816194d deploy:f68a47e (2026-07-21)
 
 ## G1 [deploy]: Fail-closed foundations
 
@@ -128,7 +128,7 @@
 
 ## G6: Close-out — reviews, rotation, docs, merge
 
-- [ ] T6.1 [deploy]: Security review pass 1 (automated) (depends on T5.1–T5.7)
+- [x] T6.1 [deploy]: Security review pass 1 (automated) (depends on T5.1–T5.7) (2026-07-21: DONE. `common/openbao/security-review-pass1.md` added — full Phase 5.6 diff (`613c092..HEAD`, the deploy baseline SHA recorded in PLAN.md's own plan-baseline comment, through G1-G5) reviewed via a 3-step identify-then-filter-false-positives sub-agent process (the `/security-review` skill's own default scoping only covers the last 2 commits vs. `origin/main`, so the full-phase methodology was applied manually against the correct range). 3 candidates found, all independently fact-checked against the actual repo files and this project's threat model, all assessed FALSE_POSITIVE: (1) vault-agent keycloak/keycloak-db policy path-wide read — confirmed as the same accepted per-service-path convention already used by every other identity this phase (OpenBao KV has no sub-key ACLs); (2) `KC_DB_USERNAME`==bootstrap-superuser coincidence in `env-setup.sh`'s role-provisioning step — real and already-tracked (T4.2.1/T4.2.2), but an operator's own authorized action on infrastructure they fully control, not a privilege/access-control vulnerability — noted for T6.3's rotation runbook; (3) live secrets in `curl` argv in 3 new G3 test scripts — real inconsistency with this phase's own argv-avoidance pattern, but no attacker exists on the single-tenant dev/deploy host these one-off operator-invoked scripts run on. Zero unaddressed findings — T6.1's done-when criterion met.)
 - [ ] T6.2 [deploy]: Security review pass 2 (independent adversarial) (depends on T6.1)
 - [ ] T6.3 [deploy]: Ops/rotation runbook additions — 7 items (depends on T5.1, T5.5)
 - [ ] T6.4 [deploy]: Execute rotation of migrated secrets (dev) (depends on T6.3, T5.7)
@@ -143,9 +143,9 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T6.1 [deploy]: Security review pass 1 (automated) (depends on T5.1–T5.7 ✓)
+- T6.2 [deploy]: Security review pass 2 (independent adversarial) (depends on T6.1 ✓)
 - T6.3 [deploy]: Ops/rotation runbook additions (depends on T5.1 ✓, T5.5 ✓)
 - T6.5 [specs]: decisions.md entry for Phase 5.6 (depends on T4.1.1 ✓, T4.2.1 ✓, T5.3 ✓, T5.5 ✓)
 - T6.8 [specs]: 13_secrets_management.md KV-table audit (depends on T4.3.9 ✓, T2.7.2 ✓)
 
-**G5 (HARD GATE — Class B live verification) passed 2026-07-21** — all 7 tasks (T5.1–T5.7) done; see G5's own summary above. This unblocks G6's close-out phase: reviews, rotation, docs, merge. T6.2/T6.4/T6.9 still wait on T6.1/T6.3; T6.6/T6.7 wait on T6.9.
+**T6.1 (security review pass 1) passed 2026-07-21** — zero unaddressed findings, see its own note above. This unblocks T6.2. T6.4/T6.9 still wait on T6.3 (and T6.2/T6.1 for T6.9); T6.6/T6.7 wait on T6.9.
