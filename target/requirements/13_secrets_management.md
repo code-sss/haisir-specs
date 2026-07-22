@@ -4,7 +4,7 @@
 >
 > Implementation lives in `haisir-deploy/common/openbao/` (+ `common/scripts/certs/generate-certs-openbao.sh`). Backend integration is a single `SETTINGS_ENV_FILE` seam in `haisir-backend/src/shared/config.py`.
 >
-> **Status note (2026-07-14):** originally designed and Phase-0–4 coded on `feature/secrets-management-openbao` in `haisir-deploy` (2026-06-05), never merged to `main`. This spec is landing now, retroactively, ahead of a "Phase 5.5 — Secrets Management Closeout" plan cycle that will reconcile that branch against 5+ weeks of `main` drift rather than rebase it wholesale. Two design deltas from the original branch, found during a design-validation pass on 2026-07-14, will be applied during that closeout rather than reflected here yet: (1) pin/upgrade to OpenBao ≥ v2.5.5 for CVE-2025-54996 (namespace-path privilege escalation, patched 2026-06-17); (2) replace the two-instance transit-auto-unseal design below with OpenBao's built-in **static seal** (`file://`-sourced key, same-host, rotation supported) — functionally equivalent on a single-VM topology with one fewer always-on service.
+> **Status note (2026-07-21):** OpenBao is now the secrets authority for **every** secret-shaped value across all three environments' `.env`/`.env.config.sh` files — Phase 5.5 (completed 2026-07-15) migrated `haisir-backend`/`haisir-worker`'s own secrets plus the two design deltas below; Phase 5.6 (completed 2026-07-21) closed the remaining gap Phase 5.5's root-goal wording claimed but never covered: gateway (APISIX admin key, session secret, CrowdSec key), the Keycloak OIDC trio + admin password, the backend-admin client credential (deduped into its own `keycloak-clients` path), the test-user credential, the Cloudflare tunnel token, and the three cold-start database passwords (`db`, `keycloak-db`, `keycloak`). See `Implementation_planning/decisions.md` (2026-07-16 planning entry, 2026-07-21 close-out entry) and `phases.md` for the full record. The two design deltas applied during the 5.5 closeout: (1) OpenBao pinned to ≥ v2.6.0 for CVE-2025-54996 (namespace-path privilege escalation, patched 2026-06-17); (2) the two-instance transit-auto-unseal design below was replaced with OpenBao's built-in **static seal** (`file://`-sourced key, same-host, rotation supported) — functionally equivalent on a single-VM topology with one fewer always-on service, live-proven via `docker restart` + poll with zero manual unseal calls.
 
 ---
 
@@ -49,13 +49,17 @@ Machines (mTLS client cert)─►  OpenBao    │   (self-unseals via static sea
 |---|---|---|---|
 | backend | `openbao-client-backend` | `backend` | `secret/haisir/backend`, `secret/haisir/shared`, `database/creds/haisir-backend` |
 | worker | `openbao-client-worker` | `worker` | `secret/haisir/worker`, `secret/haisir/shared`, `database/creds/haisir-worker` |
-| deploy | `openbao-client-deploy` | `deploy` | `secret/haisir/{gateway,keycloak,db,infra,shared}` (read-only, for templating + compose vars) |
+| deploy | `openbao-client-deploy` | `deploy` | `secret/haisir/{gateway,keycloak,db,infra,shared,keycloak-clients}` (read-only, for templating + compose vars) |
+| db | `openbao-client-db` | `db` | `secret/haisir/db` (`POSTGRES_PASSWORD`, via `vault-agent-db` → `POSTGRES_PASSWORD_FILE`) — added Phase 5.6 |
+| keycloak-db | `openbao-client-keycloak-db` | `keycloak-db` | `secret/haisir/keycloak` (`KEYCLOAK_POSTGRES_PASSWORD`, via `vault-agent-keycloak-db` → `POSTGRES_PASSWORD_FILE`) — added Phase 5.6 |
+| keycloak | `openbao-client-keycloak` | `keycloak` | `secret/haisir/keycloak` (`KC_DB_PASSWORD`, `KC_BOOTSTRAP_ADMIN_PASSWORD`, via `vault-agent-keycloak` → rendered `keycloak.conf`, zero password env vars) — added Phase 5.6 |
+| admin-ops (human) | `openbao-client-admin-ops` | `admin` | mTLS identity for OpenBao's OIDC human-admin login path (minted Phase 5.6 T6.4 — the documented flow had no cert-bound identity to use before this) |
 
-The OpenBao listener sets `tls_require_and_verify_client_cert = true` — no CA-signed client cert ⇒ TLS handshake fails before any token is presented.
+The OpenBao listener sets `tls_require_and_verify_client_cert = true` — no CA-signed client cert ⇒ TLS handshake fails before any token is presented. `db`/`keycloak-db`/`keycloak` policies grant path-wide read on their target path rather than per-key scoping (OpenBao KV has no sub-key ACLs) — the same convention every identity above uses; reconfirmed accepted by both Phase 5.6 security review passes.
 
 ### KV layout (KV v2 at `secret/`, per-env instance — not env-namespaced)
 
-`secret/haisir/{backend,worker,shared,db,keycloak,gateway,infra}` — see `haisir-deploy/common/openbao/README.md` for the key-by-path table. **Not yet audited against `main`'s current secret inventory** — `EMBEDDING__OLLAMA_API_KEY`, `HAITU__OLLAMA_API_KEY`, and `GRADING__OLLAMA_API_KEY` were added to `common/docker-compose.yml` after this branch was built and are not yet in this layout or the Vault Agent templates; closing that gap is in-scope for the Phase 5.5 closeout.
+`secret/haisir/{backend,worker,shared,db,keycloak,gateway,infra,keycloak-clients}` — see `haisir-deploy/common/openbao/README.md` for the key-by-path table. **Fully audited against `main`'s secret inventory as of Phase 5.6 close (2026-07-21)** — every secret-shaped value across `{dev,staging,prod}/{.env,.env.config.sh}` and `other/services/cftunnel/.env` is now sourced from one of these paths; a `full-plaintext-elimination-scan.sh` (added Phase 5.6 T5.7) asserts zero migrated-key-name residue by name across all three environments. `secret/haisir/keycloak-clients` is new this phase — a dedicated path deduping the backend-admin Keycloak client credential's provisioning-side and runtime-side copies into one KV source of record, readable by both `deploy` and `backend`. pgadmin credentials remain out of scope by deliberate decision (dev-only convenience, absent from staging/prod entirely).
 
 ---
 
@@ -69,7 +73,7 @@ The OpenBao listener sets `tls_require_and_verify_client_cert = true` — no CA-
 - **BR-SEC-016 — Self-unseal, bounded secret-zero.** The main server self-unseals without a cloud KMS or human keys on restart, via OpenBao's static seal (a `file://`-sourced key on the same host, rotation supported) rather than a second transit-unseal instance (superseding the original two-instance design — see status note). The residual secret-zero is that static key file (root-only permissions, never in compose env) plus the Shamir/recovery keys generated at init (held offline).
 - **BR-SEC-017 — Dynamic DB credentials (Phase 3).** Backend/worker SHOULD obtain Postgres credentials from the database secrets engine (`database/creds/*`) as short-lived leases rather than a static `DATABASE_URL` password. Static KV secrets have a documented rotation procedure.
 - **BR-SEC-018 — Recovery material handling.** Init output (recovery keys, root token) is written to gitignored `.bootstrap-out/<env>/` with `600`, MUST be moved offline, and MUST never be committed.
-- **BR-SEC-019 — Fail-safe app startup.** The backend reads secrets from the Agent-rendered env file via `SETTINGS_ENV_FILE`; the Agent MUST have rendered the file before the app boots. If required secrets are absent, the app fails to start (no silent fallback to dummy defaults). **Not yet implemented** — `haisir-backend/src/shared/config.py` still has `default="dummy"` on secret fields as of 2026-07-14; this is unstarted work, not a partial, per the Phase 5.5 closeout audit.
+- **BR-SEC-019 — Fail-safe app startup.** The backend reads secrets from the Agent-rendered env file via `SETTINGS_ENV_FILE`; the Agent MUST have rendered the file before the app boots. If required secrets are absent, the app fails to start (no silent fallback to dummy defaults). **Implemented (Phase 5.5, 2026-07-15)** — `CSRFSettings.secret`, `Settings.database_url`, and `OAuthSettings.keycloak.admin_client_id`/`admin_client_secret` lost their `dummy`/empty-string defaults; `Settings()` raises `pydantic.ValidationError` immediately at import time if any are unset, with the module-level singleton wrapped to re-raise only field-path names (not sibling plaintext values — a partial-misconfiguration leak an adversarial review caught and fixed). Phase 5.6 extended the same fail-closed posture to deploy-side rendering: a per-key required-keys manifest + `${VAR:?}` compose guards (Class A), and vault-agent healthcheck + `service_healthy` gating (Class B, `db`/`keycloak-db`/`keycloak`).
 
 ---
 
@@ -82,10 +86,11 @@ The OpenBao listener sets `tls_require_and_verify_client_cert = true` — no CA-
 | 2 | deploy | `template-configs.sh`/`deploy.sh` source secrets from OpenBao; `.env*` reduced to non-secret config |
 | 3 | deploy + DB | Postgres dynamic-secrets engine; rotation of all existing secrets at cutover |
 | 4 | deploy + specs | DR/backup runbook, audit shipping/retention, this spec + decisions entry |
-| 5.5 (closeout) | deploy + backend + specs | Reconcile Phase 0–4 code against current `main`; static-seal migration + version pin; new-secret inventory audit; BR-SEC-019 fail-fast; first live smoke test; security review gate |
-| future | — | SPIFFE/SPIRE workload attestation when scaling past one VM |
+| 5.5 (closeout) ✓ | deploy + backend + specs | Reconcile Phase 0–4 code against current `main`; static-seal migration + version pin; new-secret inventory audit; BR-SEC-019 fail-fast; first live smoke test; security review gate — completed 2026-07-15, scoped to `secret/haisir/{backend,worker,db}` |
+| 5.6 (full elimination) ✓ | deploy + specs | Every remaining plaintext secret (apisix/keycloak/db/keycloak-db/gateway/infra/keycloak-clients) migrated to KV; two hard-gate live-verification rounds (Class A, Class B); two independent security review passes; rotation executed live on dev — completed 2026-07-21 |
+| future | — | Staging/prod OpenBao bring-up + seeding (runbook exists, execution deferred until those environments are stood up); SPIFFE/SPIRE workload attestation when scaling past one VM |
 
-Task breakdown for the closeout: `Implementation_planning/PLAN.md` / `TASKS.md` (Phase 5.5, once written). Original decision record: `Implementation_planning/decisions.md` (2026-06-05, landed retroactively 2026-07-14).
+Task breakdown: `Implementation_planning/TASKS.md` (Phase 5.5 G1–G4, Phase 5.6 G1–G6 — both archived in-place, not moved to `archive/`). Decision records: `Implementation_planning/decisions.md` (2026-06-05 original design, landed retroactively 2026-07-14; 2026-07-16 Phase 5.6 planning; 2026-07-21 Phase 5.6 close-out).
 
 ---
 

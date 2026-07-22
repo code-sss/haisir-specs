@@ -199,30 +199,44 @@ that scope, it's inserted ahead of it by explicit priority choice.
 
 ---
 
-## Phase 5.6 — Full .env Secrets Elimination (OpenBao, all remaining services) (planned 2026-07-16, in progress)
+## Phase 5.6 — Full .env Secrets Elimination (OpenBao, all remaining services) ✓ (completed 2026-07-21)
 
 > Root goal: every remaining secret-shaped value in `{dev,staging,prod}/{.env,.env.config.sh}`
 > is sourced from OpenBao KV, not plaintext — closing the gap Phase 5.5's root-goal wording
 > claimed but its task list never covered (5.5 only migrated `haisir-backend`/`haisir-worker`'s
-> own secrets). Found during Phase 5.5's G4.1 combined smoke test (2026-07-15). Sits between
-> Phase 5.5 and Phase 6 — does not block or reorder Phase 6's backlog.
+> own secrets). Found during Phase 5.5's G4.1 combined smoke test (2026-07-15). Sat between
+> Phase 5.5 and Phase 6 — did not block or reorder Phase 6's backlog.
 
 Planned via `/plan` on 2026-07-16 (two challenger rounds) — full goal tree in `PLAN.md`,
-checkboxes in `TASKS.md`, planning decisions in `decisions.md` (2026-07-16 entry).
+checkboxes in `TASKS.md`, planning decisions in `decisions.md` (2026-07-16 entry, close-out
+decisions in the 2026-07-21 entry).
 
-| Goal | Scope |
-|---|---|
-| G1 [deploy] | Fail-closed foundations: per-key fail-closed render manifest, `${VAR:?}` compose guards, render hooks for `setup.sh`/`setup-keycloak.sh`, 3 Class-B mechanism spikes |
-| G2 [deploy] | Class A cutover (`.env.config.sh` secrets → KV, per-path atomic): gateway (APISIX admin key, session secret, CrowdSec key), OIDC trio, backend-admin dedup via new `secret/haisir/keycloak-clients`, test user (dropped from prod realm), Keycloak admin pw (provisioning side), tunnel token |
-| G3 [deploy] | **HARD GATE** — Class A live verification on dev (9 tasks incl. both render code paths) |
-| G4 [deploy] | Class B cutover (`.env` cold-start passwords → KV): spike-based per-service mechanism, KC_DB auth-truth verification + role-provisioning fix, db/keycloak-db/keycloak cutovers, rollback runbook |
-| G5 [deploy] | **HARD GATE** — Class B live verification on dev (preserved + fresh volumes, docker-inspect check, sealed-OpenBao fail-loud + break-glass drill) |
-| G6 [deploy][specs] | 2 independent security reviews, ops/rotation runbook, rotation executed on dev, specs updates, merge to `haisir-deploy` main |
+| Goal | Scope | Outcome |
+|---|---|---|
+| G1 [deploy] | Fail-closed foundations: per-key fail-closed render manifest, `${VAR:?}` compose guards, render hooks for `setup.sh`/`setup-keycloak.sh`, 3 Class-B mechanism spikes | ✓ all 3 spikes returned WORKS |
+| G2 [deploy] | Class A cutover (`.env.config.sh` secrets → KV, per-path atomic): gateway (APISIX admin key, session secret, CrowdSec key), OIDC trio, backend-admin dedup via new `secret/haisir/keycloak-clients`, test user (dropped from prod realm), Keycloak admin pw (provisioning side), tunnel token | ✓ all 7 sub-goals cut over |
+| G3 [deploy] | **HARD GATE** — Class A live verification on dev (9 tasks incl. both render code paths) | ✓ passed; 3 pre-existing environment bugs found + fixed as root cause (stale image tag, unwired `SECURITY__FORCE_HTTPS`, disjoint Docker networks — network fix a live workaround only, compose file left unchanged) |
+| G4 [deploy] | Class B cutover (`.env` cold-start passwords → KV): spike-based per-service mechanism, KC_DB auth-truth verification + role-provisioning fix, db/keycloak-db/keycloak cutovers, rollback runbook | ✓ all 13 sub-tasks; delivery mechanism is vault-agent sidecars rendering `POSTGRES_PASSWORD_FILE`/`keycloak.conf`, not `${VAR:?}` guards (goal-test wording correction recorded in decisions.md) |
+| G5 [deploy] | **HARD GATE** — Class B live verification on dev (preserved + fresh volumes, docker-inspect check, sealed-OpenBao fail-loud + break-glass drill) | ✓ passed; found + fixed a missing `group_add` on the `keycloak` service (first-ever real boot of common-project Keycloak in this sandbox) |
+| G6 [deploy][specs] | 2 independent security reviews, ops/rotation runbook, rotation executed on dev, specs updates, merge to `haisir-deploy` main | ✓ pass 2 (adversarial) found + fixed a real gap pass 1 missed (unguarded Class B templates could render `<no value>` as a live DB password); 10 secret categories rotated live on dev; no separate branch existed to merge — all work landed as direct commits to `main` |
 
-DAG spine: `G1 → G2 → G3 (gate) → G4 → G5 (gate) → G6`. 64 tasks (60 [deploy], 4 [specs]).
+DAG spine: `G1 → G2 → G3 (gate) → G4 → G5 (gate) → G6`. 64 tasks (60 [deploy], 4 [specs]) — all
+[deploy] tasks complete; the 4 [specs] tasks (this file, `progress.md`, `decisions.md`,
+`13_secrets_management.md`) closed out the phase.
 Scope locks: pgadmin excluded (dev-only); `TEST_USER_PASSWORD` → KV dev/staging + prod realm
 drop + Jenkins dual-store; staging/prod KV seeding AND live verification deferred to their
 OpenBao bring-up (runbook, fail-closed until then — 5.5 deferral precedent); no OpenBao
 redesign; Phase 6 backlog untouched.
 
+**Carried forward as open follow-ups (not fixed this phase, deliberately scoped out of a
+secrets-only closeout):** `common/scripts/setup.sh` checks `APISIX_ADMIN_KEY` non-empty before
+running its own OpenBao render hook — fails under `set -u` on a standalone invocation now that
+the plaintext fallback is gone; `common/docker-compose.yml`'s hardcoded external network name
+(`haisir-net`) diverges from the documented dev setup (`haisir-net-dev`), leaving the dev stack
+and the `common` project on disjoint Docker networks by default. Both are real, pre-existing gaps
+surfaced by this phase's hard gates — worth their own follow-up task whenever deploy work next
+touches those files.
+
 Baseline at planning: backend `ee3a79e`, frontend `816194d`, deploy `613c092`.
+Baseline at close: backend `ee3a79e` (unchanged — no backend work this phase), frontend
+`816194d` (unchanged), deploy `b52ec74`.

@@ -4,6 +4,89 @@
 
 ---
 
+## 2026-07-21 — Phase 5.6 close-out: full .env secrets elimination (OpenBao, all remaining services)
+
+> Context: G3/G5 hard-gate live verification, two security review passes, rotation execution, and
+> merge for the 2026-07-16 plan below. All work landed as direct commits to `haisir-deploy` `main`
+> (no separate phase branch was ever created — `feature/secrets-management-openbao` is the stale
+> Phase 5.5 branch, already fully merged). Final baseline: backend `ee3a79e` (unchanged — no
+> backend work this phase), frontend `816194d` (unchanged), deploy `b52ec74`.
+
+- **Class B's fail-closed mechanism is healthcheck-gated, not `${VAR:?}`-guarded — a deliberate
+  divergence from G1.2's pattern, not a regression.** T4.1.1's spike-driven decision delivers
+  `db`/`keycloak-db`/`keycloak` passwords via vault-agent sidecars rendering `POSTGRES_PASSWORD_FILE`
+  / `keycloak.conf`, so none of `POSTGRES_PASSWORD`, `KEYCLOAK_POSTGRES_PASSWORD`,
+  `KC_DB_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD` carry a compose-level `:?` guard anymore — fail-closed
+  now lives in the vault-agent's own `test -s /secrets/...` healthcheck plus
+  `depends_on: condition: service_healthy`, which blocks the consumer from ever starting if
+  OpenBao/KV is unreachable. Found live at G4's own end-to-end test (`docker compose config`
+  unexpectedly exiting 0): the goal-test wording inherited from G1.2 no longer describes the
+  chosen mechanism. Recorded here rather than silently "fixed" so a future reader isn't misled by
+  stale test prose; `13_secrets_management.md` (T6.8) reflects the mechanism, not the old guard.
+- **Adversarial security review (pass 2) found and fixed a real gap pass 1 missed: unguarded
+  Class B templates could render a literal `<no value>` string as a live database password.**
+  `postgres-password.ctmpl` / `keycloak-postgres-password.ctmpl` lacked the `{{if}}` guard sibling
+  `keycloak.conf.ctmpl` already had; a missing/typo'd KV key would render a 10-byte non-empty file
+  that passed the `test -s` healthcheck, meaning `db`/`keycloak-db` could boot with the string
+  `<no value>` as their real password. Reproduced empirically (real `bao server -dev` + `bao agent`
+  harness), fixed by adding the same guard, re-verified (missing key → 0-byte file → healthcheck
+  correctly fails). Committed `ccf52e2`. Confirms the two-independent-pass review structure
+  (5.5's own precedent) is pulling its weight — pass 1 rated this area clean.
+- **Two known-but-accepted findings carried from both review passes, not fixed:** (1) `keycloak`/
+  `keycloak-db` vault-agent policies grant path-wide read on `secret/haisir/keycloak` (7 keys)
+  though each identity needs 1–2 — the same per-service-path KV-granularity convention every
+  other identity in this phase already uses (OpenBao KV has no sub-key ACLs); now independently
+  reconfirmed by two separate reviews rather than newly found. (2) `KC_DB_USERNAME` coincides with
+  `postgres-dev`'s bootstrap superuser in this dev config (T4.2.1/T4.2.2) — a real gap, but an
+  operator's own authorized action on infrastructure they fully control, not an access-control
+  vulnerability; the CREATE-ROLE cold path (vs. the ALTER-ROLE path dev's values happen to hit)
+  remains unexercised and is flagged for whoever eventually differentiates the values.
+- **Three environment bugs unrelated to secrets were surfaced by the hard gates and fixed as root
+  cause, per this phase's own precedent of not deferring what a live gate finds** (G3/T3.1, T3.4;
+  G5/T5.1): a stale 7-month-old image tag in `dev/.env.config.sh` pointed at a build lacking the
+  `worker` module; `SECURITY__FORCE_HTTPS` was never wired into `common/docker-compose.yml`'s
+  `backend` environment (pydantic default `true` unconditionally 301-redirected plain HTTP);
+  `common/docker-compose.yml`'s `keycloak` service was missing `group_add: ["1000"]` — Keycloak's
+  actual image runs uid 1000 with primary gid 0, not gid 1000 as assumed when T4.3.8 set the
+  rendered `keycloak.conf` to `0640`/gid-1000, so the container crash-looped on its first-ever real
+  boot in this sandbox until fixed (mirrors the same fix already applied to `db`/`keycloak-db`).
+- **Two environment gaps found but deliberately left open, not fixed this phase — both pre-existing,
+  neither caused by this migration:** `common/docker-compose.yml:653` hardcodes the external Docker
+  network name `haisir-net`, diverging from the documented dev setup (`haisir-net-dev`), so the
+  `dev/docker-compose.yml` stack and the `common` project sit on disjoint networks by default —
+  worked around live via `docker network connect` (reversible, not committed) rather than editing
+  the compose file, since network-topology changes were judged out of this phase's secrets-only
+  scope. `common/scripts/setup.sh` checks `APISIX_ADMIN_KEY` is non-empty *before* it runs its own
+  OpenBao render hook — under `set -u` this makes standalone `setup.sh` invocation fail with
+  "unbound variable" now that the Class A plaintext fallback is gone; worked around per-invocation
+  by manually sourcing the render hook first. Both are real, worth their own follow-up tasks
+  whenever deploy work next touches those files — not folded into this phase to avoid scope creep
+  on a hard-gate-driven closeout.
+- **`common`-project Keycloak/keycloak-db could only be verified within this dev sandbox's
+  container-name collision with `dev/docker-compose.yml`'s own running `keycloak-dev`/`postgres-dev`.**
+  Every keycloak-adjacent task since T4.2.1 (T4.3.4/5/8, G5) temporarily stopped the dev-stack's
+  own Keycloak, brought up the `common`-project one under the shared name, verified, then restored
+  the original dev-stack state — a real environmental constraint of this single-sandbox setup, not
+  a shortcut on the verification itself (G5's fresh-volume test additionally used a fully isolated
+  compose project + brand-new volumes specifically to sidestep this for one sub-test).
+- **A permanent, non-workaround fix landed during rotation execution (T6.4): a real `admin-ops`
+  mTLS human-identity was minted for OpenBao's documented OIDC admin-login path, because none
+  existed** — the listener requires a client cert for any connection including browser/OIDC, so the
+  README's documented human-login flow had never actually worked. Bound to the existing `admin`
+  policy, same mechanism as every service identity (local CA key). User chose to keep this
+  permanently rather than treat it as a one-off rotation-session convenience.
+- **Rotation (T6.4) executed on dev for all 10 migrated secret categories, each sampled-verified
+  old-fails/new-succeeds**, not merely documented — matching the 5.5 precedent that rotation gates
+  the phase's completion rather than being deferred to "whenever." `CROWDSEC_BOUNCER_KEY` and
+  `TUNNEL_TOKEN` were KV-only rotations (neither is consumed live on dev; confirmed by grep before
+  rotating, not assumed).
+- **No separate `haisir-deploy` branch was created or merged this phase (T6.9).** All G1–G6 work
+  landed as direct commits to `main`, same pattern already used for T6.2–T6.4 — confirmed
+  deliberately (not an oversight) by checking that the standing `feature/secrets-management-openbao`
+  branch is the unrelated, already-merged Phase 5.5 branch with nothing `main` lacks.
+
+---
+
 ## 2026-07-16 — Phase 5.6 planning: full .env secrets elimination (OpenBao, all remaining services)
 
 > Context: `/plan` cycle for Phase 5.6. Two challenger rounds (round 1 run inline due to a
