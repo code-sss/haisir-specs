@@ -22,7 +22,7 @@ A single trusted secrets authority where:
 
 ## Solution summary
 
-**OpenBao** (MPL-2.0 fork of HashiCorp Vault; API/CLI/agent compatible) on a dedicated VM (same-host for dev), behind the existing Haisir CA and Keycloak. Secrets delivered to the backend/worker by a **Vault Agent sidecar** that renders an env file to tmpfs; deploy-time config (APISIX/Keycloak/compose vars) rendered from OpenBao by the deploy host. Full alternative analysis and phasing in `Implementation_planning/2026-06-05_secrets-management_openbao_plan.md`; a follow-up design-validation pass (2026-07-14) is summarized in the status note above and in `decisions.md`.
+**OpenBao** (MPL-2.0 fork of HashiCorp Vault; API/CLI/agent compatible) on a dedicated VM (same-host for dev), behind the existing Haisir CA and Keycloak. Secrets delivered to the backend/worker by a **Vault Agent sidecar** that renders an env file to tmpfs; deploy-time config (APISIX/Keycloak/compose vars) rendered from OpenBao by the deploy host. Full alternative analysis and phasing in `Implementation_planning/archive/2026-06-05_secrets-management_openbao_plan.md`; a follow-up design-validation pass (2026-07-14) is summarized in the status note above and in `decisions.md`.
 
 ---
 

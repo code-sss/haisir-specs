@@ -75,7 +75,7 @@ This is the **accepted v1 limitation**: there is no subject-level mastery rollup
 want an exam to influence mastery MUST tag every question with a `topic_id` via the exam builder
 Topic picker (see `07_platform_admin.md` "Exam builder — per-question topic picker", BR-ADM-007).
 Subject-level mastery aggregation (a rollup when `topic_id` is absent) is deferred — tracked in
-`Implementation_planning/PLAN_PrePhase5-Hardening_2026-07-02.md` G8.
+`Implementation_planning/archive/PLAN_PrePhase5-Hardening_2026-07-02.md` G8.
 
 ### Focus Areas strip + weak-topic deep-link (issue 6)
 
@@ -234,7 +234,7 @@ falling back to the skipped case. Verified as a real bug in the current frontend
 (`review-helpers.ts:16-22` `getReviewQuestionStatus` does not check `grading_status` at all) —
 harmless while S05 had no inbound navigation (issue 1/8), but user-visible and misleading once
 pre-Phase-5 G1 wires "Review answers" / "View attempt" / "Results" into this screen. See
-`Implementation_planning/PLAN_PrePhase5-Hardening_2026-07-02.md` G1/T1.4.
+`Implementation_planning/archive/PLAN_PrePhase5-Hardening_2026-07-02.md` G1/T1.4.
 
 **Per paragraph question card:**
 - Passage title and body shown at top of the card group.

@@ -262,7 +262,7 @@ the topology moves beyond a single VM.
   deferrals decided in the 2026-07-02 entry (backlog BL-002/BL-003, Phase 6 / follow-up).
 - **Status:** Pre-Phase-5 is now closed with QA sign-off, not just code-complete. Phase 5
   (`PLAN.md`/`TASKS.md`) is cleared to start.
-- **Updated:** `TASKS_PrePhase5-Hardening_2026-07-02.md` (status line), `phases.md` (Pre-Phase 5
+- **Updated:** `archive/TASKS_PrePhase5-Hardening_2026-07-02.md` (status line), `phases.md` (Pre-Phase 5
   heading marked ✓ completed 2026-07-06 with verification note).
 
 ---
@@ -303,8 +303,8 @@ the topology moves beyond a single VM.
   with `topic_id` for mastery to fire (already specced in `07_platform_admin.md` BR-ADM-007).
 - **No migrations, no deploy gateway work.** Every fix rides on existing schema; only
   `haisir-deploy/docs/qa-sample.json` is edited (add `topic_id` to question objects — issue 4).
-- **Plan artefacts:** `PLAN_PrePhase5-Hardening_2026-07-02.md`,
-  `TASKS_PrePhase5-Hardening_2026-07-02.md`, `phases.md` (Pre-Phase 5 section inserted before
+- **Plan artefacts:** `archive/PLAN_PrePhase5-Hardening_2026-07-02.md`,
+  `archive/TASKS_PrePhase5-Hardening_2026-07-02.md`, `phases.md` (Pre-Phase 5 section inserted before
   Phase 5). Baseline: backend `0cb36bd`, frontend `df7067e`, deploy `98912f8`.
 
 ---
@@ -394,7 +394,7 @@ the topology moves beyond a single VM.
   markdown was tripping RCE/PHP/SQLi false positives beyond the existing SQLi exclusion set). Not
   filed as a task before the fix landed; added to `TASKS.md` retroactively so the audit trail was
   complete at close.
-- `g4_test_plan.md` T1–T10 (schema, builder topic picker, EWA mastery formula, `topic_marked_weak`,
+- `archive/g4_test_plan.md` T1–T10 (schema, builder topic picker, EWA mastery formula, `topic_marked_weak`,
   third-topic `student_at_risk` + no-refire, recovery clear, essay-grading mastery path, S05
   review screen, security guards, FocusAreasStrip) all re-verified live through the real
   admin-built UI post-T4.1.4 — no open items in the closing checklist.
@@ -427,12 +427,12 @@ the topology moves beyond a single VM.
   codebase's existing one-active-fetcher-plus-passive-consumers precedent. Documented in TASKS.md;
   no spec impact.
 - Backend full test suite re-run in this session: 4143 passed, 29 skipped, 100% coverage held.
-- `g4_test_plan.md` T1–T10 manually verified live by the user against the running stack, including
+- `archive/g4_test_plan.md` T1–T10 manually verified live by the user against the running stack, including
   a full re-run of T3–T6 (weak-topic marking, EWA formula recalculation, third-topic
   `student_at_risk` alert + no-refire, recovery clear) and T9's recovered-state check (5–6) through
   the now-working real admin-built UI — topic dropdown renders and pre-populates on edit, a full
   student exam attempt runs end-to-end, and the focus-areas strip appears and clears correctly.
-  No open items remain in `g4_test_plan.md`'s closing checklist.
+  No open items remain in `archive/g4_test_plan.md`'s closing checklist.
 
 ---
 
@@ -556,7 +556,7 @@ the topology moves beyond a single VM.
 
 ## 2026-07-01 — G4-patch-2: pattern-analysis first-load fix — polling rejected in favour of inline streaming
 
-> Found during G4 integration testing item T7g (`Implementation_planning/g4_test_plan.md`):
+> Found during G4 integration testing item T7g (`Implementation_planning/archive/g4_test_plan.md`):
 > the S05 pattern-analysis opening message never appears on a student's first visit. A
 > debugging session against `haisir-backend` in isolation (without visibility into
 > `haisir-deploy`) proposed a client-side polling fix — keep the backend's existing

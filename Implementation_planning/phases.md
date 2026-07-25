@@ -79,10 +79,10 @@ Implementation for 3a–3g is complete (incl. frontend Playwright E2E suite). 3h
 
 DAG: G0 → G1 → G2 → G3 → G4 (acyclic). Dependencies flow `specs` contracts ahead of `backend` migrations ahead of `frontend` UI; G3 notifications are consumed by G2 (escalate events) and G4 (mastery events).
 
-Sign-off 2026-07-02: all sub-goals ✓, `g4_test_plan.md` T1–T10 fully verified live against the
+Sign-off 2026-07-02: all sub-goals ✓, `archive/g4_test_plan.md` T1–T10 fully verified live against the
 real admin-built UI (post-T4.1.4). Archived: `archive/PLAN_Phase4-Mastery-PostExam_2026-06-24.md`,
 `archive/TASKS_Phase4-Mastery-PostExam_2026-06-24.md`. Walkthrough record:
-`Implementation_planning/g4_test_plan.md`. Final baseline SHAs: backend `0cb36bd`, frontend
+`Implementation_planning/archive/g4_test_plan.md`. Final baseline SHAs: backend `0cb36bd`, frontend
 `df7067e`, deploy `98912f8`.
 
 **Carried into Phase 5:** Parent curriculum builder (adopt board subtree, create own
@@ -96,8 +96,8 @@ role-switcher metadata, `/institution` + `/parent` route guards).
 
 > Root goal: make the through-Phase-4 build release-ready for user testing by fixing 14 issues
 > found in manual testing (plus one latent bug, issue 15, found during plan review — see below).
-> Full goal tree: `PLAN_PrePhase5-Hardening_2026-07-02.md` /
-> `TASKS_PrePhase5-Hardening_2026-07-02.md`. **Specs-repo plan** — code tasks are tickets for the
+> Full goal tree: `archive/PLAN_PrePhase5-Hardening_2026-07-02.md` /
+> `archive/TASKS_PrePhase5-Hardening_2026-07-02.md`. **Specs-repo plan** — code tasks are tickets for the
 > sibling repos; the `[specs]` tasks (T6.3, T7.4, T8.2, T8.3, T8.4) are written as part of the plan.
 
 | Goal | Issues | Repos | Disposition |

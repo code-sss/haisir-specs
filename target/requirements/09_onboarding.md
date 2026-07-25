@@ -8,7 +8,7 @@
 ## Pre-Phase 5 amendment — student grade step (issues 13/14)
 
 > Added 2026-07-02 (pre-Phase-5 hardening pass). Amends BR-ON-008 for the **student** flow only;
-> the parent flow is untouched. Full plan: `Implementation_planning/PLAN_PrePhase5-Hardening_2026-07-02.md` (G6).
+> the parent flow is untouched. Full plan: `Implementation_planning/archive/PLAN_PrePhase5-Hardening_2026-07-02.md` (G6).
 
 **Problem being fixed:** The catalog `recommended` badge (Phase 3 —
 `EnrollmentService.get_catalog`, `enrollment_service.py:127`) is `False` for every student until
