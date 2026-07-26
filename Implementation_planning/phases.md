@@ -249,7 +249,7 @@ Baseline at close: backend `ee3a79e` (unchanged — no backend work this phase),
 
 ---
 
-## Phase 6 — Parent Indexing Status & Retry (planned 2026-07-26)
+## Phase 6 — Parent Indexing Status & Retry ✓ (completed 2026-07-26)
 
 > Root goal: parents can see, per content item, whether it has been embedded into RAG (5 states
 > sourced from `rag_indexing_outbox.status`), and can manually retry a permanently-`failed` one —
@@ -260,15 +260,17 @@ Baseline at close: backend `ee3a79e` (unchanged — no backend work this phase),
 > rationale and the two stale-candidate corrections (reranker, `/parent` guard) in `decisions.md`
 > (2026-07-26 entry).
 
-| Goal | Concern | Repos |
-|---|---|---|
-| **G1** — Parent-owned content exposes live indexing status | List-endpoint indexing-status field + owner-scoped, cooldown-guarded manual retry endpoint reusing BR-DATA-020's upsert-with-reset | backend |
-| **G2** — Parent UI surfaces indexing pills and manual retry | Status pill per content item (5-state, mirrors admin extraction-job UX) + Retry button + 2s/10s/60s polling | frontend |
-| **G3** — Cross-repo acceptance | Full lifecycle test: pending → failed → retry → pending, 404, 429 | backend |
+| Goal | Concern | Repos | Outcome |
+|---|---|---|---|
+| **G1** — Parent-owned content exposes live indexing status | List-endpoint indexing-status field + owner-scoped, cooldown-guarded manual retry endpoint reusing BR-DATA-020's upsert-with-reset | backend | ✓ `2901077` |
+| **G2** — Parent UI surfaces indexing pills and manual retry | Status pill per content item (5-state, mirrors admin extraction-job UX) + Retry button + 2s/10s/60s polling | frontend | ✓ `1e5fdd0` |
+| **G3** — Cross-repo acceptance | Full lifecycle test: pending → failed → retry → pending, 404, 429 | backend | ✓ `10b2606` |
 
 DAG: G1 → G2 (frontend needs the backend field/endpoint) → G3. No `[deploy]` work (existing
 `/api/*` write-route wildcard covers the new endpoint) and no `[specs]` work (spec pre-existed).
-Baseline: backend `aa24252`, frontend `816194d`, deploy `861705b`.
+Baseline at planning: backend `aa24252`, frontend `816194d`, deploy `861705b`.
+Baseline at close: backend `c82d466` (phase work: `2901077`, `10b2606`), frontend `67a883c`
+(phase work: `1e5fdd0`), deploy `861705b` (unchanged — no deploy work this phase).
 
 **Not in this phase's scope (Phase 5 backlog candidates, status corrected 2026-07-26):**
 tutor self-service role assignment (in-scope, needs a `tutor_profiles` table — not yet planned);

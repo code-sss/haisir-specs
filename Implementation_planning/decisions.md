@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-26 — Phase 6 close-out: parent indexing status & retry
+
+> Context: G1–G3 implementation + manual UI walkthrough sign-off for the 2026-07-26 plan below.
+> All work landed as direct commits to `main` in both repos (no separate phase branch was
+> created — this was a small, single-day, no-`[deploy]` phase). Final baseline: backend
+> `c82d466` (phase work: `2901077`, `10b2606`), frontend `67a883c` (phase work: `1e5fdd0`),
+> deploy `861705b` (unchanged — no deploy work this phase).
+
+- **No deviations from the planned goal tree.** All 3 goals (G1 backend, G2 frontend, G3
+  cross-repo acceptance) shipped exactly as scoped in `PLAN.md`/`TASKS.md` — the spec pre-existed
+  (`05_parent.md` BR-PAR-020, `01_data_model.md` BR-DATA-023) and the single challenger round's
+  fixes were mechanical, so there was nothing left to reconcile at close.
+- **Manual retry reuses BR-DATA-020's upsert-with-reset with zero new SQL, as planned** — the
+  retry endpoint's only new logic is the ownership check (404-oracle) and the 30s cooldown guard
+  (`IndexingRetryCooldownError` → 429); no new columns, no new enqueue path.
+- **G3's cross-repo acceptance test is backend-only** (`10b2606`), not a Playwright/UI e2e test —
+  matches how G1/G2's own goal-tests were already satisfied by unit/integration coverage per
+  `TASKS.md`; G2's UI-facing end-to-end gate is a separate manual walkthrough sign-off, not part
+  of G3.
+- **Nothing carried forward as an open follow-up from this phase.** The Phase 5 backlog
+  candidates this phase deliberately left untouched (tutor self-service, `invite-role`/
+  `/institution` guard, RAG ops cleanup, per-child audience scoping, parent-facing hAITU
+  endpoints) remain exactly as scoped in the 2026-07-26 scoping entry below — this phase did not
+  touch or reprioritize any of them.
+
+---
+
 ## 2026-07-26 — Phase 6 scoping: Parent Indexing Status & Retry chosen as root goal
 
 > Context: `/plan` reconciliation against live code found the Phase 5 backlog-candidates list

@@ -170,7 +170,30 @@ The platform admin board content manager is fully implemented end-to-end. The Ad
 > Snapshot baseline: haisir-backend `aa24252` (Phase 5.5 config hardening + Jenkins tag bump, 2026-07-26), haisir-frontend `816194d` (Phase 5 close — unchanged since 2026-07-14), haisir-deploy `861705b` (Phase 5.6 post-close patches — full .env secrets elimination complete, 2026-07-26).
 > Next session: `git diff aa24252..HEAD` in haisir-backend, `git diff 816194d..HEAD` in haisir-frontend, `git diff 861705b..HEAD` in haisir-deploy.
 
+**Also complete (2026-07-26 — Phase 6 close: parent indexing status & retry):** parents can now see, per content item, whether it has been embedded into RAG, and manually retry a permanently-`failed` one — mirroring the existing extraction-job status-pill UX one level down the pipeline. **G1 [backend]** (`2901077`): `GET /api/parent/curriculum/topics/{topic_id}/content` now carries `indexing_status` (`pending`/`processing`/`retry`/`done`/`failed`) and `indexing_retry_count` per item via a `LEFT JOIN rag_indexing_outbox`, folded into the existing `_attach_provenance_and_indexing` repo helper; new `POST /api/parent/curriculum/topic-contents/{content_id}/retry-indexing` (CSRF, parent-only) resets a stuck outbox row via BR-DATA-020's existing upsert-with-reset SQL — 404 on not-found/wrong-owner (oracle-safe), 429 if retried inside a 30s cooldown (new `IndexingRetryCooldownError`), 200 with `{content_id, status, retry_count}` on success. **G2 [frontend]** (`1e5fdd0`): `IndexingStatusPill` renders per-item status inside `ContentItemRow`; failed items get a Retry button wired through `useContentManagement`, disabled while pending, with an inline error banner for cooldown/generic failures; content-list polling adapts (2s while indexing is active, 10s for 60s after last activity, off otherwise); pulse animation respects `prefers-reduced-motion`. **G3 [backend]** (`10b2606`): single end-to-end lifecycle test exercises `pending → failed/3 → POST retry → pending/0`, re-GET confirms the reset, cross-owner POST returns 404, immediate re-POST returns 429. No `[deploy]` or `[specs]` work this phase (spec pre-existed; existing `/api/*` write-route wildcard already covered the new endpoint). Manual UI walkthrough sign-off closes G2's end-to-end gate (`TASKS.md`).
+
+> Snapshot baseline: haisir-backend `c82d466` (Phase 6 close — indexing retry endpoint `2901077` + lifecycle test `10b2606`, main, 2026-07-26), haisir-frontend `67a883c` (Phase 6 close — indexing pills + retry UI `1e5fdd0`, main, 2026-07-26), haisir-deploy `861705b` (unchanged — no deploy work this phase).
+> Next session: `git diff c82d466..HEAD` in haisir-backend, `git diff 67a883c..HEAD` in haisir-frontend, `git diff 861705b..HEAD` in haisir-deploy. Phase 6 is closed — next up is the Minimus container-image migration backlog candidate (`target/requirements/14_container_images.md`) or the remaining Phase 5 backlog (role migration, RAG ops cleanup), per user priority via `/plan`.
+
 ## Completed Phases
+
+### Phase 6 — Parent Indexing Status & Retry ✓
+
+**Completed:** 2026-07-26
+**Commits:** haisir-backend `2901077`, `10b2606` (main); haisir-frontend `1e5fdd0` (main)
+**Goal tree:** `Implementation_planning/TASKS.md` G1–G3
+
+**What was done:**
+- `GET /api/parent/curriculum/topics/{topic_id}/content` extended with `indexing_status` and `indexing_retry_count` per content item (LEFT JOIN `rag_indexing_outbox`)
+- New `POST /api/parent/curriculum/topic-contents/{content_id}/retry-indexing` — owner-scoped (404-oracle), 30s cooldown-guarded (429), resets outbox row via existing BR-DATA-020 upsert-with-reset (no new SQL)
+- `IndexingRetryCooldownError` domain exception; `TopicContentService.retry_indexing()`; `AbstractExtractionJobRepository.get_outbox()`/`commit()` added
+- Frontend `IndexingStatusPill` component in `ContentItemRow` (5-state, mirrors admin extraction-job pill UX); Retry button wired through `useContentManagement` with cooldown/error banner
+- Content-list polling cadence: 2s while indexing active, 10s for 60s after last activity, off otherwise; `prefers-reduced-motion` guard on the pulse animation
+- Backend end-to-end lifecycle test: pending → failed → retry → pending, plus 404 and 429 cases
+
+**Deviations from original plan:** none — implementation matched the pre-existing spec (`05_parent.md` BR-PAR-020, `01_data_model.md` BR-DATA-023) as planned.
+
+---
 
 ### Phase 5.6 — Full .env Secrets Elimination (OpenBao, all remaining services) ✓
 
