@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:aa24252 frontend:816194d deploy:861705b (2026-07-26)
+> Last baselined: backend:2901077 frontend:816194d deploy:861705b (2026-07-26)
 
 ## G1 [backend]: Parent-owned content exposes live indexing status
 
@@ -17,7 +17,7 @@
 - [x] T1.2.3 [backend]: TopicContentService.retry_indexing() (2026-07-26)
 - [x] T1.2.4 [backend]: POST /topic-contents/{content_id}/retry-indexing route (depends on T1.2.3, T1.1.3) (2026-07-26)
 - [x] **G1.2: Owner-scoped, cooldown-guarded manual retry** — integration test (2026-07-26, satisfied by T1.2.4's TestRetryIndexingRoute class)
-- [ ] **G1: Parent-owned content exposes live indexing status** — end-to-end test (blocked: G1 goal test is T3.1's lifecycle test, still pending)
+- [x] **G1: Parent-owned content exposes live indexing status** — end-to-end test (2026-07-26, satisfied by T3.1's lifecycle test)
 
 ## G2 [frontend]: Parent UI surfaces indexing pills and manual retry
 
@@ -34,11 +34,12 @@
 - [ ] **G2: Parent UI surfaces indexing pills and manual retry** — end-to-end test (manual walkthrough)
 
 ## G3: Cross-repo acceptance
-- [ ] T3.1 [backend]: End-to-end lifecycle test — pending -> failed -> retry -> pending, 404, 429 (depends on T1.1.2, T1.1.3, T1.2.4)
-- [ ] **G3: Cross-repo acceptance** — acceptance test
+- [x] T3.1 [backend]: End-to-end lifecycle test — pending -> failed -> retry -> pending, 404, 429 (2026-07-26)
+- [x] **G3: Cross-repo acceptance** — acceptance test (2026-07-26, satisfied by T3.1's lifecycle test)
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T3.1 [backend]: End-to-end lifecycle test — pending -> failed -> retry -> pending, 404, 429 (deps satisfied: T1.1.2, T1.1.3, T1.2.4)
 - T2.1.1 [frontend]: Extend TopicContent schemas with indexing fields (deps satisfied: T1.1.3 [backend])
 - T2.2.1 [frontend]: retryParentIndexing API call + adapter method (deps satisfied: T1.2.4 [backend])
+
+All [backend] tasks for this phase are complete (G1 + G3 closed).
