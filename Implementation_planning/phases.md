@@ -158,11 +158,17 @@ DAG spine: G1 → G2 → G3 → G4 → G5 → G6 → G7; G5/G6 backend tests are
 in parallel with G1–G3. No deploy-repo work (existing APISIX wildcard routes cover all new
 endpoints). Baseline: backend `9532392`, frontend `df7067e`, deploy `98912f8`.
 
-**Deferred to Phase 6 (candidates):** remaining role migration (`become-tutor`/`invite-role`,
-role-switcher metadata, `/institution` route guards); RAG ops backlog (external HTTP reranker for
-the stubbed Stage 3, bundled inference service in deploy, hAITU Prometheus monitoring — still
-blocked on Chainguard licensing); per-child audience scoping of parent content; parent-facing
-hAITU endpoints (vision §3.5–3.7).
+**Deferred to Phase 6 (candidates):** remaining role migration (`become-tutor` self-service —
+tutor is in scope; `invite-role`/`/institution` route guard blocked — institution_admin is
+explicitly out of scope per `06_institution_admin.md`, and no `organizations` table exists to
+back BR-ROLE-002's org-scoping); RAG ops backlog (external HTTP reranker shipped 2026-07-08 as
+`TeiRerankClient` — no longer backlog, remaining items are ops-only: env-template gap, deployment
+verification, stale README; bundled inference service in deploy — intent undefined, needs
+clarification; hAITU Prometheus monitoring — still blocked on Chainguard licensing); per-child
+audience scoping of parent content — deliberately deferred, no trigger complaint on record;
+parent-facing hAITU endpoints (`vision/requirements/08_haitu_ai_layer.md` §3.5–3.7 — corrected
+citation, was misfiled as `00_overview.md`; also blocked on a mastery-tracking gap for
+non-enrollment content, not just the missing UI).
 
 ---
 
@@ -240,3 +246,36 @@ touches those files.
 Baseline at planning: backend `ee3a79e`, frontend `816194d`, deploy `613c092`.
 Baseline at close: backend `ee3a79e` (unchanged — no backend work this phase), frontend
 `816194d` (unchanged), deploy `b52ec74`.
+
+---
+
+## Phase 6 — Parent Indexing Status & Retry (planned 2026-07-26)
+
+> Root goal: parents can see, per content item, whether it has been embedded into RAG (5 states
+> sourced from `rag_indexing_outbox.status`), and can manually retry a permanently-`failed` one —
+> mirroring the existing extraction-job status-pill UX one level down the pipeline. Already fully
+> spec'd (`target/requirements/05_parent.md` BR-PAR-020, `01_data_model.md` BR-DATA-023) before
+> this phase — chosen over the Phase 5 backlog candidates because it had no open decisions and no
+> missing data model. Full goal tree: `PLAN.md` / `TASKS.md`. One challenger round run — decision
+> rationale and the two stale-candidate corrections (reranker, `/parent` guard) in `decisions.md`
+> (2026-07-26 entry).
+
+| Goal | Concern | Repos |
+|---|---|---|
+| **G1** — Parent-owned content exposes live indexing status | List-endpoint indexing-status field + owner-scoped, cooldown-guarded manual retry endpoint reusing BR-DATA-020's upsert-with-reset | backend |
+| **G2** — Parent UI surfaces indexing pills and manual retry | Status pill per content item (5-state, mirrors admin extraction-job UX) + Retry button + 2s/10s/60s polling | frontend |
+| **G3** — Cross-repo acceptance | Full lifecycle test: pending → failed → retry → pending, 404, 429 | backend |
+
+DAG: G1 → G2 (frontend needs the backend field/endpoint) → G3. No `[deploy]` work (existing
+`/api/*` write-route wildcard covers the new endpoint) and no `[specs]` work (spec pre-existed).
+Baseline: backend `aa24252`, frontend `816194d`, deploy `861705b`.
+
+**Not in this phase's scope (Phase 5 backlog candidates, status corrected 2026-07-26):**
+tutor self-service role assignment (in-scope, needs a `tutor_profiles` table — not yet planned);
+`invite-role` + `/institution` route guard (**blocked** — institution_admin is explicitly out of
+scope per `06_institution_admin.md`, and no `organizations` table exists); RAG ops cleanup
+(env-template gap, reranker deployment verification, stale README, undecided monitoring stack —
+the reranker code itself already shipped 2026-07-08, this is ops-only); per-child audience scoping
+of parent content (deliberately deferred, no trigger complaint on record); parent-facing hAITU
+endpoints (blocked on a progress-monitoring-UI product decision plus a mastery-tracking gap for
+non-enrollment content). See `PLAN.md`'s backlog-candidates section for full detail on each.

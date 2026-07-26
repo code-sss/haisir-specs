@@ -282,9 +282,11 @@ re-stated here — refer to the vision file for the authoritative text:
 - §2 Interaction-type catalogue (`topic-doubt`, `exam-review-chat`, `escalation-attempt`,
   `teacher-tools`, parent interactions, `exam-analysis`).
 - §3 Prompt contracts and the 4-stage RAG retrieval pipeline (Stage 1 query rewrite + intent
-  + safety; Stage 2 hybrid retrieval; Stage 3 rerank — now a no-op passthrough future-hook per
-  G0.3; Stage 4 synthesis). The streaming Stage-4 path still uses a single prompt mirroring
-  the §3.1 QA template.
+  + safety; Stage 2 hybrid retrieval; Stage 3 rerank — the G0.3 no-op passthrough was superseded
+  2026-07-08 by a live `TeiRerankClient` calling an external TEI cross-encoder when
+  `HAITU__RERANK_BASE_URL` is configured, still failing open to unranked passthrough if
+  unconfigured or erroring; Stage 4 synthesis). The streaming Stage-4 path still uses a single
+  prompt mirroring the §3.1 QA template.
 - §4 API endpoint shapes (paths, auth, request/response bodies) — extended only by the
   `doubt_id` SSE event (§2) and persistence (§4) for `topic-doubt`.
 - §5 Token limits, §6 Caching rules, §7 Failure handling (BR-AI-001…010), §8 Scope rules.

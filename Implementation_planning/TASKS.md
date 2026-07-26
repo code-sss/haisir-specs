@@ -1,11 +1,44 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:ee3a79e frontend:816194d deploy:b52ec74 (2026-07-21)
+> Last baselined: backend:aa24252 frontend:816194d deploy:861705b (2026-07-26)
 
-Phase 5.6 complete and archived — see
-`archive/TASKS_Phase5.6-SecretsElimination_2026-07-16.md` for the full checklist.
+## G1 [backend]: Parent-owned content exposes live indexing status
+
+### G1.1 [backend]: List endpoint carries per-item indexing status
+- [ ] T1.1.1 [backend]: Transient indexing fields on TopicContent domain model
+- [ ] T1.1.2 [backend]: LEFT JOIN rag_indexing_outbox into get_owner_content_by_topic (depends on T1.1.1)
+- [ ] T1.1.3 [backend]: Expose indexing fields on TopicContentRead schema (depends on T1.1.1)
+- [ ] **G1.1: List endpoint carries per-item indexing status** — integration test
+
+### G1.2 [backend]: Owner-scoped, cooldown-guarded manual retry
+- [ ] T1.2.1 [backend]: Single-row outbox read method on ExtractionJobRepository
+- [ ] T1.2.2 [backend]: IndexingRetryCooldownError domain exception
+- [ ] T1.2.3 [backend]: TopicContentService.retry_indexing() (depends on T1.2.1, T1.2.2)
+- [ ] T1.2.4 [backend]: POST /topic-contents/{content_id}/retry-indexing route (depends on T1.2.3, T1.1.3)
+- [ ] **G1.2: Owner-scoped, cooldown-guarded manual retry** — integration test
+- [ ] **G1: Parent-owned content exposes live indexing status** — end-to-end test
+
+## G2 [frontend]: Parent UI surfaces indexing pills and manual retry
+
+### G2.1 [frontend]: Status pill rendering per content item
+- [ ] T2.1.1 [frontend]: Extend TopicContent schemas with indexing fields (depends on T1.1.3 [backend])
+- [ ] T2.1.2 [frontend]: IndexingStatusPill component in ContentItemRow (depends on T2.1.1)
+- [ ] **G2.1: Status pill rendering per content item** — integration test
+
+### G2.2 [frontend]: Retry action + polling cadence
+- [ ] T2.2.1 [frontend]: retryParentIndexing API call + adapter method (depends on T1.2.4 [backend])
+- [ ] T2.2.2 [frontend]: Retry mutation wired through useContentManagement + button (depends on T2.2.1, T2.1.2)
+- [ ] T2.2.3 [frontend]: 2s/10s/60s content-list polling cadence (depends on T2.1.1)
+- [ ] **G2.2: Retry action + polling cadence** — integration test
+- [ ] **G2: Parent UI surfaces indexing pills and manual retry** — end-to-end test (manual walkthrough)
+
+## G3: Cross-repo acceptance
+- [ ] T3.1 [backend]: End-to-end lifecycle test — pending -> failed -> retry -> pending, 404, 429 (depends on T1.1.2, T1.1.3, T1.2.4)
+- [ ] **G3: Cross-repo acceptance** — acceptance test
 
 ## Ready now
-No pending tasks. Phase 6 scope is being confirmed with the user; this file will be replaced
-with Phase 6's task checkboxes once `/plan` runs the full decomposition.
+Tasks with no pending dependencies — can be started immediately:
+- T1.1.1 [backend]: Transient indexing fields on TopicContent domain model (no deps)
+- T1.2.1 [backend]: Single-row outbox read method on ExtractionJobRepository (no deps)
+- T1.2.2 [backend]: IndexingRetryCooldownError domain exception (no deps)

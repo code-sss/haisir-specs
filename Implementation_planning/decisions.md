@@ -4,6 +4,53 @@
 
 ---
 
+## 2026-07-26 — Phase 6 scoping: Parent Indexing Status & Retry chosen as root goal
+
+> Context: `/plan` reconciliation against live code found the Phase 5 backlog-candidates list
+> (`PLAN.md`) had gone stale on two items and had one wrong citation. Baseline at planning:
+> backend `aa24252`, frontend `816194d` (unchanged since Phase 5), deploy `861705b`.
+
+- **Two backlog candidates were already shipped and mis-listed as open — corrected, not
+  re-planned.** `/parent` route guard shipped Phase 5 G2; the external HTTP reranker for hAITU
+  Stage 3 shipped 2026-07-08 as `TeiRerankClient` (superseding the G0.3 no-op stub). Corrected in
+  `PLAN.md`, `phases.md`, and `target/requirements/11_haitu_ai_layer.md` §7 (which still described
+  Stage 3 as a no-op passthrough).
+- **Citation fix:** parent-facing hAITU endpoints (§3.5–3.7) live in
+  `vision/requirements/08_haitu_ai_layer.md`, not `00_overview.md` as both `PLAN.md` and
+  `phases.md` previously stated — `00_overview.md` has no numbered subsections at all.
+- **Role migration split in two, only half is plannable now.** `become-tutor` self-service is
+  in-scope (tutor is a provisioned role) but needs a `tutor_profiles` table that doesn't exist yet.
+  `invite-role` + `/institution` route guard is **blocked**, not just lower-priority:
+  `target/requirements/06_institution_admin.md` explicitly scopes institution_admin out of this
+  increment, and there is no `organizations` table to back BR-ROLE-002's org-scoped-instructor
+  promise — building the guard/endpoint now would quietly un-scope a fenced-off persona without a
+  `/update-target-state` pass. Deferred pending that decision.
+- **Parent-facing hAITU endpoints are blocked on more than a missing screen.** Even with a product
+  decision to reintroduce parent progress-monitoring UI (P01/P02, dropped when target scope was
+  cut from vision), `enrollment_topics` (the mastery-tracking table) is FK'd to
+  `student_enrollments` only — exam attempts on parent-owned topics likely never populate it. The
+  three endpoints' input contract assumes data that may not exist for the curriculum model Phase 5
+  actually shipped. Not re-scoped this cycle; flagged for whoever picks this up next.
+- **Per-child audience scoping stays deferred — no re-litigation.** The 2026-07-02 deferral
+  condition ("revisit if parents with multiple children at different grades complain") has not
+  triggered; building it now would mean guessing a schema shape with zero real usage signal.
+- **Root goal chosen: Parent Indexing Status & Retry** (`05_parent.md` BR-PAR-020, `01_data_model.md`
+  BR-DATA-023) — found during reconciliation, not on the original 4-candidate list. Picked over the
+  four backlog candidates because it's the only one with a complete spec, no missing data model,
+  and no open product decision blocking it. Full goal tree in `PLAN.md`; 13 tasks, 8 backend + 5
+  frontend, 0 deploy (verified `/api/parent/curriculum/*` falls through the existing `/api/*`
+  write-route wildcard, no new APISIX route needed), 0 specs (already fully spec'd).
+- **Challenger ran one round, not two.** The single round found only mechanical issues (a wrong
+  method-name reference, an inaccurate "mirrors X" description, under-specified test-case wording)
+  — no structural problems (no cycles, no orphan tasks, no missing repo tags). All fixed inline;
+  a second round was judged not worth the cost given zero architectural findings in round one.
+- **Found, not fixed:** `assign-role`'s `if user.roles: raise 409` blocks a user from ever holding
+  both `student` + `parent` via self-service, contradicting BR-ROLE-005's own example (a student
+  who is also a parent). Pre-existing bug, unrelated to this cycle's scope — flagged in `PLAN.md`
+  for whoever next touches role assignment.
+
+---
+
 ## 2026-07-21 — Phase 5.6 close-out: full .env secrets elimination (OpenBao, all remaining services)
 
 > Context: G3/G5 hard-gate live verification, two security review passes, rotation execution, and
