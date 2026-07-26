@@ -21,7 +21,7 @@ Cloudflare (DDoS + CDN)
 Apache APISIX (TLS termination · WAF/Coraza · OIDC · CSRF · JWT injection)
   ├─→ Next.js Frontend  (haisir-frontend)
   └─→ FastAPI Backend   (haisir-backend)
-       └─→ PostgreSQL 16 + pgvector
+       └─→ PostgreSQL 18 + pgvector
        └─→ Keycloak 26 (identity)
        └─→ Local disk storage (file uploads, v1)
 ```
@@ -40,8 +40,8 @@ Apache APISIX (TLS termination · WAF/Coraza · OIDC · CSRF · JWT injection)
 |---|---|
 | Frontend | Next.js 16, React, raw `fetch` with `credentials: 'include'` |
 | Backend | FastAPI 0.135, SQLAlchemy (imperative mapping, no Base subclassing) |
-| Identity | Keycloak 26.4, Google SSO, JWT RS256 |
-| Database | PostgreSQL 16, pgvector |
+| Identity | Keycloak 26.6, Google SSO, JWT RS256 |
+| Database | PostgreSQL 18, pgvector |
 | Gateway | Apache APISIX (OIDC, CSRF, Coraza WAF, CrowdSec, rate limiting) |
 | File storage | Local disk (v1) via `StorageBackend` abstract interface |
 | Infra | Docker Compose (haisir-deploy) |

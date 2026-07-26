@@ -279,3 +279,11 @@ the reranker code itself already shipped 2026-07-08, this is ops-only); per-chil
 of parent content (deliberately deferred, no trigger complaint on record); parent-facing hAITU
 endpoints (blocked on a progress-monitoring-UI product decision plus a mastery-tracking gap for
 non-enrollment content). See `PLAN.md`'s backlog-candidates section for full detail on each.
+
+**New backlog candidate for the phase after Phase 6 (spec-only, added 2026-07-26):** container
+base image migration off Chainguard onto Minimus (`reg.mini.dev`) — free pinned-version images
+across `haisir-backend`, `haisir-frontend`, and every Dockerfile/compose service in
+`haisir-deploy`. Also resolves the "undecided monitoring stack" Chainguard-licensing blocker
+above (Prometheus + Grafana are free on Minimus). Full spec:
+`target/requirements/14_container_images.md`. Not planned yet — deliberately sequenced after
+Phase 6 closes to avoid disrupting the in-flight Phase 6 plan.
