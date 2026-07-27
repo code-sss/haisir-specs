@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-07-27 — Institution Admin + Teacher/Tutor: explicit hold on target-state definition
+
+- **Deferral reaffirmed, with a process gate added.** Institution Admin (`06_institution_admin.md`)
+  and Teacher/Tutor (`04_teacher_tutor.md`) remain intentionally out of scope, as originally set by
+  the 2026-03-27 target-state reset. This entry adds a stronger rule: **target/requirements/ must
+  not be filled in for either persona until the user has explicitly revisited and updated the
+  corresponding `vision/requirements/` spec first.** Vision-before-target, in that order — not
+  concurrent.
+- **Reminder mechanism:** both vision files now carry a `⚠ DEFERRED` banner pointing back to this
+  entry; `update-target-state` checks for that banner before writing to either target stub and
+  stops to remind the user/team of this decision if it's still present.
+- **Not a scope change today.** No vision content was rewritten — this only records the sequencing
+  decision and installs the guard. The existing vision specs for both personas stand as-is until
+  deliberately revised.
+
 ## 2026-07-26 — Phase 6 close-out: parent indexing status & retry
 
 > Context: G1–G3 implementation + manual UI walkthrough sign-off for the 2026-07-26 plan below.

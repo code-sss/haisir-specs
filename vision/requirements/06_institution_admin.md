@@ -1,4 +1,8 @@
 # hAIsir — Institution Admin Specification
+> ⚠ DEFERRED (2026-07-27): persona intentionally out of scope. Do not promote to
+> `target/requirements/06_institution_admin.md` until this vision file has been explicitly
+> revisited and updated by the user first. See `Implementation_planning/decisions.md` 2026-07-27
+> entry.
 > Version 1.1 | Part B extracted from `05_06_07_personas.md`.
 > Institution Admin is an entirely new persona and role.
 > → Depends on: `00_overview.md`, `01_data_model.md`, `02_auth_and_roles.md`

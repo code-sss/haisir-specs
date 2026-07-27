@@ -142,7 +142,7 @@ ProxyHeaders → SecurityHeaders → SecurityValidation
 - Full-text search handles keyword/exact matching. Vector search handles semantic similarity (e.g., "fractions" matching "rational numbers").
 - Search endpoints combine both result sets with a weighted ranking: `0.4 * text_rank + 0.6 * vector_similarity` (tunable per entity type).
 - **Infrastructure:** `pgvector` extension enabled on the existing PostgreSQL instance. No separate search service needed in v1.
-- **Embedding model:** `all-MiniLM-L6-v2` (sentence-transformers, self-hosted). 384-dimension vectors. Served via a lightweight sidecar container; no external API dependency. Configurable via `SEARCH_EMBEDDING_MODEL` env var for future swap (e.g. multilingual model if Hindi search quality requires it).
+- **Embedding model:** `bge-m3` (self-hosted, served via Ollama/LM Studio). 1024-dimension vectors. No external API dependency. Configurable via `EMBEDDING__MODEL_SPEC` env var for future swap (e.g. multilingual model if Hindi search quality requires it). (Superseded from the original `all-MiniLM-L6-v2`/384-dim choice during the Phase 2 RAG build — see `Implementation_planning/decisions.md`.)
 
 > **Two distinct pgvector uses — do not conflate:**
 > 1. **General hybrid search** (above): entity-level vectors for topics, courses, tutor profiles, organizations, questions — used by search endpoints for student/parent/teacher content discovery.
@@ -186,7 +186,7 @@ For validation errors (422), FastAPI's default Pydantic validation response is u
 - `422` — Validation error (Pydantic field validation failures)
 - `410` — Gone (expired resource, e.g. parent link code that has passed its expiry date)
 - `429` — Rate limited (hAITU calls, link code validation)
-- `502` — Bad gateway (upstream Keycloak or Claude API failure)
+- `502` — Bad gateway (upstream Keycloak or LLM provider failure — hAITU/grading dispatch to LM Studio/Ollama local, or `anthropic://` when opted in)
 - `504` — Gateway timeout (hAITU 30s timeout exceeded)
 
 **Frontend convention:** The Next.js frontend checks `response.ok` first, then parses `response.json()` to read `detail` for user-facing error messages. No custom error wrapper is needed — use FastAPI's built-in `HTTPException(status_code=..., detail="...")` consistently.

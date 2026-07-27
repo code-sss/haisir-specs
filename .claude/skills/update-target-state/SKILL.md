@@ -22,6 +22,14 @@ Launch **two parallel Agent tool calls** to read the relevant files simultaneous
 
 Collect results from both agents before proceeding.
 
+**Guard — deferred personas:** if the discussion touches Institution Admin or Teacher/Tutor,
+check the top of `vision/requirements/06_institution_admin.md` / `04_teacher_tutor.md` for a
+`⚠ DEFERRED` banner. If present, stop before drafting any `target/requirements/` changes for that
+persona and remind the user: this persona is on hold per `Implementation_planning/decisions.md`
+(2026-07-27) — the vision file must be explicitly revisited and updated first, with the banner
+removed, before target state can be defined. Ask whether they want to do that revision now (as
+its own discussion) or drop the topic.
+
 Present a concise summary using this structure:
 
 ```

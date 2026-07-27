@@ -1,4 +1,9 @@
 # hAIsir — Teacher / Tutor Specification
+> ⚠ DEFERRED (2026-07-27): persona intentionally out of scope. Do not promote to
+> `target/requirements/04_teacher_tutor.md` until this vision file has been explicitly revisited
+> and updated by the user first. See `Implementation_planning/decisions.md` 2026-07-27 entry.
+> (Exception already shipped: the shared instructor doubt-escalation queue — see
+> `target/requirements/04_teacher_tutor.md` — predates this gate and is not affected by it.)
 > Version 1.1 | Updated to reflect actual baseline from `haisir_current.md`.
 > The `instructor` role already exists. Existing routes `/add-assessment` and `/add-exam` remain unchanged.
 > The `tutor` role is new. New teacher routes are listed below.

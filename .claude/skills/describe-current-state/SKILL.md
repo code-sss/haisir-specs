@@ -119,12 +119,25 @@ Only include endpoints that are actually implemented.
 ```
 Only include screens/flows that are actually implemented.
 
+### Also update `/docs` user guides
+
+`docs/*-guide.md` (e.g. `platform-admin-guide.md`, `parent-guide.md`, `student-guide.md`) are
+user-facing guides, one per persona. Cross-reference what you just found in `current/schema.md`,
+`current/api_contracts.md`, and `current/ui_flows.md` against the matching guide:
+
+- New or changed screen, route, field, or business rule → update the relevant section of the
+  guide (use targeted Edit, not a rewrite).
+- Removed feature → remove or correct the stale section.
+- No existing guide for that persona (e.g. teacher/tutor) → skip, don't create one speculatively.
+- Backend/infra-only changes with no user-visible effect → skip, guides describe what a user sees.
+
 ---
 
 ## Step 4 — Review and write
 
 **Present the drafted changes to the user before writing any files.**
 For incremental updates, show only the additions/changes (not the full file).
+Include any drafted `/docs/*-guide.md` edits from the previous step in the same review.
 Ask if anything looks wrong, missing, or needs adjustment.
 
 Do NOT write any files during this review.
@@ -134,6 +147,7 @@ Once the user confirms (e.g. "looks good", "write it", "yes"), do the following 
 1. Apply the agreed changes:
    - **Incremental:** use Edit (targeted edits) on `current/schema.md`, `current/api_contracts.md`, `current/ui_flows.md`
    - **Full read:** use Write (overwrite) for the repos that needed a full read
+   - **Docs:** use Edit (targeted edits) on the affected `docs/*-guide.md` file(s), if any
 2. Write (overwrite) `current/snapshot_shas.md` with the current HEADs:
    ```
    ## Snapshot SHAs

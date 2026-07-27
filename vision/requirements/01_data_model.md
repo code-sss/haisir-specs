@@ -910,7 +910,7 @@ CREATE TABLE topic_content_chunks (
     topic_content_id  UUID         NOT NULL,            -- which content item this came from
     chunk_index       INT          NOT NULL,
     content           TEXT         NOT NULL,            -- 600-char segment of extracted text
-    embedding         vector(384)  NOT NULL,            -- all-MiniLM-L6-v2
+    embedding         vector(1024) NOT NULL,            -- bge-m3
     created_at        TIMESTAMPTZ  NOT NULL
 );
 
@@ -925,7 +925,7 @@ topic_contents row created/updated
         ├── detect change (content checksum / extraction_status reset)
         ├── load document (pdfplumber for PDF, passthrough for text)
         ├── chunk: 600-char pieces, 100-char overlap, sentence-aware split
-        ├── for each chunk: embed (all-MiniLM-L6-v2) → upsert into topic_content_chunks
+        ├── for each chunk: embed (bge-m3) → upsert into topic_content_chunks
         └── remove/soft-delete obsolete chunks for this topic_content_id
 ```
 
