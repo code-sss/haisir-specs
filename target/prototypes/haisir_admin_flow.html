@@ -1134,7 +1134,7 @@ function renderContentRow(c) {
   const safeId = String(c.id).replace(/'/g, "\\'");
   // Provenance badge: only for extracted rows
   const prov = c.provenance
-    ? `<span class="cr-prov" title="This row was created by an extraction job. The original PDF/image is no longer stored."><span class="cr-prov-icon">✨</span> from ${c.provenance.source} · p.${c.provenance.page}</span>`
+    ? `<span class="cr-prov" title="Edits don't affect the audit record"><span class="cr-prov-icon">✨</span> from ${c.provenance.source} · p.${c.provenance.page}</span>`
     : '';
   // Meta line shows free-form meta (video URL, char count) OR extraction time
   const metaText = c.provenance

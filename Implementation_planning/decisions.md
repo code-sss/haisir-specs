@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-28 — T6.4 closed as a no-op (provenance tooltip)
+
+> Context: implementing T6.4 ([frontend] "Correct the provenance tooltip") in `haisir-frontend`.
+
+- **T6.4's premise is false.** The plan states the badge tooltip "currently reads 'The original
+  PDF/image is no longer stored.'" That string exists only in the **prototype**
+  `target/prototypes/haisir_admin_flow.html:1137`, not in shipped code. The shipped provenance
+  badge tooltip — in admin and content-management `content-item-row.tsx` and both
+  `add-content-modal.tsx` provenance lines — is `"Edits don't affect the audit record"`, which the
+  authoritative spec `target/requirements/12_content_extraction.md` line 456 also pins. It never
+  claims the source is discarded, so the done-when ("tooltip no longer claims the source is
+  discarded") is already met. No frontend change was made.
+- **No spec-diverging copy edit.** Updating the tooltip to proactively state the raw file is
+  retained would diverge from spec line 456 and require a spec PR — out of scope for a `[frontend]`
+  task and not requested.
+- **Follow-up (specs repo, resolved 2026-07-28):** the prototype HTML at
+  `target/prototypes/haisir_admin_flow.html:1137` carried the stale "no longer stored" text,
+  which was factually wrong given G3's raw-file retention and could mislead future implementers
+  into re-deriving T6.4 from the prototype. Corrected to `"Edits don't affect the audit record"`
+  to match the shipped code and spec line 456. The shipped tooltip itself is guarded by the
+  admin and content-management `content-item-row.test.tsx` assertions, so any code regression is
+  caught at test time.
+
 ## 2026-07-27 — Phase 6.5 planning: Content Viewing & Publish
 
 > Context: baseline backend `c82d466`, frontend `67a883c`, deploy `861705b`. Run via `/plan`. The
