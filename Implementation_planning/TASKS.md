@@ -1,273 +1,58 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`c82d466` frontend:`67a883c` deploy:`861705b` specs:`1928b48` (2026-07-27)
-> Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
+> Last baselined: backend:`c82d466` frontend:`67a883c` deploy:`861705b` (2026-07-27)
+> Phase 6.5 scoped 2026-07-27 — see `PLAN.md` for the goal tree, the spec-review corrections table
+> and the scope locks. Phase 7 (Gateway WAF) archived unstarted; resume after this phase.
 
-## G1 [deploy]: Gateway build modernised and self-maintained
+## G1 [backend]: Schema foundation — `image` type and `visibility_status`
+- [ ] T1.1 [backend]: Add `image` to the `contenttype` enum — `ALTER TYPE ... ADD VALUE` in an Alembic autocommit block, plus `ContentType.image`
+- [ ] T1.2 [backend]: Add `visibility_status VARCHAR NOT NULL DEFAULT 'draft'` — column, imperative mapping, dataclass field; no DB CHECK
+- [ ] T1.3 [backend]: Pydantic surface — `Literal["draft","published"]` on `TopicContentRead`; omitted from Create/Update
+- [ ] **G1: Schema foundation** — integration test
 
-### G1.1 [deploy]: Vendor coraza-proxy-wasm into the repo
-- [ ] T1.1.1 [deploy]: Vendor `corazawaf/coraza-proxy-wasm` at the current pinned tag `0.6.0` into `gateway-docker/coraza-proxy-wasm/`, preserving upstream LICENSE and a `VENDORED.md` recording upstream URL, tag, commit SHA and date
-- [ ] T1.1.2 [deploy]: Apply the APISIX body-processing patch in-tree to `wasmplugin/plugin.go` (the `wasm_process_req_body` / `wasm_process_resp_body` `SetProperty` opt-ins) as a reviewable diff
-- [ ] T1.1.3 [deploy]: Delete `gateway-docker/coraza/apply-apisix-patch.sh` and the `git clone --depth 1 --branch` step from the Dockerfile builder stage (depends on T1.1.2)
-- [ ] T1.1.4 [deploy]: Confirm the image builds reproducibly from the vendored tree and the WASM filter loads in APISIX — no behaviour change at this step (depends on T1.1.3)
-- [ ] **G1.1: proxy-wasm vendored with the patch in-tree** — integration test
+## G2 [deploy]: One-shot content reset runbook
+- [ ] T2.1 [deploy]: Confirm-gated script truncating the six content tables and clearing `{data_dir}/topics/` (depends on T1.2 [backend])
+- [ ] **G2: Content reset runbook** — acceptance test
 
-### G1.2 [deploy]: Spike — establish the real version ceiling
-- [ ] T1.2.1 [deploy]: Timeboxed spike — attempt Go 1.24/1.25 + TinyGo ≥0.36 + Coraza v3.7.0 against the vendored tree; capture the actual failing command and error output for whichever pin genuinely blocks
-- [ ] T1.2.2 [deploy]: Record the finding in `gateway-docker/VERSIONS.md` — the observed ceiling with evidence per BR-WAF-010, replacing the current undocumented `Dockerfile:9-12` assertion (depends on T1.2.1)
-- [ ] **G1.2: real ceiling established with recorded evidence** — acceptance test
+## G3 [backend]: The raw file is materialized and servable
+- [ ] T3.1 [backend]: `copy_to_content_store` — collision-safe copy from the extraction root into `{data_dir}/topics/{content_type}/`
+- [ ] T3.2 [backend]: `finalize()` appends the raw row at `order = N` with its path in `url`; text-row ordering untouched (depends on T3.1, T1.1, T1.2)
+- [ ] T3.3 [backend]: Regression test — the raw row never enters `rag_indexing_outbox` (depends on T3.2)
+- [ ] T3.4 [backend]: `GET /api/topic-contents/{content_id}/file` — sniffed media type, path safety, student/admin/parent gating (depends on T1.2)
+- [ ] T3.5 [backend]: Delete the legacy `GET /api/topic-contents/{content_type}/{topic_id}` route (depends on T5.4 [frontend])
+- [ ] **G3: Raw file materialized and servable** — integration test
 
-### G1.3 [deploy]: Upgrade the pinned version set
-- [ ] T1.3.1 [deploy]: Bump `github.com/corazawaf/coraza/v3` to ≥ v3.5.0 (target v3.7.0) — BR-WAF-002 floor; upstream `go.mod` still pins v3.3.3 so this must be forced (depends on T1.2.2)
-- [ ] T1.3.2 [deploy]: Replace vendored CRS under `wasmplugin/rules/crs/` with 4.25.1 LTS or later — BR-WAF-003 floor; verify the `Include @owasp_crs/*.conf` embed path still resolves (depends on T1.2.2)
-- [ ] T1.3.3 [deploy]: Bump `GO_VERSION`, `TINYGO_VERSION` and `TINYGO_SHA256` together to the set established by the spike (depends on T1.2.2)
-- [ ] T1.3.4 [deploy]: Verify `coraza-wasilibs` compatibility across the version jump; pin or bump as required (depends on T1.3.1)
-- [ ] T1.3.5 [deploy]: Evaluate the `coraza.rule.no_regex_multiline` build tag — aligns `@rx` with CRS expectations and reduces false positives (depends on T1.3.1)
-- [ ] **G1.3: version set upgraded and building** — integration test
+## G4 [backend]: Publish as an atomic per-group decision
+- [ ] T4.1 [backend]: Upload-group resolver — `(topic_id, source_extraction_job_id)`, NULL job id means group of one
+- [ ] T4.2 [backend]: `PATCH /api/topic-contents/{content_id}/publish` — one transaction, drafts the opposite side (depends on T4.1, T1.3)
+- [ ] T4.3 [backend]: Parent-scoped publish mirror under `/api/parent/curriculum/`, owner-scoped 404 (depends on T4.1)
+- [ ] T4.4 [backend]: Student read paths gain the `visibility_status='published'` AND-condition (depends on T1.2)
+- [ ] **G4: Atomic per-group publish** — integration test
 
-### G1.4 [deploy]: Gateway builder stage on Minimus
-- [ ] T1.4.1 [deploy]: Swap the gateway builder stage base image to `reg.mini.dev` per BR-INFRA-004, `-dev` tag confined to the builder stage only (depends on T1.3.3)
-- [ ] T1.4.2 [deploy]: Update `.github/instructions/docker-compose.instructions.md` — it documents APISIX as 3.14.x while the Dockerfile builds 3.17.0-ubuntu
-- [ ] **G1.4: builder stage on Minimus, runtime unchanged** — integration test
+## G5 [frontend]: Shared content viewer
+- [ ] T5.1 [frontend]: Promote `ContentViewer` out of `features/student/` to shared — pure move, no behaviour change
+- [ ] T5.2 [frontend]: Add `"image"` to the `content_type` unions/zod schemas in student, admin, parent and content-management
+- [ ] T5.3 [frontend]: Add the `case "image"` image viewer — **same commit as T5.2**, `noImplicitReturns` makes the union member without its case a compile error (depends on T5.1, T5.2)
+- [ ] T5.4 [frontend]: Repoint `SecurePdfViewer`'s `pdfUrl` at the per-content file endpoint (depends on T3.4 [backend])
+- [ ] T5.5 [frontend]: YouTube IFrame Player API / Vimeo Player SDK with external-link fallback, replacing the raw `<iframe src>` (depends on T5.1)
+- [ ] **G5: Shared content viewer** — integration test
 
-- [ ] **G1: Gateway build modernised and self-maintained** — integration test
-
-## G2 [deploy]: WAF verification — HARD GATE
-
-### G2.1 [deploy]: CVE-2026-21876 blocked
-- [ ] T2.1.1 [deploy]: Add a regression test posting a multipart request with a UTF-7 payload in the first part and clean UTF-8 in the last; assert it is blocked (depends on T1.3.2)
-- [ ] T2.1.2 [deploy]: Confirm the test fails against the pre-upgrade image and passes after — proving the ruleset bump is what fixed it (depends on T2.1.1)
-- [ ] **G2.1: multipart charset bypass blocked** — acceptance test
-
-### G2.2 [deploy]: Regex-scoped exclusion proven to work
-- [ ] T2.2.1 [deploy]: Prove Coraza's JSON body processor populates `ARGS_POST` with `json.`-prefixed, dot-nested, numerically-indexed keys — assert the observed variable name for `history[2].content` (depends on T1.3.1)
-- [ ] T2.2.2 [deploy]: Prove `ctl:ruleRemoveTargetById=<id>;ARGS_POST:/^json\.history\.\d+\.content$/` suppresses the rule for that field **and leaves it active** for headers, cookies, query args and other body fields (depends on T2.2.1)
-- [ ] T2.2.3 [deploy]: Record the before/after in `16_gateway_waf.md`'s status note — the v3.3.3 silent-no-match behaviour is the finding that justifies this whole phase (depends on T2.2.2)
-- [ ] **G2.2: field-scoped exclusion demonstrably fires** — acceptance test
-
-### G2.3 [deploy]: No regression in detection
-- [ ] T2.3.1 [deploy]: Run the existing WAF suites (`common/scripts/tests/02-test-waf.sh`, `15-test-waf-config-validation.sh`, `16-test-waf-advanced.sh`) against the new image (depends on T1.3.3)
-- [ ] T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1)
-- [ ] **G2.3: attack corpus blocked, benign corpus passes** — acceptance test
-
-- [ ] **G2: WAF verification** — acceptance test — **HARD GATE: G4 must not start until this passes**
-
-## G3 [backend, frontend, deploy]: Payload design fixed at the source
-
-### G3.1 [backend]: Prompt injection closed
-- [ ] T3.1.1 [backend]: Constrain `ReviewChatMessage.role` to `Literal["student", "ai"]` in `src/schemas/haitu.py:11-12`, mirroring `HaituDoubtMessageSchema` in the sibling schema
-- [ ] T3.1.2 [backend]: Change `_DOMAIN_TO_LLM_ROLE.get(m.role, m.role)` to `_DOMAIN_TO_LLM_ROLE[m.role]` at `src/api/routes/haitu.py:840` so an unmapped role cannot be silently forwarded (depends on T3.1.1)
-- [ ] T3.1.3 [backend]: Regression test — a posted `{"role": "system", ...}` history entry is rejected with 422, not forwarded into `_build_no_rag_messages` (depends on T3.1.2)
-- [ ] **G3.1: injected system turns rejected** — integration test
-
-### G3.2 [backend, frontend]: exam-review-chat persists server-side
-- [ ] T3.2.1 [backend]: Design the persistence model — reuse `doubts`/`doubt_messages` or add a review-chat equivalent; `exam-review-chat` is currently fully stateless so this is new storage, not a refactor
-- [ ] T3.2.2 [backend]: Migration for the chosen model, additive only per the schema-sacred rule (depends on T3.2.1)
-- [ ] T3.2.3 [backend]: Persist both sides of each turn; seed the thread from the cached pattern analysis rather than accepting it from the client (depends on T3.2.2)
-- [ ] T3.2.4 [backend]: Accept `{attempt_id, message}`; keep `history` accepted-but-ignored for one release for compatibility (depends on T3.2.3)
-- [ ] T3.2.5 [frontend]: Stop sending `history` from `use-exam-review-chat.ts:296,241`; load the thread via GET on mount (depends on T3.2.4 [backend])
-- [ ] T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema` `required: [attempt_id, message, history]` (depends on T3.2.4 [backend])
-- [ ] **G3.2: review chat works with a {attempt_id, message} body** — end-to-end test
-
-### G3.3 [backend, frontend]: topic-doubt stops replaying stored history
-- [ ] T3.3.1 [backend]: Load the last N messages from `DoubtMessageRepository` in the route instead of reading `body.history` — the server already writes both sides via `add_student_message` / `finalize_ai_response`
-- [ ] T3.3.2 [frontend]: Stop re-posting the pre-loaded thread from `use-haitu-doubt.ts:299` (depends on T3.3.1 [backend])
-- [ ] T3.3.3 [backend]: Fix E1 — `_generate_events`' `finally` block persists an empty AI message and advances the doubt to `ai_answered` when the stream failed or the client disconnected; guard the `_persist_ai_reply` spawn on non-empty accumulated text (`haitu.py:316-329`)
-- [ ] **G3.3: doubt threads round-trip without client-side replay** — end-to-end test
-
-### G3.4 [backend]: exam-review-chat grounded server-side
-- [ ] T3.4.1 [backend]: Load the review payload via `ExamSessionQuestionService.get_by_session_id(attempt_id)` — already wired into `post_pattern_analysis` at `haitu.py:511` — and build the grounding context in the route (depends on T3.2.3)
-- [ ] T3.4.2 [frontend]: Stop pasting question text into the message string in `use-exam-review-chat.ts:310-314`; send `question_id` (depends on T3.4.1 [backend])
-- [ ] **G3.4: model answers from server-held session data, not client claims** — integration test
-
-### G3.5 [backend, frontend]: Exam images by reference
-- [ ] T3.5.1 [backend]: Add an image upload endpoint returning `{url}`, reusing the existing multipart path and `sniff_mime` magic-byte validation
-- [ ] T3.5.2 [backend]: Stop calling `encode_image_to_base64` on read in `exam.py:129,148` and `exam_session.py:360,678-679`; return the stored relative path (depends on T3.5.1)
-- [ ] T3.5.3 [backend]: Migrate existing base64 `image_url` values in `questions` to stored files + paths (depends on T3.5.2)
-- [ ] T3.5.4 [frontend]: `question-editor.tsx:115,153` — upload before submitting the template instead of `readAsDataURL` (depends on T3.5.1 [backend])
-- [ ] T3.5.5 [frontend]: Serve images via a static/asset route; verify `img-src` in the CSP still covers them (depends on T3.5.4)
-- [ ] **G3.5: exam images round-trip by URL** — end-to-end test
-
-### G3.6 [backend]: Declared field limits
-- [ ] T3.6.1 [backend]: Add `Field(max_length=...)` to free-text schema fields — `message`, `question_text`, `explanation`, `model_answer`, `content`, `text`, `working_text`, `user_answer` — sized under the gateway's `tx.arg_length`
-- [ ] T3.6.2 [backend]: Verify a too-long field now returns 422 naming the field, not an opaque gateway 403 (depends on T3.6.1)
-- [ ] **G3.6: oversized input fails with a 422, not a mystery 403** — integration test
-
-- [ ] **G3: Payload design fixed at the source** — end-to-end test
-
-## G4 [deploy, backend]: Exclusions rewritten field-scoped or deleted
-
-### G4.1 [deploy]: Soak before enforcement
-- [ ] T4.1.1 [deploy]: Set `SecRuleEngine DetectionOnly` on the affected URIs per BR-WAF-011 (depends on G2)
-- [ ] T4.1.2 [deploy]: Collect and review logs across real journeys before restoring blocking (depends on T4.1.1)
-- [ ] **G4.1: soak evidence collected** — acceptance test
-
-### G4.2 [deploy]: Retire the 38-ID block
-- [ ] T4.2.1 [deploy]: Replace `id:199110`'s `ctl:ruleRemoveById` list in `03-secured-api.json` with field-scoped `ctl:ruleRemoveTargetById` targets — or delete it outright if G3.2/G3.3 removed the prose from the body (depends on T4.1.2, T3.2.5 [frontend])
-- [ ] T4.2.2 [deploy]: Confirm 920370 and 920390 no longer fire now that bodies are small (depends on T4.2.1)
-- [ ] T4.2.3 [deploy]: Confirm headers, cookies and query args regained inspection on those two endpoints (depends on T4.2.1)
-- [ ] **G4.2: haitu endpoints protected and false-positive-free** — integration test
-
-### G4.3 [deploy]: Reclaim the exam authoring route
-> **Do not delete this route's field-scoped exclusions.** `12-api-exams-static.json` uses
-> `SecRuleUpdateTargetByTag <tag> "!ARGS_POST:/field/"`, which narrows one tag's scope by one named
-> field — the target-state pattern, not the blanket removal seen on `199110`. Only the four
-> `image_url` exclusions are obsoleted by G3.5. The exclusions on `question_text`, `explanation`,
-> `model_answer`, `.text`, `json.description` and `correct_answers` address real, unrelated false
-> positives in science prose, mathematical notation and quoted text and **must be preserved**.
-- [ ] T4.3.1 [deploy]: Remove only the four `image_url` exclusions (`ATTACK-RCE`, `ATTACK-GENERIC`, `ATTACK-XSS`, `ATTACK-SQLI`) now that images are URL references; leave every other field exclusion in place (depends on T3.5.4 [frontend])
-- [ ] T4.3.2 [deploy]: Restore `inbound_anomaly_score_threshold` from 12 to the platform default of 5 (`id:199101`) per BR-WAF-006 (depends on T4.3.1)
-- [ ] T4.3.3 [deploy]: Restore `tx.arg_length` (50 MB), `tx.total_arg_length` (100 MB) and `tx.max_num_args` (2000) in `id:199104` to platform defaults now that base64 image arguments are gone (depends on T4.3.1)
-- [ ] T4.3.4 [deploy]: Confirm the surviving field exclusions still suppress their original false positives at anomaly threshold 5 — the threshold raise may have been masking cases the field exclusions alone do not cover (depends on T4.3.2)
-- [ ] **G4.3: exam authoring route back to platform-default thresholds with field exclusions intact** — integration test
-
-### G4.4 [deploy]: Unambiguous route matching
-- [ ] T4.4.1 [deploy]: Raise the exact-URI routes `21-api-haitu-exam-review.json` and `22-api-haitu-pattern-analysis.json` above `19-api-haitu.json`'s `/api/haitu/*` per BR-WAF-012
-- [ ] T4.4.2 [deploy]: Verify the intended `body_schema` is the one actually enforced (depends on T4.4.1)
-- [ ] **G4.4: route precedence explicit** — integration test
-
-### G4.5 [deploy]: Exclusion hygiene
-- [ ] T4.5.1 [deploy]: Correct the `931130` justification in `03-secured-api.json` — it still says the topic-content URL allowlist is "tracked in backend task"; it shipped (https-only + hostname allowlist, rejects protocol-relative `//evil.com`), per BR-WAF-008
-- [ ] T4.5.2 [backend]: Close the related gap — `TopicContentUpdate.validate_url` enforces scheme + allowlist but not the "external URLs only for `content_type == video`" rule that create applies, so PATCH can attach an allowlisted external URL to a `pdf`/`text` item
-- [ ] T4.5.3 [deploy]: Re-scope or delete the remaining exclusions on `18-api-exam-session-submit.json` and the `01`/`02`/`04` plugin configs to field-scoped form per BR-WAF-004
-- [ ] **G4.5: every surviving exclusion is field-scoped and truthfully justified** — acceptance test
-
-- [ ] **G4: Exclusions rewritten field-scoped or deleted** — integration test
-
-## G5 [frontend]: CSP enforced
-
-### G5.1 [frontend]: Working report collector
-- [ ] T5.1.1 [frontend]: `src/app/csp-report/route.ts` currently reads the body and discards it — persist reports via structlog per BR-CSP-008, keeping the 204 response
-- [ ] T5.1.2 [frontend]: Verify reports surface where they can actually be read during the soak (depends on T5.1.1)
-- [ ] **G5.1: violations are captured** — integration test
-
-### G5.2 [frontend]: Nonce CSP in proxy.ts
-- [ ] T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (the file exists and holds the onboarding guards; extend, do not replace)
-- [ ] T5.2.2 [frontend]: Derive `frame-src` from the backend `allowed_video_hostnames` allowlist per BR-CSP-005 rather than hardcoding a second copy (depends on T5.2.1)
-- [ ] T5.2.3 [frontend]: Confirm `worker-src 'self' blob:` covers pdf.js and whether the build needs `'wasm-unsafe-eval'` (depends on T5.2.1)
-- [ ] T5.2.4 [frontend]: Confirm `react-pdf.css` and `globals.css` inject nothing at runtime that the nonce will not cover (depends on T5.2.1)
-- [ ] T5.2.5 [frontend]: Add the prefetch `missing:` filter to the proxy matcher per the Next.js CSP guidance (depends on T5.2.1)
-- [ ] T5.2.6 [frontend]: Opt the **12 pages lacking `force-dynamic`** into dynamic rendering per BR-CSP-010 — 15 of 27 have it, 12 do not (7 server components, 5 `"use client"`), including all of `/onboarding/*` and `/admin/*`. A statically prerendered page cannot receive a nonce, so a strict `script-src` blocks its framework scripts. Verify by inspecting the build manifest for statically-prerendered routes, not by grep alone (depends on T5.2.1)
-- [ ] T5.2.7 [frontend]: Add a CI assertion that no new HTML route is statically prerendered, per BR-CSP-010 — this breaks silently in production rather than at build (depends on T5.2.6)
-- [ ] **G5.2: Report-Only CSP live with nonces applied on every route** — integration test
-
-### G5.3 [frontend]: Soak
-- [ ] T5.3.1 [frontend]: Exercise every journey — login, onboarding, exam authoring with image upload, exam taking, review chat, PDF viewing, video viewing, parent curriculum, admin (depends on T5.2.5)
-- [ ] T5.3.2 [frontend]: Include the Keycloak OIDC round-trip — `07`/`08`/`09-auth-*` routes are APISIX-owned and redirect cross-origin, exercising `form-action` and navigation (depends on T5.3.1)
-- [ ] T5.3.3 [frontend]: Review collected reports and adjust directives (depends on T5.3.2)
-- [ ] **G5.3: zero unexplained violations across all journeys** — acceptance test
-
-### G5.4 [frontend]: Enforce
-- [ ] T5.4.1 [frontend]: Switch to the enforcing header name, keeping `report-uri` live per BR-CSP-009 (depends on T5.3.3)
-- [ ] T5.4.2 [frontend]: Negative test — an injected inline script is blocked (depends on T5.4.1)
-- [ ] **G5.4: CSP enforced** — end-to-end test
-
-- [ ] **G5: CSP enforced** — end-to-end test
-
-## G6 [backend, deploy]: Auth and transport verification
-
-### G6.1 [deploy, backend]: TLS verification on Keycloak channels
-- [ ] T6.1.1 [deploy]: Remove `OAUTH__KEYCLOAK__SSL_VERIFY=false` from `prod/.env:39` and `staging/.env:39`; the code default is already `true` (BR-SEC-021)
-- [ ] T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed (depends on T6.1.1)
-- [ ] T6.1.3 [backend]: Remove or gate the `check_hostname = False` / `CERT_NONE` context in `src/auth/user.py:37-42` so production cannot silently reach it (depends on T6.1.2)
-- [ ] T6.1.4 [backend]: Verify introspection and Keycloak-admin calls succeed with verification on (depends on T6.1.3)
-- [ ] **G6.1: BR-SEC-021 — no unverified TLS to Keycloak** — integration test
-
-### G6.2 [backend]: JWT audience validation
-- [ ] T6.2.1 [backend]: Confirm APISIX-injected tokens actually carry the `haisir-backend-admin` audience before enforcing — enabling this blind will 401 every request
-- [ ] T6.2.2 [backend]: Set `verify_aud: True` with the expected audience in `src/auth/user.py:73` (BR-SEC-020) (depends on T6.2.1)
-- [ ] T6.2.3 [backend]: Regression test — a token minted for a different realm client is rejected with 401 (depends on T6.2.2)
-- [ ] **G6.2: BR-SEC-020 — audience confusion closed** — integration test
-
-### G6.3 [deploy]: Internal TLS verification
-- [ ] T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in `03-secured-api.json:407`, `01-secured-authenticated.json:305`, `04-secured-api-upload.json:308` (M5)
-- [ ] T6.3.2 [deploy]: Enable `etcd.tls.verify` in `common/apisix_conf/config.yaml:48` — client certs already ship (depends on T6.3.1)
-- [ ] T6.3.3 [deploy]: Move the CrowdSec LAPI channel to https and enable `ssl_verify` (`config.yaml:67,72`) — the bouncer key currently traverses the Docker network in plaintext
-- [ ] T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (`common/openbao/bootstrap.sh:252`)
-- [ ] **G6.3: internal channels verify TLS** — integration test
-
-### G6.4 [deploy]: Keycloak realm hardening
-- [ ] T6.4.1 [deploy]: Add `passwordPolicy` to `common/keycloak/01-realm.json` — e.g. `length(12) and notUsername and notEmail and passwordHistory(3)` (H3)
-- [ ] T6.4.2 [deploy]: Set `sslRequired: "external"` (currently `"none"` at `:10`) (depends on T6.4.1)
-- [ ] T6.4.3 [deploy]: Make brute-force parameters explicit — `failureFactor`, `permanentLockout`, `maxDeltaTimeSeconds` — rather than relying on defaults (depends on T6.4.1)
-- [ ] T6.4.4 [deploy]: Evaluate requiring OTP/WebAuthn for `admin` and `institution_admin` (depends on T6.4.1)
-- [ ] **G6.4: H3 — realm password and TLS policy enforced** — integration test
-
-- [ ] **G6: Auth and transport verification** — integration test
-
-## G7 [deploy, backend, frontend]: Residual review items
-
-### G7.1 [backend]: Request size and upload validation
-- [ ] T7.1.1 [backend]: Replace `Content-Length` arithmetic in `src/auth/request_middleware.py:151,169,194` with a streaming byte cap in a pure-ASGI `receive` wrapper; treat a body-bearing request with no `Content-Length` as requiring the streaming path (M2)
-- [ ] T7.1.2 [backend]: Delete `_validate_file_uploads`, `_extract_filename` and `_is_allowed_file_type` (`request_middleware.py:208-228`) — they read a request-level `Content-Disposition` that never exists for multipart, so they have never rejected anything (B2) (depends on T7.1.1)
-- [ ] T7.1.3 [backend]: Chunk-read extraction uploads and abort past the cap in `admin_extraction.py:175-181` and `parent_extraction.py:182-188`, currently fully spooled before the 50 MB check; shared helper next to `sniff_mime` (B4)
-- [ ] T7.1.4 [backend]: Malformed `Content-Length` returns 400, not an unhandled 500 (B3) (depends on T7.1.1)
-- [ ] **G7.1: size limits hold under chunked encoding** — integration test
-
-### G7.2 [deploy, backend]: Jenkins parameter injection
-- [ ] T7.2.1 [backend]: Validate `params.TAG` against `^[A-Za-z0-9._-]+$` and pass via `withEnv` + single-quoted `sh` in `haisir-backend/Jenkinsfile:197,209,305,340` — currently untouched since the review (M3)
-- [ ] T7.2.2 [deploy]: Validate `params.VERSION` against `^\d+\.\d+(\.\d+)?$` in `Jenkinsfile.deploy:58,89-107`; the remote-exec path is already correct, `MANIFEST_PATH` is not (depends on T7.2.1)
-- [ ] T7.2.3 [deploy]: Restrict who can trigger parameterised builds (depends on T7.2.2)
-- [ ] **G7.2: M3 — build params cannot inject shell** — integration test
-
-### G7.3 [deploy]: Tailscale least privilege
-- [ ] T7.3.1 [deploy]: Replace `dst: ["*:*"]` for `tag:dev1`/`tag:in-dev1`/`tag:in-dev2` in `other/services/tailscale/tailscale.json:28-35` with the specific services and ports actually needed (M4)
-- [ ] T7.3.2 [deploy]: Gate prod SSH behind a separate rarely-held tag; consider Tailscale SSH check mode and session recording (`:72-84`) (depends on T7.3.1)
-- [ ] **G7.3: M4 — a compromised dev laptop cannot reach prod** — acceptance test
-
-### G7.4 [deploy]: Header cleanup
-- [ ] T7.4.1 [deploy]: Set `X-XSS-Protection: 0` across all four plugin configs (L3, BR-CSP-006)
-- [ ] T7.4.2 [deploy]: Add the gateway backstop CSP (`frame-ancestors`, `base-uri`, `object-src`, `form-action`) scoped to non-HTML routes only, so it never collides with `proxy.ts`'s policy per BR-CSP-004 (depends on T5.4.1 [frontend])
-- [ ] **G7.4: header ownership matches the spec table** — integration test
-
-### G7.5 [deploy, specs]: Documented acceptances
-- [ ] T7.5.1 [specs]: Record L5 (`referer-restriction bypass_missing: true`, 7 files) as a deliberate spam filter, not a security boundary — no code change
-- [ ] T7.5.2 [specs]: Reframe M6 and L4 as dev-isolation assertions rather than findings — prod is correctly hardened (etcd client-cert auth, no published ports, Keycloak `start` + `KC_HOSTNAME_STRICT=true`, no pgAdmin); the risk is regression, not current state
-- [ ] T7.5.3 [deploy]: Add a CI assertion that the dev-only patterns (`ALLOW_NONE_AUTHENTICATION`, `start-dev`, published DB/admin ports, `KEYCLOAK_ADMIN_ALLOWED_CIDR=0.0.0.0/0`) never appear outside `dev/` (depends on T7.5.2)
-- [ ] T7.5.4 [deploy]: `chmod 600` staging/dev `.env*` for consistency (L2) — they hold no secrets since Phase 5.6, so this is hygiene
-- [ ] **G7.5: accepted risks are documented and regression-guarded** — acceptance test
-
-### G7.6 [deploy]: Phase 5.6 parked gaps
-- [ ] T7.6.1 [deploy]: Fix `common/scripts/setup.sh`'s `APISIX_ADMIN_KEY` pre-check failing under `set -u` on standalone invocation
-- [ ] T7.6.2 [deploy]: Reconcile `common/docker-compose.yml`'s hardcoded `haisir-net` against the documented dev network `haisir-net-dev`
-- [ ] **G7.6: Phase 5.6's parked deploy gaps closed** — integration test
-
-### G7.7 [deploy]: New anomalies from the 2026-07-27 audit
-- [ ] T7.7.1 [deploy]: Narrow APISIX `allow_admin` from the whole Docker subnet (`config.yaml:38`) — any container on `haisir-net` that learns the admin key can rewrite every route
-- [ ] T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` (`config.yaml:35`) is warranted; it is a routing-config web UI behind a single static key with no MFA
-- [ ] T7.7.3 [deploy]: Harden `env-setup.sh:139` so a set `TMPDIR` cannot place the rendered secret env file on disk-backed storage instead of `/dev/shm`
-- [ ] T7.7.4 [deploy]: `chmod 600` the files inside `.templated/` — the 0700 directory is currently the only protection on 0664 files containing resolved secrets
-- [ ] T7.7.5 [deploy]: Migrate `other/services/sonarqube/.env` (`SONAR_DB_PASSWORD`, mode 0664) out of plaintext, or document the `other/services/*` stacks as explicitly outside the OpenBao boundary
-- [ ] **G7.7: audit anomalies closed or documented** — acceptance test
-
-- [ ] **G7: Residual review items** — integration test
-
-## G8 [specs]: Review gate and closeout — HARD GATE
-
-### G8.1 [specs]: Independent review passes
-- [ ] T8.1.1 [specs]: Adversarial security-review pass 1 against the full diff, following the Phase 5.5/5.6 precedent
-- [ ] T8.1.2 [specs]: Adversarial security-review pass 2, independent of pass 1 — 5.6's pass 2 found a live-credential bug pass 1 rated clean (depends on T8.1.1)
-- [ ] T8.1.3 [specs]: Fix or explicitly accept every finding from both passes (depends on T8.1.2)
-- [ ] **G8.1: two independent passes clean** — acceptance test
-
-### G8.2 [specs]: Runbook
-- [ ] T8.2.1 [specs]: Write the vendored proxy-wasm upgrade runbook — how to rebase on upstream, re-apply the APISIX patch, bump the version set, and re-run the G2 gate
-- [ ] T8.2.2 [specs]: Document the CRS upgrade cadence and where the LTS track is tracked (depends on T8.2.1)
-- [ ] **G8.2: the next upgrade does not require rediscovery** — acceptance test
-
-### G8.3 [specs]: Reconcile specs with reality
-- [ ] T8.3.1 [specs]: Update `16_gateway_waf.md` and `15_security_headers.md` status notes to what actually shipped
-- [ ] T8.3.2 [specs]: Update `security/SECURITY_REVIEW_2026-07-02.md` annotations to final status (depends on T8.3.1)
-- [ ] T8.3.3 [specs]: Append the Phase 7 close-out entry to `decisions.md` and `progress.md` (depends on T8.3.2)
-- [ ] **G8.3: specs match the shipped system** — acceptance test
-
-- [ ] **G8: Review gate and closeout** — acceptance test — **HARD GATE: no merge until this passes**
+## G6 [frontend]: Uploader review and publish UI
+- [ ] T6.1 [frontend]: Content row — View button and publish-state pill; View replaces Edit on `pdf`/`image` (depends on T5.1)
+- [ ] T6.2 [frontend]: Publish toggle — one call per switch, server owns mutual exclusivity (depends on T4.2, T4.3 [backend], T6.1)
+- [ ] T6.3 [frontend]: Markdown editor with live preview via the shared `MarkdownText` component
+- [ ] T6.4 [frontend]: Correct the provenance tooltip — the source file is no longer discarded
+- [ ] **G6: Uploader review and publish UI** — integration test
 
 ## Ready now
-
-- T1.1.1 [deploy]: Vendor coraza-proxy-wasm at tag `0.6.0` into `gateway-docker/coraza-proxy-wasm/`
-- T3.1.1 [backend]: Constrain `ReviewChatMessage.role` to `Literal["student", "ai"]` — one line, closes a live prompt-injection hole, no dependency on the WAF work
-- T5.1.1 [frontend]: Make the CSP report collector persist reports
-- T6.1.1 [deploy]: Remove `OAUTH__KEYCLOAK__SSL_VERIFY=false` from prod/staging
-- T7.2.1 [backend]: Validate `params.TAG` in `haisir-backend/Jenkinsfile` — independent of everything else in this phase
+Tasks with no pending dependencies — can be started immediately:
+- T1.1 [backend]: Add `image` to the `contenttype` enum (no deps)
+- T1.2 [backend]: Add the `visibility_status` column (no deps)
+- T1.3 [backend]: Pydantic schema surface (no deps)
+- T3.1 [backend]: `copy_to_content_store` (no deps)
+- T4.1 [backend]: Upload-group resolver (no deps)
+- T5.1 [frontend]: Promote `ContentViewer` to shared (no deps)
+- T5.2 [frontend]: Add `"image"` to the content-type unions (no deps — but lands with T5.3)
+- T6.3 [frontend]: Markdown editor with live preview (no deps)
+- T6.4 [frontend]: Correct the provenance tooltip (no deps)

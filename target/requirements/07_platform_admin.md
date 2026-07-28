@@ -43,12 +43,14 @@ Platform Admin (`admin` role) manages the authoritative platform board content. 
 - "Add Topic" button below the list.
 - **Publish toggle per topic:** `draft` → `live` (visible to all students) or `live` → `draft`.
 - **Publish Board modal:** preview of all draft changes, confirmation to publish.
+- **Content viewers:** admin can view every upload in both its raw form (PDF viewer / image viewer) and its extracted, editable text form — same shared `ContentViewer` used for students (`target/requirements/12_content_extraction.md` § Content viewers).
+- **Content publish control:** each upload group gets its own Publish action, independent of the topic's Draft/Live status — for PDF/Image, a mutually-exclusive "Publish as Document" (raw) vs. "Publish as Text" (extracted) toggle; for Video/Text, a simple Draft/Published toggle. A topic can be `live` while individual content items are still in draft, pending admin review (BR-ADM-008).
 
 ### Add Content modal (Phase 1d-real)
 
 Replaces the URL-only stub shipped in Phase 1d. Native `<dialog>`, 560 px wide.
 
-- Type chip selector: **PDF** (extracted to text) · **Image(s)** (OCR via vision LLM) · **Video URL** (YouTube/Vimeo) · **Text** (paste/write markdown).
+- Type chip selector: **PDF** (retained raw + extracted to text) · **Image(s)** (retained raw + OCR via vision LLM) · **Video URL** (YouTube/Vimeo) · **Text** (paste/write markdown).
 - For PDF / Image: drag-drop zone + click-to-browse, file list with size + remove buttons. **Max 10 files per submission.** Max 50 MB per file.
 - Cost preview band (e.g. "Est. $0.50–$2.00") shown next to Upload button. For estimates >$2: confirmation checkbox required.
 - On Upload click: **modal closes immediately**. For each file, frontend creates a client-side pseudo-job (`status='uploading'`) on the topic card, then POSTs in parallel. On 201 the pseudo-job is replaced by the real `pending` job; on error it becomes `upload_failed` with a Retry button.
@@ -101,6 +103,7 @@ mastery attribution (G4.2).
 - BR-ADM-005: Platform Admin cannot access student profiles, exam sessions, or parent-child links.
 - BR-ADM-006: Platform Admin extraction quota is APISIX-gated only (20 uploads/hr token-rate). No application-layer quota in v1.
 - BR-ADM-007: Every question authored via the exam builder SHOULD carry a `topic_id` (set via the per-question Topic dropdown) so its score contributes to per-topic mastery. `topic_id` is optional at the API (legacy / NULL-topic questions are skipped by mastery recalc, not rejected); the UI makes it effectively required.
+- BR-ADM-008 (Content Viewing & Publish increment): Content items default to `visibility_status='draft'` regardless of the topic's own Draft/Live status — a `live` topic can still have content no student can yet see, pending the admin's publish decision. See BR-DATA-024/025.
 
 ---
 

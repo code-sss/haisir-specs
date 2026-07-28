@@ -52,8 +52,10 @@
 | Node rows | Indented by depth, expand/collapse arrow, leaf node shows topic count badge |
 | Selected node | Highlighted row |
 | Right panel | Topic list or empty state "Select a topic to begin" |
-| Topic row | Title, content type icons (PDF/video/text), `live` badge, "Take Exam" button |
+| Topic row | Title, content type icons (PDF/image/video/text), `live` badge, "Take Exam" button |
 | Draft topics | Not shown to students |
+| Content items | Within a `live` topic, only items with `visibility_status='published'` are listed — a topic can be `live` with some content still hidden pending publish |
+| Content viewer | Dispatches per `content_type`: inline PDF viewer, inline image viewer, rendered-markdown viewer (text), YouTube/Vimeo SDK player with external-link fallback (video) |
 | "Take Exam" button | Blue (platform) or green (Home Study) |
 
 **States:**

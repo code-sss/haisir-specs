@@ -112,12 +112,13 @@ Two source tabs: **Platform** | **Home Study**.
 
 ### Right panel — Topic list
 - Lists topics for the selected node.
-- Each row: topic title, content type icons (PDF / video / text), status badge (`live` only — draft topics not shown to students), "Take Exam" button if an exam template is linked.
-- Clicking a topic opens the topic content viewer (inline PDF, video embed, or text).
+- Each row: topic title, content type icons (PDF / image / video / text), status badge (`live` only — draft topics not shown to students), "Take Exam" button if an exam template is linked.
+- Clicking a topic opens the topic content viewer: a native PDF viewer for `pdf` content, an image viewer for `image` content, a rendered-markdown viewer for `text` content, and an SDK-based YouTube/Vimeo player (with a "Watch on YouTube/Vimeo" fallback if embedding is blocked) for `video` content. Only content items with `visibility_status='published'` appear in the list (BR-DATA-025) — a topic can be `live` while some of its content items are still in draft, mid-review by the uploader.
 - "Take Exam" → creates a new `exam_session` and navigates to S-exam.
 
 **Business rules:**
 - BR-STU-003: Students only see topics with `status = 'live'`.
+- BR-STU-025 (Content Viewing & Publish increment): Within a `live` topic, students additionally only see `topic_contents` rows with `visibility_status='published'` (BR-DATA-025). For a PDF/Image upload, this is normally the raw document; the extracted-text rows are shown instead only when the uploader has explicitly published the text side over the raw side (BR-DATA-024).
 - BR-STU-004: "Take Exam" is shown if the topic's parent node has at least one published `exam_template` scoped to that node.
 - BR-STU-005: Exam sessions are per-student; `exam_sessions.user_id = student.idp_sub`.
 - BR-STU-023 (pre-Phase-5 G3, issue 5): When "Take Exam" is launched **from a topic row** (not a

@@ -86,9 +86,11 @@ Two entry paths:
 ## P-topic — Topic Content Manager
 
 - Topic title (editable).
-- Content actions: same Add Content modal as Platform Admin (PDF / Image / Video / Text). PDF and Image trigger the extraction pipeline; Video and Text save instantly.
+- Content actions: same Add Content modal as Platform Admin (PDF / Image / Video / Text). PDF and Image trigger the extraction pipeline (materializing both a permanent raw row and editable extracted-text rows); Video and Text save instantly.
 - IN PROGRESS strip on each topic mirrors the admin UX (status pills, progress bars, Cancel + Retry actions).
 - Materialized text rows from extraction show a provenance badge ("Extracted from notes.pdf · page 3").
+- **Content viewers:** parent can view every upload in both its raw form (PDF viewer / image viewer) and its extracted, editable text form before deciding what students see — same shared `ContentViewer` used for students (`target/requirements/12_content_extraction.md` § Content viewers).
+- **Publish control:** each upload group gets a Publish action — for PDF/Image, a mutually-exclusive "Publish as Document" (raw) vs. "Publish as Text" (extracted) toggle; for Video/Text, a simple Draft/Published toggle. Nothing is visible to the linked child until published, independent of the topic's own Draft/Live status (BR-PAR-021).
 - All endpoints under `/api/parent/curriculum/...`.
 - See `target/requirements/12_content_extraction.md` for full extraction behaviour.
 
@@ -116,6 +118,7 @@ Extraction (above) is a separate, already-visible pipeline from **embedding**: o
 - BR-PAR-007: File uploads go through the same `StorageBackend` interface as platform content (local disk v1).
 - BR-PAR-008a: Parent extraction quota — max 5 concurrent jobs (`status IN ('pending','extracting')`) and max 100 jobs/day. Enforced application-layer via `parent_quota_counters` row lock inside the POST handler TX. APISIX rate limit (50/day per parent token) is a coarse second-line defence.
 - BR-PAR-020: Parent can view indexing status and trigger a manual retry only for content under their own topics (`owner_id = parent.idp_sub`) — same 404-oracle ownership pattern as BR-PAR-006. See BR-DATA-023 for the retry mechanics and the cooldown-window abuse guard.
+- BR-PAR-021 (Content Viewing & Publish increment): Content items default to `visibility_status='draft'` regardless of the topic's own Draft/Live status — a `live` Home Study topic can still have content the linked child cannot yet see, pending the parent's publish decision. See BR-DATA-024/025.
 
 ---
 

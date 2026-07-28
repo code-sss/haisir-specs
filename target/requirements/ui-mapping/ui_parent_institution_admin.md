@@ -245,10 +245,13 @@ Visible whenever topic has any `contents`. One `.content-row` per item from `ren
 
 | Element | Detail |
 |---|---|
-| Row layout | Icon (📝 text / 🎬 video / 🖼️ image) · main (title, meta) · Edit / Delete buttons |
+| Row layout | Icon (📄 pdf / 🖼️ image / 🎬 video / 📝 text) · main (title, meta) · View / Edit / Delete buttons · publish state pill |
 | Title (`.cr-name`) | **Click to inline-rename**. `contenteditable=true`, blue outline, Enter saves, Esc reverts, empty reverts. Sends `PATCH /api/topic-contents/{id}` with `{title}`. |
-| Provenance badge (`.cr-prov`) | When `source_extraction_job_id` is set: "✨ from {source_filename} · p.{n}" pill on the meta line. Tooltip: "This row was created by an extraction job. The original PDF/image is no longer stored." Persists after edits. |
-| Edit button | Opens `#modal-edit-content` (560 px). Title input + markdown body textarea (or URL input for video). Provenance line shown at the top of the modal. Save sends `PATCH /api/topic-contents/{id}` with `{title, body}`. |
+| Provenance badge (`.cr-prov`) | When `source_extraction_job_id` is set: "✨ from {source_filename} · p.{n}" pill on the meta line. Tooltip: "This row was created by an extraction job." (Revised — the original PDF/image is now permanently retained, not purged; see `12_content_extraction.md`.) Persists after edits. |
+| Publish state pill | `.cr-published` "● Published" (green) or `.cr-draft` "○ Draft" (grey) per row. For a `pdf`/`image` row and its sibling extracted `text` rows, exactly one side shows Published at a time (BR-DATA-024). |
+| View button | For `pdf`/`image` rows: opens the inline PDF/image viewer (read-only, no body to edit). For `video` rows: opens the SDK-based player preview. |
+| Edit button | For `text` rows: opens `#modal-edit-content` (560 px), title input + **markdown editor with live preview**. For `video` rows: title + URL input. Not shown on `pdf`/`image` rows (use View instead — there is no editable body). Save sends `PATCH /api/topic-contents/{id}` with `{title, body}`. |
+| Publish toggle | On the upload group (raw + its sibling text rows, keyed by `source_extraction_job_id`) or the standalone video/text row (`source_extraction_job_id IS NULL` → group of one): switches which side is `visibility_status='published'`. One `PATCH /api/topic-contents/{content_id}/publish` call per BR-EXT-037 — the server drafts the previous side in the same transaction; the UI never writes rows individually. |
 | Delete button | Confirm dialog mentioning audit is preserved. Sends `DELETE /api/topic-contents/{id}`. Provenance audit row is NOT cascade-deleted. |
 | Empty state | When no content AND no jobs: "No content yet — add a PDF, image, video URL, or text below." |
 
@@ -258,11 +261,20 @@ Native `<dialog>`, 560 px wide. Triggered by Edit button on any content row.
 
 | Element | Detail |
 |---|---|
-| Provenance line | Top of modal. For extracted rows: "✨ Extracted from **{source_filename}** · page {n}. Edits don’t affect the audit record." For non-extracted: "Video URL content." / "Text content (manually authored)." |
+| Provenance line | Top of modal. For extracted `text` rows: "✨ Extracted from **{source_filename}** · page {n}. Edits don’t affect the audit record." For non-extracted: "Video URL content." / "Text content (manually authored)." |
 | Title input | Required. Cannot be empty. |
-| Body field | Markdown textarea (text/extracted) OR URL input (video). Body label and hint text adapt by content kind. |
+| Body field | Markdown editor with live preview (side-by-side or toggleable rendered pane, `text` rows) OR URL input (`video`). `pdf`/`image` rows never open this modal — see the View button / inline viewer instead. |
 | Save | `PATCH /api/topic-contents/{id}`. `source_extraction_job_id` is NEVER touched. |
 | Cancel | Closes modal without sending. |
+
+### Content viewers (`pdf` / `image` / `video`)
+
+| Element | Detail |
+|---|---|
+| PDF viewer | Inline, opened via the content row's View button. Reuses the existing `SecurePdfViewer` (`src/components/pdf-viewer/secure-pdf-viewer.tsx`) — not a new component; only its `pdfUrl` changes, to `GET /api/topic-contents/{content_id}/file`. |
+| Image viewer | Inline (lightbox/zoom optional), same trigger. **Net-new** — fetches the same per-content file endpoint. |
+| Shared component | All three come from the `ContentViewer` promoted out of `src/features/student/components/` into a shared location, so student, admin and parent mount one component. |
+| Video player | YouTube IFrame Player API / Vimeo Player SDK, not a raw `<iframe>`. On an embed error (video owner disabled embedding), shows a "Watch on YouTube"/"Watch on Vimeo" external-link button instead of a broken frame. Same component used in the uploader's View action and the student's S-nav content viewer. |
 
 ### Polling cadence (frontend, JS)
 

@@ -270,7 +270,7 @@ ALTER TABLE exam_session_questions
 
 > Detailed behaviour and business rules in `target/requirements/12_content_extraction.md`. This section defines the storage shape only.
 
-### 1 column added to existing `topic_contents` (additive, nullable)
+### Columns added to existing `topic_contents` (additive)
 
 ```sql
 ALTER TABLE topic_contents
@@ -282,6 +282,31 @@ ALTER TABLE topic_contents
 | `source_extraction_job_id` | UUID | NULL | Soft pointer (no FK per CLAUDE.md identity convention). Set only for rows materialized by an extraction job. Joins to `extraction_job_audit.job_id` for provenance display. |
 
 **Migration:** No backfill required. Existing rows remain `NULL`.
+
+### Schema Extensions (Content Viewing & Publish — this increment)
+
+```sql
+ALTER TABLE topic_contents
+  ADD COLUMN visibility_status VARCHAR NOT NULL DEFAULT 'draft'; -- 'draft' | 'published'
+```
+
+| Column | Type | Constraint | Notes |
+|---|---|---|---|
+| `visibility_status` | VARCHAR | NOT NULL, DEFAULT `'draft'` | `'draft'` \| `'published'` — enforced at Pydantic schema layer only (`Literal["draft","published"]`), no DB CHECK, same pattern as `topics.status`. |
+
+`content_type` gains a new value: **`'image'`** (`'pdf'` already exists in the baseline enum, previously unused for raw-file storage — see BR-DATA-024 below). Note this is a **native Postgres enum type**, not a VARCHAR — `topic_contents.content_type` was created as `sa.Enum(..., name="contenttype")` in `V4_topic.py`, so the value must be added with DDL of its own:
+
+```sql
+ALTER TYPE contenttype ADD VALUE IF NOT EXISTS 'image';
+```
+
+`ALTER TYPE ... ADD VALUE` cannot be run inside the transaction that then *uses* the new value, so the Alembic revision must issue it in an autocommit block (`with op.get_context().autocommit_block():`) ahead of any DML referencing `'image'`.
+
+No column stores the raw file separately: the raw row reuses the existing **`url`** column, which is already the file-path/URL column for `topic_contents` (`video` rows hold their external URL there; `pdf` rows hold a local path there, normalized by `TopicContentService.create` to `{data_dir}/topics/{content_type}/{filename}`). The `text` column stays reserved for markdown bodies — putting a path in it would also defeat the RAG worker's `tc.text IS NOT NULL AND tc.text != ''` guard.
+
+**Migration:** deliberate reset, not a backfill. `topic_contents`, `extraction_jobs`, `extraction_job_pages`, `extraction_job_audit`, `rag_indexing_outbox`, and `data_topic_content_chunks` are truncated as part of this rollout — existing content is discarded rather than migrated forward, by product decision. All content is re-uploaded fresh under the model below.
+
+**The truncate must NOT ship inside the Alembic revision.** Migrations run automatically on deploy; an irreversible data-destroying statement inside one would fire against any environment the image reaches, with no operator in the loop. The additive DDL (`ALTER TYPE`, `ADD COLUMN`) goes in the revision; the truncate is a separate, manually-invoked runbook script requiring explicit confirmation, run once per environment. Orphaned files under `{data_dir}/topics/` must be cleared in the same runbook — truncating the rows does not delete them. (Absent that decision, the safe default would be `'published'`, not `'draft'`, mirroring `topics.status`'s `DEFAULT 'live'` — so existing rows would stay visible and only new inserts would be explicitly drafted. Worth remembering if a future increment ever adds a column like this against a deployment with content worth preserving.)
 
 ### New table — `extraction_jobs`
 
@@ -431,11 +456,13 @@ CREATE TABLE parent_quota_counters (
 
 ### Extraction Business Rules
 
-**BR-DATA-008 — Extraction produces text-only content:**
-A successful job materializes `topic_contents` rows with `content_type='text'` only. The source PDF/image is **not** stored as a `topic_contents` row. No new `content_type` enum value is added.
+**BR-DATA-008 — Extraction materializes both a raw content row and text rows (supersedes the prior text-only rule):**
+A successful job now materializes: (a) **one** raw content row (`content_type='pdf'` or `'image'`, matching `extraction_jobs.source_type`) pointing at a permanently-retained copy of the source file, and (b) the **N** extracted `content_type='text'` rows, one per page, as before. Both sets share the same `source_extraction_job_id`. The raw row's file path is stored in the existing **`url`** column — the same column `video` and manually-uploaded `pdf` rows already use — so no new storage column is added. Both the raw row and the text rows default to `visibility_status='draft'`; see BR-DATA-024 for how one is chosen to publish.
 
-**BR-DATA-009 — Source files are transient; audit is permanent:**
-`extraction_jobs.source_path` files and `extraction_jobs` rows are purged per status TTL. `extraction_job_audit` rows are **never purged** — they preserve provenance for materialized `topic_contents`.
+**Ordering:** the raw row is **appended after** the text rows (`order = N`, where text rows keep their existing `order = page_no`, 0-indexed). Text-row ordering is deliberately left untouched because `provenance.page_no` is derived directly from `topic_contents.order` (`TopicContentRepository._set_provenance`) — shifting text rows to make room at the front would silently renumber every provenance badge. Uploader UIs that want the raw form listed first should sort client-side rather than encode it in `order`.
+
+**BR-DATA-009 — The job's working copy is transient; the audit and the published raw file are permanent:**
+`extraction_jobs.source_path` — the job's own working-directory copy of the upload — and the `extraction_jobs` row itself are still purged per status TTL, unchanged by BR-DATA-008. This purge is independent of the permanent raw `topic_contents` row (content_type `'pdf'`/`'image'`), whose file is a separate copy made at finalize time and is never subject to this TTL — it persists until the content row itself is deleted. `extraction_job_audit` rows are **never purged** — they preserve provenance for materialized `topic_contents` regardless of which representation (raw or text) was ultimately published.
 
 **BR-DATA-010 — Provenance is preserved across content deletes:**
 Manually deleting a `topic_contents` row via `DELETE /api/topic-contents/{id}` does not cascade to `extraction_job_audit`. The audit retains "this job extracted N pages on date X by user Y" forever.
@@ -457,6 +484,18 @@ Before this rule, the only way to escape a permanently `failed` (`retry_count >=
 
 **BR-DATA-022 — RAG cleanup cascades with the owning topic/node:**
 Deleting a topic, or a `course_path_nodes` subtree, deletes every embedded `topic_contents` row's chunks and outbox row (BR-DATA-021's cleanup, applied per `content_id` in the subtree) inside the same cascade transaction as the topic/node delete. No orphaned chunks or outbox rows can outlive their owning topic.
+
+**BR-DATA-024 — Publish is a per-upload, mutually exclusive choice between raw and extracted (Content Viewing & Publish):**
+For a PDF/Image upload, the uploader (platform admin or parent, matching the topic's `owner_type`) publishes **either** the single raw row **or** the full set of extracted text rows sharing that upload's `source_extraction_job_id` — never both at once. Setting one side's `visibility_status='published'` requires the other side's rows to be (or be set to) `'draft'`. Enforced at the service/API layer only, no DB constraint — same precedent as `topics.status` having no DB CHECK. Typical case: raw is published because the source is a well-formatted document (e.g. a textbook page) that should be shown as-is; the extracted-text side is published instead only when the raw source is low-quality (e.g. a poor scan) and the uploader edits the extracted text into something more readable. Video and Text content types have no raw/extracted duality (the stored value already is the one representation) — they use the same `visibility_status` column directly, with no mutual-exclusivity rule to enforce.
+
+**Grouping key:** an upload group is `(topic_id, source_extraction_job_id)` where `source_extraction_job_id IS NOT NULL`. A row with `source_extraction_job_id IS NULL` — every manually-created video/text row, and any legacy row — is **its own group of one**, never grouped with other NULL rows. Implementations must not `GROUP BY source_extraction_job_id` without excluding NULLs, or every manual row on a topic collapses into a single false group. The grouping survives `extraction_jobs` TTL purge (BR-DATA-009) because `source_extraction_job_id` is a soft reference with no FK.
+
+**BR-DATA-025 — Student content visibility gains a content-item gate (companion to BR-DATA-003, does not replace it):**
+BR-DATA-003 gates visibility at the topic/node/exam level (`owner_type` + `parent_child_links`). This increment adds one more AND-condition underneath it, applied uniformly to **every** `content_type`: a student sees a `topic_contents` row only when `topics.status='live'` **and** `topic_contents.visibility_status='published'`. Rows still in `'draft'` are invisible to students even inside an otherwise-live topic. (The `contenttype` enum also carries `question` and `question_answer`, which are dead values — declared in `domain/models/topic_content.py` and referenced nowhere else in the backend. They inherit the gate by default like any other value; no special-casing.)
+
+This is orthogonal to `rag_indexing_outbox.status` (BR-PAR-020/BR-DATA-023) — indexing status governs hAITU search-groundedness, not student-facing visibility, and the two are deliberately decoupled: extraction's primary purpose is RAG, so every extracted `content_type='text'` row is enqueued at creation time **regardless of its own `visibility_status`** (extraction is why it exists, not whether a student can currently see it) — a text row kept in `'draft'` as the unpublished fallback (because the raw form was published instead, BR-DATA-024) is still searchable by hAITU.
+
+**No enqueue change is required for the new raw rows.** BR-DATA-020's prose frames non-text types as an exclusion list, but the implemented gate is an *allowlist* — `TopicContentService` enqueues only when `content_type == ContentType.text`, and the extraction worker enqueues only the text rows it materializes. `pdf` and `image` are therefore already excluded by construction, published or not. (BR-DATA-020's parenthetical "`video`, `url`" names a `url` content type that does not exist in the enum; left as-is rather than renumbered, but do not propagate it.)
 
 ---
 

@@ -292,7 +292,50 @@ Phase 6 closes to avoid disrupting the in-flight Phase 6 plan.
 
 ---
 
-## Phase 7 — Gateway WAF Modernisation, CSP & Security Review Closeout (planned 2026-07-27)
+## Phase 6.5 — Content Viewing & Publish (planned 2026-07-27)
+
+> Root goal: uploaded content is viewable in its native format by both the uploader and the student,
+> and student visibility becomes an explicit per-item publish decision instead of an implicit
+> side-effect of extraction finishing.
+
+Baseline at planning: backend `c82d466`, frontend `67a883c`, deploy `861705b`.
+
+Extraction was built to feed RAG embeddings; student display was an accident of that pipeline. The
+raw upload was purged on a TTL with no `topic_contents` row pointing at it, so a well-formatted
+textbook page was permanently replaced by a lossy transcription and neither admin nor parent could
+see what they had uploaded. There was no review gate — a bad OCR pass on a poor scan went straight
+to students. This phase materializes a permanent raw row alongside the extracted text rows, adds a
+`visibility_status` gate underneath the existing `topics.status='live'` gate, and makes publish a
+mutually-exclusive raw-vs-text choice per upload.
+
+**Sequencing:** G1 (schema) unblocks everything. G3 (raw file + serving endpoint) and G4 (publish
+API) are independent of each other and both feed the frontend goals. G5 (shared viewer) must land
+before G6 (uploader UI), which mounts it.
+
+**Scope locks:** the truncate is a confirm-gated runbook, never an Alembic revision — migrations run
+automatically on deploy and an irreversible `TRUNCATE` inside one fires with no operator in the
+loop. Publish is never a per-row write; `visibility_status` is absent from `TopicContentUpdate` and
+the only mutation path is the group-scoped endpoint, because the mutual-exclusivity invariant cannot
+hold if callers can set one row at a time. Video scope stays YouTube + Vimeo, matching the existing
+hostname allowlist.
+
+**Correction to the drafted specs:** a challenger pass found eight discrepancies between the target
+specs for this increment and the shipped code — most consequentially that the raw file path belongs
+in the existing `url` column (not `text`), that `content_type` is a native Postgres enum requiring
+`ALTER TYPE`, that the PDF viewer and `ContentViewer` already exist (only the image viewer is
+net-new), and that no file-serving endpoint was specced at all. All fixed in the specs before
+planning; see the corrections table in `PLAN.md`.
+
+**Deferred out of this phase:** BR-DATA-012's specced-but-unimplemented content-order base shift,
+and the pre-existing 0-indexed provenance page display. Both are pre-existing, and the raw row is
+deliberately appended after the text rows so neither gets worse.
+
+---
+
+## Phase 7 — Gateway WAF Modernisation, CSP & Security Review Closeout (deferred 2026-07-27, unstarted)
+
+> Superseded in sequence by Phase 6.5 — archived unstarted to
+> `archive/PLAN_Phase7-GatewayWAF-CSP_2026-07-27.md`. Deferred, not cancelled; resume after 6.5.
 
 > Root goal: the gateway WAF detects attacks precisely instead of being tuned into irrelevance;
 > the browser enforces a strict CSP; and every finding from the 2026-07-02 security review is

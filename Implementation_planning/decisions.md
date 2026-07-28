@@ -4,6 +4,57 @@
 
 ---
 
+## 2026-07-27 — Phase 6.5 planning: Content Viewing & Publish
+
+> Context: baseline backend `c82d466`, frontend `67a883c`, deploy `861705b`. Run via `/plan`. The
+> target specs for this increment had been drafted by a prior session without being checked against
+> the shipped code; this cycle challenged them against the repos before decomposing.
+
+- **Phase 7 archived unstarted rather than merged.** Gateway WAF/CSP and content publishing share
+  no files, no data model and no personas. Folding them together would have made a G2 WAF hard-gate
+  failure unattributable. Phase 7 is deferred, not cancelled.
+- **Raw file path goes in the existing `url` column, not `text`.** The drafted spec asserted video
+  rows hold their URL in `text`; they do not — `url` is the file-path column, `TopicContentService`
+  already normalizes to `{data_dir}/topics/{content_type}/{filename}`, and the existing file route
+  reads `url`. Using `text` would also have slipped the raw row past the RAG worker's
+  `tc.text IS NOT NULL AND tc.text != ''` guard.
+- **The raw row is appended after the text rows (`order = N`), not inserted at the front.**
+  `provenance.page_no` is derived from `topic_contents.order`, so shifting text rows to seat the raw
+  row first would silently renumber every provenance badge and every test asserting one. Appending
+  has a one-INSERT blast radius; the uploader UI sorts raw-first client-side instead. Chosen over
+  the shift-and-fix-provenance alternative.
+- **The content reset is a confirm-gated runbook, not an Alembic revision.** Migrations run
+  automatically on deploy; an irreversible `TRUNCATE` inside one would fire against every
+  environment the image reaches with no operator in the loop. Additive DDL stays in the revision.
+  The runbook must also clear `{data_dir}/topics/` — truncating rows orphans the files, it does not
+  delete them.
+- **A new per-content file endpoint replaces the legacy topic-keyed one rather than sitting beside
+  it.** `GET /api/topic-contents/{content_type}/{topic_id}` cannot address one of the N+1 rows a
+  topic now holds, hardcodes `application/pdf`, and is gated on `require_any_platform_role()` —
+  which excludes **parent**, so a parent could not fetch their own upload at all. Keeping both would
+  have meant two auth paths and two visibility filters to hold in sync. Product owner confirmed
+  backend and frontend always release together, so deleting the legacy route in this phase carries
+  no cross-release ordering hazard.
+- **Publish is exposed only as a group-scoped operation.** `visibility_status` is deliberately
+  absent from `TopicContentUpdate`: BR-DATA-024's mutual-exclusivity invariant cannot be enforced if
+  a caller can set one row's status at a time. One endpoint, one transaction, whole group.
+- **`source_extraction_job_id IS NULL` means "group of one".** Every manually-created video/text row
+  carries a NULL job id, so a `GROUP BY source_extraction_job_id` that does not exclude NULLs would
+  treat all of a topic's manual content as one group and draft the lot on any publish.
+- **No enqueue-gate change for the new raw rows.** BR-DATA-020's prose reads as an exclusion list,
+  but the implemented gate is an allowlist (`content_type == ContentType.text`), so `pdf`/`image`
+  are excluded by construction. Locked in with a regression test rather than new code, guarding
+  against a future refactor flipping it to a denylist.
+- **Viewer work is mostly promotion, not new build.** `ContentViewer` and `SecurePdfViewer` already
+  exist under `features/student/`; the spec had called the PDF viewer net-new. Only the image viewer
+  is genuinely new. The move to a shared location is kept as its own no-behaviour-change task so
+  later regressions stay attributable.
+- **Left deliberately unfixed:** BR-DATA-012's specced-but-unimplemented order base shift, and the
+  0-indexed `provenance.page_no` display (page 1 renders as `p.0`). Both pre-existing; the appended
+  raw row is specifically designed not to make either worse.
+
+---
+
 ## 2026-07-27 — Phase 7 scoping: gateway WAF modernisation, CSP, and security-review closeout
 
 > Context: baseline backend `c82d466`, frontend `67a883c`, deploy `861705b`, specs `1928b48`.

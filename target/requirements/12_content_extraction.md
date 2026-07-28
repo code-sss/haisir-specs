@@ -2,7 +2,7 @@
 
 > **Phase 1d-real scope.** Replaces the incomplete URL-only Add Content modal shipped in Phase 1d. Applies to Platform Admin and Parent personas.
 >
-> **Persistence model:** ONE PDF/image upload → N `topic_contents` rows with `content_type='text'`. The source PDF/image is **transient** (purged after retention window). No new `content_type` enum value is introduced. Confirmed by haiguru's `etl_pipeline/load.py:_load_contents` proof-of-concept.
+> **Persistence model (revised — Content Viewing & Publish increment):** ONE PDF/image upload → **one permanent raw** `topic_contents` row (`content_type='pdf'` or `'image'`) **plus** N extracted `topic_contents` rows (`content_type='text'`), all sharing one `source_extraction_job_id`. Extraction's primary purpose is feeding RAG embeddings — the raw row is what's normally shown to students (e.g. a well-formatted textbook page), with the extracted-text side available as an editable fallback the uploader can publish instead when the raw source is low quality (a poor scan, for instance). Only one side is published at a time (BR-DATA-024). Superseded rule: this used to be text-only, with the source PDF/image transient and never stored as a `topic_contents` row — see `target/requirements/01_data_model.md` BR-DATA-008/009 for the full before/after. The job's own working-directory copy (`extraction_jobs.source_path`) is still purged per the existing TTL; the permanent raw row is a separate copy made at finalize, with its path in the existing **`url`** column (not `text`).
 
 ---
 
@@ -304,21 +304,47 @@ SELECT owner_type, owner_id FROM topics WHERE id = :job.topic_id FOR UPDATE;
 -- Compute order base (challenger #5)
 SELECT COALESCE(MAX(content_order), 0) AS base
   FROM topic_contents WHERE topic_id = :job.topic_id;
+-- ⚠ SPEC↔CODE DRIFT, pre-existing, NOT introduced by this increment: the shipped
+-- worker (`src/worker/finalize.py`) sets `order = page.page_no` outright and never
+-- reads this base, so BR-DATA-012's base-shift is specced but unimplemented. This
+-- increment deliberately does not fix it — see BR-DATA-008's ordering note. Also
+-- note the real column is `"order"` (a reserved word, quoted in code); the
+-- pseudo-SQL below writes `content_order` for readability only.
 
 -- Read all staged pages
 SELECT page_no, markdown_text FROM extraction_job_pages
   WHERE job_id = :job ORDER BY page_no;
 
--- Materialize content rows
+-- Copy the source file from the job working directory into the permanent content store
+-- (Content Viewing & Publish increment). Two DISTINCT storage roots are involved:
+--   source:      EXTRACTION storage root (ExtractionSourceStorageImpl), holds job.source_path
+--   destination: {data_dir}/topics/{content_type}/{filename} — the convention
+--                TopicContentService.create already uses for manually-uploaded files,
+--                and the only root the file-serving endpoint will resolve under.
+-- extraction_jobs.source_path keeps its own TTL-purge lifecycle, unchanged.
+permanent_url := storage.copy_to_content_store(job.source_path, job.source_type, job.source_filename)
+
+-- Materialize the extracted text rows (N per upload) — order UNCHANGED from the
+-- pre-increment behaviour, because provenance.page_no is derived from it (BR-DATA-008)
 INSERT INTO topic_contents
-  (id, topic_id, content_type, title, text, content_order, source_extraction_job_id)
+  (id, topic_id, content_type, title, text, content_order, source_extraction_job_id, visibility_status)
 VALUES
-  (uuid(), :topic, 'text', :title, :md, :base + page_no, :job),
+  (uuid(), :topic, 'text', :title, :md, page_no, :job, 'draft'),
   ...
 RETURNING id;
 
--- Outbox for async embedding (challenger #3)
-INSERT INTO rag_indexing_outbox (content_id, status) VALUES (:returned_id, 'pending'), ...;
+-- Materialize the raw content row (1 per upload), APPENDED after the text rows.
+-- Path goes in the `url` column, not `text` — `url` is the existing file-path column.
+INSERT INTO topic_contents
+  (id, topic_id, content_type, title, url, content_order, source_extraction_job_id, visibility_status)
+VALUES
+  (uuid(), :topic, :job.source_type, :job.source_filename, :permanent_url, :page_count, :job, 'draft')
+RETURNING id;
+
+-- Outbox for async embedding (challenger #3) — text rows only, regardless of visibility_status
+-- (extraction's primary purpose is RAG; the raw row is never enqueued, there is no text to embed —
+--  and it is already excluded by construction: the enqueue gate is content_type == 'text')
+INSERT INTO rag_indexing_outbox (content_id, status) VALUES (:returned_text_id, 'pending'), ...;
 
 -- Audit (indefinite)
 INSERT INTO extraction_job_audit
@@ -339,9 +365,9 @@ COMMIT;
 
 ### Title derivation
 
-For each extracted page markdown, parse the first H1 (`# Foo`); use as title. Fallback: `"Page N — {source_filename}"`.
+For each extracted page markdown, parse the first H1 (`# Foo`); use as title. Fallback: `"Page N — {source_filename}"`. The raw content row's title is simply `source_filename`.
 
-**No upload-time title input for PDF/image** — one upload becomes N rows, so a single user-typed title cannot map cleanly. The filename is the upload-level identifier (carried in the provenance badge); page-level titles are auto-derived and editable post-hoc. Video and Text content types DO accept an optional/required title at upload (1 upload → 1 row).
+**No upload-time title input for PDF/image** — one upload becomes N+1 rows (N text, plus the raw row appended after them), so a single user-typed title cannot map cleanly. The filename is the upload-level identifier (carried in the provenance badge, and used directly as the raw row's title); page-level titles are auto-derived and editable post-hoc. Video and Text content types DO accept an optional/required title at upload (1 upload → 1 row).
 
 ### Editing materialized rows
 
@@ -432,8 +458,48 @@ Topic delete and `course_path_nodes` subtree delete (parent and admin paths) run
 ### Editing materialized rows (frontend)
 
 - **Click on title** → inline contenteditable; Enter saves, Esc reverts. Empty value reverts. Sends `PATCH /api/topic-contents/{id}` with `{title}` only.
-- **Edit button** → full editor modal (title input + markdown textarea / URL input for video). Save sends `PATCH /api/topic-contents/{id}` with `{title, body}`. Modal shows the provenance line at the top so admins know they are editing extracted content.
+- **Edit button** → full editor modal. For `text` rows: title input + **markdown editor with live preview** (textarea + rendered pane, toggleable or side-by-side — same `MarkdownText` rendering component the student viewer uses, so what the uploader previews is exactly what gets published). For `video` rows: title input + URL input. `pdf`/`image` rows are not text-edited (there is no body to edit) — see the viewers below. Save sends `PATCH /api/topic-contents/{id}` with `{title, body}`. Modal shows the provenance line at the top so admins know they are editing extracted content.
 - **Delete button** → confirm dialog mentioning that audit record is preserved.
+
+### Content viewers (uploader preview + student display — shared component)
+
+One `ContentViewer` dispatches on `content_type`, used identically by the uploader (reviewing before publish) and the student (reading published content).
+
+**This component already exists** at `src/features/student/components/content-viewer.tsx` and already dispatches on `content_type` — the work is to promote it out of `features/student/` into a shared location so admin and parent can mount it, then extend the switch. It is not built from scratch.
+
+| `content_type` | Viewer | Status |
+|---|---|---|
+| `pdf` | `SecurePdfViewer` (react-pdf, `usePDFBlob` CSRF fetch, `PDFDocument`) | **Already exists** at `src/components/pdf-viewer/secure-pdf-viewer.tsx` and is already wired into `ContentViewer`. Repoint its `pdfUrl` at the new per-content file endpoint; otherwise reused as-is. |
+| `image` | Inline image viewer (lightbox/zoom optional) | **Net-new** — the only genuinely new viewer. Needs a matching `case "image"` in the `ContentViewer` switch, which is exhaustive over the `content_type` union. |
+| `text` | Rendered markdown (`MarkdownText`) | **Already exists** for display; gains the live-preview pairing above for the editor (BR-EXT-036). |
+| `video` | Player via official SDK | **Replaces** the current raw `<iframe src>` at `content-viewer.tsx:40`, which fails outright for embed-restricted YouTube videos, for both the uploader's preview and the student's viewer. See BR-EXT-035. |
+
+### Raw file serving
+
+Neither the raw PDF nor the raw image can be rendered without an authenticated endpoint that streams the stored file. The existing route is not usable for this:
+
+`GET /api/topic-contents/{content_type}/{topic_id}` is keyed by **topic**, so it cannot address one of the N+1 rows a topic now holds; it hardcodes `media_type="application/pdf"`; and it is gated on `require_any_platform_role()` (student, instructor, admin), which **excludes parent** — so a parent cannot fetch their own uploads.
+
+It is replaced by a per-content endpoint:
+
+| | |
+|---|---|
+| Route | `GET /api/topic-contents/{content_id}/file` |
+| Resolves | Exactly one `topic_contents` row by id; 404 if absent, non-file `content_type`, or `url` empty |
+| Media type | Derived from `content_type` + stored extension (`application/pdf`, `image/png`, `image/jpeg`, `image/webp`) — never hardcoded |
+| Path safety | Resolve under `{data_dir}` and reject any path escaping the root, as the current route already does |
+| Student | 404 unless BR-DATA-003 visibility **and** `topics.status='live'` **and** `visibility_status='published'` (BR-DATA-025) |
+| Admin | Platform-owned rows only (BR-SEC-005) |
+| Parent | Rows under topics with `owner_id = parent.idp_sub` only — same 404-oracle pattern as BR-PAR-006 |
+
+The legacy `GET /api/topic-contents/{content_type}/{topic_id}` route is **removed** once the frontend is migrated, so there is a single file path to authorize.
+
+### Publish action (uploader-triggered)
+
+- New control on each upload group (the raw row + its sibling text rows, or a standalone video/text row): **Publish**, choosing which representation students see.
+- For a PDF/Image upload: a two-way toggle — "Publish as Document" (raw) or "Publish as Text" (extracted, editable beforehand) — mutually exclusive (BR-DATA-024). Switching sets the chosen side's rows to `visibility_status='published'` and the other side's rows back to `'draft'` in one call.
+- For Video/Text: a simple Draft/Published toggle on the single row, same interaction as the existing topic-level Draft/Live toggle.
+- Draft content remains fully visible/editable to the uploader (both raw and extracted forms) at all times — only student-facing display is gated.
 
 ---
 
@@ -457,7 +523,7 @@ Topic delete and `course_path_nodes` subtree delete (parent and admin paths) run
 - **BR-EXT-033** — `restructure_page()` uses `EXTRACTION__RESTRUCTURE_MODEL_SPEC` if set; falls back to `EXTRACTION__MODEL_SPEC` otherwise. A lighter text-only model (e.g. `qwen3.5:9b`) is preferred to reduce cost and latency, since no image is processed in this path.
 - **BR-EXT-010** — Worker re-validates ownership of the target topic in the finalize transaction. Mismatch → `extraction_failed` with `error='ownership_violation'`.
 - **BR-EXT-011** — Finalize is one TX: `topic_contents INSERT` + `rag_indexing_outbox INSERT` + `extraction_job_audit INSERT` + `extraction_job_pages DELETE` + `extraction_jobs UPDATE`. Atomic.
-- **BR-EXT-012** — RAG embedding is async via outbox. Failure to embed never rolls back content. Content is visible immediately; searchable when outbox row drains.
+- **BR-EXT-012** — RAG embedding is async via outbox, decoupled from student visibility (revised — Content Viewing & Publish increment). Failure to embed never rolls back content. Materialized rows are **not** visible to students on creation — they default to `visibility_status='draft'` and require an explicit publish action (BR-DATA-024). Embedding proceeds independently: extracted `text` rows are enqueued and become searchable by hAITU as soon as the outbox row drains, regardless of whether that row is ever published for student display.
 - **BR-EXT-013** — Per-job cost cap: `MAX_PER_JOB_USD=20` (env-configurable). Worker tracks running cost from token counts × per-token prices; kills job that exceeds.
 - **BR-EXT-014** — Per-day platform cost cap: `MAX_DAILY_PLATFORM_USD=200` (env-configurable). Worker queries today's `extraction_job_audit.cost_usd` sum before claiming a new job; if exceeded, sleeps 60s and retries.
 
@@ -500,6 +566,13 @@ Topic delete and `course_path_nodes` subtree delete (parent and admin paths) run
 ### Health
 
 - **BR-EXT-031** — Workers write `worker_heartbeats` row every 10s. `GET /api/admin/system/workers` returns workers with `last_seen > NOW()-INTERVAL '60s'` flagged as stale.
+
+### Publish & viewing (Content Viewing & Publish increment)
+
+- **BR-EXT-034** — Every materialized row (raw or text) defaults to `visibility_status='draft'`. Neither side of an extraction is visible to students until the uploader explicitly publishes one (BR-DATA-024). Video and Text rows created via the instant path (`POST /api/topic-contents`) also default to `'draft'`.
+- **BR-EXT-037** — Publish is a single atomic call per upload group, not a per-row toggle: `PATCH /api/topic-contents/{content_id}/publish` (and the parent-scoped mirror under `/api/parent/curriculum/`) resolves the row's group per BR-DATA-024's grouping key and, in **one transaction**, sets the chosen side to `'published'` and every other row in the group to `'draft'`. A per-row `visibility_status` write is not exposed — the mutual-exclusivity invariant cannot be enforced if callers can set one row at a time.
+- **BR-EXT-035** — Video playback uses the official YouTube IFrame Player API / Vimeo Player SDK, not a raw `<iframe src="...">`. Scope stays YouTube + Vimeo only (matching the existing hostname allowlist in BR-EXT/T13.2 — `youtube.com`, `www.youtube.com`, `youtu.be`, `vimeo.com`, `www.vimeo.com`). When the SDK reports an embed error (e.g. the video owner disabled embedding), the player falls back to a "Watch on YouTube"/"Watch on Vimeo" external-link button instead of a silently broken frame. Applies to both the uploader's preview and the student's viewer.
+- **BR-EXT-036** — Text content editing uses a markdown editor with live preview (textarea + rendered pane via the shared `MarkdownText` component), replacing a plain textarea-only editor. Uploader and student see identically-rendered markdown — one rendering pipeline for both authored and extracted text.
 
 ---
 
