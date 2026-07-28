@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`0ba0362` frontend:`67a883c` deploy:`861705b` (2026-07-28)
+> Last baselined: backend:`0ba0362` frontend:`8dc994e` deploy:`861705b` (2026-07-28)
 > Phase 6.5 scoped 2026-07-27 — see `PLAN.md` for the goal tree, the spec-review corrections table
 > and the scope locks. Phase 7 (Gateway WAF) archived unstarted; resume after this phase.
 
@@ -40,11 +40,14 @@
 
 ## G6 [frontend]: Uploader review and publish UI
 - [x] T6.1 [frontend]: Content row — View button and publish-state pill; View replaces Edit on `pdf`/`image` (depends on T5.1) (2026-07-28)
-- [ ] T6.2 [frontend]: Publish toggle — one call per switch, server owns mutual exclusivity (depends on T4.2, T4.3 [backend], T6.1)
+- [x] T6.2 [frontend]: Publish toggle — one call per switch, server owns mutual exclusivity (depends on T4.2, T4.3 [backend], T6.1) (2026-07-28)
 - [x] T6.3 [frontend]: Markdown editor with live preview via the shared `MarkdownText` component (2026-07-28)
 - [x] T6.4 [frontend]: Correct the provenance tooltip — the source file is no longer discarded (2026-07-28; no-op — shipped tooltip already correct, see decisions)
 - [ ] **G6: Uploader review and publish UI** — integration test
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T6.2 [frontend]: Publish toggle — one call per switch, server owns mutual exclusivity (deps T4.2, T4.3 [backend], T6.1 all done)
+- (none) — every G1–G6 constituent task across all repos is done. Only the six goal-level
+  integration tests remain (G1–G6), each requiring a live backend + deploy stack to execute
+  (e.g. G6: upload as admin, publish, confirm student visibility, repeat as parent). Not
+  runnable from a frontend-only environment; needs a full-stack test pass.
