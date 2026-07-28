@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`de7e794` frontend:`67a883c` deploy:`861705b` (2026-07-28)
+> Last baselined: backend:`0ba0362` frontend:`67a883c` deploy:`861705b` (2026-07-28)
 > Phase 6.5 scoped 2026-07-27 — see `PLAN.md` for the goal tree, the spec-review corrections table
 > and the scope locks. Phase 7 (Gateway WAF) archived unstarted; resume after this phase.
 
@@ -20,7 +20,7 @@
 - [x] T3.2 [backend]: `finalize()` appends the raw row at `order = N` with its path in `url`; text-row ordering untouched (depends on T3.1, T1.1, T1.2) (2026-07-28)
 - [x] T3.3 [backend]: Regression test — the raw row never enters `rag_indexing_outbox` (depends on T3.2) (2026-07-28)
 - [x] T3.4 [backend]: `GET /api/topic-contents/{content_id}/file` — sniffed media type, path safety, student/admin/parent gating (depends on T1.2) (2026-07-28)
-- [ ] T3.5 [backend]: Delete the legacy `GET /api/topic-contents/{content_type}/{topic_id}` route (depends on T5.4 [frontend])
+- [x] T3.5 [backend]: Delete the legacy `GET /api/topic-contents/{content_type}/{topic_id}` route (depends on T5.4 [frontend]) (2026-07-28)
 - [ ] **G3: Raw file materialized and servable** — integration test
 
 ## G4 [backend]: Publish as an atomic per-group decision
@@ -47,4 +47,4 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T3.5 [backend]: Delete the legacy `GET /api/topic-contents/{content_type}/{topic_id}` route (dep T5.4 [frontend] done)
+- T6.2 [frontend]: Publish toggle — one call per switch, server owns mutual exclusivity (deps T4.2, T4.3 [backend], T6.1 all done)
