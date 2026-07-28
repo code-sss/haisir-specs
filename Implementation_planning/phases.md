@@ -289,3 +289,56 @@ across `haisir-backend`, `haisir-frontend`, and every Dockerfile/compose service
 above (Prometheus + Grafana are free on Minimus). Full spec:
 `target/requirements/14_container_images.md`. Not planned yet — deliberately sequenced after
 Phase 6 closes to avoid disrupting the in-flight Phase 6 plan.
+
+---
+
+## Phase 7 — Gateway WAF Modernisation, CSP & Security Review Closeout (planned 2026-07-27)
+
+> Root goal: the gateway WAF detects attacks precisely instead of being tuned into irrelevance;
+> the browser enforces a strict CSP; and every finding from the 2026-07-02 security review is
+> either fixed or explicitly and defensibly accepted. Scoped via `/update-target-state` rather than
+> `/plan` — the trigger was an operational complaint (WAF false positives requiring near-daily rule
+> exclusions), and scoping surfaced a mechanical root cause plus an unpatched CVE. Specs written
+> this cycle: `target/requirements/16_gateway_waf.md`, `target/requirements/15_security_headers.md`,
+> `02_auth_and_roles.md` (BR-SEC-020/021). One challenger round run — findings and the three
+> corrections it forced are in `decisions.md` (2026-07-27 entry).
+
+| Goal | Concern | Repos | Outcome |
+|---|---|---|---|
+| **G1** — Gateway build modernised and self-maintained | Vendor `coraza-proxy-wasm`; spike the real Go/TinyGo ceiling; upgrade Coraza ≥3.5.0 and CRS ≥4.22.0; gateway builder stage to Minimus | deploy | |
+| **G2** — WAF verification (**HARD GATE**) | CVE-2026-21876 blocked; runtime regex-scoped `ctl:ruleRemoveTargetById` proven to fire; no detection regression | deploy | |
+| **G3** — Payload design fixed at the source | Prompt injection closed; chat transcripts persisted server-side instead of replayed; exam images by URL; `max_length` on free-text fields | backend, frontend, deploy | |
+| **G4** — Exclusions rewritten field-scoped or deleted | Retire the 38-ID block; restore anomaly threshold 5 on the authoring route; disambiguate route priorities | deploy, backend | |
+| **G5** — CSP enforced | Nonce CSP in the existing `proxy.ts`; working report collector; Report-Only soak including the OIDC round-trip; then enforce | frontend | |
+| **G6** — Auth and transport verification | BR-SEC-021 TLS verification to Keycloak; BR-SEC-020 JWT audience; internal TLS (M5); Keycloak realm policy (H3) | backend, deploy | |
+| **G7** — Residual review items | M2/B4 streaming size cap; M3 Jenkins params; M4 Tailscale ACLs; L3 header; documented acceptances; Phase 5.6 parked gaps; 2026-07-27 audit anomalies | deploy, backend, frontend | |
+| **G8** — Review gate and closeout (**HARD GATE**) | Two independent adversarial security-review passes; proxy-wasm upgrade runbook; specs reconciled with what shipped | specs | |
+
+DAG spine: G1 → G2 (gate) → G3 → G4 → G5 → G6 → G7 → G8 (gate). G5/G6/G7 are mutually independent
+once G4 lands; G3 may start alongside G1 since it has no dependency on the WAF build; G4 must not
+begin until G2 passes.
+Baseline at planning: backend `c82d466`, frontend `67a883c`, deploy `861705b`, specs `1928b48`.
+
+**Why G3 precedes G4:** fixing the payloads first means several exclusions get *deleted* rather
+than carefully rewritten for a request shape that is about to stop existing. Sequencing them the
+other way would spend the phase's most delicate work on configuration that G3 then obsoletes.
+
+**Scope locks:** Coraza stays — SafeLine and open-appsec were evaluated and rejected with reasons
+recorded in `16_gateway_waf.md`, so neither should be re-litigated. Only the *gateway builder
+stage* of the Minimus migration is in scope; the other ~25 services stay in Phase 8, because
+running two hard gates across three repos and two unrelated concerns would make a G2 failure
+unattributable between the Coraza upgrade and the base-image swap.
+
+**Carried into Phase 8:** the remaining Minimus container-image migration
+(`target/requirements/14_container_images.md`), and CrowdSec AppSec virtual patching as a
+complementary per-route layer on non-prose endpoints (the deployed CrowdSec integration is IP
+reputation only today — no `appsec_config`, no acquisition datasource, no request forwarding).
+
+**Not in this phase's scope (unchanged from Phase 6):** tutor self-service role assignment (needs
+a `tutor_profiles` table); `invite-role` + `/institution` route guard (**blocked** —
+institution_admin is on explicit hold per `decisions.md` 2026-07-27); RAG ops cleanup; per-child
+audience scoping of parent content; parent-facing hAITU endpoints. Also out: the Platform Admin
+twin of Phase 6's parent indexing-status gap; a dedicated IDOR test pass; authenticated ZAP DAST
+on staging; gitleaks as a pre-commit hook; staging/prod OpenBao bring-up (runbook exists,
+execution deferred until those environments are stood up); and the `other/services/*` stacks,
+which were never inside the OpenBao migration boundary.

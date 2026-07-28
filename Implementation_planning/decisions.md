@@ -4,6 +4,148 @@
 
 ---
 
+## 2026-07-27 — Phase 7 scoping: gateway WAF modernisation, CSP, and security-review closeout
+
+> Context: baseline backend `c82d466`, frontend `67a883c`, deploy `861705b`, specs `1928b48`.
+> Triggered by an operational complaint — WAF false positives requiring near-daily rule exclusions —
+> not by a `/plan` cycle. Scoped via `/update-target-state`. One challenger round run.
+
+- **The WAF tuning treadmill has a mechanical root cause, and the recorded diagnosis was wrong.**
+  `03-secured-api.json` states that "request-scoped `ctl:ruleRemoveTargetById` is confirmed
+  unreliable in this Coraza WASM build", re-tested 2026-07-01. The observation was correct; the
+  attribution was not. Regex collection keys in `ctl:ruleRemoveTargetById` / `ByTag` / `ByMsg`
+  landed in **Coraza v3.5.0**; the shipped build pins **v3.3.3** via `coraza-proxy-wasm 0.6.0`. On
+  v3.3.3 a slash-delimited key is parsed as a *literal variable name*, so it matches nothing —
+  silently, with no error. That is why the workaround escalated to whole-request
+  `ctl:ruleRemoveById` and grew to **38 rule IDs across seven rounds in nine days**. The collection
+  name was never wrong either: Coraza's JSON body processor writes to `ArgsPost` with `json.`-
+  prefixed, dot-nested, numerically-indexed keys, so `ARGS_POST` was correct all along. This is a
+  version gap, not an engine defect — which means the fix is an upgrade, not a WAF replacement.
+
+- **Coraza stays; SafeLine and open-appsec were evaluated and rejected on the record.** SafeLine's
+  semantic engine genuinely solves the prose false-positive class and its `chaitin-waf` plugin is
+  stock in APISIX ≥3.5 — rejected because the community detection engine is a closed-source binary
+  from a non-EU vendor processing student chat content, it is out-of-process (latency plus a
+  fail-open/closed decision), and it adds ~5 stateful containers; a prior POC (`safeline-new-poc`)
+  had already been completed and abandoned for these reasons. **The prior open-appsec finding that
+  it "only monitors for 7–14 days" is wrong and is corrected here:** the model ships pre-trained on
+  millions of requests, the local learning phase is ~2–3 days, and Prevent mode is available from
+  day one — the staged rollout is advice, not a gate. It was rejected on different grounds: it is
+  **Israeli (Check Point, Tel Aviv), not European** as had been assumed; it is out-of-process; it
+  still requires a custom APISIX image so it does not remove the build-maintenance burden; and its
+  production-recommended "Advanced Model" is a portal download behind a login. Recorded in
+  `16_gateway_waf.md` so neither is re-litigated.
+
+- **CRS 4.14.0 carries an unpatched CVSS 9.3.** CVE-2026-21876 — rule 922110 overwrites its own
+  capture variables while iterating multipart sections, so only the last part is validated; a UTF-7
+  payload in the first part passes. Affects CRS 3.3.x–3.3.7 and 4.0.0–4.21.0, fixed 4.22.0 / 3.3.8 on 2026-01-06,
+  exposed here via the upload route. Independent of the false-positive work and the reason this
+  phase is not deferrable. **A CRS upgrade will not reduce false positives** — newer CRS mostly adds
+  detection; the FP win comes from the Coraza bump plus correct scoping. Two separate changes, two
+  separate wins, deliberately not conflated.
+
+- **The claimed "WASM will not compile with a newer Go" blocker is undocumented.** An exhaustive
+  search of `git log --all`, every commit touching `gateway-docker/Dockerfile`, `docs/`,
+  `plan_dir/`, `.github/instructions/` and this repo found **no record of an actual build failure**.
+  The only evidence is a Dockerfile comment asserting a compatibility requirement. G1 therefore
+  opens with a timeboxed spike to establish which of Go / TinyGo / Coraza is the real constraint,
+  and BR-WAF-010 now requires any held-back pin to record the *observed* failure — command, output,
+  date — rather than an assertion.
+
+- **`proxy.ts` was mis-reported as absent during scoping; it exists.** An early check looked for
+  `middleware.ts`, the pre-Next-16 filename. `haisir-frontend/src/proxy.ts` is present and holds the
+  onboarding guards, and `src/app/csp-report/route.ts` already exists as dead scaffolding that
+  accepts reports and discards them. G5 extends both rather than creating either. Correcting this
+  changed G5 from "build CSP infrastructure" to "finish it".
+
+- **CSP belongs in the app, not the gateway — the 2026-07-02 review's fix was not implementable as
+  written.** It recommended a nonce-based CSP applied at the gateway via `response-rewrite`. Those
+  requirements are incompatible: a nonce must be unique per request *and* appear on every inline
+  tag in the rendered HTML, and APISIX cannot mint a value and inject it into the response body. A
+  gateway CSP is necessarily static, which forces `script-src 'unsafe-inline'` and does not
+  meaningfully constrain XSS. BR-CSP-004 now fixes one owner per header to prevent the two layers
+  colliding. The application side is cheaper than usual — styling is 112
+  CSS Modules with no CSS-in-JS and there are no inline scripts or third-party script origins — but
+  **not free: only 15 of 27 pages carry `force-dynamic`.** The other 12, including all of
+  `/onboarding/*` and `/admin/*`, are statically prerendered, and a build-time-rendered page cannot
+  receive a per-request nonce. Caught during a self-verification pass after an earlier claim that
+  "every page" was already dynamic; now BR-CSP-010 and task T5.2.6.
+
+- **`exam-review-chat` is fully stateless — G3.2 is new persistence, not a client-side trim.** An
+  earlier reading held that the backend already cached the conversation. It caches only the *seed*
+  pattern-analysis message; `haitu.py:838-845` reads `body.history[-10:]` and persists nothing. The
+  challenger caught this and it materially resized the goal. `topic-doubt` is the easy case — the
+  server already writes both sides to `doubt_messages` and the client replays what it just fetched.
+
+- **A live prompt-injection hole was found that no WAF could have caught.**
+  `ReviewChatMessage.role` is an unconstrained `str` and `_DOMAIN_TO_LLM_ROLE.get(m.role, m.role)`
+  passes unknown roles through unchanged into `msgs.extend(history)` — so a client can inject a
+  `system` turn into an authenticated LLM call. The sibling schema already does this correctly
+  (`Literal["student","ai"]`). One-line fix, highest severity-to-effort ratio in the phase, and
+  sequenced with no dependency on the WAF work.
+
+- **A finding the 2026-07-02 review missed, and it contradicts a shipped business rule.**
+  `OAUTH__KEYCLOAK__SSL_VERIFY=false` in `prod/.env:39` and `staging/.env:39` drives
+  `check_hostname = False` / `CERT_NONE` on the backend's token-introspection and Keycloak-Admin
+  channels. BR-SEC-010 guarantees introspection fails closed; an introspection call over an
+  unverified channel is not fail-closed against an on-path attacker, who can answer `active: true`
+  for a revoked token. Now BR-SEC-021.
+
+- **Minimus is split, not merged wholesale.** The user's initial preference was a full merge of the
+  Phase 7 candidate (`14_container_images.md`) with this security work. Accepted in part: only the
+  *gateway builder stage* comes in, since G1 rewrites that Dockerfile anyway. The other ~25 services
+  stay in Phase 8 — running two hard gates across three repos and two unrelated concerns would make
+  a G2 failure unattributable between the Coraza upgrade and the base-image swap, and Phase 5.6 (the
+  structural precedent) was 64 tasks in *one* repo on *one* concern and still needed two challenger
+  rounds.
+
+- **G3 (design) precedes G4 (exclusion rewrite), on the challenger's argument.** Fixing payloads
+  first means several exclusions get *deleted* rather than carefully rewritten for a request shape
+  about to stop existing — most clearly `12-api-exams-static.json`, whose 5→12 anomaly raise and
+  50 MB argument limits exist solely to admit base64 images. BR-WAF-011 additionally requires a
+  `DetectionOnly` soak before any exclusion is retired: removing the blanket block before the scoped
+  replacement demonstrably fires would 403 live traffic.
+
+- **New rule prefixes rather than extending BR-SEC.** `BR-WAF-*` and `BR-CSP-*`, following
+  `14_container_images.md`'s `BR-INFRA-*` precedent. `02_auth_and_roles.md` (BR-SEC-001…012) and
+  `13_secrets_management.md` (BR-SEC-011…019) already collide at 011/012; the collision is
+  **recorded, not renumbered** — those IDs are referenced from shipped code and past entries. New
+  rules in the auth spec start at BR-SEC-020.
+
+- **OpenBao closed less of the review than assumed.** It is **dev-only** — staging and prod
+  instances have never been started (they fail closed by design). It fixed H1 and, with `.gitignore`
+  work, L1; M6 and L4 turned out already-correct for prod and are reframed as dev-isolation
+  assertions rather than findings. But **APISIX does not use OpenBao as a runtime resolver** —
+  secrets are rendered to plaintext and written into etcd — and the backend does not read OpenBao
+  either; a sidecar renders an env file. H3 has had zero movement; M3 is only half done
+  (`haisir-backend/Jenkinsfile` untouched); M4, M5 and L5 are unchanged.
+
+- **An independent challenger pass (fable-5) caught two errors in this scope before it shipped, and
+  both are recorded because they were the same failure mode.** First: `12-api-exams-static.json` was
+  characterised as removing whole tag families and being "effectively unprotected". It is the
+  opposite — it uses `SecRuleUpdateTargetByTag <tag> "!ARGS_POST:/field/"`, a *field-scoped* form,
+  and is the codebase's reference example of the correct pattern. The draft fix task would have
+  deleted six legitimate exclusions (`question_text`, `explanation`, `model_answer`, `.text`,
+  `json.description`, `correct_answers`) covering real false positives in science prose and
+  mathematical notation, reintroducing the exact problem this phase exists to remove. Second: the
+  CSP section claimed every page was already `force-dynamic`; it is 15 of 27. Both errors came from
+  sampling rather than enumerating — the same root cause as the earlier `middleware.ts` vs
+  `proxy.ts` miss. Corrected in place; BR-WAF-004/005 now distinguish the startup-time and runtime
+  exclusion forms explicitly, and BR-CSP-010 plus T5.2.6/T5.2.7 close the rendering gap.
+
+- **A useful consequence of that first correction: the startup-time exclusion form has no engine-
+  version floor.** `SecRuleUpdateTargetById` / `ByTag` accept `!COLLECTION:/regex/` at config-parse
+  time and have done so long before v3.5.0 — which is why route 12's exclusions work today on
+  v3.3.3. The v3.5.0 gap is specific to the **runtime `ctl:` action**. `id:199110` needs the runtime
+  form only because `03-secured-api.json` is a *shared* config across all `/api/*` routes, so a
+  startup-time directive would exempt the field everywhere rather than on the two chat endpoints.
+  This narrows what the Coraza upgrade is actually required for, and BR-WAF-004 now says to prefer
+  the startup-time form wherever a dedicated route config makes it possible.
+
+- **`security/SECURITY_REVIEW_2026-07-02.md` is annotated in place rather than rewritten or
+  deleted.** It is a dated artifact and its findings are now cross-referenced from the Phase 7 goal
+  tree, but leaving it un-annotated would misrepresent several items as open that are fixed.
+
 ## 2026-07-27 — Institution Admin + Teacher/Tutor: explicit hold on target-state definition
 
 - **Deferral reaffirmed, with a process gate added.** Institution Admin (`06_institution_admin.md`)
