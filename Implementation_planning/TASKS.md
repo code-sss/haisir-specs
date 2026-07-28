@@ -12,7 +12,7 @@
 - [ ] **G1: Schema foundation** — integration test
 
 ## G2 [deploy]: One-shot content reset runbook
-- [ ] T2.1 [deploy]: Confirm-gated script truncating the six content tables and clearing `{data_dir}/topics/` (depends on T1.2 [backend])
+- [x] T2.1 [deploy]: Confirm-gated script truncating the six content tables and clearing `{data_dir}/topics/` (depends on T1.2 [backend]) (2026-07-28)
 - [ ] **G2: Content reset runbook** — acceptance test
 
 ## G3 [backend]: The raw file is materialized and servable
@@ -47,7 +47,6 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T2.1 [deploy]: Confirm-gated content reset script (deps T1.2 [backend] done)
 - T3.2 [backend]: `finalize()` appends the raw row at `order = N` (deps T3.1, T1.1, T1.2 done)
 - T3.4 [backend]: `GET /api/topic-contents/{content_id}/file` — sniffed media type, path safety, role gating (dep T1.2 done)
 - T4.2 [backend]: `PATCH /api/topic-contents/{content_id}/publish` — one transaction, drafts the opposite side (deps T4.1, T1.3 done)
