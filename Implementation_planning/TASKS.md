@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`c82d466` frontend:`67a883c` deploy:`861705b` (2026-07-27)
+> Last baselined: backend:`de7e794` frontend:`67a883c` deploy:`861705b` (2026-07-28)
 > Phase 6.5 scoped 2026-07-27 — see `PLAN.md` for the goal tree, the spec-review corrections table
 > and the scope locks. Phase 7 (Gateway WAF) archived unstarted; resume after this phase.
 
@@ -17,9 +17,9 @@
 
 ## G3 [backend]: The raw file is materialized and servable
 - [x] T3.1 [backend]: `copy_to_content_store` — collision-safe copy from the extraction root into `{data_dir}/topics/{content_type}/` (2026-07-28)
-- [ ] T3.2 [backend]: `finalize()` appends the raw row at `order = N` with its path in `url`; text-row ordering untouched (depends on T3.1, T1.1, T1.2)
-- [ ] T3.3 [backend]: Regression test — the raw row never enters `rag_indexing_outbox` (depends on T3.2)
-- [ ] T3.4 [backend]: `GET /api/topic-contents/{content_id}/file` — sniffed media type, path safety, student/admin/parent gating (depends on T1.2)
+- [x] T3.2 [backend]: `finalize()` appends the raw row at `order = N` with its path in `url`; text-row ordering untouched (depends on T3.1, T1.1, T1.2) (2026-07-28)
+- [x] T3.3 [backend]: Regression test — the raw row never enters `rag_indexing_outbox` (depends on T3.2) (2026-07-28)
+- [x] T3.4 [backend]: `GET /api/topic-contents/{content_id}/file` — sniffed media type, path safety, student/admin/parent gating (depends on T1.2) (2026-07-28)
 - [ ] T3.5 [backend]: Delete the legacy `GET /api/topic-contents/{content_type}/{topic_id}` route (depends on T5.4 [frontend])
 - [ ] **G3: Raw file materialized and servable** — integration test
 
@@ -47,10 +47,9 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T3.2 [backend]: `finalize()` appends the raw row at `order = N` (deps T3.1, T1.1, T1.2 done)
-- T3.4 [backend]: `GET /api/topic-contents/{content_id}/file` — sniffed media type, path safety, role gating (dep T1.2 done)
 - T4.2 [backend]: `PATCH /api/topic-contents/{content_id}/publish` — one transaction, drafts the opposite side (deps T4.1, T1.3 done)
 - T4.3 [backend]: Parent-scoped publish mirror under `/api/parent/curriculum/`, owner-scoped 404 (dep T4.1 done)
 - T4.4 [backend]: Student read paths gain the `visibility_status='published'` AND-condition (dep T1.2 done)
+- T5.4 [frontend]: Repoint `SecurePdfViewer`'s `pdfUrl` at the per-content file endpoint (dep T3.4 [backend] done)
 - T5.5 [frontend]: YouTube IFrame Player API / Vimeo Player SDK with external-link fallback (depends on T5.1)
 - T6.1 [frontend]: Content row — View button and publish-state pill; View replaces Edit on `pdf`/`image` (depends on T5.1)
