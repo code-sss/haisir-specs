@@ -25,9 +25,9 @@
 
 ## G4 [backend]: Publish as an atomic per-group decision
 - [x] T4.1 [backend]: Upload-group resolver — `(topic_id, source_extraction_job_id)`, NULL job id means group of one (2026-07-28)
-- [ ] T4.2 [backend]: `PATCH /api/topic-contents/{content_id}/publish` — one transaction, drafts the opposite side (depends on T4.1, T1.3)
-- [ ] T4.3 [backend]: Parent-scoped publish mirror under `/api/parent/curriculum/`, owner-scoped 404 (depends on T4.1)
-- [ ] T4.4 [backend]: Student read paths gain the `visibility_status='published'` AND-condition (depends on T1.2)
+- [x] T4.2 [backend]: `PATCH /api/topic-contents/{content_id}/publish` — one transaction, drafts the opposite side (deps T4.1, T1.3 done) (2026-07-28)
+- [x] T4.3 [backend]: Parent-scoped publish mirror under `/api/parent/curriculum/`, owner-scoped 404 (depends on T4.1) (2026-07-28)
+- [x] T4.4 [backend]: Student read paths gain the `visibility_status='published'` AND-condition (depends on T1.2) (2026-07-28)
 - [ ] **G4: Atomic per-group publish** — integration test
 
 ## G5 [frontend]: Shared content viewer
