@@ -34,12 +34,12 @@
 - [x] T5.1 [frontend]: Promote `ContentViewer` out of `features/student/` to shared — pure move, no behaviour change (2026-07-28)
 - [x] T5.2 [frontend]: Add `"image"` to the `content_type` unions/zod schemas in student, admin, parent and content-management (2026-07-28)
 - [x] T5.3 [frontend]: Add the `case "image"` image viewer — **same commit as T5.2**, `noImplicitReturns` makes the union member without its case a compile error (depends on T5.1, T5.2) (2026-07-28)
-- [ ] T5.4 [frontend]: Repoint `SecurePdfViewer`'s `pdfUrl` at the per-content file endpoint (depends on T3.4 [backend])
-- [ ] T5.5 [frontend]: YouTube IFrame Player API / Vimeo Player SDK with external-link fallback, replacing the raw `<iframe src>` (depends on T5.1)
+- [x] T5.4 [frontend]: Repoint `SecurePdfViewer`'s `pdfUrl` at the per-content file endpoint (depends on T3.4 [backend]) (2026-07-28)
+- [x] T5.5 [frontend]: YouTube IFrame Player API / Vimeo Player SDK with external-link fallback, replacing the raw `<iframe src>` (depends on T5.1) (2026-07-28)
 - [ ] **G5: Shared content viewer** — integration test
 
 ## G6 [frontend]: Uploader review and publish UI
-- [ ] T6.1 [frontend]: Content row — View button and publish-state pill; View replaces Edit on `pdf`/`image` (depends on T5.1)
+- [x] T6.1 [frontend]: Content row — View button and publish-state pill; View replaces Edit on `pdf`/`image` (depends on T5.1) (2026-07-28)
 - [ ] T6.2 [frontend]: Publish toggle — one call per switch, server owns mutual exclusivity (depends on T4.2, T4.3 [backend], T6.1)
 - [x] T6.3 [frontend]: Markdown editor with live preview via the shared `MarkdownText` component (2026-07-28)
 - [x] T6.4 [frontend]: Correct the provenance tooltip — the source file is no longer discarded (2026-07-28; no-op — shipped tooltip already correct, see decisions)
@@ -47,9 +47,4 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T4.2 [backend]: `PATCH /api/topic-contents/{content_id}/publish` — one transaction, drafts the opposite side (deps T4.1, T1.3 done)
-- T4.3 [backend]: Parent-scoped publish mirror under `/api/parent/curriculum/`, owner-scoped 404 (dep T4.1 done)
-- T4.4 [backend]: Student read paths gain the `visibility_status='published'` AND-condition (dep T1.2 done)
-- T5.4 [frontend]: Repoint `SecurePdfViewer`'s `pdfUrl` at the per-content file endpoint (dep T3.4 [backend] done)
-- T5.5 [frontend]: YouTube IFrame Player API / Vimeo Player SDK with external-link fallback (depends on T5.1)
-- T6.1 [frontend]: Content row — View button and publish-state pill; View replaces Edit on `pdf`/`image` (depends on T5.1)
+- T3.5 [backend]: Delete the legacy `GET /api/topic-contents/{content_type}/{topic_id}` route (dep T5.4 [frontend] done)
