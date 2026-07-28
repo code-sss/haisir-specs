@@ -6,9 +6,9 @@
 > and the scope locks. Phase 7 (Gateway WAF) archived unstarted; resume after this phase.
 
 ## G1 [backend]: Schema foundation — `image` type and `visibility_status`
-- [ ] T1.1 [backend]: Add `image` to the `contenttype` enum — `ALTER TYPE ... ADD VALUE` in an Alembic autocommit block, plus `ContentType.image`
-- [ ] T1.2 [backend]: Add `visibility_status VARCHAR NOT NULL DEFAULT 'draft'` — column, imperative mapping, dataclass field; no DB CHECK
-- [ ] T1.3 [backend]: Pydantic surface — `Literal["draft","published"]` on `TopicContentRead`; omitted from Create/Update
+- [x] T1.1 [backend]: Add `image` to the `contenttype` enum — `ALTER TYPE ... ADD VALUE` in an Alembic autocommit block, plus `ContentType.image` (2026-07-28)
+- [x] T1.2 [backend]: Add `visibility_status VARCHAR NOT NULL DEFAULT 'draft'` — column, imperative mapping, dataclass field; no DB CHECK (2026-07-28)
+- [x] T1.3 [backend]: Pydantic surface — `Literal["draft","published"]` on `TopicContentRead`; omitted from Create/Update (2026-07-28)
 - [ ] **G1: Schema foundation** — integration test
 
 ## G2 [deploy]: One-shot content reset runbook
@@ -16,7 +16,7 @@
 - [ ] **G2: Content reset runbook** — acceptance test
 
 ## G3 [backend]: The raw file is materialized and servable
-- [ ] T3.1 [backend]: `copy_to_content_store` — collision-safe copy from the extraction root into `{data_dir}/topics/{content_type}/`
+- [x] T3.1 [backend]: `copy_to_content_store` — collision-safe copy from the extraction root into `{data_dir}/topics/{content_type}/` (2026-07-28)
 - [ ] T3.2 [backend]: `finalize()` appends the raw row at `order = N` with its path in `url`; text-row ordering untouched (depends on T3.1, T1.1, T1.2)
 - [ ] T3.3 [backend]: Regression test — the raw row never enters `rag_indexing_outbox` (depends on T3.2)
 - [ ] T3.4 [backend]: `GET /api/topic-contents/{content_id}/file` — sniffed media type, path safety, student/admin/parent gating (depends on T1.2)
@@ -24,7 +24,7 @@
 - [ ] **G3: Raw file materialized and servable** — integration test
 
 ## G4 [backend]: Publish as an atomic per-group decision
-- [ ] T4.1 [backend]: Upload-group resolver — `(topic_id, source_extraction_job_id)`, NULL job id means group of one
+- [x] T4.1 [backend]: Upload-group resolver — `(topic_id, source_extraction_job_id)`, NULL job id means group of one (2026-07-28)
 - [ ] T4.2 [backend]: `PATCH /api/topic-contents/{content_id}/publish` — one transaction, drafts the opposite side (depends on T4.1, T1.3)
 - [ ] T4.3 [backend]: Parent-scoped publish mirror under `/api/parent/curriculum/`, owner-scoped 404 (depends on T4.1)
 - [ ] T4.4 [backend]: Student read paths gain the `visibility_status='published'` AND-condition (depends on T1.2)
@@ -47,11 +47,12 @@
 
 ## Ready now
 Tasks with no pending dependencies — can be started immediately:
-- T1.1 [backend]: Add `image` to the `contenttype` enum (no deps)
-- T1.2 [backend]: Add the `visibility_status` column (no deps)
-- T1.3 [backend]: Pydantic schema surface (no deps)
-- T3.1 [backend]: `copy_to_content_store` (no deps)
-- T4.1 [backend]: Upload-group resolver (no deps)
+- T2.1 [deploy]: Confirm-gated content reset script (deps T1.2 [backend] done)
+- T3.2 [backend]: `finalize()` appends the raw row at `order = N` (deps T3.1, T1.1, T1.2 done)
+- T3.4 [backend]: `GET /api/topic-contents/{content_id}/file` — sniffed media type, path safety, role gating (dep T1.2 done)
+- T4.2 [backend]: `PATCH /api/topic-contents/{content_id}/publish` — one transaction, drafts the opposite side (deps T4.1, T1.3 done)
+- T4.3 [backend]: Parent-scoped publish mirror under `/api/parent/curriculum/`, owner-scoped 404 (dep T4.1 done)
+- T4.4 [backend]: Student read paths gain the `visibility_status='published'` AND-condition (dep T1.2 done)
 - T5.1 [frontend]: Promote `ContentViewer` to shared (no deps)
 - T5.2 [frontend]: Add `"image"` to the content-type unions (no deps — but lands with T5.3)
 - T6.3 [frontend]: Markdown editor with live preview (no deps)
