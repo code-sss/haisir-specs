@@ -58,7 +58,7 @@
 
 ### G3.1 [backend]: Prompt injection closed
 - [x] T3.1.1 [backend]: Constrain `ReviewChatMessage.role` to `Literal["student", "ai"]` in `src/schemas/haitu.py:11-12`, mirroring `HaituDoubtMessageSchema` in the sibling schema (2026-07-29)
-- [ ] T3.1.2 [backend]: Change `_DOMAIN_TO_LLM_ROLE.get(m.role, m.role)` to `_DOMAIN_TO_LLM_ROLE[m.role]` at `src/api/routes/haitu.py:840` so an unmapped role cannot be silently forwarded (depends on T3.1.1)
+- [x] T3.1.2 [backend]: Change `_DOMAIN_TO_LLM_ROLE.get(m.role, m.role)` to `_DOMAIN_TO_LLM_ROLE[m.role]` at `src/api/routes/haitu.py:840` so an unmapped role cannot be silently forwarded (depends on T3.1.1) (2026-07-29)
 - [ ] T3.1.3 [backend]: Regression test — a posted `{"role": "system", ...}` history entry is rejected with 422, not forwarded into `_build_no_rag_messages` (depends on T3.1.2)
 - [ ] **G3.1: injected system turns rejected** — integration test
 
@@ -285,6 +285,6 @@
 
 - T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (no dependencies; G5.2 start)
 - T1.1.4 [deploy]: Confirm the image builds reproducibly from the vendored tree and the WASM filter loads in APISIX, now that the clone/patch step is gone — no behaviour change expected
-- T3.1.2 [backend]: Change `_DOMAIN_TO_LLM_ROLE.get(m.role, m.role)` to `_DOMAIN_TO_LLM_ROLE[m.role]` — `ReviewChatMessage.role` is now constrained, so the unmapped-role fallback can be removed
+- T3.1.3 [backend]: Regression test — a posted `{"role": "system", ...}` history entry is rejected with 422, not forwarded into `_build_no_rag_messages` — `ReviewChatMessage.role` is constrained and the unmapped-role fallback is gone, so this is the last step to close G3.1
 - T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone
 - T7.2.2 [deploy]: Validate `params.VERSION` against `^\d+\.\d+(\.\d+)?$` in `Jenkinsfile.deploy:58,89-107`; the remote-exec path is already correct, `MANIFEST_PATH` is not (depends on T7.2.1)
