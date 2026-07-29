@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`583511d` frontend:`3a57718` deploy:`8cb1dbe` (2026-07-29, reconciled after
+> Last baselined: backend:`583511d` frontend:`3a57718` deploy:`ed1dbf1` (2026-07-29, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 
@@ -224,9 +224,9 @@
 
 ### G7.2 [deploy, backend]: Jenkins parameter injection
 - [x] T7.2.1 [backend]: Validate `params.TAG` against `^[A-Za-z0-9._-]+$` and pass via `withEnv` + single-quoted `sh` in `haisir-backend/Jenkinsfile:197,209,305,340` — currently untouched since the review (M3) (2026-07-29)
-- [ ] T7.2.2 [deploy]: Validate `params.VERSION` against `^\d+\.\d+(\.\d+)?$` in `Jenkinsfile.deploy:58,89-107`; the remote-exec path is already correct, `MANIFEST_PATH` is not (depends on T7.2.1)
-- [ ] T7.2.3 [deploy]: Restrict who can trigger parameterised builds (depends on T7.2.2)
-- [ ] **G7.2: M3 — build params cannot inject shell** — integration test
+- [x] T7.2.2 [deploy]: Validate `params.VERSION` against `^\d+\.\d+(\.\d+)?$` in `Jenkinsfile.deploy:58,89-107`; the remote-exec path is already correct, `MANIFEST_PATH` is not (depends on T7.2.1) (2026-07-29)
+- [x] T7.2.3 [deploy]: Restrict who can trigger parameterised builds (depends on T7.2.2) (2026-07-29)
+- [x] **G7.2: M3 — build params cannot inject shell** — integration test (2026-07-29; verified `VERSION`/`TAG` regex gates in both Jenkinsfiles plus `withEnv`-only shell interpolation, and `matrix-auth` plugin + documented Access Control restriction in `other/services/jenkins/README.md`)
 
 ### G7.3 [deploy]: Tailscale least privilege
 - [ ] T7.3.1 [deploy]: Replace `dst: ["*:*"]` for `tag:dev1`/`tag:in-dev1`/`tag:in-dev2` in `other/services/tailscale/tailscale.json:28-35` with the specific services and ports actually needed (M4)
@@ -285,4 +285,3 @@
 
 - T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (no dependencies; G5.2 start)
 - T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone
-- T7.2.2 [deploy]: Validate `params.VERSION` against `^\d+\.\d+(\.\d+)?$` in `Jenkinsfile.deploy:58,89-107`; the remote-exec path is already correct, `MANIFEST_PATH` is not (depends on T7.2.1)
