@@ -4,6 +4,50 @@
 
 ---
 
+## 2026-07-29 — Phase 7 restored from archive and reconciled against shipped Phase 6.5
+
+> Context: Phase 7 (Gateway WAF, CSP, security-review closeout) was scoped 2026-07-27 and archived
+> unstarted the same day when Phase 6.5 took priority. Phase 6.5 has now closed, so Phase 7 is
+> unarchived as the active plan. `archive/PLAN_Phase7-GatewayWAF-CSP_2026-07-27.md` and its TASKS
+> twin are removed; `archive/*_Phase6.5-ContentViewingPublish_2026-07-29.md` take their place.
+
+- **Restored verbatim, then reconciled — no scope was dropped.** All 8 goals, the DAG spine
+  (`G1 → G2 gate → G3 → G4 → G5 → G6 → G7 → G8 gate`), both documented spine exceptions and all 5
+  scope locks carry over unchanged. The only substantive edits are the four below.
+- **T7.6.1 closed as already-done.** Phase 6.5's deploy work (`92a5057`, "check APISIX_ADMIN_KEY
+  after OpenBao render hook, not before") is exactly what T7.6.1 called for: `setup.sh:54` now uses
+  `${APISIX_ADMIN_KEY:-}` so the standalone `set -u` invocation no longer aborts, and the required-var
+  check at `:131` runs after the render hook at `:122`. Marked `[x]` rather than re-implemented.
+- **G4.2's scope widened.** Phase 6.5's walkthrough added two more blanket `ctl:ruleRemoveById` blocks
+  to `03-secured-api.json` — `id:199120` (932130/932240/942410, PATCH on OCR'd topic content) and
+  `id:199121` (931130, parent content-URL route). `199120` is the same whole-request-removal pattern
+  G4 exists to retire and joins T4.2.1; `199121` is already correctly scoped and justified, so T4.5.1
+  verifies it rather than rewriting it. Phase 7 was archived *before* these landed — this is the
+  treadmill continuing to run while the fix sat on the shelf, which is itself the argument for the phase.
+- **Correction to the entry below (append-only, so recorded here rather than edited in place):** the
+  2026-07-29 Phase 6.5 entry states the parent video-URL exclusion landed as `id:199101`. It is
+  **`id:199121`**. `199101` was already taken — it is the anomaly-threshold SecAction in
+  `12-api-exams-static.json:31`. `PLAN.md` and `TASKS.md` use the correct ID.
+- **Baseline moved** from backend `c82d466` / frontend `67a883c` / deploy `861705b` to `583511d` /
+  `3a57718` / `8cb1dbe`, all three matching repo HEAD with clean working trees. Note this supersedes
+  the deploy SHA `bc77132` recorded in the Phase 6.5 snapshot below — two further deploy commits
+  (`b16ad82`, `8cb1dbe`) landed after that manifest was cut.
+- **A second reconciliation pass was needed.** The first pass swept the G4 files for content drift but
+  did not check other goals' line references *into those same files*, then asserted a blanket
+  "no other drift found". That claim was wrong: T6.3.1's three `ssl_verify` line numbers had all
+  shifted (the same commit that added `199120`/`199121` grew `03-secured-api.json` by 43 lines and
+  `01`/`02`/`04` by 3 each). Also fixed in the same pass: T4.3.3 said "restore to platform defaults"
+  without naming them (the baseline is `id:199004` — `max_num_args=512`, `arg_length=4096`,
+  `total_arg_length=65535`, `max_file_size`/`combined_file_sizes=1048576`), and T7.1.2's line range
+  `208-228` was wrong at original scoping. **Decision: verify file:line references against the
+  sibling repos individually when restoring an archived plan — a plan shelved across another phase
+  cannot assume its own references survived, and a spot-check of the obvious files is not a sweep.**
+- **Documented grep hazard for G4:** `id:199110` names two unrelated things — the 38-ID block in
+  `03-secured-api.json` (T4.2.1) and a `max_num_args` SecAction in `12-api-exams-static.json:39`
+  (T4.3.3). G4 edits are scoped by file, not by rule ID.
+- **Phase 7 is now active and unblocked.** All five "Ready now" entries re-verified against live code.
+  Implementation starts next.
+
 ## 2026-07-29 — Phase 6.5 closed: G3 WAF false positives + final sign-off
 
 > Context: G1, G3–G6 walkthrough steps all passed manually (admin + parent + student, image + PDF

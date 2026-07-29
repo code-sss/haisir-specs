@@ -332,10 +332,12 @@ deliberately appended after the text rows so neither gets worse.
 
 ---
 
-## Phase 7 — Gateway WAF Modernisation, CSP & Security Review Closeout (deferred 2026-07-27, unstarted)
+## Phase 7 — Gateway WAF Modernisation, CSP & Security Review Closeout (active — restored 2026-07-29)
 
-> Superseded in sequence by Phase 6.5 — archived unstarted to
-> `archive/PLAN_Phase7-GatewayWAF-CSP_2026-07-27.md`. Deferred, not cancelled; resume after 6.5.
+> Scoped 2026-07-27, archived unstarted the same day when Phase 6.5 took priority, **restored
+> 2026-07-29** once 6.5 closed. Now the active plan — see `PLAN.md` / `TASKS.md`, and `decisions.md`
+> (2026-07-29, "Phase 7 restored from archive") for what the reconciliation changed. Baseline:
+> backend `583511d`, frontend `3a57718`, deploy `8cb1dbe`.
 
 > Root goal: the gateway WAF detects attacks precisely instead of being tuned into irrelevance;
 > the browser enforces a strict CSP; and every finding from the 2026-07-02 security review is
