@@ -1,7 +1,6 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`583511d` frontend:`3a57718` deploy:`ed1dbf1` (2026-07-29, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 
@@ -160,13 +159,13 @@
 - [x] **G5.1: violations are captured** — integration test (2026-07-29; collector persists a posted report as a structured greppable JSON line on every input branch — locked by `tests/unit/app/csp-report-route.test.ts`, 100% coverage)
 
 ### G5.2 [frontend]: Nonce CSP in proxy.ts
-- [ ] T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (the file exists and holds the onboarding guards; extend, do not replace)
-- [ ] T5.2.2 [frontend]: Derive `frame-src` from the backend `allowed_video_hostnames` allowlist per BR-CSP-005 rather than hardcoding a second copy (depends on T5.2.1)
-- [ ] T5.2.3 [frontend]: Confirm `worker-src 'self' blob:` covers pdf.js and whether the build needs `'wasm-unsafe-eval'` (depends on T5.2.1)
-- [ ] T5.2.4 [frontend]: Confirm `react-pdf.css` and `globals.css` inject nothing at runtime that the nonce will not cover (depends on T5.2.1)
-- [ ] T5.2.5 [frontend]: Add the prefetch `missing:` filter to the proxy matcher per the Next.js CSP guidance (depends on T5.2.1)
-- [ ] T5.2.6 [frontend]: Opt the **12 pages lacking `force-dynamic`** into dynamic rendering per BR-CSP-010 — 15 of 27 have it, 12 do not (7 server components, 5 `"use client"`), including all of `/onboarding/*` and `/admin/*`. A statically prerendered page cannot receive a nonce, so a strict `script-src` blocks its framework scripts. Verify by inspecting the build manifest for statically-prerendered routes, not by grep alone (depends on T5.2.1)
-- [ ] T5.2.7 [frontend]: Add a CI assertion that no new HTML route is statically prerendered, per BR-CSP-010 — this breaks silently in production rather than at build (depends on T5.2.6)
+- [x] T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (the file exists and holds the onboarding guards; extend, do not replace)
+- [x] T5.2.2 [frontend]: Derive `frame-src` from the backend `allowed_video_hostnames` allowlist per BR-CSP-005 rather than hardcoding a second copy (depends on T5.2.1)
+- [x] T5.2.3 [frontend]: Confirm `worker-src 'self' blob:` covers pdf.js and whether the build needs `'wasm-unsafe-eval'` (depends on T5.2.1)
+- [x] T5.2.4 [frontend]: Confirm `react-pdf.css` and `globals.css` inject nothing at runtime that the nonce will not cover (depends on T5.2.1)
+- [x] T5.2.5 [frontend]: Add the prefetch `missing:` filter to the proxy matcher per the Next.js CSP guidance (depends on T5.2.1)
+- [x] T5.2.6 [frontend]: Opt the **12 pages lacking `force-dynamic`** into dynamic rendering per BR-CSP-010 — 15 of 27 have it, 12 do not (7 server components, 5 `"use client"`), including all of `/onboarding/*` and `/admin/*`. A statically prerendered page cannot receive a nonce, so a strict `script-src` blocks its framework scripts. Verify by inspecting the build manifest for statically-prerendered routes, not by grep alone (depends on T5.2.1)
+- [x] T5.2.7 [frontend]: Add a CI assertion that no new HTML route is statically prerendered, per BR-CSP-010 — this breaks silently in production rather than at build (depends on T5.2.6)
 - [ ] **G5.2: Report-Only CSP live with nonces applied on every route** — integration test
 
 ### G5.3 [frontend]: Soak
