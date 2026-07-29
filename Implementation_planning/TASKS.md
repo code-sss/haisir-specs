@@ -57,7 +57,7 @@
 ## G3 [backend, frontend, deploy]: Payload design fixed at the source
 
 ### G3.1 [backend]: Prompt injection closed
-- [ ] T3.1.1 [backend]: Constrain `ReviewChatMessage.role` to `Literal["student", "ai"]` in `src/schemas/haitu.py:11-12`, mirroring `HaituDoubtMessageSchema` in the sibling schema
+- [x] T3.1.1 [backend]: Constrain `ReviewChatMessage.role` to `Literal["student", "ai"]` in `src/schemas/haitu.py:11-12`, mirroring `HaituDoubtMessageSchema` in the sibling schema (2026-07-29)
 - [ ] T3.1.2 [backend]: Change `_DOMAIN_TO_LLM_ROLE.get(m.role, m.role)` to `_DOMAIN_TO_LLM_ROLE[m.role]` at `src/api/routes/haitu.py:840` so an unmapped role cannot be silently forwarded (depends on T3.1.1)
 - [ ] T3.1.3 [backend]: Regression test — a posted `{"role": "system", ...}` history entry is rejected with 422, not forwarded into `_build_no_rag_messages` (depends on T3.1.2)
 - [ ] **G3.1: injected system turns rejected** — integration test
@@ -284,7 +284,6 @@
 ## Ready now
 
 - T1.1.2 [deploy]: Apply the APISIX body-processing patch in-tree to `wasmplugin/plugin.go` in the newly vendored `gateway-docker/coraza-proxy-wasm/`
-- T3.1.1 [backend]: Constrain `ReviewChatMessage.role` to `Literal["student", "ai"]` — one line, closes a live prompt-injection hole, no dependency on the WAF work
 - T5.1.1 [frontend]: Make the CSP report collector persist reports
 - T6.1.1 [deploy]: Remove `OAUTH__KEYCLOAK__SSL_VERIFY=false` from prod/staging
 - T7.2.1 [backend]: Validate `params.TAG` in `haisir-backend/Jenkinsfile` — independent of everything else in this phase
