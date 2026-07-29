@@ -156,8 +156,8 @@
 
 ### G5.1 [frontend]: Working report collector
 - [x] T5.1.1 [frontend]: `src/app/csp-report/route.ts` currently reads the body and discards it — persist reports via structlog per BR-CSP-008, keeping the 204 response (2026-07-29)
-- [ ] T5.1.2 [frontend]: Verify reports surface where they can actually be read during the soak (depends on T5.1.1)
-- [ ] **G5.1: violations are captured** — integration test
+- [x] T5.1.2 [frontend]: Verify reports surface where they can actually be read during the soak (depends on T5.1.1) (2026-07-29)
+- [x] **G5.1: violations are captured** — integration test (2026-07-29; collector persists a posted report as a structured greppable JSON line on every input branch — locked by `tests/unit/app/csp-report-route.test.ts`, 100% coverage)
 
 ### G5.2 [frontend]: Nonce CSP in proxy.ts
 - [ ] T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (the file exists and holds the onboarding guards; extend, do not replace)
@@ -283,8 +283,8 @@
 
 ## Ready now
 
+- T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (no dependencies; G5.2 start)
 - T1.1.4 [deploy]: Confirm the image builds reproducibly from the vendored tree and the WASM filter loads in APISIX, now that the clone/patch step is gone — no behaviour change expected
 - T3.1.2 [backend]: Change `_DOMAIN_TO_LLM_ROLE.get(m.role, m.role)` to `_DOMAIN_TO_LLM_ROLE[m.role]` — `ReviewChatMessage.role` is now constrained, so the unmapped-role fallback can be removed
-- T5.1.2 [frontend]: Verify CSP reports surface where they can actually be read during the soak, now that the collector persists them
 - T6.1.1 [deploy]: Remove `OAUTH__KEYCLOAK__SSL_VERIFY=false` from prod/staging
 - T7.2.2 [deploy]: Validate `params.VERSION` against `^\d+\.\d+(\.\d+)?$` in `Jenkinsfile.deploy:58,89-107`; the remote-exec path is already correct, `MANIFEST_PATH` is not (depends on T7.2.1)
