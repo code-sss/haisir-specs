@@ -11,8 +11,8 @@
 - [x] T1.1.1 [deploy]: Vendor `corazawaf/coraza-proxy-wasm` at the current pinned tag `0.6.0` into `gateway-docker/coraza-proxy-wasm/`, preserving upstream LICENSE and a `VENDORED.md` recording upstream URL, tag, commit SHA and date (2026-07-29)
 - [x] T1.1.2 [deploy]: Apply the APISIX body-processing patch in-tree to `wasmplugin/plugin.go` (the `wasm_process_req_body` / `wasm_process_resp_body` `SetProperty` opt-ins) as a reviewable diff (2026-07-29)
 - [x] T1.1.3 [deploy]: Delete `gateway-docker/coraza/apply-apisix-patch.sh` and the `git clone --depth 1 --branch` step from the Dockerfile builder stage (depends on T1.1.2) (2026-07-29)
-- [ ] T1.1.4 [deploy]: Confirm the image builds reproducibly from the vendored tree and the WASM filter loads in APISIX — no behaviour change at this step (depends on T1.1.3)
-- [ ] **G1.1: proxy-wasm vendored with the patch in-tree** — integration test
+- [x] T1.1.4 [deploy]: Confirm the image builds reproducibly from the vendored tree and the WASM filter loads in APISIX — no behaviour change at this step (depends on T1.1.3) (2026-07-29)
+- [x] **G1.1: proxy-wasm vendored with the patch in-tree** — integration test (2026-07-29)
 
 ### G1.2 [deploy]: Spike — establish the real version ceiling
 - [ ] T1.2.1 [deploy]: Timeboxed spike — attempt Go 1.24/1.25 + TinyGo ≥0.36 + Coraza v3.7.0 against the vendored tree; capture the actual failing command and error output for whichever pin genuinely blocks
@@ -284,6 +284,5 @@
 ## Ready now
 
 - T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (no dependencies; G5.2 start)
-- T1.1.4 [deploy]: Confirm the image builds reproducibly from the vendored tree and the WASM filter loads in APISIX, now that the clone/patch step is gone — no behaviour change expected
 - T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone
 - T7.2.2 [deploy]: Validate `params.VERSION` against `^\d+\.\d+(\.\d+)?$` in `Jenkinsfile.deploy:58,89-107`; the remote-exec path is already correct, `MANIFEST_PATH` is not (depends on T7.2.1)
