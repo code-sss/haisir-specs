@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 85ba354 (Phase 5 G4 — RAG outbox wiring on content create/update/delete, idempotent re-embed, 2026-07-10) |
-| haisir-frontend | 61610bd (Phase 5 G3.3 — parent curriculum builder UI, 2026-07-10) |
-| haisir-deploy | ee39f9c (rerank client + WAF/dep hardening, 2026-07-09) |
+| haisir-backend | 583511d (Phase 6.5 close — singular route alias for file/publish endpoints, 2026-07-29) |
+| haisir-frontend | 3a57718 (Phase 6.5 close — view-dialog CSS fix + publish-body fix + Sonar dedupe, 2026-07-29) |
+| haisir-deploy | bc77132 (release manifest v2026.5.2 — Phase 6 + 6.5 bundled, content reset runbook + WAF exclusions committed, 2026-07-29) |
 
-> Next session: run `git diff 85ba354..HEAD` in haisir-backend, `git diff 61610bd..HEAD` in haisir-frontend, and `git diff ee39f9c..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 583511d..HEAD` in haisir-backend, `git diff 3a57718..HEAD` in haisir-frontend, and `git diff bc77132..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -33,6 +33,7 @@
 | V38_relax_student_profile_name_nullable | Alters `student_profiles.first_name`/`last_name` from `NOT NULL` → nullable, enabling a grade-only profile upsert (Pre-Phase-5 G6 onboarding grade picker). |
 | V39_partial_unique_parent_child_link | Drops the blanket unique constraint `uq_parent_child` on `parent_child_links(parent_sub, child_sub)`; replaces it with a partial unique index `uq_parent_child_active` on the same columns scoped to `WHERE revoked_at IS NULL` — a revoked pair can be re-linked via a fresh code (BR-PAR-014) while at most one active link per pair is still enforced. |
 | V40_adopt_lineage_source_node_id | Adds `course_path_nodes.source_node_id UUID NULL` + partial unique index `ux_course_path_nodes_adopt_lineage` on `(owner_id, source_node_id) WHERE source_node_id IS NOT NULL` — enforces adopt idempotency (BR-DATA-006): a parent adopting the same platform subtree twice hits the DB constraint, surfaced as 409. |
+| V41_content_image_visibility | Adds `image` to the `contenttype` PostgreSQL enum via `ALTER TYPE ... ADD VALUE` in an Alembic autocommit block (no downgrade path). Adds `topic_contents.visibility_status VARCHAR NOT NULL DEFAULT 'draft'` (no DB CHECK — validated at the Pydantic/service layer). Phase 6.5 — Content Viewing & Publish. |
 
 ---
 
@@ -127,14 +128,16 @@
 ## topic_contents
 - `id` (UUID, PK)
 - `topic_id` (UUID, FK → topics)
-- `content_type` (Enum: video | pdf | text | question | question_answer)
+- `content_type` (Enum: video | pdf | text | question | question_answer | image) — `image` added by V41 (Phase 6.5); `question`/`question_answer` are dead values, declared but referenced nowhere in backend `src/`
 - `title` (String)
-- `url` (String, nullable)
+- `url` (String, nullable) — also holds the on-disk path for uploaded `pdf`/`image` rows (`{data_dir}/topics/{content_type}/{filename}`), not just video URLs
 - `text` (String, nullable)
-- `order` (Integer)
+- `order` (Integer) — a raw `pdf`/`image` row is appended after its sibling extracted `text` rows at `order = N`, never renumbering them (provenance `page_no` is derived from `order`)
 - `description` (String, nullable)
-- `source_extraction_job_id` (UUID, nullable) — provenance link to the extraction job that created this row; set by the worker finalize step; **never cleared by PATCH** (BR-EXT-023a)
+- `visibility_status` (String, NOT NULL, default `'draft'`) — added by V41 (Phase 6.5). Gates student visibility underneath the existing `topics.status='live'` gate. **Never a per-row write** — the only mutation path is the group-scoped `PATCH .../publish` endpoint, which sets the chosen side of an upload group to `'published'` and every other row in the group to `'draft'` in one transaction (BR-DATA-024/BR-EXT-037); a raw row and its sibling text row(s) are mutually exclusive.
+- `source_extraction_job_id` (UUID, nullable) — provenance link to the extraction job that created this row; set by the worker finalize step; **never cleared by PATCH** (BR-EXT-023a). NULL for manually-created rows (video/text) and treated as "group of one" for publish grouping.
 - `provenance` — **transient, not a DB column**; populated by the repository via `LEFT JOIN extraction_job_audit ON source_extraction_job_id = job_id`; exposed in `GET /api/topics-contents/{topic_id}` response as `{ source_filename: str, page_no: int } | null`
+- `indexing_status` / `indexing_retry_count` — **transient, not DB columns** (Phase 6); populated via `LEFT JOIN rag_indexing_outbox`; `indexing_status` one of `pending | processing | retry | done | failed`; only ever set on `text`-type rows (the RAG allowlist gate excludes `pdf`/`image` raw rows by construction, so they never enter `rag_indexing_outbox`)
 
 ## questions
 - `id` (UUID, PK)

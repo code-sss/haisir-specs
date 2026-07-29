@@ -215,19 +215,21 @@ If a content item shows **Indexing failed**, click the **Retry** button next to 
 ### Inline content management
 
 - **Rename** — click the content title to edit it inline (Enter to save, Escape to cancel).
-- **Edit** — click the Edit button to change the URL, text, or description.
+- **View** — for uploaded PDFs and images, click View to open the file in the viewer (there's nothing to type-edit on a raw file).
+- **Edit** — click the Edit button on video/text rows to change the URL, text (via a markdown editor with a live preview), or description.
 - **Delete** — click × to remove the content. The extraction audit record is preserved even after deletion.
 
 ---
 
 ## 6. Publishing content for your child
 
-Content is only visible to your linked child when **both** conditions are met:
+Content is only visible to your linked child when **all three** conditions are met:
 
 1. The **topic** is set to **Live**.
-2. Your child has an active link to your account.
+2. The individual **content item** is **Published** (see below).
+3. Your child has an active link to your account.
 
-New topics always start as **Draft**.
+New topics always start as **Draft**, and so does every content item inside them — uploading or typing content never makes it visible on its own.
 
 ```mermaid
 graph LR
@@ -238,7 +240,17 @@ graph LR
     Live -->|"Click 'Set draft'"| Draft
 ```
 
-**Tip:** add and review all your content before publishing. Once a topic is Live, your child can see it immediately.
+### Publishing a content item
+
+A PDF or image upload gives you **two versions** to choose from: the raw file exactly as you uploaded it, and the text your child's device extracted from it (which you can edit). Only one is ever visible at a time.
+
+Above your topic's content list, click **Publish as Document** to show the raw file, or **Publish as Text** to show the extracted (and optionally edited) text. Picking one automatically un-publishes the other — you never have both showing at once. If the scan looked messy, review the extracted text first, fix anything wrong, then publish that instead of the raw image.
+
+Video links and typed text have only one version, so they use a single **Publish** button.
+
+The Draft/Published pill on each content row shows what's currently visible. To take something down, publish something else in its place — there's no separate unpublish button.
+
+**Tip:** add, review, and publish all your content before setting the topic to Live. Once a topic is Live, anything already published in it is visible to your child immediately.
 
 ---
 

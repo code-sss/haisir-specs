@@ -1,5 +1,5 @@
 ## Snapshot SHAs
-- haisir-backend: aa24252ff5291b97acb59d851f59fd27015d2178
-- haisir-frontend: 816194d35c8bdddb804f67b9fded7d5f9d6aa897
-- haisir-deploy: 861705bc29164ba73746297ad563ab1d6259e4de
-- captured: 2026-07-26
+- haisir-backend: 583511dec7fa94c800a6865c7e500338518d8dbb
+- haisir-frontend: 3a57718774770fe6180f50ca4f46a25eef207890
+- haisir-deploy: bc77132060c5d15eb24ec27e371fc3b99e60a9e0 (release manifest v2026.5.2 — WAF exclusions committed)
+- captured: 2026-07-29

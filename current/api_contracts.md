@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 3c53b1a (Phase 5 close — G7-patch-6/12/15/17/19/20 fixes + cognitive-complexity refactor, 2026-07-14) |
-| haisir-frontend | 816194d (Phase 5 close — G7-patch-3/5/7/8/9/13/14/15/17/18 fixes, 2026-07-14) |
-| haisir-deploy | b8f650d (rootless-dockerd network reconcile script, unrelated to Phase 5, 2026-07-14) |
+| haisir-backend | 583511d (Phase 6.5 close — singular route alias for file/publish endpoints, 2026-07-29) |
+| haisir-frontend | 3a57718 (Phase 6.5 close — view-dialog CSS fix + publish-body fix + Sonar dedupe, 2026-07-29) |
+| haisir-deploy | bc77132 (release manifest v2026.5.2 — Phase 6 + 6.5 bundled, content reset runbook + WAF exclusions committed, 2026-07-29) |
 
-> Next session: run `git diff 3c53b1a..HEAD` in haisir-backend, `git diff 816194d..HEAD` in haisir-frontend, and `git diff b8f650d..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 583511d..HEAD` in haisir-backend, `git diff 3a57718..HEAD` in haisir-frontend, and `git diff bc77132..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -147,15 +147,30 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 
 ### GET /topics/{topic_id}/content
 - Purpose: List content under a caller-owned topic (Phase 5 G7-patch-6 — previously missing entirely; only `POST` existed at this path, so the frontend's list call 405'd and adding text content appeared to silently fail)
-- Response: `list[TopicContentRead]`; empty list if topic not found/not owned (oracle protection)
+- Response: `list[TopicContentRead]`; empty list if topic not found/not owned (oracle protection); each item carries `visibility_status`, `indexing_status`, `indexing_retry_count` (same fields as the admin-scoped list, see Topic Contents above)
 
 ### POST /topics/{topic_id}/content
 - Purpose: Create topic content (instant types) under a caller-owned topic; 404 if topic not found/not owned
 - RAG: text content with non-empty `text` enqueues a `rag_indexing_outbox` row for the worker (T4.1)
+- WAF (Phase 6.5): rule 931130 (RFI) excluded for this route so a YouTube/Vimeo `url` doesn't 403 — mirrors the pre-existing admin-route exclusion, which this route was never added to when it shipped.
 
 ### PATCH /topic-contents/{content_id}
 - Purpose: Update a caller-owned topic content item; 400 on an invalid field combination, 404 if not found/not owned
 - RAG: changing `text` or `title` on a text-type row resets its outbox row to `pending` for re-embed (T4.3)
+- WAF (Phase 6.5): same 932130/932240/942410 exclusion as the admin PATCH route (OCR math-text false positives) — see Topic Contents above.
+
+### PATCH /topic-contents/{content_id}/publish
+- Purpose: Parent-scoped mirror of the admin publish endpoint (BR-EXT-037) — publishes one side of a caller-owned upload group, drafts every other row in it, atomically
+- Auth: parent, CSRF required
+- Request: no body (frontend sends literal `{}`, same gateway body-schema reason as the admin endpoint)
+- Response: the published `TopicContentRead` row (200)
+- Errors: 404 if not found or not owned by the caller (oracle protection — same as every other parent-curriculum write)
+
+### POST /topic-contents/{content_id}/retry-indexing
+- Purpose: Manually reset a permanently-`failed` RAG indexing row so the worker picks it up again (Phase 6)
+- Auth: parent, CSRF required
+- Response: `IndexingRetryRead { content_id, status, retry_count }` (200)
+- Errors: 404 if not found or not owned by the caller; 429 if retried inside a 30-second cooldown window
 
 ### DELETE /topic-contents/{content_id}
 - Purpose: Delete a caller-owned topic content item; 404 if not found/not owned
@@ -297,32 +312,42 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 ### GET /api/topics-contents/{topic_id}
 - Purpose: List content items for a topic
 - Auth: student | instructor | admin (any platform role)
-- Response: array of `{ id, topic_id, content_type, title, url, text, order, description, source_extraction_job_id, provenance: { source_filename, page_no } | null }` — `provenance` is populated via LEFT JOIN on `extraction_job_audit` when the item was produced by the extraction worker; `null` for manually-created items
-- Note: visibility scoped by the parent topic's owner_type — student sees only items whose parent topic is visible to them.
+- Response: array of `{ id, topic_id, content_type, title, url, text, order, description, source_extraction_job_id, visibility_status: "draft"|"published", provenance: { source_filename, page_no } | null, indexing_status: str | null, indexing_retry_count: int }` — `provenance` via LEFT JOIN `extraction_job_audit`; `indexing_status`/`indexing_retry_count` (Phase 6) via LEFT JOIN `rag_indexing_outbox`, only ever set on `text`-type rows
+- Note: visibility scoped by the parent topic's owner_type — student sees only items whose parent topic is visible to them **and** whose `visibility_status='published'` (Phase 6.5, BR-DATA-025) — orthogonal to `indexing_status`, which tracks RAG search-groundedness, not display.
 
-### GET /api/topics-contents/{content_type}/{topic_id}
-- Purpose: Serve a media file for a topic (PDF, video, etc.)
-- Auth: student | instructor | admin (any platform role)
-- Response: FileResponse (binary)
-- Note: stored files follow the path `topics/{content_type}/{filename}` on disk (e.g. `topics/pdf/filename.pdf`).
+### GET /api/topic-contents/{content_id}/file
+- Purpose: Serve the stored file for a single topic content row (raw `pdf`/`image`, or a manually-uploaded video/text asset), role-scoped
+- Auth: student | admin | parent (`require_any_role`) — **also reachable at the plural alias** `GET /api/topics-contents/{content_id}/file` for backward compatibility with existing CRUD callers on that prefix
+- Response: `FileResponse`, media type sniffed from the first 8 KB of file bytes (`application/pdf`, `image/png`, `image/jpeg`, `image/webp` only — unsupported bytes treated as not-found)
+- Errors: 404 for not-found **and** not-visible (draft/unpublished for a student caller) — deliberate oracle protection, never 403; 400 on path-traversal attempt
+- Note (Phase 6.5): replaces the removed legacy `GET /api/topics-contents/{content_type}/{topic_id}` route, which was topic-keyed (couldn't address one of N+1 rows a topic now holds), hardcoded `application/pdf`, and excluded the parent role.
 
 ### POST /api/topics-contents
 - Purpose: Create a content item
 - Auth: admin
 - Request: topic_id, content_type, title, url?, text?, order, description?
-- Response: content object
+- Response: content object (`visibility_status` defaults to `'draft'` — BR-EXT-034)
 - Validation: `url` field — if content_type is `video`: must be `https://` scheme and hostname in allowlist (`youtube.com`, `www.youtube.com`, `youtu.be`, `vimeo.com`, `www.vimeo.com`); local paths (no scheme/netloc) pass through; returns 422 on failure.
 - WAF: OWASP CRS rule 931130 is suppressed for `POST /api/topics-contents/` to allow external video URLs in the body (Coraza SecRule chain in `03-secured-api.json`); SSRF/XSS risk mitigated by backend allowlist.
-- RAG: text content with non-empty `text` enqueues a `rag_indexing_outbox` row for the worker (T4.1)
+- RAG: text content with non-empty `text` enqueues a `rag_indexing_outbox` row for the worker (T4.1); raw `pdf`/`image` rows never enqueue (allowlist gate, regression-tested)
 
 ### PATCH /api/topics-contents/{content_id}
 - Purpose: Partially update a platform-owned content item
 - Auth: admin (X-Current-Role: admin), CSRF required
-- Request: any of `title`, `order`, `description`, `url`, `text` (all optional; `content_type` is immutable)
+- Request: any of `title`, `order`, `description`, `url`, `text` (all optional; `content_type` and `visibility_status` are immutable here — publish is a separate endpoint, never a per-row field write)
 - Response: updated content object (200); empty payload returns current state unchanged
 - Errors: 404 if not found or not platform-owned; 403 if non-admin or missing CSRF; 400 if `url` fails allowlist validation (ValueError → HTTP 400)
 - Validation: same `url` allowlist rules as POST above.
+- WAF (Phase 6.5): rules 932130/932240/942410 (RCE/SQLi) excluded for this route + its parent-scoped mirror below — OCR-restructured LaTeX math immediately followed by lettered MCQ options (e.g. `$28\frac{4}{5}\%$ ... (a) (b) (c)`) forms literal shell/SQLi-shaped substrings; ordinary exam content, never executed.
 - RAG: changing `text` or `title` on a text-type row resets its outbox row to `pending` for re-embed — title is embedded in chunk metadata so it also requires re-embed (T4.3)
+
+### PATCH /api/topics-contents/{content_id}/publish
+- Purpose: Publish one side of a content upload group and draft every other row in that group, atomically (BR-EXT-037)
+- Auth: admin (X-Current-Role: admin), CSRF required — **also reachable at the singular alias** `PATCH /api/topic-contents/{content_id}/publish` (`include_in_schema=False`; the spec text and frontend both use the singular form)
+- Request: no body (frontend sends a literal `{}` — the gateway's generic write-route body-schema check requires a JSON object/array on every POST/PUT/PATCH regardless of what the backend route itself needs)
+- Response: the published `TopicContentRead` row (200)
+- Errors: 404 if not found or not platform-owned
+- Grouping (BR-DATA-024): rows share a group by `(topic_id, source_extraction_job_id)`; `NULL` job id means "group of one" — publishing a raw `pdf`/`image` row drafts every text-side row in the group and vice versa; a standalone row just publishes itself.
 
 ### DELETE /api/topics-contents/{content_id}
 - Purpose: Delete a platform-owned content item

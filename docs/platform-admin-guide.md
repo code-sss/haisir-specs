@@ -216,6 +216,21 @@ sequenceDiagram
 - **Rename** — click the content title to edit it inline (Enter to save, Escape to cancel).
 - **Delete** — click the × on the content row. The extraction audit record is preserved even after deletion.
 
+### Viewing and publishing content
+
+A PDF or image upload produces **two representations**: the raw file you uploaded, and the text the worker extracted from it. Both start as **Draft** — neither is visible to students until you explicitly publish one.
+
+| Row | What it is | Action |
+|---|---|---|
+| Raw document row (📄/🖼️) | The original PDF/image, exactly as uploaded | Click **View** to open it in the viewer |
+| Extracted text row(s) (📝) | The OCR'd/parsed text, editable via the markdown editor | Click **View** or **Edit** |
+
+Above the content list, use **Publish as Document** or **Publish as Text** to choose which side students see. Publishing one side automatically drafts the other — a topic only ever shows one representation of an upload at a time. Use the raw document when the source is well-formatted (a clean textbook page); use the extracted text when the source is a poor scan and the OCR'd text reads better, editing it first if needed.
+
+Video and typed-text content follow the same draft-by-default rule and use the same single **Publish** button (no raw/text choice, since there's only one representation).
+
+The Draft/Published pill on each content row always shows current state. There is no separate "unpublish" action — publishing the other side is how you take something down.
+
 ---
 
 ## 8. Monitoring extraction jobs

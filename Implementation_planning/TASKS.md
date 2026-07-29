@@ -1,19 +1,22 @@
 # Progress
 
-> Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`0ba0362` frontend:`8dc994e` deploy:`861705b` (2026-07-28)
-> Phase 6.5 scoped 2026-07-27 — see `PLAN.md` for the goal tree, the spec-review corrections table
-> and the scope locks. Phase 7 (Gateway WAF) archived unstarted; resume after this phase.
+> **Phase 6.5 CLOSED 2026-07-29 — fully committed.** All G1–G6 constituent tasks and goal-level
+> walkthroughs pass. Baseline: backend `583511d`, frontend `3a57718`, deploy `bc77132` (release
+> manifest v2026.5.2, bundles Phase 6 + 6.5). See `progress.md`'s Completed Phases for the full
+> closing summary and `decisions.md` 2026-07-28/29 for the individual bug writeups. G2's real
+> destructive run was intentionally not exercised locally (dev/staging compose topology mismatch,
+> out of scope) — signed off via dry-run + manual command review instead; the real run is still
+> owed against staging before this repo's spec can claim it end-to-end verified.
 
 ## G1 [backend]: Schema foundation — `image` type and `visibility_status`
 - [x] T1.1 [backend]: Add `image` to the `contenttype` enum — `ALTER TYPE ... ADD VALUE` in an Alembic autocommit block, plus `ContentType.image` (2026-07-28)
 - [x] T1.2 [backend]: Add `visibility_status VARCHAR NOT NULL DEFAULT 'draft'` — column, imperative mapping, dataclass field; no DB CHECK (2026-07-28)
 - [x] T1.3 [backend]: Pydantic surface — `Literal["draft","published"]` on `TopicContentRead`; omitted from Create/Update (2026-07-28)
-- [ ] **G1: Schema foundation** — integration test
+- [x] **G1: Schema foundation** — integration test (2026-07-29, manual: image upload produced correctly-typed draft rows)
 
 ## G2 [deploy]: One-shot content reset runbook
 - [x] T2.1 [deploy]: Confirm-gated script truncating the six content tables and clearing `{data_dir}/topics/` (depends on T1.2 [backend]) (2026-07-28)
-- [ ] **G2: Content reset runbook** — acceptance test
+- [x] **G2: Content reset runbook** — acceptance test (2026-07-29, partial: dry-run passed; real run reviewed manually, not executed, deferred to staging — see decisions.md 2026-07-28/29)
 
 ## G3 [backend]: The raw file is materialized and servable
 - [x] T3.1 [backend]: `copy_to_content_store` — collision-safe copy from the extraction root into `{data_dir}/topics/{content_type}/` (2026-07-28)
@@ -21,14 +24,14 @@
 - [x] T3.3 [backend]: Regression test — the raw row never enters `rag_indexing_outbox` (depends on T3.2) (2026-07-28)
 - [x] T3.4 [backend]: `GET /api/topic-contents/{content_id}/file` — sniffed media type, path safety, student/admin/parent gating (depends on T1.2) (2026-07-28)
 - [x] T3.5 [backend]: Delete the legacy `GET /api/topic-contents/{content_type}/{topic_id}` route (depends on T5.4 [frontend]) (2026-07-28)
-- [ ] **G3: Raw file materialized and servable** — integration test
+- [x] **G3: Raw file materialized and servable** — integration test (2026-07-29, manual: image + PDF, admin + parent)
 
 ## G4 [backend]: Publish as an atomic per-group decision
 - [x] T4.1 [backend]: Upload-group resolver — `(topic_id, source_extraction_job_id)`, NULL job id means group of one (2026-07-28)
 - [x] T4.2 [backend]: `PATCH /api/topic-contents/{content_id}/publish` — one transaction, drafts the opposite side (deps T4.1, T1.3 done) (2026-07-28)
 - [x] T4.3 [backend]: Parent-scoped publish mirror under `/api/parent/curriculum/`, owner-scoped 404 (depends on T4.1) (2026-07-28)
 - [x] T4.4 [backend]: Student read paths gain the `visibility_status='published'` AND-condition (depends on T1.2) (2026-07-28)
-- [ ] **G4: Atomic per-group publish** — integration test
+- [x] **G4: Atomic per-group publish** — integration test (2026-07-29, manual: admin + parent publish, mutual exclusion)
 
 ## G5 [frontend]: Shared content viewer
 - [x] T5.1 [frontend]: Promote `ContentViewer` out of `features/student/` to shared — pure move, no behaviour change (2026-07-28)
@@ -36,18 +39,18 @@
 - [x] T5.3 [frontend]: Add the `case "image"` image viewer — **same commit as T5.2**, `noImplicitReturns` makes the union member without its case a compile error (depends on T5.1, T5.2) (2026-07-28)
 - [x] T5.4 [frontend]: Repoint `SecurePdfViewer`'s `pdfUrl` at the per-content file endpoint (depends on T3.4 [backend]) (2026-07-28)
 - [x] T5.5 [frontend]: YouTube IFrame Player API / Vimeo Player SDK with external-link fallback, replacing the raw `<iframe src>` (depends on T5.1) (2026-07-28)
-- [ ] **G5: Shared content viewer** — integration test
+- [x] **G5: Shared content viewer** — integration test (2026-07-29, manual: image + PDF viewer, dialog rendering)
 
 ## G6 [frontend]: Uploader review and publish UI
 - [x] T6.1 [frontend]: Content row — View button and publish-state pill; View replaces Edit on `pdf`/`image` (depends on T5.1) (2026-07-28)
 - [x] T6.2 [frontend]: Publish toggle — one call per switch, server owns mutual exclusivity (depends on T4.2, T4.3 [backend], T6.1) (2026-07-28)
 - [x] T6.3 [frontend]: Markdown editor with live preview via the shared `MarkdownText` component (2026-07-28)
 - [x] T6.4 [frontend]: Correct the provenance tooltip — the source file is no longer discarded (2026-07-28; no-op — shipped tooltip already correct, see decisions)
-- [ ] **G6: Uploader review and publish UI** — integration test
+- [x] **G6: Uploader review and publish UI** — integration test (2026-07-29, manual: publish pill, view/edit split, markdown editor edit flow)
 
 ## Ready now
-Tasks with no pending dependencies — can be started immediately:
-- (none) — every G1–G6 constituent task across all repos is done. Only the six goal-level
-  integration tests remain (G1–G6), each requiring a live backend + deploy stack to execute
-  (e.g. G6: upload as admin, publish, confirm student visibility, repeat as parent). Not
-  runnable from a frontend-only environment; needs a full-stack test pass.
+- (none) — Phase 6.5 is closed. Next up per `progress.md`: Minimus container-image migration
+  backlog (`target/requirements/14_container_images.md`), remaining Phase 5 backlog (role
+  migration, RAG ops cleanup), or Phase 7 (Gateway WAF, archived unstarted) — per user priority
+  via `/plan`. G2's staging acceptance run is still outstanding and should happen before/soon
+  after this phase is considered fully verified end-to-end.

@@ -4,6 +4,185 @@
 
 ---
 
+## 2026-07-29 — Phase 6.5 closed: G3 WAF false positives + final sign-off
+
+> Context: G1, G3–G6 walkthrough steps all passed manually (admin + parent + student, image + PDF
+> + video). G3 additionally surfaced two Coraza 403s — a PDF/video "edit" PATCH and a parent-role
+> video-URL POST — diagnosed from `apisix-dev` logs and fixed via a prompt handed to a separate
+> Claude Code session scoped to `haisir-deploy` (this session's edit to
+> `common/plugin_configs/03-secured-api.json` was blocked by the permission classifier as a
+> security-config change, correctly so — WAF rule removal isn't a same-session auto-approve action
+> even after in-chat user sign-off).
+
+- **Rule 931130 (RFI) — parent video-URL route never added to the existing exclusion's scope.**
+  `POST /api/parent/curriculum/topics/{topic_id}/content` with a YouTube/Vimeo `url` 403'd; the
+  admin equivalent (`POST /api/topics-contents/`) has had this exact exclusion since T13.1 (see
+  progress.md 2026-05-14). Fixed with a second URI-scoped block (`id:199101`) mirroring `199100`.
+- **Rules 932130/932240/942410 (RCE/SQLi) — OCR'd LaTeX math + lettered MCQ options.** This
+  session's initial diagnosis (932130 alone, from a static content example) was refined by live
+  testing in the deploy session against real OCR'd content: 932130 doesn't actually fire on the
+  real body shape, but 932240 (shell-evasion pattern matching `2\frac`) and 942410 (SQLi matching
+  a line-wrapped `is\n(` before an MCQ paren) do, pushing the anomaly score over threshold when
+  combined with warning-level 942430. All three now excluded (932130 kept since it targets the
+  same literal pattern and may still fire on content this route hasn't seen yet). Same
+  URI+method-scoped `ctl:ruleRemoveById` pattern as the existing 199100/199110 blocks in this file.
+- **Incidental fixes in the same pass:** a `csrf-token` cookie exclusion for rule 942440, added to
+  all four `plugin_configs/0{1,2,3,4}-secured-*.json` files for consistency with the existing
+  session-cookie exclusions (942440 excluded `session`/`session_2`/`KC_*` but not `csrf-token`
+  itself in any of them); and the CSRF route's rate limit (`common/routes/03-api-csrf.json`)
+  raised 60→100, found necessary during the same testing pass. Both outside the original ask but
+  reviewed and accepted as reasonable, related hardening.
+- **Committed 2026-07-29** at `89bc78f` (`fix(apisix): waf exclusions for csrf cookie, parent
+  content, OCR body`) — was left uncommitted in the `haisir-deploy` host checkout pending review,
+  same as the earlier fixes. Release manifest `v2026.5.2` added at `bc77132`, bundling Phase 6 +
+  Phase 6.5 (no release was cut between them).
+- **Phase 6.5 is closed.** All G1–G6 goal-level walkthroughs pass. G2's real destructive-reset
+  acceptance run remains outstanding against staging (dry-run + manual command review substituted
+  for local dev, by user decision — see 2026-07-28 entry below). `TASKS.md` and `progress.md`
+  updated; backend (`583511d`) and frontend (`3a57718`/`416b63f`/`416f04c`) already committed by
+  the user, deploy still pending.
+
+## 2026-07-28 — G2 walkthrough: real reset run crashes on `POSTGRES_DB: unbound variable`
+
+> Context: dry run passed clean; the real destructive run (`common/scripts/reset-content.sh dev`)
+> passed both confirmation prompts, then crashed during `run_sql_reset()` with
+> `line 155: POSTGRES_DB: unbound variable`.
+
+- **No data was lost.** `set -euo pipefail` means the crash happened during bash's variable
+  expansion of the `psql` command line — before `docker compose exec` was ever invoked. Separately,
+  the `db`/`backend`/`worker`/vault-agent containers weren't even running at the time (only base
+  devcontainer infra was up), so there was nothing live to truncate regardless.
+- **Root cause:** `run_sql_reset()` references `${POSTGRES_USER}`/`${POSTGRES_DB}` as host-shell
+  bash variables, but `render_runtime_env_if_needed()` only ever *passes* `RUNTIME_ENV_FILE` to
+  `docker compose --env-file` — that reaches compose's own interpolation and the exec'd container's
+  environment, never the script's own process. This dev environment has
+  `OPENBAO_DEPLOY_SECRETS=true`, and `POSTGRES_DB` is a Class B secret (Phase 5.6 OpenBao work)
+  that only ever lands in the OpenBao-rendered file, never the plain `.env` — so it was never a
+  real shell variable anywhere in this script. `POSTGRES_USER` happened to already be set from
+  something else in the calling shell, which is why only `POSTGRES_DB` tripped `set -u`.
+- **Fix:** `render_runtime_env_if_needed()` now sources `RUNTIME_ENV_FILE` (with `set -a`) into its
+  own shell at the end of the function, covering both the plain-`.env` and OpenBao-rendered paths
+  uniformly, instead of returning early on the non-OpenBao branch. Applied directly to
+  `haisir-deploy/common/scripts/reset-content.sh` on the host checkout (unlike backend/frontend,
+  this repo isn't behind a dev-container volume) — `bash -n` clean, **left uncommitted**, same
+  "commit before/with closing Phase 6.5" status as the other three fixes.
+- **Correction — the actual root cause was a missing `dev/.env` line, not a script bug.**
+  `staging/.env` and `prod/.env` both already define `POSTGRES_DB` directly, and `main()` already
+  unconditionally `source`s the environment's `.env` before `render_runtime_env_if_needed()` runs
+  — so staging/prod were never at risk from this. `dev/.env` was simply missing a `POSTGRES_DB`
+  line (it had `POSTGRES_USER` but not `POSTGRES_DB`); the user added
+  `POSTGRES_DB=haisir_${APP_ENV}_db` to it directly (dev intentionally uses a different DB name
+  than staging/prod's shared literal `haisir_app_db` — not a mismatch to fix). With that line
+  present, `main()`'s existing `source` binds `POSTGRES_DB` before the OpenBao branch even runs,
+  so the earlier `render_runtime_env_if_needed()` script edit (sourcing `RUNTIME_ENV_FILE` at the
+  end of that function) was superseded and has been **reverted** — `common/scripts/reset-content.sh`
+  is back to its original, unmodified state. Net: **zero code changes needed for G2**; the fix was
+  a one-line environment config addition (`dev/.env`, not committed to git — that file is
+  gitignored/untracked), which the user made themselves.
+- **G2 acceptance deferred to staging.** This local dev environment also runs two
+  non-interchangeable compose stacks — `dev/docker-compose.yml` (lightweight, service `postgres`,
+  container `postgres-dev`, no backend/worker/vault-agents) and `common/docker-compose.yml` (full
+  prod-parity stack, service `db`, container `haisir-db-${APP_ENV}`, which is what actually held
+  the Phase 6.5 test data during the G3/G4 walkthrough and what `reset-content.sh` targets). By
+  user decision, reconciling which stack the script should target for pure local dev is out of
+  scope here — the script's actual acceptance run (`reset-content.sh <env>`, no `--dry-run`) is
+  deferred to staging, where the compose topology matches what the script assumes and `POSTGRES_DB`
+  is already correctly set. For local dev, the manual SQL truncate + volume-clear equivalent (same
+  statements `run_sql_reset`/`reset_datadir_topics` execute) was reviewed instead of run, and
+  accepted as sufficient for G2 sign-off at this level.
+
+## 2026-07-28 — G4 walkthrough: publish click 400s at the gateway, not the backend
+
+> Context: user clicked **Publish as Document** in the admin UI and got `400 Invalid request:
+> missing/invalid Content-Type or body` on `PATCH /api/topic-contents/{id}/publish`.
+
+- **Root cause: gateway, not application code.** `haisir-deploy/common/routes/05-api-write.json`
+  is a wildcard `/api/*` route matching every `POST`/`PUT`/`PATCH`, carrying a `request-validation`
+  plugin that requires (a) a `Content-Type` header — satisfied, `buildApiHeaders()` always sets
+  `application/json` — and (b) `body_schema: {"type": ["object","array"]}` — **not** satisfied,
+  because T4.2/T4.3's publish endpoints take no request body at all (`content_id` comes from the
+  path, everything else from the CSRF/role headers), so the frontend's `fetchWithCSRFRetry()` call
+  had no `body` key. Every write endpoint before this phase always sent a JSON body, so this generic
+  route's body requirement was never exercised by a body-less mutation until now. The 400 comes
+  from APISIX itself — the request never reaches FastAPI (confirmed by the exact rejection string
+  matching `rejected_msg` in the route file, not any backend error path).
+- **Fix: send `{}`, not a gateway route change.** Both call sites — `admin-api.ts`
+  `publishTopicContent` and `parent-curriculum-api.ts`'s mirror — now send a literal `"{}"` body.
+  FastAPI ignores a body on a route with no declared body parameter, so this is inert at the
+  backend; it only exists to satisfy the gateway's generic schema gate. Chosen over adding a
+  publish-specific gateway route override because it's a two-line change in two files already
+  being touched this phase, versus a new deploy route needing its own priority/plugin-config
+  reasoning — and every other body-less-at-the-backend mutation this codebase might add later hits
+  the same gate, so this is the smaller precedent to set. Applied in the `frontend` dev container,
+  uncommitted, same status as the other two fixes above.
+
+## 2026-07-28 — G3/G5 walkthrough: admin "View" dialog rendered transparent, page scrolled instead of the viewer
+
+> Context: user ran the G3 walkthrough manually — uploaded an image to a topic, got the expected
+> two rows (extracted text page + raw image, `q-ocr.jpg`), and clicked **View** on each. Screenshots
+> showed the modal header rendering as an opaque bar but the body beneath it fully transparent (the
+> admin page behind bled through, making content unreadable), no scrollbar on the viewer itself, and
+> mouse-wheel scrolling moving the browser window's own scrollbar instead of the modal's.
+
+- **Root cause:** `topic-row.module.css`'s `.viewModalBox` (the `<dialog>` added by this phase to
+  host `ContentViewer` behind the new View button, `topic-row.tsx`) used `all: unset` to clear the
+  browser's default `<dialog>` styling before applying its own flex layout. `all: unset` also wipes
+  `background`, `max-height`, and `overflow` to their initial values — `background: transparent`
+  (page bleeds through) and no height cap (so the box grows past the viewport with no internal
+  scrollbar of its own, leaving only the underlying document's scrollbar to move). `ContentViewer`
+  itself renders a bare fragment with no wrapping `<div>` and never sets a background — every other
+  place it's used (student page) already sits inside an opaque page container, so this was never
+  exposed before.
+- **This codebase already has a working pattern for exactly this** — `admin-modals.module.css`'s
+  `.overlay`/`.modal` pair (used by `delete-topic-dialog.tsx`, `add-node-modal.tsx`, etc.): the
+  *inner* dialog carries `background: #fff`, `max-height: 90vh`, `overflow-y: auto` directly,
+  rather than `all: unset` plus relying on the outer overlay div to scroll. `.viewModalBox` was the
+  only dialog in the codebase using `all: unset`.
+- **Fix (applied in the `frontend` dev container, uncommitted):**
+  `src/features/admin/components/topic-row.module.css` — `.viewModalBox` drops `all: unset` and
+  gains `background`, `border`, `border-radius`, `max-width: 52rem`, `max-height: calc(100vh - 4rem)`,
+  `overflow-y: auto` (mirroring `.modal`); `.viewModalHeader` becomes `position: sticky; top: 0`
+  inside that scroll container (pinned while the body scrolls) instead of owning its own
+  border-radius/border, which now belong to the box; a new `.viewModalContent` padding wrapper
+  was added around `ContentViewer` in `topic-row.tsx` since it renders unpadded. Same "review and
+  commit before closing Phase 6.5" status as the router-alias fix below.
+- **Same bug, second call site:** `content-management/components/topic-content-section.tsx` (the
+  parent-role mirror) copy-pasted the identical `viewModal`/`viewModalBox` markup and CSS —
+  `topic-content-section.module.css` had the same `all: unset` box. Fixed identically, same
+  uncommitted status, in the `frontend` dev container.
+
+## 2026-07-28 — Phase 6.5 pre-walkthrough: singular/plural route mismatch found and fixed
+
+> Context: preparing the manual G1–G6 walkthrough for Phase 6.5 close-out. Baseline at the time:
+> backend `28af9b8`, frontend `04d82eb`, deploy `dc17786` — all T-level tasks in `TASKS.md` were
+> checked off, but none of the six goal-level integration tests had been run yet.
+
+- **Found:** the two Phase 6.5 backend routes added to the pre-existing `topic_content.router` —
+  `GET .../{content_id}/file` (T3.4) and `PATCH .../{content_id}/publish` (T4.2) — inherit that
+  router's mount point, `prefix="/api/topics-contents"` (plural, `src/api/router.py:76-78`,
+  unchanged since before this phase). But `target/requirements/12_content_extraction.md` documents
+  every `topic-contents` route, old and new, in the **singular** form (BR-EXT-034/037, line 487
+  etc.) — a pre-existing documentation habit that never matched the real (plural) backend prefix,
+  harmless until now because no frontend caller had ever taken the spec text literally. This phase's
+  frontend work did: `admin-api.ts:401` (publish) and the shared `content-viewer.tsx:55,71`
+  (file-fetch, used by student/admin/parent alike) were written against the singular spec string,
+  with a `ponytail:` comment explicitly asserting it was intentional and *not* a bug. Net effect:
+  the publish button and every PDF/image view would 404 in the walkthrough.
+- **Decision: fix the backend, not the frontend or the spec.** The spec text is what both
+  `12_content_extraction.md` and the frontend already agree on; making the backend serve both
+  prefixes is the smaller, lower-risk change (one additional `include_router` mount, same router
+  object, zero route-handler duplication) versus rewriting three frontend call sites and their
+  tests against a prefix the spec doesn't document. `include_in_schema=False` on the singular
+  mount keeps the OpenAPI surface from listing every CRUD route twice.
+- **Applied directly in the `backend` dev container** (`/workspaces/haisir-backend/src/api/router.py`,
+  not the host checkout — that clone is read-only per user instruction). **Left uncommitted** —
+  the user's VS Code session in that container should review and commit it (with tests, since none
+  of the new backend tests exercise the singular alias) as part of closing Phase 6.5, rather than
+  it landing as an unreviewed commit from this session.
+- **Not yet closed:** this fix removes the blocker but the G1–G6 goal-level walkthroughs still need
+  to be run against a stack that has both this fix and commits `28af9b8`/`04d82eb`/`dc17786`
+  deployed. Phase 6.5 stays open in `TASKS.md` until that happens.
+
 ## 2026-07-28 — T6.4 closed as a no-op (provenance tooltip)
 
 > Context: implementing T6.4 ([frontend] "Correct the provenance tooltip") in `haisir-frontend`.

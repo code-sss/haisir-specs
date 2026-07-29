@@ -180,7 +180,66 @@ The platform admin board content manager is fully implemented end-to-end. The Ad
 > Snapshot baseline: haisir-backend `c82d466` (Phase 6 close — indexing retry endpoint `2901077` + lifecycle test `10b2606`, main, 2026-07-26), haisir-frontend `67a883c` (Phase 6 close — indexing pills + retry UI `1e5fdd0`, main, 2026-07-26), haisir-deploy `861705b` (unchanged — no deploy work this phase).
 > Next session: `git diff c82d466..HEAD` in haisir-backend, `git diff 67a883c..HEAD` in haisir-frontend, `git diff 861705b..HEAD` in haisir-deploy. Phase 6 is closed — next up is the Minimus container-image migration backlog candidate (`target/requirements/14_container_images.md`) or the remaining Phase 5 backlog (role migration, RAG ops cleanup), per user priority via `/plan`.
 
+> Snapshot baseline: haisir-backend `583511d` (Phase 6.5 close — singular route alias for file/publish endpoints, main, 2026-07-29), haisir-frontend `3a57718` (Phase 6.5 close — view-dialog CSS fix + publish-body fix + Sonar dedupe, main, 2026-07-29), haisir-deploy `bc77132` (release manifest v2026.5.2 — Phase 6 + 6.5 bundled, main, 2026-07-29).
+> Next session: `git diff 583511d..HEAD` in haisir-backend, `git diff 3a57718..HEAD` in haisir-frontend, `git diff bc77132..HEAD` in haisir-deploy. Phase 6.5 is fully closed and committed. G2's real destructive-reset acceptance run is still outstanding against staging. Next up: Minimus container-image migration backlog, remaining Phase 5 backlog (role migration, RAG ops cleanup), or Phase 7 (Gateway WAF, archived unstarted), per user priority via `/plan`.
+
+**Also complete (2026-07-29 — `/describe-current-state` capture):** `current/schema.md`, `current/api_contracts.md`, and `current/ui_flows.md` refreshed via incremental diff from the prior `aa24252`/`816194d`/`861705b` snapshot (2026-07-26, which itself predated Phase 6 and Phase 6.5 — those files had drifted out of sync with each other on top of being stale, a pre-existing issue noted but not resolved beyond this incremental catch-up). Captured: `V41_content_image_visibility` migration + `topic_contents.visibility_status`/`content_type=image`/transient `indexing_status` fields (schema.md); the new/changed file-serve, publish, and retry-indexing endpoints across both the admin and parent-curriculum routers, plus the two new WAF exclusion notes (api_contracts.md); the View button/publish pill/`ContentPublishControl`/markdown live-preview editor/shared `ContentViewer` UI (ui_flows.md). `docs/platform-admin-guide.md` §7 gained a new "Viewing and publishing content" subsection (previously undocumented); `docs/parent-guide.md` §5/§6 updated — §6 previously described only the topic-level draft/live gate and had no mention of the new per-content publish step at all.
+
+**Also complete (2026-07-29 — deploy WAF fixes committed + release manifest):** the 5 pending WAF/route files (`common/plugin_configs/0{1,2,3,4}-secured-*.json`, `common/routes/03-api-csrf.json`) committed in `haisir-deploy` at `89bc78f` (`fix(apisix): waf exclusions for csrf cookie, parent content, OCR body`). Release manifest `releases/v2026.5.2/manifest.yaml` added at `bc77132`, bundling Phase 6 + Phase 6.5 (no release was cut between them): `db_migration: true` (V41), `apisix_routes`/`apisix_plugins`/`apisix_full_setup: true`; rollback notes call out V41's `image` enum value (cannot be removed by Postgres, harmless if left after a downgrade) and recommend rolling back backend/worker images to v2026.5.1 before running `alembic downgrade` so old code doesn't have to serve `image`-type rows it doesn't understand. All three `current/*.md` baselines and `current/snapshot_shas.md` now read backend `583511d`, frontend `3a57718`, deploy `bc77132` — nothing pending commit anywhere.
+
 ## Completed Phases
+
+### Phase 6.5 — Content Viewing & Publish ✓
+
+All 22 G1–G6 tasks landed on `main` in all three repos, then a full manual G1–G6 walkthrough
+(2026-07-29) found and fixed five real bugs before sign-off — none caught by the automated test
+suites, all surfaced only by actually clicking through the feature as admin, parent, and student.
+
+**Backend** `de7e794`→`583511d`: image enum + `visibility_status` column; raw-file
+materialization (`copy_to_content_store`, `finalize()` appends the raw row) + per-content file
+endpoint; atomic per-group publish (admin + parent-scoped mirror) + student read-gate; legacy
+topic-keyed file route removed; **plus** a second router mount at the singular `/api/topic-contents`
+prefix (`include_in_schema=False`) so the file-serve and publish routes are reachable at the path
+the spec documents and the frontend calls, alongside the pre-existing plural
+`/api/topics-contents` CRUD mount.
+
+**Frontend** `ee41290`→`3a57718`: shared `ContentViewer` promoted out of `features/student/`,
+image viewer, SDK video player with fallback, publish toggle, markdown live-preview editor;
+**plus** the admin and parent "View" dialogs (`topic-row.tsx`,
+`content-management/topic-content-section.tsx`) fixed from `all: unset` (transparent body, no
+internal scroll, left-aligned once the browser's default `dialog{position:absolute}` UA style was
+exposed) to the same explicit `background`/`max-height`/`overflow-y`/`position:static` treatment
+the codebase's other dialogs already use; and both publish call sites (`admin-api.ts`,
+`parent-curriculum-api.ts`) send a literal `"{}"` body so the gateway's generic body-schema check
+doesn't 400 a body-less PATCH.
+
+**Deploy** `dc17786` + pending commit: confirm-gated `common/scripts/reset-content.sh`; **plus**
+Coraza WAF exclusions in `common/plugin_configs/03-secured-api.json` for two false positives found
+during the walkthrough — rule 931130 (RFI) on the parent's YouTube/Vimeo `url` field (the admin
+route already had this exclusion, the parent mirror never got added to its scope), and rules
+932130/932240/942410 (RCE/SQLi) on OCR-restructured LaTeX math text (`$28\frac{4}{5}\%$` style)
+immediately followed by lettered MCQ options, edited via the new markdown editor — first real edit
+of this content shape since T6.3 shipped. Same fix pattern as the pre-existing hAITU exclusions in
+that file (URI+method-scoped `ctl:ruleRemoveById`; field-level exclusion is documented elsewhere
+in the file as unreliable on this Coraza build). A `csrf-token` cookie exclusion for rule 942440
+and a CSRF-route rate-limit bump (60→100) were added alongside for consistency with the existing
+session-cookie exclusions.
+
+**Bugs found and fixed during the walkthrough, in order:** (1) singular/plural route mismatch —
+backend 404 on file-serve and publish; (2) `all: unset` dialog CSS — transparent/unscrollable/
+left-aligned View dialog; (3) gateway 400 on publish — generic write route requires a JSON body
+the endpoint never sends; (4) `POSTGRES_DB: unbound variable` in the reset runbook — turned out to
+be a missing line in local `dev/.env`, not a script defect (staging/prod already had it; the
+script edit was reverted, zero deploy-repo code change needed for this one); (5) two Coraza WAF
+false positives (RFI on parent video URLs, RCE/SQLi on OCR math text) blocking parent PDF/video
+upload and topic-content editing. Full writeups: `decisions.md` 2026-07-28/2026-07-29.
+
+**G2 exception:** the real (non-dry-run) reset was never successfully executed locally — local dev
+runs a different, lighter compose stack (`dev/docker-compose.yml`, service `postgres`) than the
+one `reset-content.sh` targets (`common/docker-compose.yml`, service `db`, which is what actually
+held the walkthrough's test data). Reconciling that for local dev was ruled out of scope by the
+user; dry-run passed, the destructive SQL/volume-clear commands were reviewed manually instead of
+run, and the real acceptance run is deferred to staging.
 
 ### Phase 6 — Parent Indexing Status & Retry ✓
 
