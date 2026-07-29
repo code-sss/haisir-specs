@@ -155,7 +155,7 @@
 ## G5 [frontend]: CSP enforced
 
 ### G5.1 [frontend]: Working report collector
-- [ ] T5.1.1 [frontend]: `src/app/csp-report/route.ts` currently reads the body and discards it — persist reports via structlog per BR-CSP-008, keeping the 204 response
+- [x] T5.1.1 [frontend]: `src/app/csp-report/route.ts` currently reads the body and discards it — persist reports via structlog per BR-CSP-008, keeping the 204 response (2026-07-29)
 - [ ] T5.1.2 [frontend]: Verify reports surface where they can actually be read during the soak (depends on T5.1.1)
 - [ ] **G5.1: violations are captured** — integration test
 
@@ -285,6 +285,5 @@
 
 - T1.1.3 [deploy]: Delete `gateway-docker/coraza/apply-apisix-patch.sh` and the `git clone --depth 1 --branch` step from the Dockerfile builder stage, now that the patch is applied in-tree
 - T3.1.2 [backend]: Change `_DOMAIN_TO_LLM_ROLE.get(m.role, m.role)` to `_DOMAIN_TO_LLM_ROLE[m.role]` — `ReviewChatMessage.role` is now constrained, so the unmapped-role fallback can be removed
-- T5.1.1 [frontend]: Make the CSP report collector persist reports
 - T6.1.1 [deploy]: Remove `OAUTH__KEYCLOAK__SSL_VERIFY=false` from prod/staging
 - T7.2.1 [backend]: Validate `params.TAG` in `haisir-backend/Jenkinsfile` — independent of everything else in this phase
