@@ -185,7 +185,7 @@
 ## G6 [backend, deploy]: Auth and transport verification
 
 ### G6.1 [deploy, backend]: TLS verification on Keycloak channels
-- [ ] T6.1.1 [deploy]: Remove `OAUTH__KEYCLOAK__SSL_VERIFY=false` from `prod/.env:39` and `staging/.env:39`; the code default is already `true` (BR-SEC-021)
+- [x] T6.1.1 [deploy]: Remove `OAUTH__KEYCLOAK__SSL_VERIFY=false` from `prod/.env:39` and `staging/.env:39`; the code default is already `true` (BR-SEC-021) (2026-07-29)
 - [ ] T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed (depends on T6.1.1)
 - [ ] T6.1.3 [backend]: Remove or gate the `check_hostname = False` / `CERT_NONE` context in `src/auth/user.py:37-42` so production cannot silently reach it (depends on T6.1.2)
 - [ ] T6.1.4 [backend]: Verify introspection and Keycloak-admin calls succeed with verification on (depends on T6.1.3)
@@ -286,5 +286,5 @@
 - T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (no dependencies; G5.2 start)
 - T1.1.4 [deploy]: Confirm the image builds reproducibly from the vendored tree and the WASM filter loads in APISIX, now that the clone/patch step is gone — no behaviour change expected
 - T3.1.2 [backend]: Change `_DOMAIN_TO_LLM_ROLE.get(m.role, m.role)` to `_DOMAIN_TO_LLM_ROLE[m.role]` — `ReviewChatMessage.role` is now constrained, so the unmapped-role fallback can be removed
-- T6.1.1 [deploy]: Remove `OAUTH__KEYCLOAK__SSL_VERIFY=false` from prod/staging
+- T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone
 - T7.2.2 [deploy]: Validate `params.VERSION` against `^\d+\.\d+(\.\d+)?$` in `Jenkinsfile.deploy:58,89-107`; the remote-exec path is already correct, `MANIFEST_PATH` is not (depends on T7.2.1)
