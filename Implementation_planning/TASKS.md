@@ -9,7 +9,7 @@
 
 ### G1.1 [deploy]: Vendor coraza-proxy-wasm into the repo
 - [x] T1.1.1 [deploy]: Vendor `corazawaf/coraza-proxy-wasm` at the current pinned tag `0.6.0` into `gateway-docker/coraza-proxy-wasm/`, preserving upstream LICENSE and a `VENDORED.md` recording upstream URL, tag, commit SHA and date (2026-07-29)
-- [ ] T1.1.2 [deploy]: Apply the APISIX body-processing patch in-tree to `wasmplugin/plugin.go` (the `wasm_process_req_body` / `wasm_process_resp_body` `SetProperty` opt-ins) as a reviewable diff
+- [x] T1.1.2 [deploy]: Apply the APISIX body-processing patch in-tree to `wasmplugin/plugin.go` (the `wasm_process_req_body` / `wasm_process_resp_body` `SetProperty` opt-ins) as a reviewable diff (2026-07-29)
 - [ ] T1.1.3 [deploy]: Delete `gateway-docker/coraza/apply-apisix-patch.sh` and the `git clone --depth 1 --branch` step from the Dockerfile builder stage (depends on T1.1.2)
 - [ ] T1.1.4 [deploy]: Confirm the image builds reproducibly from the vendored tree and the WASM filter loads in APISIX — no behaviour change at this step (depends on T1.1.3)
 - [ ] **G1.1: proxy-wasm vendored with the patch in-tree** — integration test
@@ -283,7 +283,8 @@
 
 ## Ready now
 
-- T1.1.2 [deploy]: Apply the APISIX body-processing patch in-tree to `wasmplugin/plugin.go` in the newly vendored `gateway-docker/coraza-proxy-wasm/`
+- T1.1.3 [deploy]: Delete `gateway-docker/coraza/apply-apisix-patch.sh` and the `git clone --depth 1 --branch` step from the Dockerfile builder stage, now that the patch is applied in-tree
+- T3.1.2 [backend]: Change `_DOMAIN_TO_LLM_ROLE.get(m.role, m.role)` to `_DOMAIN_TO_LLM_ROLE[m.role]` — `ReviewChatMessage.role` is now constrained, so the unmapped-role fallback can be removed
 - T5.1.1 [frontend]: Make the CSP report collector persist reports
 - T6.1.1 [deploy]: Remove `OAUTH__KEYCLOAK__SSL_VERIFY=false` from prod/staging
 - T7.2.1 [backend]: Validate `params.TAG` in `haisir-backend/Jenkinsfile` — independent of everything else in this phase
