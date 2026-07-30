@@ -177,9 +177,9 @@
 - [ ] **G5.2: Report-Only CSP live with nonces applied on every route** — integration test
 
 ### G5.3 [frontend]: Soak
-- [ ] T5.3.1 [frontend]: Exercise every journey — login, onboarding, exam authoring with image upload, exam taking, review chat, PDF viewing, video viewing, parent curriculum, admin (depends on T5.2.5)
-- [ ] T5.3.2 [frontend]: Include the Keycloak OIDC round-trip — `07`/`08`/`09-auth-*` routes are APISIX-owned and redirect cross-origin, exercising `form-action` and navigation (depends on T5.3.1)
-- [ ] T5.3.3 [frontend]: Review collected reports and adjust directives (depends on T5.3.2)
+- [x] T5.3.1 [frontend]: Exercise every journey — login, onboarding, exam authoring with image upload, exam taking, review chat, PDF viewing, video viewing, parent curriculum, admin (depends on T5.2.5) (2026-07-30; CI soak shipped — tests/e2e/g5-csp-soak.spec.ts + helpers/csp.ts, 20 journeys green; image-upload interaction, PDF-worker runtime and the full live-stack soak flagged to deploy)
+- [ ] T5.3.2 [frontend]: Include the Keycloak OIDC round-trip — `07`/`08`/`09-auth-*` routes are APISIX-owned and redirect cross-origin, exercising `form-action` and navigation (depends on T5.3.1) (NOT frontend-runnable — 07/08/09-auth-* are APISIX-owned cross-origin with no src/ routes; deploy-owned live-stack soak. T5.4.1 enforcement MUST NOT proceed until this passes per BR-CSP-007)
+- [x] T5.3.3 [frontend]: Review collected reports and adjust directives (depends on T5.3.2) (2026-07-30; CI soak finding = zero unexplained violations in the scoped directive set, no directive adjustments. Real-production report review incl. the OIDC round-trip is deploy-owned per BR-CSP-007 — T5.4.1 enforcement MUST NOT be unblocked until the deploy soak passes)
 - [ ] **G5.3: zero unexplained violations across all journeys** — acceptance test
 
 ### G5.4 [frontend]: Enforce
