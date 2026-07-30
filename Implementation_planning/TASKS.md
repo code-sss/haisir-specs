@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`7829dd3` frontend:`3a57718` deploy:`ed1dbf1` (2026-07-29, reconciled after
+> Last baselined: backend:`b865ec1` frontend:`bc4d6f7` deploy:`fd997a8` (2026-07-30, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 
@@ -72,7 +72,7 @@
 - [x] T3.2.1 [backend]: Design the persistence model — reuse `doubts`/`doubt_messages` or add a review-chat equivalent; `exam-review-chat` is currently fully stateless so this is new storage, not a refactor (2026-07-29)
 - [x] T3.2.2 [backend]: Migration for the chosen model, additive only per the schema-sacred rule (depends on T3.2.1) (2026-07-30)
 - [x] T3.2.3 [backend]: Persist both sides of each turn; seed the thread from the cached pattern analysis rather than accepting it from the client (depends on T3.2.2) (2026-07-30)
-- [x] T3.2.3a [backend]: Add `GET /api/haitu/exam-review-chat/{attempt_id}` — same router/ownership+status guards as the POST, returns messages where `is_seed = false` ordered `(created_at, id)` (depends on T3.2.3) (2026-07-30)
+- [x] T3.2.3a [backend]: Add `GET /api/haitu/exam-review-chat/{attempt_id}` — same router/ownership+status guards as the POST, returns messages where `is_seed = false` ordered `(created_at, id)` (depends on T3.2.3) (2026-07-30; follow-up fix `b865ec1` added the CSRF guard that was missing from the initial GET route)
 - [x] T3.2.4 [backend]: Accept `{attempt_id, message}`; keep `history` accepted-but-ignored for one release for compatibility (depends on T3.2.3) (2026-07-30)
 - [ ] T3.2.5 [frontend]: Stop sending `history` from `use-exam-review-chat.ts:296,241`; load the thread via GET on mount (depends on T3.2.3a [backend], T3.2.4 [backend])
 - [ ] T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema` `required: [attempt_id, message, history]`; add a matching APISIX GET route for T3.2.3a (depends on T3.2.4 [backend])
@@ -164,7 +164,7 @@
 ### G5.1 [frontend]: Working report collector
 - [x] T5.1.1 [frontend]: `src/app/csp-report/route.ts` currently reads the body and discards it — persist reports via structlog per BR-CSP-008, keeping the 204 response (2026-07-29)
 - [x] T5.1.2 [frontend]: Verify reports surface where they can actually be read during the soak (depends on T5.1.1) (2026-07-29)
-- [x] **G5.1: violations are captured** — integration test (2026-07-29; collector persists a posted report as a structured greppable JSON line on every input branch — locked by `tests/unit/app/csp-report-route.test.ts`, 100% coverage)
+- [x] **G5.1: violations are captured** — integration test (2026-07-29; collector persists a posted report as a structured greppable JSON line on every input branch — locked by `tests/unit/app/csp-report-route.test.ts`, 100% coverage; hardened 2026-07-29 in `eb21350`, BR-CSP-008 — unbounded `request.text()` replaced with a 64 KiB-capped streaming read so an oversized/malicious report can't exhaust memory or flood the log)
 
 ### G5.2 [frontend]: Nonce CSP in proxy.ts
 - [x] T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (the file exists and holds the onboarding guards; extend, do not replace)
@@ -290,18 +290,18 @@
 
 ## Ready now
 
-> Recomputed 2026-07-29 after T3.2.1 landed. **Caveat:** entries below with no listed `Depends on`
-> in TASKS.md are included on a literal read of the dependency annotations (mirroring how T3.2.1
-> itself turned out to be ready despite being previously omitted from this list) — they have not
-> all been individually re-verified against PLAN.md's prose goal tree the way T3.2.1 was. Excluded
-> throughout: all of **G4** (explicit hard gate at G2, not yet done) and all of **G8** (closeout —
-> "the full diff", meaningless before G1–G7 finish, even though some of its tasks list no explicit
-> per-task dependency).
+> Recomputed 2026-07-30 after T3.2.2–T3.2.4/T3.2.3a landed. **Caveat:** entries below with no listed
+> `Depends on` in TASKS.md are included on a literal read of the dependency annotations — they have
+> not all been individually re-verified against PLAN.md's prose goal tree. Excluded throughout: all
+> of **G4** (explicit hard gate at G2, not yet done) and all of **G8** (closeout — "the full diff",
+> meaningless before G1–G7 finish, even though some of its tasks list no explicit per-task
+> dependency). Also excluded: T5.3.2/T5.4.1 — literally unblocked by T5.3.1/T5.3.3 landing, but each
+> carries an explicit BR-CSP-007 "MUST NOT proceed" note pending the deploy-owned live-stack soak.
 
 **Backend**
-- T3.2.2 [backend]: Migration for the review-chat persistence model, additive only (depends on T3.2.1, done 2026-07-29)
 - T3.3.1 [backend]: Load the last N messages from `DoubtMessageRepository` in the route instead of reading `body.history` (no dependencies)
 - T3.3.3 [backend]: Fix E1 — guard the `_persist_ai_reply` spawn on non-empty accumulated text (`haitu.py:316-329`) (no dependencies)
+- T3.4.1 [backend]: Load the review payload via `ExamSessionQuestionService.get_by_session_id` and build grounding context server-side (depends on T3.2.3, done 2026-07-30)
 - T3.5.1 [backend]: Add an image upload endpoint returning `{url}` (no dependencies)
 - T3.6.1 [backend]: Add `Field(max_length=...)` to free-text schema fields (no dependencies)
 - T6.2.1 [backend]: Confirm APISIX-injected tokens carry the `haisir-backend-admin` audience before enforcing (no dependencies)
@@ -309,11 +309,15 @@
 - T7.1.3 [backend]: Chunk-read extraction uploads and abort past the cap (B4) (no dependencies)
 
 **Frontend**
-- T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (no dependencies; G5.2 start)
+- T3.2.5 [frontend]: Stop sending `history` in `use-exam-review-chat.ts`; load the thread via GET on mount (depends on T3.2.3a, T3.2.4, both done 2026-07-30)
 
 **Deploy**
 - T1.3.2 [deploy]: Replace vendored CRS with 4.25.1 LTS or later (depends on T1.2.2, done 2026-07-29)
 - T1.3.5 [deploy]: Evaluate the `coraza.rule.no_regex_multiline` build tag (depends on T1.3.1, done 2026-07-29)
+- T1.4.1 [deploy]: Swap the gateway builder stage base image to `reg.mini.dev` (depends on T1.3.3, done 2026-07-29)
+- T2.2.1 [deploy]: Prove Coraza's JSON body processor's `ARGS_POST` naming for nested JSON (depends on T1.3.1, done 2026-07-29)
+- T2.3.1 [deploy]: Run the existing WAF suites against the new image (depends on T1.3.3, done 2026-07-29)
+- T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema`; add the matching GET route (depends on T3.2.4, done 2026-07-30)
 - T1.4.2 [deploy]: Update `docker-compose.instructions.md` — documents APISIX 3.14.x, Dockerfile builds 3.17.0-ubuntu (no dependencies)
 - T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone (depends on T6.1.1, done)
 - T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in the three named plugin configs (M5) (no dependencies)
