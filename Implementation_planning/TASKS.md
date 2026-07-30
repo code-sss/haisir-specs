@@ -70,10 +70,10 @@
 > `decisions.md` (2026-07-29, "T3.2.1: exam-review-chat persistence model designed"). T3.2.3a added
 > below — the original 6-task breakdown had no task creating the GET endpoint T3.2.5 depends on.
 - [x] T3.2.1 [backend]: Design the persistence model — reuse `doubts`/`doubt_messages` or add a review-chat equivalent; `exam-review-chat` is currently fully stateless so this is new storage, not a refactor (2026-07-29)
-- [ ] T3.2.2 [backend]: Migration for the chosen model, additive only per the schema-sacred rule (depends on T3.2.1)
-- [ ] T3.2.3 [backend]: Persist both sides of each turn; seed the thread from the cached pattern analysis rather than accepting it from the client (depends on T3.2.2)
-- [ ] T3.2.3a [backend]: Add `GET /api/haitu/exam-review-chat/{attempt_id}` — same router/ownership+status guards as the POST, returns messages where `is_seed = false` ordered `(created_at, id)` (depends on T3.2.3)
-- [ ] T3.2.4 [backend]: Accept `{attempt_id, message}`; keep `history` accepted-but-ignored for one release for compatibility (depends on T3.2.3)
+- [x] T3.2.2 [backend]: Migration for the chosen model, additive only per the schema-sacred rule (depends on T3.2.1) (2026-07-30)
+- [x] T3.2.3 [backend]: Persist both sides of each turn; seed the thread from the cached pattern analysis rather than accepting it from the client (depends on T3.2.2) (2026-07-30)
+- [x] T3.2.3a [backend]: Add `GET /api/haitu/exam-review-chat/{attempt_id}` — same router/ownership+status guards as the POST, returns messages where `is_seed = false` ordered `(created_at, id)` (depends on T3.2.3) (2026-07-30)
+- [x] T3.2.4 [backend]: Accept `{attempt_id, message}`; keep `history` accepted-but-ignored for one release for compatibility (depends on T3.2.3) (2026-07-30)
 - [ ] T3.2.5 [frontend]: Stop sending `history` from `use-exam-review-chat.ts:296,241`; load the thread via GET on mount (depends on T3.2.3a [backend], T3.2.4 [backend])
 - [ ] T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema` `required: [attempt_id, message, history]`; add a matching APISIX GET route for T3.2.3a (depends on T3.2.4 [backend])
 - [ ] **G3.2: review chat works with a {attempt_id, message} body** — end-to-end test
@@ -320,6 +320,7 @@
 - T6.3.3 [deploy]: Move the CrowdSec LAPI channel to https and enable `ssl_verify` (no dependencies)
 - T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies)
 - T6.4.1 [deploy]: Add `passwordPolicy` to `common/keycloak/01-realm.json` (H3) (no dependencies)
+- T7.2.2 [deploy]: Validate `params.VERSION` against `^\d+\.\d+(\.\d+)?$` in `Jenkinsfile.deploy:58,89-107` (depends on T7.2.1, done)
 - T7.3.1 [deploy]: Replace `dst: ["*:*"]` Tailscale ACLs with specific services/ports (M4) (no dependencies)
 - T7.4.1 [deploy]: Set `X-XSS-Protection: 0` across all four plugin configs (L3, BR-CSP-006) (no dependencies)
 - T7.5.4 [deploy]: `chmod 600` staging/dev `.env*` (L2 hygiene) (no dependencies)
