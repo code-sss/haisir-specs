@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`583511d` frontend:`3a57718` deploy:`ed1dbf1` (2026-07-29, reconciled after
+> Last baselined: backend:`7829dd3` frontend:`3a57718` deploy:`8cb1dbe` (2026-07-29, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 
@@ -63,12 +63,19 @@
 - [ ] **G3.1: injected system turns rejected** — integration test
 
 ### G3.2 [backend, frontend]: exam-review-chat persists server-side
-- [ ] T3.2.1 [backend]: Design the persistence model — reuse `doubts`/`doubt_messages` or add a review-chat equivalent; `exam-review-chat` is currently fully stateless so this is new storage, not a refactor
+> **T3.2.1 design output (2026-07-29, two-pass challenge):** persistence model is `review_chat_threads`
+> + `review_chat_messages` (new tables, not a reuse of `doubts`/`doubt_messages`) — full schema and
+> persistence contract in `target/requirements/01_data_model.md` ("New tables — review_chat_threads +
+> review_chat_messages") and `target/requirements/11_haitu_ai_layer.md` §8.4a; rationale in
+> `decisions.md` (2026-07-29, "T3.2.1: exam-review-chat persistence model designed"). T3.2.3a added
+> below — the original 6-task breakdown had no task creating the GET endpoint T3.2.5 depends on.
+- [x] T3.2.1 [backend]: Design the persistence model — reuse `doubts`/`doubt_messages` or add a review-chat equivalent; `exam-review-chat` is currently fully stateless so this is new storage, not a refactor (2026-07-29)
 - [ ] T3.2.2 [backend]: Migration for the chosen model, additive only per the schema-sacred rule (depends on T3.2.1)
 - [ ] T3.2.3 [backend]: Persist both sides of each turn; seed the thread from the cached pattern analysis rather than accepting it from the client (depends on T3.2.2)
+- [ ] T3.2.3a [backend]: Add `GET /api/haitu/exam-review-chat/{attempt_id}` — same router/ownership+status guards as the POST, returns messages where `is_seed = false` ordered `(created_at, id)` (depends on T3.2.3)
 - [ ] T3.2.4 [backend]: Accept `{attempt_id, message}`; keep `history` accepted-but-ignored for one release for compatibility (depends on T3.2.3)
-- [ ] T3.2.5 [frontend]: Stop sending `history` from `use-exam-review-chat.ts:296,241`; load the thread via GET on mount (depends on T3.2.4 [backend])
-- [ ] T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema` `required: [attempt_id, message, history]` (depends on T3.2.4 [backend])
+- [ ] T3.2.5 [frontend]: Stop sending `history` from `use-exam-review-chat.ts:296,241`; load the thread via GET on mount (depends on T3.2.3a [backend], T3.2.4 [backend])
+- [ ] T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema` `required: [attempt_id, message, history]`; add a matching APISIX GET route for T3.2.3a (depends on T3.2.4 [backend])
 - [ ] **G3.2: review chat works with a {attempt_id, message} body** — end-to-end test
 
 ### G3.3 [backend, frontend]: topic-doubt stops replaying stored history
@@ -283,5 +290,46 @@
 
 ## Ready now
 
+> Recomputed 2026-07-29 after T3.2.1 landed. **Caveat:** entries below with no listed `Depends on`
+> in TASKS.md are included on a literal read of the dependency annotations (mirroring how T3.2.1
+> itself turned out to be ready despite being previously omitted from this list) — they have not
+> all been individually re-verified against PLAN.md's prose goal tree the way T3.2.1 was. Excluded
+> throughout: all of **G4** (explicit hard gate at G2, not yet done) and all of **G8** (closeout —
+> "the full diff", meaningless before G1–G7 finish, even though some of its tasks list no explicit
+> per-task dependency).
+
+**Backend**
+- T3.2.2 [backend]: Migration for the review-chat persistence model, additive only (depends on T3.2.1, done 2026-07-29)
+- T3.3.1 [backend]: Load the last N messages from `DoubtMessageRepository` in the route instead of reading `body.history` (no dependencies)
+- T3.3.3 [backend]: Fix E1 — guard the `_persist_ai_reply` spawn on non-empty accumulated text (`haitu.py:316-329`) (no dependencies)
+- T3.5.1 [backend]: Add an image upload endpoint returning `{url}` (no dependencies)
+- T3.6.1 [backend]: Add `Field(max_length=...)` to free-text schema fields (no dependencies)
+- T6.2.1 [backend]: Confirm APISIX-injected tokens carry the `haisir-backend-admin` audience before enforcing (no dependencies)
+- T7.1.1 [backend]: Replace `Content-Length` arithmetic with a streaming byte cap (M2) (no dependencies)
+- T7.1.3 [backend]: Chunk-read extraction uploads and abort past the cap (B4) (no dependencies)
+
+**Frontend**
 - T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (no dependencies; G5.2 start)
-- T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone
+
+**Deploy**
+- T1.2.1 [deploy]: Timeboxed spike — Go/TinyGo/Coraza version ceiling (no dependencies; G1.1 fully shipped)
+- T1.4.2 [deploy]: Update `docker-compose.instructions.md` — documents APISIX 3.14.x, Dockerfile builds 3.17.0-ubuntu (no dependencies)
+- T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone (depends on T6.1.1, done)
+- T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in the three named plugin configs (M5) (no dependencies)
+- T6.3.3 [deploy]: Move the CrowdSec LAPI channel to https and enable `ssl_verify` (no dependencies)
+- T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies)
+- T6.4.1 [deploy]: Add `passwordPolicy` to `common/keycloak/01-realm.json` (H3) (no dependencies)
+- T7.2.2 [deploy]: Validate `params.VERSION` against `^\d+\.\d+(\.\d+)?$` in `Jenkinsfile.deploy:58,89-107` (depends on T7.2.1, done)
+- T7.3.1 [deploy]: Replace `dst: ["*:*"]` Tailscale ACLs with specific services/ports (M4) (no dependencies)
+- T7.4.1 [deploy]: Set `X-XSS-Protection: 0` across all four plugin configs (L3, BR-CSP-006) (no dependencies)
+- T7.5.4 [deploy]: `chmod 600` staging/dev `.env*` (L2 hygiene) (no dependencies)
+- T7.6.2 [deploy]: Reconcile `docker-compose.yml`'s hardcoded `haisir-net` against `haisir-net-dev` (no dependencies)
+- T7.7.1 [deploy]: Narrow APISIX `allow_admin` from the whole Docker subnet (no dependencies)
+- T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` is warranted (no dependencies)
+- T7.7.3 [deploy]: Harden `env-setup.sh:139` against a set `TMPDIR` (no dependencies)
+- T7.7.4 [deploy]: `chmod 600` the files inside `.templated/` (no dependencies)
+- T7.7.5 [deploy]: Migrate `other/services/sonarqube/.env` out of plaintext, or document it outside the OpenBao boundary (no dependencies)
+
+**Specs**
+- T7.5.1 [specs]: Record L5 as a deliberate spam filter, not a security boundary — no code change (no dependencies)
+- T7.5.2 [specs]: Reframe M6 and L4 as dev-isolation assertions (no dependencies)

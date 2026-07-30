@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-07-29 — T3.2.1: exam-review-chat persistence model designed (two-pass challenge)
+
+> Context: G3.2 needs `exam-review-chat` to persist server-side; the endpoint is fully stateless
+> today. T3.2.1 is a design-only task — no `haisir-backend/src/` files change. A planner produced
+> an initial design; two independent challenger passes reviewed it (the second, run on request,
+> caught issues the first rated clean — the same "pass 2 finds what pass 1 missed" pattern this
+> phase's own G8.1 gate is built around).
+
+- **New tables, not reuse of `doubts`/`doubt_messages`.** `doubts` is keyed on `(student_sub,
+  topic_id)` and carries a teacher-escalation lifecycle that has no analog for exam review
+  (student-only, no escalation, never expires). `exam-review-chat` is keyed on `attempt_id`
+  (`exam_sessions.id`) instead. New tables: `review_chat_threads` (1:1 with `attempt_id`, unique
+  constraint), `review_chat_messages` (`sender_type ∈ (student, ai)`, `is_seed` flag). Full schema
+  and persistence contract recorded in `target/requirements/01_data_model.md` ("New tables —
+  review_chat_threads + review_chat_messages") and `target/requirements/11_haitu_ai_layer.md`
+  §8.4a.
+- **Pass 1 caught:** landing the domain-model dataclass file in this task (with no migration/tests
+  arriving until T3.2.2) would leave uncovered lines against this repo's 100%-coverage gate — kept
+  T3.2.1 at zero `src/` files, model code lands atomically with its migration and tests in T3.2.2.
+- **Pass 2 caught three things pass 1 missed, all now fixed in the design:**
+  1. The plan had find-or-create running *before* the rate-limit check, which would violate the
+     orphan-on-429 guarantee (`11_haitu_ai_layer.md` §5.1) that a 429 creates zero rows. Verified
+     against `haitu.py:832-833`'s actual ordering and fixed.
+  2. The plan had `exam-review-chat` seed itself by reading `_PATTERN_ANALYSIS_CACHE` — a
+     per-worker in-memory cache (`--workers 2` deployed) that PLAN.md's own scope lock already
+     says "is not a persistence layer." Fixed: `pattern-analysis` writes the seed row directly;
+     the persisted table is now the cross-worker store the cache was missing.
+  3. No task in G3.2's existing breakdown creates the `GET` endpoint T3.2.5 (frontend) depends on
+     — `haitu.py` has zero `@router.get` routes today. **New task T3.2.3a added** to TASKS.md:
+     `GET /api/haitu/exam-review-chat/{attempt_id}`, depended on by T3.2.5 (T3.2.6 gains a
+     matching APISIX GET route note).
+- **`UNIQUE(attempt_id)` requires `INSERT ... ON CONFLICT DO NOTHING`, not select-then-insert** —
+  unlike `doubts` (no unique constraint, tolerates a race duplicate), both `pattern-analysis` and
+  `exam-review-chat` can race to create the same thread on a normal S05 page load, and a naive
+  insert would surface that race as a 500. Flagged explicitly for T3.2.2/T3.2.3.
+
+---
+
 ## 2026-07-29 — Phase 7 restored from archive and reconciled against shipped Phase 6.5
 
 > Context: Phase 7 (Gateway WAF, CSP, security-review closeout) was scoped 2026-07-27 and archived

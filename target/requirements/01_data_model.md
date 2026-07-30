@@ -793,6 +793,70 @@ CREATE INDEX idx_doubt_messages_doubt_id ON doubt_messages(doubt_id);
 
 ---
 
+### New tables — `review_chat_threads` + `review_chat_messages` (Phase 7 G3.2 — designed, migration pending T3.2.2)
+
+> **Designed, not yet migrated.** `exam-review-chat` is fully stateless today — `haitu.py:838-845`
+> reads `body.history[-10:]` and persists nothing (`_PATTERN_ANALYSIS_CACHE` is an in-memory,
+> per-worker cache for the sibling `pattern-analysis` endpoint, not a persistence layer). This
+> section is T3.2.1's design output; the table below is the target for T3.2.2's migration.
+
+**Why not reuse `doubts`/`doubt_messages`:** `doubts` is keyed on `(student_sub, topic_id)` and
+carries a teacher-escalation lifecycle (`status`, `escalated_to`, `auto_close_at`,
+`sender_type ∈ (student, ai, teacher, system)`). `exam-review-chat` is keyed on `attempt_id`
+(`exam_sessions.id` — an attempt can span many topics), is student-only with no escalation path,
+and never expires. Forcing it into `doubts`' shape would carry six lifecycle states and an
+auto-close SLA that never apply, and require attempt-aware guards on every teacher-queue query to
+keep review-chat rows out.
+
+```sql
+CREATE TABLE review_chat_threads (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    attempt_id  UUID NOT NULL REFERENCES exam_sessions(id),  -- no ON DELETE, matches
+                                                               -- exam_session_questions precedent
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (attempt_id)
+);
+
+CREATE TABLE review_chat_messages (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    thread_id    UUID NOT NULL REFERENCES review_chat_threads(id) ON DELETE CASCADE,
+    sender_type  VARCHAR(10) NOT NULL,       -- 'student' | 'ai'
+    is_seed      BOOLEAN NOT NULL DEFAULT FALSE,
+    content      TEXT NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (sender_type IN ('student', 'ai'))
+);
+
+CREATE INDEX idx_review_chat_messages_thread_id ON review_chat_messages(thread_id);
+```
+
+| Column | Notes |
+|---|---|
+| `review_chat_threads.attempt_id` | `UNIQUE` — one thread per exam attempt, always reused, never closed. Verified `exam_sessions` has no unique constraint on `(user_id, exam_template_id)`, so every retake gets a fresh row/PK and therefore a fresh thread. |
+| `review_chat_messages.is_seed` | `TRUE` only for the opening message written by `pattern-analysis` (see below). Lets a `GET` filter it out so the frontend's existing seed-then-replace-on-first-token UI (§8.8 of `11_haitu_ai_layer.md`) needs no change. |
+
+**Persistence contract (for T3.2.3):**
+- `pattern-analysis` owns the seed write — `find_or_create_by_attempt(attempt_id)` then
+  `add_message(thread_id, sender_type='ai', is_seed=true, content=...)`, on both the
+  zero-wrong-answers neutral-message path (request session) and the real LLM-compute path (fresh
+  session, post-stream). It does **not** read from `_PATTERN_ANALYSIS_CACHE` to seed the thread —
+  that cache is per-worker (`--workers 2` deployed) and would silently drop or double-charge the
+  rate limiter on a cross-worker miss.
+- `exam-review-chat`'s student message is written **after** the `HaituRateLimiter` check succeeds
+  (orphan-on-429 — a 429 must create zero rows, same guarantee as `topic-doubt` §5.1), before the
+  request session closes. The AI reply is written by a post-stream background task on a fresh
+  session, mirroring `topic-doubt`'s `_generate_events`/`finalize_ai_response` pattern.
+- `find_or_create_by_attempt` must be `INSERT ... ON CONFLICT (attempt_id) DO NOTHING RETURNING
+  id`, re-selecting on no row returned — **not** select-then-insert. Unlike `doubts` (no unique
+  constraint, tolerates a duplicate row on a race), `review_chat_threads.attempt_id` is `UNIQUE`,
+  and both `pattern-analysis` and `exam-review-chat` can race to create the same thread on a
+  normal S05 page load (pattern-analysis fires on load; the student can start typing immediately).
+  A naive insert would surface that race as a 500.
+- Thread reads (`GET /api/haitu/exam-review-chat/{attempt_id}`, T3.2.3a) filter `is_seed = false`
+  and order by `(created_at, id)`.
+
+---
+
 ## Schema Extensions (Phase 4 G4 — Mastery + Enrollment Topics)
 
 Migration **V37**. All columns and tables are additive — nothing is dropped or renamed.

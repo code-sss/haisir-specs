@@ -463,6 +463,37 @@ and reused (instant replay) across page reloads / re-opens within the same revie
 `exam-review-chat` is **not cached** — each follow-up is a fresh LLM call (rate-limited per
 BR-AI-003).
 
+### 8.4a Persistence (G3.2, Phase 7 — designed, migration pending T3.2.2)
+
+> **Designed, not yet shipped.** Both endpoints are stateless today (§8.4's cache is per-worker
+> in-memory, not durable — PLAN.md's scope lock is explicit that it "is not a persistence layer").
+> T3.2.1 designed the schema below (`target/requirements/01_data_model.md`, "New tables —
+> review_chat_threads + review_chat_messages"); T3.2.2 migrates it; T3.2.3 wires the writers
+> described here; T3.2.3a adds the `GET` this section's read path needs.
+
+A `review_chat_threads` row maps 1:1 with `attempt_id`, created lazily on first use (by whichever
+of `pattern-analysis` or `exam-review-chat` runs first for that attempt) and appended to for the
+lifetime of the attempt — no lifecycle states, no closing, unlike a `doubts` thread.
+
+- **`pattern-analysis` writes the seed.** On both the neutral-message (zero wrong answers) and the
+  real-compute path, it finds-or-creates the thread and appends one message with
+  `sender_type='ai', is_seed=true`. It does not read `exam-review-chat`'s conversation, and
+  `exam-review-chat` never reads `_PATTERN_ANALYSIS_CACHE` — the persisted `is_seed` row is the
+  single source of truth for the opening message, replacing the cache as the de facto
+  cross-worker store the v1 limitation in §8.4 used to lack.
+- **`exam-review-chat` writes both sides of each follow-up turn.** The student message is written
+  *after* the BR-AI-003 rate-limit check passes (orphan-on-429: a 429 must create zero rows,
+  identical guarantee to `topic-doubt` §5.1) and before the request session closes. The AI reply
+  is written by a post-stream background task on a fresh session, mirroring `topic-doubt`'s
+  `_generate_events` / fresh-session pattern in §4.2.
+- **`GET /api/haitu/exam-review-chat/{attempt_id}` (T3.2.3a)** returns messages where
+  `is_seed = false`, ordered `(created_at, id)`, guarded by the same ownership/status checks as
+  §8.5. This is what T3.2.5 (frontend) loads on mount instead of replaying client-held `history`.
+- **Concurrency:** `find_or_create_by_attempt` is `INSERT ... ON CONFLICT (attempt_id) DO NOTHING
+  RETURNING id` — both endpoints can race to create the same thread on a normal S05 page load
+  (pattern-analysis fires on load; nothing stops the student typing immediately), and the table's
+  `UNIQUE(attempt_id)` constraint means a naive insert would surface that race as a 500.
+
 ### 8.5 Guards
 
 Both endpoints enforce, in order:
