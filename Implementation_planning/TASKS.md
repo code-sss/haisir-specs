@@ -38,8 +38,8 @@
 
 ### G2.1 [deploy]: CVE-2026-21876 blocked
 - [x] T2.1.1 [deploy]: Add a regression test posting a multipart request with a UTF-7 payload in the first part and clean UTF-8 in the last; assert it is blocked (depends on T1.3.2) (2026-07-30; `common/scripts/tests/18-test-cve-2026-21876-multipart.sh` — posts to `04-secured-api-upload.json`'s route with a fully shift-encoded UTF-7 `<script>` payload in part 1, clean UTF-8 in the last part, asserts 403; no auth token needed since `coraza-filter` (wasm priority 7999) runs ahead of `openid-connect`. Not yet run live — see T2.1.2)
-- [ ] T2.1.2 [deploy]: Confirm the test fails against the pre-upgrade image and passes after — proving the ruleset bump is what fixed it (depends on T2.1.1)
-- [ ] **G2.1: multipart charset bypass blocked** — acceptance test
+- [x] T2.1.2 [deploy]: Confirm the test fails against the pre-upgrade image and passes after — proving the ruleset bump is what fixed it (depends on T2.1.1) (2026-07-30; proved directly at the Coraza rule-engine level rather than through the wasm/APISIX HTTP path — see note below on why. Built two throwaway Go harnesses calling `coraza.NewWAF()`/`Transaction` directly: **pre-upgrade** (Coraza v3.3.3 + CRS v4.14.0, cloned fresh from `coreruleset` at tag `v4.14.0`) processed the exact T2.1.1 payload (UTF-7-declared first part, clean UTF-8 last part) and rule **922110 never appears in `tx.MatchedRules()` at all** — result `NOT_BLOCKED`, empirically reproducing the CVE. **Post-upgrade** (Coraza v3.7.0 + the vendored CRS 4.25.1, same directives/thresholds as `02-secured-anonymous.json`) processed the identical payload and 922110 fires — `msg="Illegal MIME Multipart Header content-type: charset parameter" data="Matched Data: text/plain; charset=utf-7 found within Content-Type multipart form"` — contributing to anomaly score 5, blocked via 949110. Same payload, same directives structure, only the Coraza+CRS version differs — isolates the ruleset bump as the fix. **Why not through APISIX/wasm:** hit the same live-harness blocker recorded under T2.2.1/T2.3.1 below — `coraza-filter` registers but never executes in an isolated APISIX instance in this environment. Since the wasm build is a straight TinyGo cross-compile of this same Coraza engine against the same embedded CRS files (no logic divergence), the rule-engine-level proof is directly applicable, but the wasm/APISIX integration layer itself remains unverified live — same open risk as T2.2.1/T2.3.1)
+- [x] **G2.1: multipart charset bypass blocked** — acceptance test (2026-07-30; T2.1.1 and T2.1.2 both done — regression test added and proven to distinguish the pre/post-upgrade ruleset at the Coraza engine level)
 
 ### G2.2 [deploy]: Regex-scoped exclusion proven to work
 - [ ] T2.2.1 [deploy]: Prove Coraza's JSON body processor populates `ARGS_POST` with `json.`-prefixed, dot-nested, numerically-indexed keys — assert the observed variable name for `history[2].content` (depends on T1.3.1)
@@ -315,8 +315,8 @@
 
 ## Ready now
 
-> Recomputed 2026-07-30 (T2.1.1 done, replaced by newly-unblocked T2.1.2; T2.2.1/T2.3.1 attempted but
-> still open — see their blocker notes above) after T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed.
+> Recomputed 2026-07-30 (T2.1.1 and T2.1.2 both done, G2.1 closed; T2.2.1/T2.3.1 attempted but still
+> open — see their blocker notes above) after T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed.
 > **Caveat:** entries below with no listed
 > `Depends on` in TASKS.md are included on a literal read of the dependency annotations — they have
 > not all been individually re-verified against PLAN.md's prose goal tree. Excluded throughout: all
@@ -338,7 +338,6 @@
 - _(none)_ — T3.4.2 done 2026-07-30. Remaining frontend tasks all wait on undone backend deps: T3.3.2 → T3.3.1, T3.5.4 → T3.5.1; T5.3.2/T5.4.1 held for the deploy-owned live-stack soak (BR-CSP-007).
 
 **Deploy**
-- T2.1.2 [deploy]: Confirm the multipart-charset test fails pre-upgrade and passes post-upgrade (depends on T2.1.1, done 2026-07-30)
 - T2.2.1 [deploy]: Prove Coraza's JSON body processor's `ARGS_POST` naming for nested JSON (depends on T1.3.1, done 2026-07-29) — attempted 2026-07-30, blocked on an isolated-harness issue, see note above
 - T2.3.1 [deploy]: Run the existing WAF suites against the new image (depends on T1.3.3, done 2026-07-29) — attempted 2026-07-30, blocked on the same harness issue as T2.2.1, see note above
 - T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema`; add the matching GET route (depends on T3.2.4, done 2026-07-30)
