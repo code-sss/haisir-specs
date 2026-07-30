@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`b865ec1` frontend:`343939d` deploy:`15c909a` (2026-07-30, reconciled after
+> Last baselined: backend:`b865ec1` frontend:`343939d` deploy:`3905c8a` (2026-07-30, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 
@@ -23,16 +23,17 @@
 - [x] T1.3.1 [deploy]: Bump `github.com/corazawaf/coraza/v3` to ≥ v3.5.0 (target v3.7.0) — BR-WAF-002 floor; upstream `go.mod` still pins v3.3.3 so this must be forced (depends on T1.2.2) (2026-07-29; forced to v3.7.0 via `go mod edit`+`go mod tidy`, verified building — see `gateway-docker/VERSIONS.md` "Resolution")
 - [x] T1.3.2 [deploy]: Replace vendored CRS under `wasmplugin/rules/crs/` with 4.25.1 LTS or later — BR-WAF-003 floor; verify the `Include @owasp_crs/*.conf` embed path still resolves (depends on T1.2.2) (2026-07-29; CRS 4.14.0 → 4.25.1 LTS, vendored tree byte-identical to upstream, local rule 900120 re-applied, `tx.crs_setup_version` 4140 → 4251; `Include @owasp_crs/*.conf` is directory-name-based so no code change needed — verified by `docker build --target builder` — see `gateway-docker/VERSIONS.md` T1.3.2)
 - [x] T1.3.3 [deploy]: Bump `GO_VERSION`, `TINYGO_VERSION` and `TINYGO_SHA256` together to the set established by the spike (depends on T1.2.2) (2026-07-29; Go 1.25, TinyGo 0.39.0, sha256 `775f15974e...` — `gateway-docker/Dockerfile`)
-- [x] T1.3.4 [deploy]: Verify `coraza-wasilibs` compatibility across the version jump; pin or bump as required (depends on T1.3.1) (2026-07-29; `go-re2` forced to v1.12.0 — wasm2go backend links under TinyGo 0.39, v1.6.0's prebuilt archive doesn't; `nottinygc` removed entirely — frozen at v0.7.1, no compatible release exists, upstream itself recommends against using it. Verified end-to-end with a real `docker build` of the committed Dockerfile+vendored tree, not just a scratch copy. Known carried risk: dropping nottinygc reverts to TinyGo's default GC/allocator — a real perf-under-load change, not just a version bump; recommend checking during G2.3's existing WAF-suite run rather than a new gate)
+- [x] T1.3.4 [deploy]: Verify `coraza-wasilibs` compatibility across the version jump; pin or bump as required (depends on T1.3.1) (re-opened and **closed 2026-07-30**; `waf-harness.sh` reports **4/4** against an image built from the committed tree. Root cause of the last open defect was **not** a `go-re2` version issue — v1.12.0 is already the latest release. `wasip1.json` gives the module a **64KB linear-memory stack**; CRS 4.25.1's regex compilation recurses past it and the stack pointer walks out of bounds. Both previously-distinct traps were this one bug (`go-re2`'s `wasm2go` backend is RE2 translated into Go, so it recurses on the same TinyGo stack). Fixed with a local TinyGo target `wasip1-bigstack.json` raising the **linker** stack to 4MB — note TinyGo's `-stack-size` flag is the *goroutine* stack and a no-op under `-scheduler=none` (it produced a byte-identical binary), and `RE2_MAX_STACK_BYTES` is not a workaround because APISIX's wasmtime host passes no environ. **Decision: wasilibs operators dropped by default** — benchmarked ~6x slower and ~6.6x more memory than Coraza's pure-Go operators (520ms/16.42GiB vs 88ms/2.47GiB), because under TinyGo `go-re2` emulates RE2 rather than running it natively; the adopted build beats the previous prod image on latency (88.3ms vs 94.7ms). Detection unchanged (stdlib `regexp`, `libinjection-go`, `aho-corasick` — all already direct deps); kept behind a `wasilibs_operators` tag as an escape hatch. Carried regression: container memory 1.46→2.47GiB from losing `nottinygc`; `-gc=boehm -tags=custommalloc` recovers it to 1.80GiB for ~30ms latency — tested, one-line switch. Full detail + benchmark table in `gateway-docker/VERSIONS.md` "T1.3.4")
+  > Original 2026-07-29 note follows: ( `go-re2` forced to v1.12.0 — wasm2go backend links under TinyGo 0.39, v1.6.0's prebuilt archive doesn't; `nottinygc` removed entirely — frozen at v0.7.1, no compatible release exists, upstream itself recommends against using it. Verified end-to-end with a real `docker build` of the committed Dockerfile+vendored tree, not just a scratch copy. Known carried risk: dropping nottinygc reverts to TinyGo's default GC/allocator — a real perf-under-load change, not just a version bump; recommend checking during G2.3's existing WAF-suite run rather than a new gate)
 - [x] T1.3.5 [deploy]: Evaluate the `coraza.rule.no_regex_multiline` build tag — aligns `@rx` with CRS expectations and reduces false positives (depends on T1.3.1) (2026-07-29; **adopted** unconditionally in `magefiles/magefile.go` `Build()` + mirrored into `Test()`/`Coverage()` `-tags=`. Traced in Coraza v3.7.0 source: flag drops the implicit `(?m)` so `^`/`$` match whole-string only; grepped both CRS 4.14.0 and 4.25.1 — zero rules rely on implicit multiline, so no detection regression, only tighter `^`/`$` for this project's own field-scoped exclusions — see `gateway-docker/VERSIONS.md` T1.3.5)
-- [x] **G1.3: version set upgraded and building** — integration test (2026-07-29; all of T1.3.1–T1.3.5 done, verified by a real `docker build --target builder` of the committed Dockerfile + vendored tree, commit `15c909a`)
+- [x] **G1.3: version set upgraded and building** — integration test (2026-07-29; all of T1.3.1–T1.3.5 done, verified by a real `docker build --target builder` of the committed Dockerfile + vendored tree, commit `15c909a`) (re-closed 2026-07-30; T1.3.4 fixed and the image verified 4/4 by `common/scripts/tests/waf-harness.sh` — the gate now rests on a request-through-the-proxy block assertion, not just a successful `docker build`)
 
 ### G1.4 [deploy]: Gateway builder stage on Minimus
 - [x] T1.4.1 [deploy]: Swap the gateway builder stage base image to `reg.mini.dev` per BR-INFRA-004, `-dev` tag confined to the builder stage only (depends on T1.3.3) (2026-07-30; `FROM golang:${GO_VERSION}-bookworm` → `FROM reg.mini.dev/go:${GO_VERSION}-dev`; two collateral fixes required for the swap to actually build — MinimOS ships neither `apt`/`dpkg` (TinyGo install switched from `.deb`+`dpkg -i` to the upstream tarball+`tar`, `TINYGO_SHA256` re-pinned to the tarball hash) nor is `apt-get install git ca-certificates` needed (both preinstalled on the `-dev` image, step deleted); `Jenkinsfile:90`'s CI cache-prepull updated to match. Runtime stage (`apache/apisix:3.17.0-ubuntu`) untouched. Verified via a real `docker build` — both `--target builder` alone and the full two-stage build succeeded, `main.wasm` produced (18,322,384 bytes, same Go 1.25.x/TinyGo 0.39.0 toolchain versions as the already-gated T1.3.4 build), `hadolint` shows zero new warnings vs. pre-change baseline, final image's `apisix version` reports `3.17.0`)
 - [x] T1.4.2 [deploy]: Update `.github/instructions/docker-compose.instructions.md` — it documents APISIX as 3.14.x while the Dockerfile builds 3.17.0-ubuntu (2026-07-30; Technology Stack table row updated to `3.17.x`)
 - [x] **G1.4: builder stage on Minimus, runtime unchanged** — integration test (2026-07-30; verified above — builder stage now `reg.mini.dev/go:1.25-dev`, runtime stage bit-for-bit the same `apache/apisix:3.17.0-ubuntu` base as before)
 
-- [x] **G1: Gateway build modernised and self-maintained** — integration test (2026-07-30; G1.1–G1.4 all done; full two-stage `docker build` succeeds reproducibly, `main.wasm` present at the correct path/ownership in the final image, `apisix version` runs and reports `3.17.0` in the built image — a live etcd-backed WASM-filter-loads check was already established at T1.1.4/commit `15c909a` against the identical vendored source and is unaffected by this builder-toolchain-only change, so it was not re-run against the dev stack)
+- [x] **G1: Gateway build modernised and self-maintained** — integration test (2026-07-30; G1.1–G1.4 all done; full two-stage `docker build` succeeds reproducibly, `main.wasm` present at the correct path/ownership in the final image, `apisix version` runs and reports `3.17.0` in the built image — a live etcd-backed WASM-filter-loads check was already established at T1.1.4/commit `15c909a` against the identical vendored source and is unaffected by this builder-toolchain-only change, so it was not re-run against the dev stack) (re-closed 2026-07-30; G1.1–G1.4 all done and the built image demonstrably filters — `waf-harness.sh` 4/4)
 
 ## G2 [deploy]: WAF verification — HARD GATE
 
@@ -42,38 +43,32 @@
 - [x] **G2.1: multipart charset bypass blocked** — acceptance test (2026-07-30; T2.1.1 and T2.1.2 both done — regression test added and proven to distinguish the pre/post-upgrade ruleset at the Coraza engine level)
 
 ### G2.2 [deploy]: Regex-scoped exclusion proven to work
-- [ ] T2.2.1 [deploy]: Prove Coraza's JSON body processor populates `ARGS_POST` with `json.`-prefixed, dot-nested, numerically-indexed keys — assert the observed variable name for `history[2].content` (depends on T1.3.1)
-  > **Attempted 2026-07-30, blocked — not done.** Built a throwaway, isolated APISIX+etcd stack (new
-  > docker network, T1.4.1's `reg.mini.dev`-built gateway image, never touching `dev`/`staging`) to
-  > empirically observe the `ARGS_POST` variable name via a diagnostic `SecRule` logging
-  > `MATCHED_VAR_NAME`. Blocked before reaching that point: `coraza-filter` registers cleanly at
-  > startup (correct `priority`/`version`/`schema` per source tracing of `apisix/plugin.lua` and
-  > `apisix/wasm.lua` — no load errors ever logged) but never actually executes — neither the Admin
-  > API's schema validation (`local_plugins_hash["coraza-filter"]` is `nil` at request time, every
-  > time, in every worker) nor live proxying (attack payloads consistently returned 200, never 403).
-  > Tried: config nearly identical to `common/apisix_conf/config.yaml` (only etcd TLS and
-  > `enable_admin_ui` dropped), `apisix.proxy_mode: http` (fixed an unrelated stream-subsystem wasm
-  > crash), `--user root` (matches `dev/docker-compose.yml`'s override), and an explicit
-  > `PUT /apisix/admin/plugins/reload`. None fixed it. Since this WAF demonstrably works in real
-  > deployments (the whole `199110`/exclusion-treadmill history in `16_gateway_waf.md` depends on it
-  > firing), this looks like an environment gap specific to a from-scratch minimal harness, not a
-  > T1.4.1 regression — but unconfirmed. Whoever picks this up next: either find what the isolated
-  > repro is missing, or fall back to a source-only proof (trace `wasmplugin`'s JSON body processor in
-  > the vendored Coraza source, matching the T1.3.5 precedent) plus a real run against a disposable
-  > staging-like environment.
+- [x] T2.2.1 [deploy]: Prove Coraza's JSON body processor populates `ARGS_POST` with `json.`-prefixed, dot-nested, numerically-indexed keys — assert the observed variable name for `history[2].content` (depends on T1.3.1) (2026-07-30; **observed variable name: `ARGS_POST:json.history.2.content`** — `json.`-prefixed, dot-nested, **0-based** numeric index, reachable via both `ARGS` and `ARGS_POST`. Measured empirically, not traced from source: stood up the isolated harness (now committed as `common/scripts/tests/waf-harness.sh`), loaded a diagnostic `SecRule ARGS_POST "@rx CANARY" "id:900001,phase:2,pass,log,msg:'ARGSPOST_NAME=%{MATCHED_VAR_NAME}'"` alongside the same `ARGS` variant, and POSTed `{"history":[{"content":"first"},{"content":"second"},{"content":"CANARY"}],"topic":"x"}` with `Content-Type: application/json`. Both rules logged the identical name. This confirms T2.2.2's planned regex `^json\.history\.\d+\.content$` matches the real variable naming. **Caveat discharged 2026-07-30:** originally measured on `haisir-gateway:v2026.4` (Coraza v3.3.3 / CRS 4.14.0) because the T1.3.x image could not execute the WAF. Re-verified on the **fixed** image (Coraza v3.7.0 / CRS 4.25.1, T1.3.4 closed) by POSTing a SQLi payload as `history[2].content` against the real `02-secured-anonymous.json` ruleset and reading the variable name CRS itself reported: `found within ARGS_POST:json.history.2.content` — byte-identical naming across both engine versions)
+  > **Correction to the 2026-07-30 blocker note that previously stood here.** That note concluded the
+  > isolated harness was missing something environmental. It was not. The harness recipe works; the
+  > *image under test* was broken. Proven by running the identical harness against
+  > `haisir-gateway:v2026.4` (loads, blocks XSS/SQLi/LFI 403) versus the current Dockerfile's image
+  > (never loads, everything 200). Two misreads caused the wrong conclusion: (1) `plugin.lua:288`'s
+  > `new plugins: {...}` line is emitted *before* the load loop at `plugin.lua:301-308`, so it never
+  > proved the plugin loaded; (2) the real error string does not contain `coraza-filter`
+  > (`failed to call function: Exited with i32 exit status 0` / `main!_start`), so grepping the
+  > plugin name found nothing. Full root cause and the verified fixes: `gateway-docker/VERSIONS.md`.
 - [ ] T2.2.2 [deploy]: Prove `ctl:ruleRemoveTargetById=<id>;ARGS_POST:/^json\.history\.\d+\.content$/` suppresses the rule for that field **and leaves it active** for headers, cookies, query args and other body fields (depends on T2.2.1)
 - [ ] T2.2.3 [deploy]: Record the before/after in `16_gateway_waf.md`'s status note — the v3.3.3 silent-no-match behaviour is the finding that justifies this whole phase (depends on T2.2.2)
 - [ ] **G2.2: field-scoped exclusion demonstrably fires** — acceptance test
 
 ### G2.3 [deploy]: No regression in detection
 - [ ] T2.3.1 [deploy]: Run the existing WAF suites (`common/scripts/tests/02-test-waf.sh`, `15-test-waf-config-validation.sh`, `16-test-waf-advanced.sh`) against the new image (depends on T1.3.3)
-  > **Attempted 2026-07-30, blocked — not done.** Same isolated-stack attempt and same blocker as
-  > T2.2.1 above (`coraza-filter` never actually executes in the throwaway harness). The existing
-  > suites also can't run as-is outside `staging`/`prod`: `common/scripts/tests/config.sh` gates on
-  > `ENV=staging|prod` and auto-sources the real `{staging,prod}/.env.config.sh` secrets files, which
-  > are off-limits per `CLAUDE.md`. Once T2.2.1's harness blocker is resolved (or a disposable
-  > staging-like environment is available), re-run these three suites' payload sets against the new
-  > image and record pass/fail here.
+  > **Unblocked 2026-07-30 — T1.3.4 is fixed and the image now filters.** The image blocker is gone:
+  > `bash common/scripts/tests/waf-harness.sh <image>` reports 4/4 against a build from the committed
+  > tree, and body-borne attacks (JSON and urlencoded form) are blocked as well as query-string ones.
+  > Ready to run.
+  > Secondary, independent blocker that remains once a working image exists: the three suites can't
+  > run as-is outside `staging`/`prod` — `common/scripts/tests/config.sh` gates on `ENV=staging|prod`
+  > and auto-sources the real `{staging,prod}/.env.config.sh` secrets files, which are off-limits per
+  > `CLAUDE.md`. Either point their payload sets at the harness or use a disposable staging-like
+  > environment. **Do not close this task on a source-only or engine-level proof** — its entire value
+  > is exercising the wasm/APISIX integration layer that all three defects live in.
 - [ ] T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1)
 - [ ] **G2.3: attack corpus blocked, benign corpus passes** — acceptance test
 
@@ -315,8 +310,11 @@
 
 ## Ready now
 
-> Recomputed 2026-07-30 (T2.1.1 and T2.1.2 both done, G2.1 closed; T2.2.1/T2.3.1 attempted but still
-> open — see their blocker notes above) after T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed.
+> Recomputed 2026-07-30 (**T1.3.4 closed** — the gateway image now demonstrably filters, verified
+> 4/4 by `common/scripts/tests/waf-harness.sh`; gates **G1.3 and G1 re-closed** on that evidence.
+> **T2.3.1 unblocked** as a result and is the highest-value deploy task left — G2 is a hard gate on
+> G4. T2.2.1 done, and its v2026.4 caveat discharged against the fixed image.) Earlier basis:
+> T2.1.1/T2.1.2 done, G2.1 closed, T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed.
 > **Caveat:** entries below with no listed
 > `Depends on` in TASKS.md are included on a literal read of the dependency annotations — they have
 > not all been individually re-verified against PLAN.md's prose goal tree. Excluded throughout: all
@@ -338,8 +336,7 @@
 - _(none)_ — T3.4.2 done 2026-07-30. Remaining frontend tasks all wait on undone backend deps: T3.3.2 → T3.3.1, T3.5.4 → T3.5.1; T5.3.2/T5.4.1 held for the deploy-owned live-stack soak (BR-CSP-007).
 
 **Deploy**
-- T2.2.1 [deploy]: Prove Coraza's JSON body processor's `ARGS_POST` naming for nested JSON (depends on T1.3.1, done 2026-07-29) — attempted 2026-07-30, blocked on an isolated-harness issue, see note above
-- T2.3.1 [deploy]: Run the existing WAF suites against the new image (depends on T1.3.3, done 2026-07-29) — attempted 2026-07-30, blocked on the same harness issue as T2.2.1, see note above
+- T2.3.1 [deploy]: Run the existing WAF suites (`02-test-waf.sh`, `15-test-waf-config-validation.sh`, `16-test-waf-advanced.sh`) against the new image (depends on T1.3.3/T1.3.4, both done) — **unblocked 2026-07-30**, image verified 4/4; remaining wrinkle is that the three suites gate on `ENV=staging|prod` via `tests/config.sh`, so point their payload sets at `waf-harness.sh` or a disposable env. **Blocks G2.3 → G2, a hard gate on G4.**
 - T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema`; add the matching GET route (depends on T3.2.4, done 2026-07-30)
 - T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone (depends on T6.1.1, done)
 - T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in the three named plugin configs (M5) (no dependencies)
