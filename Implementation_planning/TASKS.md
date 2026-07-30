@@ -290,7 +290,8 @@
 
 ## Ready now
 
-> Recomputed 2026-07-30 after T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed. **Caveat:** entries below with no listed
+> Recomputed 2026-07-30 (added T2.1.1, missed on the prior pass despite its sole dependency T1.3.2
+> landing 2026-07-29) after T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed. **Caveat:** entries below with no listed
 > `Depends on` in TASKS.md are included on a literal read of the dependency annotations — they have
 > not all been individually re-verified against PLAN.md's prose goal tree. Excluded throughout: all
 > of **G4** (explicit hard gate at G2, not yet done) and all of **G8** (closeout — "the full diff",
@@ -313,6 +314,7 @@
 
 **Deploy**
 - T1.4.1 [deploy]: Swap the gateway builder stage base image to `reg.mini.dev` (depends on T1.3.3, done 2026-07-29)
+- T2.1.1 [deploy]: Add a regression test posting a multipart request with a UTF-7 payload in the first part and clean UTF-8 in the last; assert it is blocked (depends on T1.3.2, done 2026-07-29)
 - T2.2.1 [deploy]: Prove Coraza's JSON body processor's `ARGS_POST` naming for nested JSON (depends on T1.3.1, done 2026-07-29)
 - T2.3.1 [deploy]: Run the existing WAF suites against the new image (depends on T1.3.3, done 2026-07-29)
 - T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema`; add the matching GET route (depends on T3.2.4, done 2026-07-30)
