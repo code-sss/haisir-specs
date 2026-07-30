@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`b865ec1` frontend:`bc4d6f7` deploy:`15c909a` (2026-07-30, reconciled after
+> Last baselined: backend:`b865ec1` frontend:`343939d` deploy:`15c909a` (2026-07-30, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 
@@ -74,7 +74,7 @@
 - [x] T3.2.3 [backend]: Persist both sides of each turn; seed the thread from the cached pattern analysis rather than accepting it from the client (depends on T3.2.2) (2026-07-30)
 - [x] T3.2.3a [backend]: Add `GET /api/haitu/exam-review-chat/{attempt_id}` — same router/ownership+status guards as the POST, returns messages where `is_seed = false` ordered `(created_at, id)` (depends on T3.2.3) (2026-07-30; follow-up fix `b865ec1` added the CSRF guard that was missing from the initial GET route)
 - [x] T3.2.4 [backend]: Accept `{attempt_id, message}`; keep `history` accepted-but-ignored for one release for compatibility (depends on T3.2.3) (2026-07-30)
-- [ ] T3.2.5 [frontend]: Stop sending `history` from `use-exam-review-chat.ts:296,241`; load the thread via GET on mount (depends on T3.2.3a [backend], T3.2.4 [backend])
+- [x] T3.2.5 [frontend]: Stop sending `history` from `use-exam-review-chat.ts:296,241`; load the thread via GET on mount (depends on T3.2.3a [backend], T3.2.4 [backend]) (2026-07-30; already shipped in frontend `343939d` — POST body is `{attempt_id, message}` with no `history`, `getExamReviewChatThread` GET loads the thread on mount; verified lint+typecheck+test:coverage 100%)
 - [ ] T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema` `required: [attempt_id, message, history]`; add a matching APISIX GET route for T3.2.3a (depends on T3.2.4 [backend])
 - [ ] **G3.2: review chat works with a {attempt_id, message} body** — end-to-end test
 
@@ -86,7 +86,7 @@
 
 ### G3.4 [backend]: exam-review-chat grounded server-side
 - [x] T3.4.1 [backend]: Load the review payload via `ExamSessionQuestionService.get_by_session_id(attempt_id)` — already wired into `post_pattern_analysis` at `haitu.py:511` — and build the grounding context in the route (depends on T3.2.3) (2026-07-30)
-- [ ] T3.4.2 [frontend]: Stop pasting question text into the message string in `use-exam-review-chat.ts:310-314`; send `question_id` (depends on T3.4.1 [backend])
+- [x] T3.4.2 [frontend]: Stop pasting question text into the message string in `use-exam-review-chat.ts:310-314`; send `question_id` (depends on T3.4.1 [backend]) (2026-07-30; `explainQuestion(questionId, number)` sends `Explain question <n>` + `question_id` body field, no pasted text; threaded through send/attempt/retry via `lastFailedRef`. Verified lint+typecheck+test:coverage 100%. Uncommitted — frontend HEAD still `343939d`; bump baseline after commit. G3.4 integration test pending live-backend smoke)
 - [ ] **G3.4: model answers from server-held session data, not client claims** — integration test
 
 ### G3.5 [backend, frontend]: Exam images by reference
@@ -290,9 +290,8 @@
 
 ## Ready now
 
-> Recomputed 2026-07-30 (removed T1.4.1/T1.4.2, both done; nothing else depends on them, and G1's
-> completion doesn't independently gate anything since G2's deps point at T1.3.x directly) after
-> T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed. **Caveat:** entries below with no listed
+> Recomputed 2026-07-30 (added T2.1.1, missed on the prior pass despite its sole dependency T1.3.2
+> landing 2026-07-29) after T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed. **Caveat:** entries below with no listed
 > `Depends on` in TASKS.md are included on a literal read of the dependency annotations — they have
 > not all been individually re-verified against PLAN.md's prose goal tree. Excluded throughout: all
 > of **G4** (explicit hard gate at G2, not yet done) and all of **G8** (closeout — "the full diff",
@@ -310,8 +309,7 @@
 - T7.1.3 [backend]: Chunk-read extraction uploads and abort past the cap (B4) (no dependencies)
 
 **Frontend**
-- T3.2.5 [frontend]: Stop sending `history` in `use-exam-review-chat.ts`; load the thread via GET on mount (depends on T3.2.3a, T3.2.4, both done 2026-07-30)
-- T3.4.2 [frontend]: Stop pasting question text into the message string in `use-exam-review-chat.ts:310-314`; send `question_id` (depends on T3.4.1, done 2026-07-30)
+- _(none)_ — T3.4.2 done 2026-07-30. Remaining frontend tasks all wait on undone backend deps: T3.3.2 → T3.3.1, T3.5.4 → T3.5.1; T5.3.2/T5.4.1 held for the deploy-owned live-stack soak (BR-CSP-007).
 
 **Deploy**
 - T2.1.1 [deploy]: Add a regression test posting a multipart request with a UTF-7 payload in the first part and clean UTF-8 in the last; assert it is blocked (depends on T1.3.2, done 2026-07-29)
