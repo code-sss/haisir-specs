@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`b865ec1` frontend:`bc4d6f7` deploy:`fd997a8` (2026-07-30, reconciled after
+> Last baselined: backend:`b865ec1` frontend:`bc4d6f7` deploy:`15c909a` (2026-07-30, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 
@@ -28,11 +28,11 @@
 - [x] **G1.3: version set upgraded and building** — integration test (2026-07-29; all of T1.3.1–T1.3.5 done, verified by a real `docker build --target builder` of the committed Dockerfile + vendored tree, commit `15c909a`)
 
 ### G1.4 [deploy]: Gateway builder stage on Minimus
-- [ ] T1.4.1 [deploy]: Swap the gateway builder stage base image to `reg.mini.dev` per BR-INFRA-004, `-dev` tag confined to the builder stage only (depends on T1.3.3)
-- [ ] T1.4.2 [deploy]: Update `.github/instructions/docker-compose.instructions.md` — it documents APISIX as 3.14.x while the Dockerfile builds 3.17.0-ubuntu
-- [ ] **G1.4: builder stage on Minimus, runtime unchanged** — integration test
+- [x] T1.4.1 [deploy]: Swap the gateway builder stage base image to `reg.mini.dev` per BR-INFRA-004, `-dev` tag confined to the builder stage only (depends on T1.3.3) (2026-07-30; `FROM golang:${GO_VERSION}-bookworm` → `FROM reg.mini.dev/go:${GO_VERSION}-dev`; two collateral fixes required for the swap to actually build — MinimOS ships neither `apt`/`dpkg` (TinyGo install switched from `.deb`+`dpkg -i` to the upstream tarball+`tar`, `TINYGO_SHA256` re-pinned to the tarball hash) nor is `apt-get install git ca-certificates` needed (both preinstalled on the `-dev` image, step deleted); `Jenkinsfile:90`'s CI cache-prepull updated to match. Runtime stage (`apache/apisix:3.17.0-ubuntu`) untouched. Verified via a real `docker build` — both `--target builder` alone and the full two-stage build succeeded, `main.wasm` produced (18,322,384 bytes, same Go 1.25.x/TinyGo 0.39.0 toolchain versions as the already-gated T1.3.4 build), `hadolint` shows zero new warnings vs. pre-change baseline, final image's `apisix version` reports `3.17.0`)
+- [x] T1.4.2 [deploy]: Update `.github/instructions/docker-compose.instructions.md` — it documents APISIX as 3.14.x while the Dockerfile builds 3.17.0-ubuntu (2026-07-30; Technology Stack table row updated to `3.17.x`)
+- [x] **G1.4: builder stage on Minimus, runtime unchanged** — integration test (2026-07-30; verified above — builder stage now `reg.mini.dev/go:1.25-dev`, runtime stage bit-for-bit the same `apache/apisix:3.17.0-ubuntu` base as before)
 
-- [ ] **G1: Gateway build modernised and self-maintained** — integration test
+- [x] **G1: Gateway build modernised and self-maintained** — integration test (2026-07-30; G1.1–G1.4 all done; full two-stage `docker build` succeeds reproducibly, `main.wasm` present at the correct path/ownership in the final image, `apisix version` runs and reports `3.17.0` in the built image — a live etcd-backed WASM-filter-loads check was already established at T1.1.4/commit `15c909a` against the identical vendored source and is unaffected by this builder-toolchain-only change, so it was not re-run against the dev stack)
 
 ## G2 [deploy]: WAF verification — HARD GATE
 
@@ -290,8 +290,9 @@
 
 ## Ready now
 
-> Recomputed 2026-07-30 (added T2.1.1, missed on the prior pass despite its sole dependency T1.3.2
-> landing 2026-07-29) after T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed. **Caveat:** entries below with no listed
+> Recomputed 2026-07-30 (removed T1.4.1/T1.4.2, both done; nothing else depends on them, and G1's
+> completion doesn't independently gate anything since G2's deps point at T1.3.x directly) after
+> T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed. **Caveat:** entries below with no listed
 > `Depends on` in TASKS.md are included on a literal read of the dependency annotations — they have
 > not all been individually re-verified against PLAN.md's prose goal tree. Excluded throughout: all
 > of **G4** (explicit hard gate at G2, not yet done) and all of **G8** (closeout — "the full diff",
@@ -313,12 +314,10 @@
 - T3.4.2 [frontend]: Stop pasting question text into the message string in `use-exam-review-chat.ts:310-314`; send `question_id` (depends on T3.4.1, done 2026-07-30)
 
 **Deploy**
-- T1.4.1 [deploy]: Swap the gateway builder stage base image to `reg.mini.dev` (depends on T1.3.3, done 2026-07-29)
 - T2.1.1 [deploy]: Add a regression test posting a multipart request with a UTF-7 payload in the first part and clean UTF-8 in the last; assert it is blocked (depends on T1.3.2, done 2026-07-29)
 - T2.2.1 [deploy]: Prove Coraza's JSON body processor's `ARGS_POST` naming for nested JSON (depends on T1.3.1, done 2026-07-29)
 - T2.3.1 [deploy]: Run the existing WAF suites against the new image (depends on T1.3.3, done 2026-07-29)
 - T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema`; add the matching GET route (depends on T3.2.4, done 2026-07-30)
-- T1.4.2 [deploy]: Update `docker-compose.instructions.md` — documents APISIX 3.14.x, Dockerfile builds 3.17.0-ubuntu (no dependencies)
 - T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone (depends on T6.1.1, done)
 - T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in the three named plugin configs (M5) (no dependencies)
 - T6.3.3 [deploy]: Move the CrowdSec LAPI channel to https and enable `ssl_verify` (no dependencies)
