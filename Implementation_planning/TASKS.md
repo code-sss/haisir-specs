@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`7829dd3` frontend:`3a57718` deploy:`8cb1dbe` (2026-07-29, reconciled after
+> Last baselined: backend:`7829dd3` frontend:`3a57718` deploy:`ed1dbf1` (2026-07-29, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 
@@ -15,9 +15,9 @@
 - [x] **G1.1: proxy-wasm vendored with the patch in-tree** — integration test (2026-07-29)
 
 ### G1.2 [deploy]: Spike — establish the real version ceiling
-- [ ] T1.2.1 [deploy]: Timeboxed spike — attempt Go 1.24/1.25 + TinyGo ≥0.36 + Coraza v3.7.0 against the vendored tree; capture the actual failing command and error output for whichever pin genuinely blocks
-- [ ] T1.2.2 [deploy]: Record the finding in `gateway-docker/VERSIONS.md` — the observed ceiling with evidence per BR-WAF-010, replacing the current undocumented `Dockerfile:9-12` assertion (depends on T1.2.1)
-- [ ] **G1.2: real ceiling established with recorded evidence** — acceptance test
+- [x] T1.2.1 [deploy]: Timeboxed spike — attempt Go 1.24/1.25 + TinyGo ≥0.36 + Coraza v3.7.0 against the vendored tree; capture the actual failing command and error output for whichever pin genuinely blocks (2026-07-29; found 3 distinct real blockers, not the assumed one — see `gateway-docker/VERSIONS.md`)
+- [x] T1.2.2 [deploy]: Record the finding in `gateway-docker/VERSIONS.md` — the observed ceiling with evidence per BR-WAF-010, replacing the current undocumented `Dockerfile:9-12` assertion (depends on T1.2.1) (2026-07-29)
+- [x] **G1.2: real ceiling established with recorded evidence** — acceptance test (2026-07-29; evidence: Coraza v3.7.0 requires Go≥1.25.0; TinyGo needs ≥0.39.0 for Go 1.25 host support, not ≥0.36 as assumed; TinyGo 0.39.0+Go 1.25 then fails at wasm-ld with undefined libc symbols from `wasilibs/nottinygc@v0.7.1` and `wasilibs/go-re2@v1.6.0`'s prebuilt archives — real ceiling is those wasilibs versions, tracked in T1.3.4, not the Go/TinyGo/Coraza pins alone)
 
 ### G1.3 [deploy]: Upgrade the pinned version set
 - [ ] T1.3.1 [deploy]: Bump `github.com/corazawaf/coraza/v3` to ≥ v3.5.0 (target v3.7.0) — BR-WAF-002 floor; upstream `go.mod` still pins v3.3.3 so this must be forced (depends on T1.2.2)
@@ -312,14 +312,15 @@
 - T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (no dependencies; G5.2 start)
 
 **Deploy**
-- T1.2.1 [deploy]: Timeboxed spike — Go/TinyGo/Coraza version ceiling (no dependencies; G1.1 fully shipped)
+- T1.3.1 [deploy]: Bump `github.com/corazawaf/coraza/v3` to ≥ v3.5.0 (target v3.7.0) (depends on T1.2.2, done 2026-07-29 — but see `gateway-docker/VERSIONS.md`: blocked at link time until T1.3.4 also bumps `wasilibs/nottinygc`/`wasilibs/go-re2`)
+- T1.3.2 [deploy]: Replace vendored CRS with 4.25.1 LTS or later (depends on T1.2.2, done 2026-07-29)
+- T1.3.3 [deploy]: Bump `GO_VERSION`, `TINYGO_VERSION`, `TINYGO_SHA256` to the spike-established set — Go 1.25, TinyGo ≥0.39.0 (depends on T1.2.2, done 2026-07-29)
 - T1.4.2 [deploy]: Update `docker-compose.instructions.md` — documents APISIX 3.14.x, Dockerfile builds 3.17.0-ubuntu (no dependencies)
 - T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone (depends on T6.1.1, done)
 - T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in the three named plugin configs (M5) (no dependencies)
 - T6.3.3 [deploy]: Move the CrowdSec LAPI channel to https and enable `ssl_verify` (no dependencies)
 - T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies)
 - T6.4.1 [deploy]: Add `passwordPolicy` to `common/keycloak/01-realm.json` (H3) (no dependencies)
-- T7.2.2 [deploy]: Validate `params.VERSION` against `^\d+\.\d+(\.\d+)?$` in `Jenkinsfile.deploy:58,89-107` (depends on T7.2.1, done)
 - T7.3.1 [deploy]: Replace `dst: ["*:*"]` Tailscale ACLs with specific services/ports (M4) (no dependencies)
 - T7.4.1 [deploy]: Set `X-XSS-Protection: 0` across all four plugin configs (L3, BR-CSP-006) (no dependencies)
 - T7.5.4 [deploy]: `chmod 600` staging/dev `.env*` (L2 hygiene) (no dependencies)
