@@ -115,7 +115,7 @@
 - [ ] **G3.4: model answers from server-held session data, not client claims** — integration test
 
 ### G3.5 [backend, frontend]: Exam images by reference
-- [ ] T3.5.1 [backend]: Add an image upload endpoint returning `{url}`, reusing the existing multipart path and `sniff_mime` magic-byte validation
+- [x] T3.5.1 [backend]: Add an image upload endpoint returning `{url}`, reusing the existing multipart path and `sniff_mime` magic-byte validation (2026-07-30)
 - [ ] T3.5.2 [backend]: Stop calling `encode_image_to_base64` on read in `exam.py:129,148` and `exam_session.py:360,678-679`; return the stored relative path (depends on T3.5.1)
 - [ ] T3.5.3 [backend]: Migrate existing base64 `image_url` values in `questions` to stored files + paths (depends on T3.5.2)
 - [ ] T3.5.4 [frontend]: `question-editor.tsx:115,153` — upload before submitting the template instead of `readAsDataURL` (depends on T3.5.1 [backend])
@@ -123,7 +123,7 @@
 - [ ] **G3.5: exam images round-trip by URL** — end-to-end test
 
 ### G3.6 [backend]: Declared field limits
-- [ ] T3.6.1 [backend]: Add `Field(max_length=...)` to free-text schema fields — `message`, `question_text`, `explanation`, `model_answer`, `content`, `text`, `working_text`, `user_answer` — sized under the gateway's `tx.arg_length`
+- [x] T3.6.1 [backend]: Add `Field(max_length=...)` to free-text schema fields — `message`, `question_text`, `explanation`, `model_answer`, `content`, `text`, `working_text`, `user_answer` — sized under the gateway's `tx.arg_length` (2026-07-30)
 - [ ] T3.6.2 [backend]: Verify a too-long field now returns 422 naming the field, not an opaque gateway 403 (depends on T3.6.1)
 - [ ] **G3.6: oversized input fails with a 422, not a mystery 403** — integration test
 
@@ -224,7 +224,7 @@
 - [ ] **G6.1: BR-SEC-021 — no unverified TLS to Keycloak** — integration test
 
 ### G6.2 [backend]: JWT audience validation
-- [ ] T6.2.1 [backend]: Confirm APISIX-injected tokens actually carry the `haisir-backend-admin` audience before enforcing — enabling this blind will 401 every request
+- [x] T6.2.1 [backend]: Confirm APISIX-injected tokens actually carry the `haisir-backend-admin` audience before enforcing — enabling this blind will 401 every request (2026-07-30)
 - [ ] T6.2.2 [backend]: Set `verify_aud: True` with the expected audience in `src/auth/user.py:73` (BR-SEC-020) (depends on T6.2.1)
 - [ ] T6.2.3 [backend]: Regression test — a token minted for a different realm client is rejected with 401 (depends on T6.2.2)
 - [ ] **G6.2: BR-SEC-020 — audience confusion closed** — integration test
