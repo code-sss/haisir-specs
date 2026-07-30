@@ -20,10 +20,10 @@
 - [x] **G1.2: real ceiling established with recorded evidence** — acceptance test (2026-07-29; evidence: Coraza v3.7.0 requires Go≥1.25.0; TinyGo needs ≥0.39.0 for Go 1.25 host support, not ≥0.36 as assumed; TinyGo 0.39.0+Go 1.25 then fails at wasm-ld with undefined libc symbols from `wasilibs/nottinygc@v0.7.1` and `wasilibs/go-re2@v1.6.0`'s prebuilt archives — real ceiling is those wasilibs versions, tracked in T1.3.4, not the Go/TinyGo/Coraza pins alone)
 
 ### G1.3 [deploy]: Upgrade the pinned version set
-- [ ] T1.3.1 [deploy]: Bump `github.com/corazawaf/coraza/v3` to ≥ v3.5.0 (target v3.7.0) — BR-WAF-002 floor; upstream `go.mod` still pins v3.3.3 so this must be forced (depends on T1.2.2)
+- [x] T1.3.1 [deploy]: Bump `github.com/corazawaf/coraza/v3` to ≥ v3.5.0 (target v3.7.0) — BR-WAF-002 floor; upstream `go.mod` still pins v3.3.3 so this must be forced (depends on T1.2.2) (2026-07-29; forced to v3.7.0 via `go mod edit`+`go mod tidy`, verified building — see `gateway-docker/VERSIONS.md` "Resolution")
 - [ ] T1.3.2 [deploy]: Replace vendored CRS under `wasmplugin/rules/crs/` with 4.25.1 LTS or later — BR-WAF-003 floor; verify the `Include @owasp_crs/*.conf` embed path still resolves (depends on T1.2.2)
-- [ ] T1.3.3 [deploy]: Bump `GO_VERSION`, `TINYGO_VERSION` and `TINYGO_SHA256` together to the set established by the spike (depends on T1.2.2)
-- [ ] T1.3.4 [deploy]: Verify `coraza-wasilibs` compatibility across the version jump; pin or bump as required (depends on T1.3.1)
+- [x] T1.3.3 [deploy]: Bump `GO_VERSION`, `TINYGO_VERSION` and `TINYGO_SHA256` together to the set established by the spike (depends on T1.2.2) (2026-07-29; Go 1.25, TinyGo 0.39.0, sha256 `775f15974e...` — `gateway-docker/Dockerfile`)
+- [x] T1.3.4 [deploy]: Verify `coraza-wasilibs` compatibility across the version jump; pin or bump as required (depends on T1.3.1) (2026-07-29; `go-re2` forced to v1.12.0 — wasm2go backend links under TinyGo 0.39, v1.6.0's prebuilt archive doesn't; `nottinygc` removed entirely — frozen at v0.7.1, no compatible release exists, upstream itself recommends against using it. Verified end-to-end with a real `docker build` of the committed Dockerfile+vendored tree, not just a scratch copy. Known carried risk: dropping nottinygc reverts to TinyGo's default GC/allocator — a real perf-under-load change, not just a version bump; recommend checking during G2.3's existing WAF-suite run rather than a new gate)
 - [ ] T1.3.5 [deploy]: Evaluate the `coraza.rule.no_regex_multiline` build tag — aligns `@rx` with CRS expectations and reduces false positives (depends on T1.3.1)
 - [ ] **G1.3: version set upgraded and building** — integration test
 
@@ -312,9 +312,8 @@
 - T5.2.1 [frontend]: Extend the existing `src/proxy.ts` — mint a per-request nonce, set `Content-Security-Policy-Report-Only`, forward `x-nonce` on request headers (no dependencies; G5.2 start)
 
 **Deploy**
-- T1.3.1 [deploy]: Bump `github.com/corazawaf/coraza/v3` to ≥ v3.5.0 (target v3.7.0) (depends on T1.2.2, done 2026-07-29 — but see `gateway-docker/VERSIONS.md`: blocked at link time until T1.3.4 also bumps `wasilibs/nottinygc`/`wasilibs/go-re2`)
 - T1.3.2 [deploy]: Replace vendored CRS with 4.25.1 LTS or later (depends on T1.2.2, done 2026-07-29)
-- T1.3.3 [deploy]: Bump `GO_VERSION`, `TINYGO_VERSION`, `TINYGO_SHA256` to the spike-established set — Go 1.25, TinyGo ≥0.39.0 (depends on T1.2.2, done 2026-07-29)
+- T1.3.5 [deploy]: Evaluate the `coraza.rule.no_regex_multiline` build tag (depends on T1.3.1, done 2026-07-29)
 - T1.4.2 [deploy]: Update `docker-compose.instructions.md` — documents APISIX 3.14.x, Dockerfile builds 3.17.0-ubuntu (no dependencies)
 - T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone (depends on T6.1.1, done)
 - T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in the three named plugin configs (M5) (no dependencies)
