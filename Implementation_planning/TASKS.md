@@ -85,7 +85,7 @@
 - [ ] **G3.3: doubt threads round-trip without client-side replay** — end-to-end test
 
 ### G3.4 [backend]: exam-review-chat grounded server-side
-- [ ] T3.4.1 [backend]: Load the review payload via `ExamSessionQuestionService.get_by_session_id(attempt_id)` — already wired into `post_pattern_analysis` at `haitu.py:511` — and build the grounding context in the route (depends on T3.2.3)
+- [x] T3.4.1 [backend]: Load the review payload via `ExamSessionQuestionService.get_by_session_id(attempt_id)` — already wired into `post_pattern_analysis` at `haitu.py:511` — and build the grounding context in the route (depends on T3.2.3) (2026-07-30)
 - [ ] T3.4.2 [frontend]: Stop pasting question text into the message string in `use-exam-review-chat.ts:310-314`; send `question_id` (depends on T3.4.1 [backend])
 - [ ] **G3.4: model answers from server-held session data, not client claims** — integration test
 
@@ -290,7 +290,7 @@
 
 ## Ready now
 
-> Recomputed 2026-07-30 after T3.2.2–T3.2.4/T3.2.3a landed. **Caveat:** entries below with no listed
+> Recomputed 2026-07-30 after T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed. **Caveat:** entries below with no listed
 > `Depends on` in TASKS.md are included on a literal read of the dependency annotations — they have
 > not all been individually re-verified against PLAN.md's prose goal tree. Excluded throughout: all
 > of **G4** (explicit hard gate at G2, not yet done) and all of **G8** (closeout — "the full diff",
@@ -301,7 +301,6 @@
 **Backend**
 - T3.3.1 [backend]: Load the last N messages from `DoubtMessageRepository` in the route instead of reading `body.history` (no dependencies)
 - T3.3.3 [backend]: Fix E1 — guard the `_persist_ai_reply` spawn on non-empty accumulated text (`haitu.py:316-329`) (no dependencies)
-- T3.4.1 [backend]: Load the review payload via `ExamSessionQuestionService.get_by_session_id` and build grounding context server-side (depends on T3.2.3, done 2026-07-30)
 - T3.5.1 [backend]: Add an image upload endpoint returning `{url}` (no dependencies)
 - T3.6.1 [backend]: Add `Field(max_length=...)` to free-text schema fields (no dependencies)
 - T6.2.1 [backend]: Confirm APISIX-injected tokens carry the `haisir-backend-admin` audience before enforcing (no dependencies)
@@ -310,6 +309,7 @@
 
 **Frontend**
 - T3.2.5 [frontend]: Stop sending `history` in `use-exam-review-chat.ts`; load the thread via GET on mount (depends on T3.2.3a, T3.2.4, both done 2026-07-30)
+- T3.4.2 [frontend]: Stop pasting question text into the message string in `use-exam-review-chat.ts:310-314`; send `question_id` (depends on T3.4.1, done 2026-07-30)
 
 **Deploy**
 - T1.4.1 [deploy]: Swap the gateway builder stage base image to `reg.mini.dev` (depends on T1.3.3, done 2026-07-29)
