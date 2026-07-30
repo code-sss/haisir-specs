@@ -37,18 +37,43 @@
 ## G2 [deploy]: WAF verification — HARD GATE
 
 ### G2.1 [deploy]: CVE-2026-21876 blocked
-- [ ] T2.1.1 [deploy]: Add a regression test posting a multipart request with a UTF-7 payload in the first part and clean UTF-8 in the last; assert it is blocked (depends on T1.3.2)
+- [x] T2.1.1 [deploy]: Add a regression test posting a multipart request with a UTF-7 payload in the first part and clean UTF-8 in the last; assert it is blocked (depends on T1.3.2) (2026-07-30; `common/scripts/tests/18-test-cve-2026-21876-multipart.sh` — posts to `04-secured-api-upload.json`'s route with a fully shift-encoded UTF-7 `<script>` payload in part 1, clean UTF-8 in the last part, asserts 403; no auth token needed since `coraza-filter` (wasm priority 7999) runs ahead of `openid-connect`. Not yet run live — see T2.1.2)
 - [ ] T2.1.2 [deploy]: Confirm the test fails against the pre-upgrade image and passes after — proving the ruleset bump is what fixed it (depends on T2.1.1)
 - [ ] **G2.1: multipart charset bypass blocked** — acceptance test
 
 ### G2.2 [deploy]: Regex-scoped exclusion proven to work
 - [ ] T2.2.1 [deploy]: Prove Coraza's JSON body processor populates `ARGS_POST` with `json.`-prefixed, dot-nested, numerically-indexed keys — assert the observed variable name for `history[2].content` (depends on T1.3.1)
+  > **Attempted 2026-07-30, blocked — not done.** Built a throwaway, isolated APISIX+etcd stack (new
+  > docker network, T1.4.1's `reg.mini.dev`-built gateway image, never touching `dev`/`staging`) to
+  > empirically observe the `ARGS_POST` variable name via a diagnostic `SecRule` logging
+  > `MATCHED_VAR_NAME`. Blocked before reaching that point: `coraza-filter` registers cleanly at
+  > startup (correct `priority`/`version`/`schema` per source tracing of `apisix/plugin.lua` and
+  > `apisix/wasm.lua` — no load errors ever logged) but never actually executes — neither the Admin
+  > API's schema validation (`local_plugins_hash["coraza-filter"]` is `nil` at request time, every
+  > time, in every worker) nor live proxying (attack payloads consistently returned 200, never 403).
+  > Tried: config nearly identical to `common/apisix_conf/config.yaml` (only etcd TLS and
+  > `enable_admin_ui` dropped), `apisix.proxy_mode: http` (fixed an unrelated stream-subsystem wasm
+  > crash), `--user root` (matches `dev/docker-compose.yml`'s override), and an explicit
+  > `PUT /apisix/admin/plugins/reload`. None fixed it. Since this WAF demonstrably works in real
+  > deployments (the whole `199110`/exclusion-treadmill history in `16_gateway_waf.md` depends on it
+  > firing), this looks like an environment gap specific to a from-scratch minimal harness, not a
+  > T1.4.1 regression — but unconfirmed. Whoever picks this up next: either find what the isolated
+  > repro is missing, or fall back to a source-only proof (trace `wasmplugin`'s JSON body processor in
+  > the vendored Coraza source, matching the T1.3.5 precedent) plus a real run against a disposable
+  > staging-like environment.
 - [ ] T2.2.2 [deploy]: Prove `ctl:ruleRemoveTargetById=<id>;ARGS_POST:/^json\.history\.\d+\.content$/` suppresses the rule for that field **and leaves it active** for headers, cookies, query args and other body fields (depends on T2.2.1)
 - [ ] T2.2.3 [deploy]: Record the before/after in `16_gateway_waf.md`'s status note — the v3.3.3 silent-no-match behaviour is the finding that justifies this whole phase (depends on T2.2.2)
 - [ ] **G2.2: field-scoped exclusion demonstrably fires** — acceptance test
 
 ### G2.3 [deploy]: No regression in detection
 - [ ] T2.3.1 [deploy]: Run the existing WAF suites (`common/scripts/tests/02-test-waf.sh`, `15-test-waf-config-validation.sh`, `16-test-waf-advanced.sh`) against the new image (depends on T1.3.3)
+  > **Attempted 2026-07-30, blocked — not done.** Same isolated-stack attempt and same blocker as
+  > T2.2.1 above (`coraza-filter` never actually executes in the throwaway harness). The existing
+  > suites also can't run as-is outside `staging`/`prod`: `common/scripts/tests/config.sh` gates on
+  > `ENV=staging|prod` and auto-sources the real `{staging,prod}/.env.config.sh` secrets files, which
+  > are off-limits per `CLAUDE.md`. Once T2.2.1's harness blocker is resolved (or a disposable
+  > staging-like environment is available), re-run these three suites' payload sets against the new
+  > image and record pass/fail here.
 - [ ] T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1)
 - [ ] **G2.3: attack corpus blocked, benign corpus passes** — acceptance test
 
@@ -290,8 +315,9 @@
 
 ## Ready now
 
-> Recomputed 2026-07-30 (added T2.1.1, missed on the prior pass despite its sole dependency T1.3.2
-> landing 2026-07-29) after T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed. **Caveat:** entries below with no listed
+> Recomputed 2026-07-30 (T2.1.1 done, replaced by newly-unblocked T2.1.2; T2.2.1/T2.3.1 attempted but
+> still open — see their blocker notes above) after T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed.
+> **Caveat:** entries below with no listed
 > `Depends on` in TASKS.md are included on a literal read of the dependency annotations — they have
 > not all been individually re-verified against PLAN.md's prose goal tree. Excluded throughout: all
 > of **G4** (explicit hard gate at G2, not yet done) and all of **G8** (closeout — "the full diff",
@@ -312,9 +338,9 @@
 - _(none)_ — T3.4.2 done 2026-07-30. Remaining frontend tasks all wait on undone backend deps: T3.3.2 → T3.3.1, T3.5.4 → T3.5.1; T5.3.2/T5.4.1 held for the deploy-owned live-stack soak (BR-CSP-007).
 
 **Deploy**
-- T2.1.1 [deploy]: Add a regression test posting a multipart request with a UTF-7 payload in the first part and clean UTF-8 in the last; assert it is blocked (depends on T1.3.2, done 2026-07-29)
-- T2.2.1 [deploy]: Prove Coraza's JSON body processor's `ARGS_POST` naming for nested JSON (depends on T1.3.1, done 2026-07-29)
-- T2.3.1 [deploy]: Run the existing WAF suites against the new image (depends on T1.3.3, done 2026-07-29)
+- T2.1.2 [deploy]: Confirm the multipart-charset test fails pre-upgrade and passes post-upgrade (depends on T2.1.1, done 2026-07-30)
+- T2.2.1 [deploy]: Prove Coraza's JSON body processor's `ARGS_POST` naming for nested JSON (depends on T1.3.1, done 2026-07-29) — attempted 2026-07-30, blocked on an isolated-harness issue, see note above
+- T2.3.1 [deploy]: Run the existing WAF suites against the new image (depends on T1.3.3, done 2026-07-29) — attempted 2026-07-30, blocked on the same harness issue as T2.2.1, see note above
 - T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema`; add the matching GET route (depends on T3.2.4, done 2026-07-30)
 - T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone (depends on T6.1.1, done)
 - T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in the three named plugin configs (M5) (no dependencies)
