@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`b865ec1` frontend:`343939d` deploy:`3905c8a` (2026-07-30, reconciled after
+> Last baselined: backend:`555c72f` frontend:`343939d` deploy:`3905c8a` (2026-07-30, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 
@@ -243,9 +243,9 @@
 ## G7 [deploy, backend, frontend]: Residual review items
 
 ### G7.1 [backend]: Request size and upload validation
-- [ ] T7.1.1 [backend]: Replace `Content-Length` arithmetic in `src/auth/request_middleware.py:151,169,194` with a streaming byte cap in a pure-ASGI `receive` wrapper; treat a body-bearing request with no `Content-Length` as requiring the streaming path (M2)
-- [ ] T7.1.2 [backend]: Delete `_validate_file_uploads` (`request_middleware.py:189`), `_extract_filename` (`:230`) and `_is_allowed_file_type` (`:240`) — spanning roughly `:189-250`, plus the `self._validate_file_uploads(request)` call site at `:184`. They read a request-level `Content-Disposition` that never exists for multipart, so they have never rejected anything (B2). The originally-scoped range `208-228` was wrong at scoping time — it points at the `Content-Disposition` block *inside* the first function, not the three definitions (depends on T7.1.1)
-- [ ] T7.1.3 [backend]: Chunk-read extraction uploads and abort past the cap in `admin_extraction.py:175-181` and `parent_extraction.py:182-188`, currently fully spooled before the 50 MB check; shared helper next to `sniff_mime` (B4)
+- [x] T7.1.1 [backend]: Replace `Content-Length` arithmetic in `src/auth/request_middleware.py:151,169,194` with a streaming byte cap in a pure-ASGI `receive` wrapper; treat a body-bearing request with no `Content-Length` as requiring the streaming path (M2) (2026-07-30)
+- [x] T7.1.2 [backend]: Delete `_validate_file_uploads` (`request_middleware.py:189`), `_extract_filename` (`:230`) and `_is_allowed_file_type` (`:240`) — spanning roughly `:189-250`, plus the `self._validate_file_uploads(request)` call site at `:184`. They read a request-level `Content-Disposition` that never exists for multipart, so they have never rejected anything (B2). The originally-scoped range `208-228` was wrong at scoping time — it points at the `Content-Disposition` block *inside* the first function, not the three definitions (depends on T7.1.1) (2026-07-30)
+- [x] T7.1.3 [backend]: Chunk-read extraction uploads and abort past the cap in `admin_extraction.py:175-181` and `parent_extraction.py:182-188`, currently fully spooled before the 50 MB check; shared helper next to `sniff_mime` (B4) (2026-07-30)
 - [ ] T7.1.4 [backend]: Malformed `Content-Length` returns 400, not an unhandled 500 (B3) (depends on T7.1.1)
 - [ ] **G7.1: size limits hold under chunked encoding** — integration test
 
@@ -329,8 +329,7 @@
 - T3.5.1 [backend]: Add an image upload endpoint returning `{url}` (no dependencies)
 - T3.6.1 [backend]: Add `Field(max_length=...)` to free-text schema fields (no dependencies)
 - T6.2.1 [backend]: Confirm APISIX-injected tokens carry the `haisir-backend-admin` audience before enforcing (no dependencies)
-- T7.1.1 [backend]: Replace `Content-Length` arithmetic with a streaming byte cap (M2) (no dependencies)
-- T7.1.3 [backend]: Chunk-read extraction uploads and abort past the cap (B4) (no dependencies)
+- T7.1.4 [backend]: Malformed `Content-Length` returns 400, not an unhandled 500 (B3) (depends on T7.1.1)
 
 **Frontend**
 - _(none)_ — T3.4.2 done 2026-07-30. Remaining frontend tasks all wait on undone backend deps: T3.3.2 → T3.3.1, T3.5.4 → T3.5.1; T5.3.2/T5.4.1 held for the deploy-owned live-stack soak (BR-CSP-007).
