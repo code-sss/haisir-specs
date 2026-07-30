@@ -21,11 +21,11 @@
 
 ### G1.3 [deploy]: Upgrade the pinned version set
 - [x] T1.3.1 [deploy]: Bump `github.com/corazawaf/coraza/v3` to ≥ v3.5.0 (target v3.7.0) — BR-WAF-002 floor; upstream `go.mod` still pins v3.3.3 so this must be forced (depends on T1.2.2) (2026-07-29; forced to v3.7.0 via `go mod edit`+`go mod tidy`, verified building — see `gateway-docker/VERSIONS.md` "Resolution")
-- [ ] T1.3.2 [deploy]: Replace vendored CRS under `wasmplugin/rules/crs/` with 4.25.1 LTS or later — BR-WAF-003 floor; verify the `Include @owasp_crs/*.conf` embed path still resolves (depends on T1.2.2)
+- [x] T1.3.2 [deploy]: Replace vendored CRS under `wasmplugin/rules/crs/` with 4.25.1 LTS or later — BR-WAF-003 floor; verify the `Include @owasp_crs/*.conf` embed path still resolves (depends on T1.2.2) (2026-07-29; CRS 4.14.0 → 4.25.1 LTS, vendored tree byte-identical to upstream, local rule 900120 re-applied, `tx.crs_setup_version` 4140 → 4251; `Include @owasp_crs/*.conf` is directory-name-based so no code change needed — verified by `docker build --target builder` — see `gateway-docker/VERSIONS.md` T1.3.2)
 - [x] T1.3.3 [deploy]: Bump `GO_VERSION`, `TINYGO_VERSION` and `TINYGO_SHA256` together to the set established by the spike (depends on T1.2.2) (2026-07-29; Go 1.25, TinyGo 0.39.0, sha256 `775f15974e...` — `gateway-docker/Dockerfile`)
 - [x] T1.3.4 [deploy]: Verify `coraza-wasilibs` compatibility across the version jump; pin or bump as required (depends on T1.3.1) (2026-07-29; `go-re2` forced to v1.12.0 — wasm2go backend links under TinyGo 0.39, v1.6.0's prebuilt archive doesn't; `nottinygc` removed entirely — frozen at v0.7.1, no compatible release exists, upstream itself recommends against using it. Verified end-to-end with a real `docker build` of the committed Dockerfile+vendored tree, not just a scratch copy. Known carried risk: dropping nottinygc reverts to TinyGo's default GC/allocator — a real perf-under-load change, not just a version bump; recommend checking during G2.3's existing WAF-suite run rather than a new gate)
-- [ ] T1.3.5 [deploy]: Evaluate the `coraza.rule.no_regex_multiline` build tag — aligns `@rx` with CRS expectations and reduces false positives (depends on T1.3.1)
-- [ ] **G1.3: version set upgraded and building** — integration test
+- [x] T1.3.5 [deploy]: Evaluate the `coraza.rule.no_regex_multiline` build tag — aligns `@rx` with CRS expectations and reduces false positives (depends on T1.3.1) (2026-07-29; **adopted** unconditionally in `magefiles/magefile.go` `Build()` + mirrored into `Test()`/`Coverage()` `-tags=`. Traced in Coraza v3.7.0 source: flag drops the implicit `(?m)` so `^`/`$` match whole-string only; grepped both CRS 4.14.0 and 4.25.1 — zero rules rely on implicit multiline, so no detection regression, only tighter `^`/`$` for this project's own field-scoped exclusions — see `gateway-docker/VERSIONS.md` T1.3.5)
+- [x] **G1.3: version set upgraded and building** — integration test (2026-07-29; all of T1.3.1–T1.3.5 done, verified by a real `docker build --target builder` of the committed Dockerfile + vendored tree, commit `15c909a`)
 
 ### G1.4 [deploy]: Gateway builder stage on Minimus
 - [ ] T1.4.1 [deploy]: Swap the gateway builder stage base image to `reg.mini.dev` per BR-INFRA-004, `-dev` tag confined to the builder stage only (depends on T1.3.3)
@@ -312,8 +312,6 @@
 - T3.2.5 [frontend]: Stop sending `history` in `use-exam-review-chat.ts`; load the thread via GET on mount (depends on T3.2.3a, T3.2.4, both done 2026-07-30)
 
 **Deploy**
-- T1.3.2 [deploy]: Replace vendored CRS with 4.25.1 LTS or later (depends on T1.2.2, done 2026-07-29)
-- T1.3.5 [deploy]: Evaluate the `coraza.rule.no_regex_multiline` build tag (depends on T1.3.1, done 2026-07-29)
 - T1.4.1 [deploy]: Swap the gateway builder stage base image to `reg.mini.dev` (depends on T1.3.3, done 2026-07-29)
 - T2.2.1 [deploy]: Prove Coraza's JSON body processor's `ARGS_POST` naming for nested JSON (depends on T1.3.1, done 2026-07-29)
 - T2.3.1 [deploy]: Run the existing WAF suites against the new image (depends on T1.3.3, done 2026-07-29)
