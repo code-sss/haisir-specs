@@ -79,9 +79,9 @@
 - [ ] **G3.2: review chat works with a {attempt_id, message} body** — end-to-end test
 
 ### G3.3 [backend, frontend]: topic-doubt stops replaying stored history
-- [ ] T3.3.1 [backend]: Load the last N messages from `DoubtMessageRepository` in the route instead of reading `body.history` — the server already writes both sides via `add_student_message` / `finalize_ai_response`
+- [x] T3.3.1 [backend]: Load the last N messages from `DoubtMessageRepository` in the route instead of reading `body.history` — the server already writes both sides via `add_student_message` / `finalize_ai_response` (2026-07-30)
 - [ ] T3.3.2 [frontend]: Stop re-posting the pre-loaded thread from `use-haitu-doubt.ts:299` (depends on T3.3.1 [backend])
-- [ ] T3.3.3 [backend]: Fix E1 — `_generate_events`' `finally` block persists an empty AI message and advances the doubt to `ai_answered` when the stream failed or the client disconnected; guard the `_persist_ai_reply` spawn on non-empty accumulated text (`haitu.py:316-329`)
+- [x] T3.3.3 [backend]: Fix E1 — `_generate_events`' `finally` block persists an empty AI message and advances the doubt to `ai_answered` when the stream failed or the client disconnected; guard the `_persist_ai_reply` spawn on non-empty accumulated text (`haitu.py:316-329`) (2026-07-30)
 - [ ] **G3.3: doubt threads round-trip without client-side replay** — end-to-end test
 
 ### G3.4 [backend]: exam-review-chat grounded server-side
