@@ -119,7 +119,7 @@
 - [x] T3.5.2 [backend]: Stop calling `encode_image_to_base64` on read in `exam.py:129,148` and `exam_session.py:360,678-679`; return the stored relative path (depends on T3.5.1) (2026-07-31)
 - [x] T3.5.3 [backend]: Migrate existing base64 `image_url` values in `questions` to stored files + paths (depends on T3.5.2) (2026-07-31)
 - [x] T3.5.4 [frontend]: `question-editor.tsx:115,153` — upload before submitting the template instead of `readAsDataURL` (depends on T3.5.1 [backend]) (2026-07-31)
-- [x] T3.5.5 [frontend]: Serve images via a static/asset route; verify `img-src` in the CSP still covers them (depends on T3.5.4) (2026-07-31)
+- [ ] T3.5.5 [frontend, backend]: Serve images via a static/asset route; verify `img-src` in the CSP still covers them (depends on T3.5.4, done) — **reopened 2026-07-31, was wrongly marked `[x]`.** Commit `a72ddcf` added `src/app/exam-images/[...path]/route.ts`, a same-origin proxy to `${BACKEND_URL}/exam-images/*`. This is broken: backend's upload endpoint (`haisir-backend/src/api/routes/exam.py:236-289`, `IMAGE_DIR = "images/questions"`) returns and stores `image_url` as `/images/questions/<safe_name>` — a *different* path prefix than the new proxy route — and every rendering component (`assessment-form.tsx`, `single-choice-input.tsx`, `multiple-choice-input.tsx`, `question-renderer.tsx`) uses `image_url` verbatim as `<img src>`, so the new proxy route is never actually requested by the app. Separately, the backend has **zero** route or `StaticFiles` mount serving `images/questions/*` (or `exam-images/*`) at all — confirmed via `grep -rn StaticFiles src/` (empty) and `grep -rn exam-images src/` (empty) in `haisir-backend`. Net effect: uploaded exam images render as broken `<img>` tags. **Fix, smallest diff (recommended over renaming the storage path, since T3.5.3 already migrated existing rows to `/images/questions/...`):** (1) frontend — move `src/app/exam-images/[...path]/route.ts` to `src/app/images/questions/[...path]/route.ts` and repoint its upstream fetch at `${BACKEND_URL}/images/questions/${path}` (same 12 test cases should port with path-string changes only); (2) backend — add a `GET` route or `StaticFiles` mount serving `images/questions/*` from `os.path.join(settings.data_dir, IMAGE_DIR)`, reusing the same content-type allowlist (`image/png`, `image/jpeg`) the upload endpoint already enforces. Full detail also in `01_data_model.md` §2.1 and `Implementation_planning/TASKS_by_repo.tmp.md`'s discrepancy note.
 - [ ] **G3.5: exam images round-trip by URL** — end-to-end test
 
 ### G3.6 [backend]: Declared field limits
@@ -346,7 +346,13 @@
 - T6.2.3 [backend]: Regression test — a token minted for a different realm client is rejected with 401 (depends on T6.2.2, done 2026-07-31) — note: `test_invalid_audience_raises_401` added under T6.2.2 already exercises the wrong-audience→401 path, so this may already be satisfied; confirm before doing it separately
 
 **Frontend**
-> T3.3.2 done 2026-07-30; T3.5.4 and T3.5.5 done 2026-07-31 (committed — baseline updated to `a72ddcf`). T5.3.2/T5.4.1 remain held for the deploy-owned live-stack soak (BR-CSP-007).
+> T3.3.2 done 2026-07-30; T3.5.4 done 2026-07-31 (committed — baseline updated to `a72ddcf`).
+> **T3.5.5 reopened 2026-07-31** — was marked done off the same commit, but the proxy route it
+> added targets the wrong backend path and the backend has no serving route at all; see the task
+> note above for the exact fix. T5.3.2/T5.4.1 remain held for the deploy-owned live-stack soak
+> (BR-CSP-007).
+- T3.5.5 [frontend, backend]: see reopened task note above — currently the highest-value item
+  blocking G3.5, fully unblocked (dep T3.5.4 done), just implemented wrong.
 
 **Deploy**
 > 2026-07-31: T3.2.6, T6.1.2, T6.3.1, T6.3.3, T7.4.1, T7.6.2, T7.7.1, T7.7.3, T7.7.4, T7.7.5 all done

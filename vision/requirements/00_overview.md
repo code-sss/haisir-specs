@@ -301,7 +301,7 @@ Key rule: hAITU must attempt before escalation is possible (`doubt.haitu_attempt
 | SQLAlchemy imperative mapping — domain models are plain dataclasses | Existing |
 | `question_ids` as PostgreSQL ARRAY columns — not join tables | Existing |
 | Exam session questions reference live question rows via FK (no JSONB snapshot) | Existing |
-| Images stored on disk at `data_dir/images/questions/`, base64 at API layer | Existing |
+| Images stored on disk at `data_dir/images/questions/`, served by URL reference — base64-at-API-layer superseded Phase 7 G3.5, see `01_data_model.md` §2.1 (serving route currently broken, TASKS.md T3.5.5 reopened) | Existing, in rework |
 | `is_active` soft delete on `exam_templates` | Existing |
 
 **New decisions (added for this build):**
