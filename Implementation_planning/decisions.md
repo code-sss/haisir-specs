@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-30 — T6.4.4: MFA for `admin`/`institution_admin` deferred, evaluated not implemented
+
+> Context: Phase 7 G6.4 (Keycloak realm hardening, H3). T6.4.4 asks to "evaluate requiring
+> OTP/WebAuthn for `admin` and `institution_admin`" — an evaluation task, not an implementation
+> task. Landed alongside T6.4.2 (`sslRequired: external`) and T6.4.3 (explicit brute-force params).
+
+- **`institution_admin` is out of scope full stop.** `02_auth_and_roles.md` scopes this increment
+  to `student`/`parent`/`admin` only, and the 2026-07-27 entry above records an explicit hold:
+  target-state work for `institution_admin` is blocked until its vision spec is revisited.
+  Requiring MFA for a role with no live users is moot until that hold lifts.
+- **`admin` MFA is not a realm-JSON toggle.** Keycloak has no per-role "require OTP" field on the
+  realm object; enforcing it needs either a per-user `CONFIGURE_TOTP` required action or a custom
+  Conditional-OTP authentication flow keyed on role membership — and either one changes the login
+  experience for whoever holds the real `admin` account today. That is an operational decision
+  affecting a live account, not a config default, so it was not made unilaterally as a side effect
+  of T6.4.1–T6.4.3's password/TLS/brute-force hardening.
+- **Decision: defer.** Build the conditional-OTP flow once, for both `admin` and
+  `institution_admin` together, when `institution_admin`'s hold lifts — a role-keyed auth flow is
+  naturally a single piece of work, not two. Until then, `admin` MFA enforcement stays a deliberate
+  gap, not an oversight; `bruteForceProtected` + the new `passwordPolicy` (T6.4.1) are the interim
+  compensating controls on that account.
+
+---
+
 ## 2026-07-29 — T3.2.1: exam-review-chat persistence model designed (two-pass challenge)
 
 > Context: G3.2 needs `exam-review-chat` to persist server-side; the endpoint is fully stateless

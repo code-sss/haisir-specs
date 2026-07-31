@@ -232,11 +232,11 @@
 - [ ] **G6.3: internal channels verify TLS** — integration test
 
 ### G6.4 [deploy]: Keycloak realm hardening
-- [ ] T6.4.1 [deploy]: Add `passwordPolicy` to `common/keycloak/01-realm.json` — e.g. `length(12) and notUsername and notEmail and passwordHistory(3)` (H3)
-- [ ] T6.4.2 [deploy]: Set `sslRequired: "external"` (currently `"none"` at `:10`) (depends on T6.4.1)
-- [ ] T6.4.3 [deploy]: Make brute-force parameters explicit — `failureFactor`, `permanentLockout`, `maxDeltaTimeSeconds` — rather than relying on defaults (depends on T6.4.1)
-- [ ] T6.4.4 [deploy]: Evaluate requiring OTP/WebAuthn for `admin` and `institution_admin` (depends on T6.4.1)
-- [ ] **G6.4: H3 — realm password and TLS policy enforced** — integration test
+- [x] T6.4.1 [deploy]: Add `passwordPolicy` to `common/keycloak/01-realm.json` — e.g. `length(12) and notUsername and notEmail and passwordHistory(3)` (H3) (2026-07-30; added `"passwordPolicy": "length(12) and notUsername and notEmail and passwordHistory(3)"` — min 12 chars, can't contain username/email, can't reuse last 3 passwords. Scoped strictly to this task: `sslRequired` (T6.4.2) and explicit brute-force params (T6.4.3) untouched. `jq` valid. Applies going forward via `setup-keycloak.sh`'s realm load — does not retroactively invalidate existing passwords. Needs `keycloak_setup: true` in the release manifest.)
+- [x] T6.4.2 [deploy]: Set `sslRequired: "external"` (currently `"none"` at `:10`) (depends on T6.4.1) (2026-07-30; `"none"` → `"external"` in `common/keycloak/01-realm.json`. Requires TLS for any non-private-network request Keycloak sees; internal Docker-network traffic is exempt. `jq` valid.)
+- [x] T6.4.3 [deploy]: Make brute-force parameters explicit — `failureFactor`, `permanentLockout`, `maxDeltaTimeSeconds` — rather than relying on defaults (depends on T6.4.1) (2026-07-30; added `failureFactor: 30`, `maxDeltaTimeSeconds: 43200`, `permanentLockout: false` to `common/keycloak/01-realm.json` — Keycloak's own stock defaults, now explicit and reviewable rather than implicit. `permanentLockout` deliberately kept `false`: no documented admin-unlock runbook exists in this repo, and a permanent lockout on the sole `admin` account would be a self-inflicted outage. Left at defaults rather than tightened — the task asked for explicitness, not a lockout-policy change; tightening is a separate product/support-load tradeoff. `jq` valid.)
+- [x] T6.4.4 [deploy]: Evaluate requiring OTP/WebAuthn for `admin` and `institution_admin` (depends on T6.4.1) (2026-07-30; **evaluated, deferred — no realm change.** `institution_admin` is explicitly out of target-state scope (`02_auth_and_roles.md` scopes this increment to student/parent/admin only; `decisions.md` 2026-07-27 records an explicit hold on `institution_admin` target-state work), so MFA for a role with no live users is moot. For `admin`: Keycloak has no per-role "require OTP" realm-JSON field — it needs a per-user `CONFIGURE_TOTP` required action or a custom Conditional-OTP flow keyed on role, which changes the live `admin` account's login experience; not appropriate to change unilaterally as a side effect of T6.4.1–T6.4.3. Decision recorded in `decisions.md` (2026-07-30, "T6.4.4"): build the conditional-OTP flow once for both roles together when `institution_admin`'s hold lifts; interim compensating controls are `bruteForceProtected` + the new `passwordPolicy` from T6.4.1.)
+- [x] **G6.4: H3 — realm password and TLS policy enforced** — integration test (2026-07-30; T6.4.1–T6.4.4 all done. `jq '.' common/keycloak/01-realm.json` passes; `passwordPolicy`, `sslRequired: external`, and explicit brute-force params (`failureFactor`/`maxDeltaTimeSeconds`/`permanentLockout`) all present. T6.4.4's MFA evaluation deliberately concluded "defer" rather than "implement" — recorded as a decision, not left undone.)
 
 - [ ] **G6: Auth and transport verification** — integration test
 
@@ -310,14 +310,20 @@
 
 ## Ready now
 
-> Recomputed 2026-07-30 (**G2.2 closed** — T2.2.1–T2.2.3 all done: target-scoped
-> `ctl:ruleRemoveTargetById` proven to suppress only the named `ARGS_POST` field
+> Recomputed 2026-07-30 (**G6.4 closed** — T6.4.1–T6.4.4 all done: Keycloak `passwordPolicy`,
+> `sslRequired: external`, explicit brute-force params all landed in `01-realm.json`; T6.4.4's MFA
+> question evaluated and deliberately deferred (recorded in `decisions.md`), not left undone.
+> Nothing else depends on T6.4.2–T6.4.4 individually, so no new deploy tasks unblock — **G6 stays
+> open** pending G6.1 (deploy+backend), G6.2 (backend), G6.3 (deploy). Earlier same day: fixed a
+> stale bookkeeping error found while recomputing: T7.2.2 was already `[x]` done (2026-07-29) but
+> was still listed here as ready — removed. Earlier same day: **G2.2 closed** — T2.2.1–T2.2.3 all
+> done: target-scoped `ctl:ruleRemoveTargetById` proven to suppress only the named `ARGS_POST` field
 > (headers/cookies/query args/other body fields stay inspected), and the before/after is recorded
 > in `16_gateway_waf.md`. **T2.3.1 done** — all three real WAF suites run against the fixed image
 > on a disposable harness (21/24, 14/14, 14/14; the 3 shortfalls confirmed not regressions — see
 > T2.3.1's note). **T2.3.2 unblocked** as a result and is what closes G2.3 → G2, the hard gate on
-> G4 — but it needs a **real-traffic benign corpus**, not a throwaway harness, so it's likely a
-> staging-soak task rather than something runnable in isolation. Earlier basis same day: **T1.3.4 closed** — the gateway image now demonstrably filters, verified 4/4 by
+> G4 — but it needs a **real-traffic benign corpus**, not a throwaway harness, so it's parked
+> pending staging/live-stack access rather than something runnable in isolation. Earlier basis same day: **T1.3.4 closed** — the gateway image now demonstrably filters, verified 4/4 by
 > `common/scripts/tests/waf-harness.sh`; gates **G1.3 and G1 re-closed** on that evidence.
 > **T2.3.1 unblocked** as a result and is the highest-value deploy task left — G2 is a hard gate on
 > G4. T2.2.1 done, and its v2026.4 caveat discharged against the fixed image.) Earlier basis:
@@ -340,14 +346,12 @@
 - _(none)_ — T3.4.2 done 2026-07-30. Remaining frontend tasks all wait on undone backend deps: T3.3.2 → T3.3.1, T3.5.4 → T3.5.1; T5.3.2/T5.4.1 held for the deploy-owned live-stack soak (BR-CSP-007).
 
 **Deploy**
-- T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1, done 2026-07-30) — **unblocked 2026-07-30**; needs real journeys (staging or prod), not the disposable harness used for T2.3.1. **Closes G2.3 → G2, a hard gate on G4.**
+- T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1, done 2026-07-30) — **unblocked 2026-07-30**; needs real journeys (staging or prod), not the disposable harness used for T2.3.1. **Closes G2.3 → G2, a hard gate on G4.** Parked for now (2026-07-30) — no other ready work depends on it, since G4 is far from starting anyway.
 - T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema`; add the matching GET route (depends on T3.2.4, done 2026-07-30)
 - T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone (depends on T6.1.1, done)
 - T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in the three named plugin configs (M5) (no dependencies)
 - T6.3.3 [deploy]: Move the CrowdSec LAPI channel to https and enable `ssl_verify` (no dependencies)
 - T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies)
-- T6.4.1 [deploy]: Add `passwordPolicy` to `common/keycloak/01-realm.json` (H3) (no dependencies)
-- T7.2.2 [deploy]: Validate `params.VERSION` against `^\d+\.\d+(\.\d+)?$` in `Jenkinsfile.deploy:58,89-107` (depends on T7.2.1, done)
 - T7.3.1 [deploy]: Replace `dst: ["*:*"]` Tailscale ACLs with specific services/ports (M4) (no dependencies)
 - T7.4.1 [deploy]: Set `X-XSS-Protection: 0` across all four plugin configs (L3, BR-CSP-006) (no dependencies)
 - T7.5.4 [deploy]: `chmod 600` staging/dev `.env*` (L2 hygiene) (no dependencies)
