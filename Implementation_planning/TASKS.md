@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`555c72f` frontend:`343939d` deploy:`3905c8a` (2026-07-30, reconciled after
+> Last baselined: backend:`555c72f` frontend:`343939d` deploy:`69c077c` (2026-07-30, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 
@@ -53,12 +53,12 @@
   > proved the plugin loaded; (2) the real error string does not contain `coraza-filter`
   > (`failed to call function: Exited with i32 exit status 0` / `main!_start`), so grepping the
   > plugin name found nothing. Full root cause and the verified fixes: `gateway-docker/VERSIONS.md`.
-- [ ] T2.2.2 [deploy]: Prove `ctl:ruleRemoveTargetById=<id>;ARGS_POST:/^json\.history\.\d+\.content$/` suppresses the rule for that field **and leaves it active** for headers, cookies, query args and other body fields (depends on T2.2.1)
-- [ ] T2.2.3 [deploy]: Record the before/after in `16_gateway_waf.md`'s status note — the v3.3.3 silent-no-match behaviour is the finding that justifies this whole phase (depends on T2.2.2)
-- [ ] **G2.2: field-scoped exclusion demonstrably fires** — acceptance test
+- [x] T2.2.2 [deploy]: Prove `ctl:ruleRemoveTargetById=<id>;ARGS_POST:/^json\.history\.\d+\.content$/` suppresses the rule for that field **and leaves it active** for headers, cookies, query args and other body fields (depends on T2.2.1) (2026-07-30; proved against the fixed `haisir-gateway:t134-fixed` image (commit `69c077c`) via the isolated `waf-harness.sh`-pattern throwaway stack, with a diagnostic directive set instead of the real plugin config: rule `900002` denies `@rx CANARY` on `ARGS_POST|ARGS_GET|REQUEST_HEADERS:X-Test|REQUEST_COOKIES:test`, and `900003` runs `ctl:ruleRemoveTargetById=900002;ARGS_POST:/^json\.history\.\d+\.content$/` on POST. Five probes, all as expected: (a) `CANARY` in `json.history.2.content` → **200** (suppressed, the target-scoped exclusion regex matches T2.2.1's confirmed `ARGS_POST:json.history.2.content` naming); (b) `CANARY` in an unrelated body field `json.topic` → **403** (still active); (c) query arg `?q=CANARY` → **403**; (d) header `X-Test: CANARY` → **403**; (e) cookie `test=CANARY` → **403**. Confirms `ctl:ruleRemoveTargetById` with a regex `ARGS_POST` collection key narrows only the named field, leaving every other collection and every other body field inspected — the Coraza v3.5.0+ behavior BR-WAF-002 depends on. **Gotcha found and worth flagging for anyone hand-building a `coraza-filter` plugin_config:** omitting `default_directives` from the `conf` JSON silently initializes **no WAF at all** — `plugin.go:114`'s `if name != config.defaultDirectives` check skips every directives-map entry, and the only symptom is a low-severity nginx warn (`Failed to resolve WAF for authority ...: no default WAF`), never a 5xx or a startup failure. All four real `common/plugin_configs/*.json` already set it correctly; this only bit the throwaway harness config, not anything shipped.)
+- [x] T2.2.3 [deploy]: Record the before/after in `16_gateway_waf.md`'s status note — the v3.3.3 silent-no-match behaviour is the finding that justifies this whole phase (depends on T2.2.2) (2026-07-30; added a "Status update (2026-07-30)" block to the top status note plus a "Before/after (2026-07-30, Phase 7 G2.2)" subsection under §1, contrasting the 2026-07-01 v3.3.3 silent-no-match observation against T2.2.2's controlled v3.7.0 proof — both sides of the same directive form, side by side, with links to `VERSIONS.md` and `TASKS.md` for full evidence)
+- [x] **G2.2: field-scoped exclusion demonstrably fires** — acceptance test (2026-07-30; T2.2.1–T2.2.3 all done — T2.2.1 established the real `ARGS_POST:json.history.2.content` variable naming, T2.2.2 proved the regex-scoped `ctl:ruleRemoveTargetById` form suppresses only that field (5/5 probes: excluded field 200, every other collection/field 403), T2.2.3 recorded the before/after in the spec. Acceptance criterion met on T2.2.2's direct evidence.)
 
 ### G2.3 [deploy]: No regression in detection
-- [ ] T2.3.1 [deploy]: Run the existing WAF suites (`common/scripts/tests/02-test-waf.sh`, `15-test-waf-config-validation.sh`, `16-test-waf-advanced.sh`) against the new image (depends on T1.3.3)
+- [x] T2.3.1 [deploy]: Run the existing WAF suites (`common/scripts/tests/02-test-waf.sh`, `15-test-waf-config-validation.sh`, `16-test-waf-advanced.sh`) against the new image (depends on T1.3.3) (2026-07-30; ran all three **real, unmodified** suites against `haisir-gateway:t134-fixed` (commit `69c077c`) on the same disposable `waf-harness.sh`-pattern stack used for T2.2.1/T2.2.2, loaded with the real `common/plugin_configs/02-secured-anonymous.json` coraza-filter config. Unblocked the suites' `ENV=staging|prod` secrets gate by adding an additive `ENV=harness` branch to `common/scripts/tests/config.sh` (no `.env.config.sh` lookup path exists for `harness/`, so nothing is sourced; `shellcheck`-clean). **Results: 02-test-waf.sh 21/24, 15-test-waf-config-validation.sh 14/14, 16-test-waf-advanced.sh 14/14.** All 3 shortfalls in `02-test-waf.sh` investigated and confirmed **not regressions**: FILE-1/FILE-3 (`.php` webshell/double-extension paths) are blocked by the `uri-blocker` APISIX plugin, not Coraza — out of scope for a coraza-filter-only harness; the XXE check was re-run against the pre-upgrade `registry.haisir.in/haisir-gateway:v2026.4` image on the identical harness and returned the identical un-blocked 200 — a pre-existing CRS coverage gap present in both engine versions, not something the upgrade broke. **Do not close this task's evidence as "26/26"** — the true denominator including the two out-of-scope checks is documented here so a future rerun doesn't need to rediscover the uri-blocker gap. Full detail: `gateway-docker/VERSIONS.md` "T2.3.1".)
   > **Unblocked 2026-07-30 — T1.3.4 is fixed and the image now filters.** The image blocker is gone:
   > `bash common/scripts/tests/waf-harness.sh <image>` reports 4/4 against a build from the committed
   > tree, and body-borne attacks (JSON and urlencoded form) are blocked as well as query-string ones.
@@ -310,8 +310,15 @@
 
 ## Ready now
 
-> Recomputed 2026-07-30 (**T1.3.4 closed** — the gateway image now demonstrably filters, verified
-> 4/4 by `common/scripts/tests/waf-harness.sh`; gates **G1.3 and G1 re-closed** on that evidence.
+> Recomputed 2026-07-30 (**G2.2 closed** — T2.2.1–T2.2.3 all done: target-scoped
+> `ctl:ruleRemoveTargetById` proven to suppress only the named `ARGS_POST` field
+> (headers/cookies/query args/other body fields stay inspected), and the before/after is recorded
+> in `16_gateway_waf.md`. **T2.3.1 done** — all three real WAF suites run against the fixed image
+> on a disposable harness (21/24, 14/14, 14/14; the 3 shortfalls confirmed not regressions — see
+> T2.3.1's note). **T2.3.2 unblocked** as a result and is what closes G2.3 → G2, the hard gate on
+> G4 — but it needs a **real-traffic benign corpus**, not a throwaway harness, so it's likely a
+> staging-soak task rather than something runnable in isolation. Earlier basis same day: **T1.3.4 closed** — the gateway image now demonstrably filters, verified 4/4 by
+> `common/scripts/tests/waf-harness.sh`; gates **G1.3 and G1 re-closed** on that evidence.
 > **T2.3.1 unblocked** as a result and is the highest-value deploy task left — G2 is a hard gate on
 > G4. T2.2.1 done, and its v2026.4 caveat discharged against the fixed image.) Earlier basis:
 > T2.1.1/T2.1.2 done, G2.1 closed, T3.2.2–T3.2.4/T3.2.3a and T3.4.1 landed.
@@ -335,7 +342,7 @@
 - _(none)_ — T3.4.2 done 2026-07-30. Remaining frontend tasks all wait on undone backend deps: T3.3.2 → T3.3.1, T3.5.4 → T3.5.1; T5.3.2/T5.4.1 held for the deploy-owned live-stack soak (BR-CSP-007).
 
 **Deploy**
-- T2.3.1 [deploy]: Run the existing WAF suites (`02-test-waf.sh`, `15-test-waf-config-validation.sh`, `16-test-waf-advanced.sh`) against the new image (depends on T1.3.3/T1.3.4, both done) — **unblocked 2026-07-30**, image verified 4/4; remaining wrinkle is that the three suites gate on `ENV=staging|prod` via `tests/config.sh`, so point their payload sets at `waf-harness.sh` or a disposable env. **Blocks G2.3 → G2, a hard gate on G4.**
+- T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1, done 2026-07-30) — **unblocked 2026-07-30**; needs real journeys (staging or prod), not the disposable harness used for T2.3.1. **Closes G2.3 → G2, a hard gate on G4.**
 - T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema`; add the matching GET route (depends on T3.2.4, done 2026-07-30)
 - T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone (depends on T6.1.1, done)
 - T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in the three named plugin configs (M5) (no dependencies)

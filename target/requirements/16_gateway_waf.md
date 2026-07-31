@@ -5,6 +5,13 @@
 > Implementation lives in `haisir-deploy/gateway-docker/` (Dockerfile + vendored `coraza-proxy-wasm/`) and `haisir-deploy/common/plugin_configs/*.json` + `common/routes/*.json` (the `coraza-filter` directive maps).
 >
 > **Status note (2026-07-27):** the shipped build pins `coraza-proxy-wasm 0.6.0` → **Coraza v3.3.3** + **OWASP CRS v4.14.0**. Both are materially out of date: CRS 4.14.0 is affected by **CVE-2026-21876** (CVSS 9.3), and Coraza v3.3.3 predates the v3.5.0 feature that makes precise exclusions possible at all. The resulting tuning treadmill is documented under "Problem" below. This spec defines the target state; Phase 7 implements it.
+>
+> **Status update (2026-07-30):** Phase 7 G2.2 closed — the "v3.3.3 silently matches nothing"
+> finding that justifies this whole phase is no longer just a 2026-07-01 field observation. T2.2.1
+> and T2.2.2 empirically proved both halves on the upgraded image (Coraza v3.7.0 / CRS 4.25.1,
+> `haisir-gateway:t134-fixed`, commit `69c077c`): the JSON body processor's real `ARGS_POST`
+> variable naming, and that the regex-scoped `ctl:ruleRemoveTargetById` form actually narrows to the
+> named field. See "Before/after" under §1 below.
 
 ---
 
@@ -23,6 +30,23 @@ ctl:ruleRemoveTargetById=942200;ARGS_POST:/^json\.history\.\d+\.content$/
 is parsed as a request to exclude a variable *literally named* `/^json\.history\.\d+\.content$/`. No such variable exists, so it matches nothing — **silently, with no error and no log line**. This was observed and re-tested on 2026-07-01 and recorded in `03-secured-api.json` as "request-scoped `ctl:ruleRemoveTargetById` is confirmed unreliable in this Coraza WASM build". The observation was correct; the attributed cause was not. It is a version gap, not an engine defect.
 
 The collection name was never the problem. Coraza's JSON body processor writes to **`ArgsPost`**, keyed with a `json.` prefix, dot-separated nesting and numeric array indices — so `history[2].content` becomes `json.history.2.content`, and `ARGS_POST` is the correct collection.
+
+#### Before/after (2026-07-30, Phase 7 G2.2)
+
+The paragraph above was a 2026-07-01 field observation on the shipped v3.3.3 build. Phase 7 G2.2
+(T2.2.1, T2.2.2) turned it into a controlled before/after proof:
+
+| | Engine | Directive | Result |
+|---|---|---|---|
+| **Before** | Coraza v3.3.3 (shipped, pre-Phase-7) | `ctl:ruleRemoveTargetById=<id>;ARGS_POST:/^json\.history\.\d+\.content$/` | Parsed as a literal variable name — no such variable exists, so it silently matches nothing. No error, no log line. (2026-07-01 observation, `03-secured-api.json`'s pre-existing comment.) |
+| **After** | Coraza v3.7.0 (Phase 7, `haisir-gateway:t134-fixed`, commit `69c077c`) | identical directive form, tested via a diagnostic rule (`ctl:ruleRemoveTargetById=900002;ARGS_POST:/^json\.history\.\d+\.content$/`) | Suppresses the rule **only** for `ARGS_POST:json.history.2.content` (200, was 403); an unrelated body field `json.topic` (403), a query arg (403), a header (403) and a cookie (403) all stayed blocked. |
+
+T2.2.1 independently confirmed the collection naming this depends on: Coraza's JSON body processor
+populates `ARGS_POST:json.history.2.content` for `history[2].content` — `json.`-prefixed,
+dot-nested, 0-based numeric index — identically on both the v3.3.3 and v3.7.0 builds, so the naming
+was never in question, only the engine's ability to match a regex collection key. Full evidence and
+reproduction steps: `haisir-deploy/gateway-docker/VERSIONS.md` ("T2.2.1/T2.3.1" and "T2.2.2"
+sections) and `Implementation_planning/TASKS.md` (T2.2.1, T2.2.2).
 
 ### 2. The workaround disabled protection wholesale
 
