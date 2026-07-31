@@ -266,8 +266,8 @@
 
 ### G7.3 [deploy]: Tailscale least privilege
 - [x] T7.3.1 [deploy]: Replace `dst: ["*:*"]` for `tag:dev1`/`tag:in-dev1`/`tag:in-dev2` in `other/services/tailscale/tailscale.json:28-35` with the specific services and ports actually needed (M4) (2026-07-31; replaced the wildcard rule with per-tag scoped `dst`: `tag:staging:22,81,443,3080,9180` (NPM admin UI + proxied internal UIs, Dockhand, APISIX admin — 9180 added at user's explicit request), `tag:ci:22,81,443,3080` (NPM + Dockhand), `tag:prod:22,3080,9180` (Dockhand, APISIX admin — prod has no NPM, uses Cloudflare Tunnel instead), `tag:compute:22,53,443,11434,8081` (mirrors the existing staging/prod→compute grant). Traced against real service bindings, not guessed: NPM (`other/services/npm`) and Dockhand (`other/services/dockhand`) both bind `${TAILSCALE_IP}:<port>` directly; APISIX/Keycloak/Postgres/OpenBao admin ports stay off this list — they bind `127.0.0.1` only in `docker-compose.yml`/`docker-compose.openbao.yml`, unreachable over Tailscale regardless of ACL, by design (SSH tunnel is the intended path), except APISIX admin's `9180` which the user asked to add explicitly (implies a `APISIX_ADMIN_PORT_BINDING` override to the Tailscale interface when needed). **`22` is required even though this src/dst pair is also covered by the `ssh` ACL block below** — Tailscale's `ssh` section only grants permission to use the SSH feature, it does not itself open the underlying network path; that's still governed by `acls`, so the first version of this change (without `22`) locked the user out of `ssh staging`/`ssh prod` until `22` was added back and the policy re-applied in the Tailscale Admin Console — confirmed live: SSH restored, other scoped ports also confirmed working. `jq` valid. **Repo-only change — must be pasted into the Tailscale Admin Console per the README's "Apply ACLs" step to take effect; not part of any automated deploy flow.** (Applied and verified live 2026-07-31.))
-- [ ] T7.3.2 [deploy]: Gate prod SSH behind a separate rarely-held tag; consider Tailscale SSH check mode and session recording (`:72-84`) (depends on T7.3.1)
-- [ ] **G7.3: M4 — a compromised dev laptop cannot reach prod** — acceptance test
+- [x] T7.3.2 [deploy]: Gate prod SSH behind a separate rarely-held tag; consider Tailscale SSH check mode and session recording (`:72-84`) (depends on T7.3.1) (2026-07-31; **final shipped design:** new tag `tag:prod-ssh` in `tagOwners` (`autogroup:admin`-only); `ssh` block: `tag:dev1` → `staging`/`ci`/`compute` only (no prod); separate rule `src: ["tag:prod-ssh"]` → `dst: ["tag:prod"]`, `"action": "accept"`. `acls` (network layer) split so only `tag:dev1` reaches `tag:prod` at all — `tag:in-dev1`/`tag:in-dev2` have zero network path to prod (SSH or otherwise), a deliberate widening beyond the ticket's literal ask per the user's explicit instruction ("only dev1 should be allowed the ssh access, remove ssh access for in-dev1 and in-dev2", "cut off entirely" over keeping non-SSH `3080`/`9180`). Operator step: the trusted admin machine advertises **both** `tag:dev1,tag:prod-ssh` — the rare tag is additive, not a replacement. `tag:ci`→`staging`/`prod` (automated Jenkins path, T7.2.3) untouched. **Session recording evaluated, deliberately deferred** — needs a `tsrecorder` node, infra this repo doesn't run; documented in the README as a parked decision (T6.3.4/T7.7.2 pattern). `jq` valid. **Two wrong turns on the way here, both corrected same day before/via live testing — worth keeping so the next person doesn't repeat them:** (1) first design gated the `ssh` rule on `tag:prod-ssh` using `"action": "check"` — rejected by the Admin Console outright (`"[ssh] \"check\" action does not support tags in src"`); check mode challenges a *person*, so it structurally cannot key on a device tag. (2) switched to `src: ["autogroup:admin"]` to satisfy check mode's user-identity requirement — this *validated* and even looked more secure on paper, but a live `ssh prod` attempt failed with `"tailnet policy does not permit you to SSH to this node"`. Root cause: once a device advertises **any** tag, Tailscale attributes all its traffic to that tag for policy evaluation and strips the logged-in user's identity from consideration entirely — so `autogroup:admin` can never match a connection from a tagged device like this one (`tag:dev1`), no matter who's logged in. This also meant, before it was caught, that the `autogroup:admin` design had briefly reopened prod to `tag:in-dev1`/`tag:in-dev2` via the still-bundled `acls` rule from T7.3.1, which is what prompted the `acls` split above. **Conclusion: check mode is fundamentally incompatible with any node that carries other tags, which every real dev/prod-ssh machine here does — dropped in favor of a plain tag-gated `accept` rule**, which is what the "separate rarely-held tag" half of this task's ask already called for.)
+- [x] **G7.3: M4 — a compromised dev laptop cannot reach prod** — acceptance test (2026-07-31; T7.3.1 (network `acls` narrowed off `*:*`, later re-split per T7.3.2's fixes so only `tag:dev1`/`tag:prod-ssh` reach prod) and T7.3.2 (prod SSH gated behind the separate `tag:prod-ssh` tag, held only by the trusted admin machine alongside `tag:dev1`; `tag:in-dev1`/`tag:in-dev2` have zero network path to `tag:prod`) both done. `jq '.' other/services/tailscale/tailscale.json` passes. A real `ssh prod` attempt against the interim `autogroup:admin`/`check` design failed live (`"tailnet policy does not permit..."`), which is what surfaced the tagged-node incompatibility documented in T7.3.2's note. **Final `tag:prod-ssh` + `accept` design live-confirmed working 2026-07-31** — after re-advertising `--advertise-tags=tag:dev1,tag:prod-ssh` (which forced a fresh Tailscale login, expected on a tag-set change) and re-authenticating, `ssh prod` succeeded from the trusted admin machine. G7.3 acceptance criterion fully met end-to-end, not just on `jq`/policy-syntax validation.)
 
 ### G7.4 [deploy]: Header cleanup
 - [x] T7.4.1 [deploy]: Set `X-XSS-Protection: 0` across all four plugin configs (L3, BR-CSP-006) (2026-07-31; `"1; mode=block"` → `"0"` in all four `response-rewrite` blocks. `jq` valid.)
@@ -319,9 +319,13 @@
 
 ## Ready now
 
-> **Recomputed 2026-07-31** — T7.3.1 and T7.5.4 done (see task notes above). **T7.3.2 newly
-> unblocked** (depends on T7.3.1, now done) — added to Deploy below. G7.3 and G7.5 both stay open —
-> each still has other unchecked children (T7.3.2 itself; T7.5.1–T7.5.3 respectively).
+> **Recomputed 2026-07-31 (later)** — T7.3.2 done, closing **G7.3** (both children T7.3.1/T7.3.2
+> done, acceptance test passed on `jq` validation — see task note; live re-verification still
+> pending the Admin Console paste step). Removed from Deploy below. Nothing depends on T7.3.2, so
+> no further tasks unblock. **G7 stays open** — G7.1, G7.4, G7.5, G7.6, G7.7 all still have
+> unchecked children/gates.
+> **Recomputed 2026-07-31** — T7.3.1 and T7.5.4 done (see task notes above). G7.5 stays open — it
+> still has other unchecked children (T7.5.1–T7.5.3).
 > Recomputed 2026-07-30 (**G6.4 closed** — T6.4.1–T6.4.4 all done: Keycloak `passwordPolicy`,
 > `sslRequired: external`, explicit brute-force params all landed in `01-realm.json`; T6.4.4's MFA
 > question evaluated and deliberately deferred (recorded in `decisions.md`), not left undone.
@@ -359,16 +363,14 @@
 > held for the deploy-owned live-stack soak (BR-CSP-007).
 
 **Deploy**
-> 2026-07-31: T3.2.6, T6.1.2, T6.3.1, T6.3.2, T6.3.3, T7.3.1, T7.4.1, T7.5.4, T7.6.2, T7.7.1, T7.7.3,
-> T7.7.4, T7.7.5 all done (see task notes above). **T7.3.2 newly unblocked** (depends on T7.3.1, now
-> done) — not yet attempted. T6.3.4 and T7.7.2 were in the same batch but deliberately skipped: both
-> need a scope/product decision from the user rather than a mechanical fix (T6.3.4: Postgres has no
-> TLS at all, fixing it properly means standing up server-side TLS, bigger than the task as scoped;
-> T7.7.2: an explicit "decide whether X is warranted" call). Both remain listed below pending that
-> decision.
+> 2026-07-31: T3.2.6, T6.1.2, T6.3.1, T6.3.2, T6.3.3, T7.3.1, T7.3.2, T7.4.1, T7.5.4, T7.6.2, T7.7.1,
+> T7.7.3, T7.7.4, T7.7.5 all done (see task notes above). **G7.3 now closed** (T7.3.2 was its last
+> open child). T6.3.4 and T7.7.2 were in the same batch but deliberately skipped: both need a
+> scope/product decision from the user rather than a mechanical fix (T6.3.4: Postgres has no TLS at
+> all, fixing it properly means standing up server-side TLS, bigger than the task as scoped; T7.7.2:
+> an explicit "decide whether X is warranted" call). Both remain listed below pending that decision.
 - T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1, done 2026-07-30) — **unblocked 2026-07-30**; needs real journeys (staging or prod), not the disposable harness used for T2.3.1. **Closes G2.3 → G2, a hard gate on G4.** Parked for now (2026-07-30) — no other ready work depends on it, since G4 is far from starting anyway.
 - T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies) — **blocked pending a scope decision**, see banner above.
-- T7.3.2 [deploy]: Gate prod SSH behind a separate rarely-held tag; consider Tailscale SSH check mode and session recording (`:72-84`) (depends on T7.3.1, done 2026-07-31)
 - T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` is warranted (no dependencies) — **blocked pending a product decision**, see banner above.
 
 **Specs**
