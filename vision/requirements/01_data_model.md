@@ -122,20 +122,20 @@ class Topic(BaseModel):
 
 **`topic_contents`** — content items attached to a topic. Types: PDF (file stored on disk), video (URL), text notes.
 
-> Image storage (Phase 7 G3.5, superseding the base64-at-API-layer pattern below): question images
+> Image storage (Phase 7 G3.5, superseded the base64-at-API-layer pattern below): question images
 > are stored at `data_dir/images/questions/` on disk. `POST /api/exams/images` (backend,
 > `src/api/routes/exam.py`) accepts a multipart upload, MIME-sniffs it, and returns
 > `{"url": "/images/questions/<safe_name>"}` — that string is stored verbatim in `image_url` /
-> `option.image_url` and existing base64 values were migrated to this format (T3.5.3). The frontend
-> must render `<img src={image_url}>` as-is (no `BACKEND_URL` prefixing) and must serve that exact
-> path same-origin so `img-src 'self'` in the CSP covers it — a Next.js route under
-> `src/app/images/questions/[...path]/route.ts` proxying to the backend's identical path, not a
-> different path prefix. **Known open gap (2026-07-31):** the frontend currently has a proxy route
-> at `exam-images/[...path]` instead — the wrong prefix, unreachable by any real `image_url` — and
-> the backend has no route or `StaticFiles` mount serving `images/questions/*` at all, so uploaded
-> images do not actually render yet. See `TASKS.md` T3.5.5 for the reopened task. Original pattern,
-> now superseded: images were base64-encoded at the API layer on every read; do not reintroduce
-> that for new question types.
+> `option.image_url` (existing base64 values were migrated to this format, T3.5.3) and rendered
+> as-is (`<img src={image_url}>`, no `BACKEND_URL` prefixing). Serving contract: backend
+> `GET /images/questions/{filename}` (`src/api/routes/images.py`, mounted at `prefix="/images"`)
+> requires an authenticated user, allowlists `png`/`jpg`/`webp` filenames, rejects path traversal
+> with 400, 404s a missing file. Frontend proxies the identical path same-origin —
+> `src/app/images/questions/[...path]/route.ts` forwards to `${BACKEND_URL}/images/questions/*`
+> with the request cookie — so it's covered by `img-src 'self'` in the CSP with no directive
+> change. Both sides verified directly against source 2026-07-31. Original pattern, now
+> superseded: images were base64-encoded at the API layer on every read; do not reintroduce that
+> for new question types.
 
 ### 2.2 Question Bank
 
