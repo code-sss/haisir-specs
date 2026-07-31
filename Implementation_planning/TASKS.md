@@ -13,6 +13,12 @@
 > T6.1.4 (backend) and T3.5.5 (frontend+backend) done, closing **G6.1**. T3.5.5 was briefly
 > reopened same day after `a72ddcf` shipped a broken half-fix (see its task note) — now fixed
 > properly on both sides and re-verified directly against both repos' source.
+> **2026-07-31 (latest): T7.5.3 done, closing G7.5 — deploy baseline NOT bumped.** New
+> `common/scripts/tests/dev-isolation-check.sh` + the `Jenkinsfile` "Dev Isolation Check" stage are
+> implemented and verified locally (shellcheck clean, script PASS) but are **uncommitted** in the
+> `haisir-deploy` working tree as of this entry — current HEAD (`b523d3c`) predates this change, so
+> bumping `deploy:` to it would misrepresent what's captured. Re-bump the deploy baseline once these
+> two files are committed.
 
 ## G1 [deploy]: Gateway build modernised and self-maintained
 
@@ -277,9 +283,9 @@
 ### G7.5 [deploy, specs]: Documented acceptances
 - [x] T7.5.1 [specs]: Record L5 (`referer-restriction bypass_missing: true`, 7 files) as a deliberate spam filter, not a security boundary — no code change (2026-07-31; re-verified the 7 files still carry `bypass_missing: true` — `01-secured-authenticated.json`, `02-secured-anonymous.json`, `03-secured-api.json`, `04-secured-api-upload.json`, `01-keycloak-realms.json`, `13-keycloak-admin.json`, `14-keycloak-master-realm.json` — before recording it. Updated `security/SECURITY_REVIEW_2026-07-02.md`'s L5 section and summary-table row to state this as the accepted-risk record, no fix intended: the real boundary on every sensitive route is CSRF + OIDC + IP allowlists, not `referer-restriction`. No `haisir-deploy` change.)
 - [x] T7.5.2 [specs]: Reframe M6 and L4 as dev-isolation assertions rather than findings — prod is correctly hardened (etcd client-cert auth, no published ports, Keycloak `start` + `KC_HOSTNAME_STRICT=true`, no pgAdmin); the risk is regression, not current state (2026-07-31; re-verified directly against current `common/docker-compose.yml`/`dev/docker-compose.yml` — line numbers had drifted since the 2026-07-27 review from Phase 7's own OpenBao-agent additions, re-checked rather than copied forward: `ETCD_CLIENT_CERT_AUTH=true`/`read_only`/no published port (prod etcd) vs. unpublished `ALLOW_NONE_AUTHENTICATION=yes` (dev etcd); `command: [start]`/`KC_HOSTNAME_STRICT=true`/`KC_HTTP_ENABLED=false` (prod Keycloak) vs. `start-dev`/`KC_HOSTNAME_STRICT=false` (dev); zero pgAdmin references in the prod compose file. Updated `security/SECURITY_REVIEW_2026-07-02.md`'s M6/L4 sections and summary-table rows. The residual regression-guard work (CI assertion these patterns never leak outside `dev/`) is T7.5.3, not this task.)
-- [ ] T7.5.3 [deploy]: Add a CI assertion that the dev-only patterns (`ALLOW_NONE_AUTHENTICATION`, `start-dev`, published DB/admin ports, `KEYCLOAK_ADMIN_ALLOWED_CIDR=0.0.0.0/0`) never appear outside `dev/` (depends on T7.5.2)
+- [x] T7.5.3 [deploy]: Add a CI assertion that the dev-only patterns (`ALLOW_NONE_AUTHENTICATION`, `start-dev`, published DB/admin ports, `KEYCLOAK_ADMIN_ALLOWED_CIDR=0.0.0.0/0`) never appear outside `dev/` (depends on T7.5.2) (2026-07-31; new `common/scripts/tests/dev-isolation-check.sh` — follows the existing `plaintext-residue-scan.sh` convention (violations array, `grep -q` pattern checks only, never prints env-file values). Checks all `docker-compose*.yml` outside `dev/`/`archived/` for `ALLOW_NONE_AUTHENTICATION`, `start-dev`, and bare (no host-IP) publishes of the known DB/admin ports (5432/5050/8080/8443/9080/9180/2379/2380); checks `common/.env.config.common.sh`/`staging/.env.config.sh`/`prod/.env.config.sh` for `KEYCLOAK_ADMIN_ALLOWED_CIDR` widened to `0.0.0.0/0`. Wired into `Jenkinsfile` as a new parallel `Dev Isolation Check` stage — none of the sibling scan scripts (`plaintext-residue-scan.sh` etc.) were actually pipeline-wired before this, so this is a real CI assertion, not just a runnable script. Verified: `shellcheck` clean, script exits 0/PASS against the current tree, Jenkinsfile brace/paren-balanced.)
 - [x] T7.5.4 [deploy]: `chmod 600` staging/dev `.env*` for consistency (L2) — they hold no secrets since Phase 5.6, so this is hygiene (2026-07-31; `dev/.env`, `dev/.env.config.sh`, `dev/.env_info` chmod'd 600 — dev runs locally straight out of this checkout, so these are the live files. staging/prod `.env*` are never synced from this repo (`common/scripts/deploy-lib.sh:207-215` — they live only on the remote, hand-maintained via SSH) so the local `staging/.env`/`staging/.env.config.sh` copies chmod'd here are cosmetic consistency only; the real staging + prod host files were already fixed by the user directly via SSH before this task ran. `prod/.env`/`prod/.env.config.sh` local copies were already 600.)
-- [ ] **G7.5: accepted risks are documented and regression-guarded** — acceptance test
+- [x] **G7.5: accepted risks are documented and regression-guarded** — acceptance test (2026-07-31; T7.5.1–T7.5.4 all done — L5 and M6/L4 documented as accepted risk in `security/SECURITY_REVIEW_2026-07-02.md`, the dev-isolation boundary is now mechanically regression-guarded by a real Jenkins CI stage rather than left as a one-time review finding, and `.env*` perms are consistent. Verified by running the new check script directly (PASS, 0 violations) rather than trusting the Jenkins stage sight-unseen.)
 
 ### G7.6 [deploy]: Phase 5.6 parked gaps
 - [x] T7.6.1 [deploy]: Fix `common/scripts/setup.sh`'s `APISIX_ADMIN_KEY` pre-check failing under `set -u` on standalone invocation — landed as a side effect of Phase 6.5's deploy work (the required-var check moved to after the OpenBao render hook runs); confirmed on reconciliation, 2026-07-29
@@ -319,6 +325,9 @@
 
 ## Ready now
 
+> **Recomputed 2026-07-31 (newest)** — T7.5.3 done, closing **G7.5** (T7.5.1–T7.5.4 all done).
+> Removed from Deploy below. Nothing depends on T7.5.3, so no further tasks unblock. **G7 stays
+> open** — G7.1, G7.4, G7.6, G7.7 all still have unchecked children/gates.
 > **Recomputed 2026-07-31 (latest)** — T7.5.1/T7.5.2 done (see task notes above). **T7.5.3 newly
 > unblocked** (depends on T7.5.2, now done) — remains in Deploy below, ready to start. G7.5 stays
 > open pending T7.5.3.
@@ -375,7 +384,6 @@
 - T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1, done 2026-07-30) — **unblocked 2026-07-30**; needs real journeys (staging or prod), not the disposable harness used for T2.3.1. **Closes G2.3 → G2, a hard gate on G4.** Parked for now (2026-07-30) — no other ready work depends on it, since G4 is far from starting anyway.
 - T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies) — **blocked pending a scope decision**, see banner above.
 - T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` is warranted (no dependencies) — **blocked pending a product decision**, see banner above.
-- T7.5.3 [deploy]: Add a CI assertion that the dev-only patterns never appear outside `dev/` (depends on T7.5.2, done 2026-07-31) — **newly unblocked**; closes G7.5's last child.
 
 **Specs**
 - _(none)_ — T7.5.1/T7.5.2 done 2026-07-31 (see task notes above).
