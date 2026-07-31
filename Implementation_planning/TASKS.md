@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`5068a14` frontend:`a72ddcf` deploy:`d55f05a` (2026-07-30, reconciled after
+> Last baselined: backend:`5068a14` frontend:`a72ddcf` deploy:`8e07d47` (2026-07-30, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 > **2026-07-31: deploy baseline bumped to `d55f05a`** — T3.2.6/T6.1.2/T6.3.1/T6.3.2/T6.3.3/T7.4.1/
@@ -261,7 +261,7 @@
 - [x] **G7.2: M3 — build params cannot inject shell** — integration test (2026-07-29; verified `VERSION`/`TAG` regex gates in both Jenkinsfiles plus `withEnv`-only shell interpolation, and `matrix-auth` plugin + documented Access Control restriction in `other/services/jenkins/README.md`)
 
 ### G7.3 [deploy]: Tailscale least privilege
-- [ ] T7.3.1 [deploy]: Replace `dst: ["*:*"]` for `tag:dev1`/`tag:in-dev1`/`tag:in-dev2` in `other/services/tailscale/tailscale.json:28-35` with the specific services and ports actually needed (M4)
+- [x] T7.3.1 [deploy]: Replace `dst: ["*:*"]` for `tag:dev1`/`tag:in-dev1`/`tag:in-dev2` in `other/services/tailscale/tailscale.json:28-35` with the specific services and ports actually needed (M4) (2026-07-31; replaced the wildcard rule with per-tag scoped `dst`: `tag:staging:22,81,443,3080,9180` (NPM admin UI + proxied internal UIs, Dockhand, APISIX admin — 9180 added at user's explicit request), `tag:ci:22,81,443,3080` (NPM + Dockhand), `tag:prod:22,3080,9180` (Dockhand, APISIX admin — prod has no NPM, uses Cloudflare Tunnel instead), `tag:compute:22,53,443,11434,8081` (mirrors the existing staging/prod→compute grant). Traced against real service bindings, not guessed: NPM (`other/services/npm`) and Dockhand (`other/services/dockhand`) both bind `${TAILSCALE_IP}:<port>` directly; APISIX/Keycloak/Postgres/OpenBao admin ports stay off this list — they bind `127.0.0.1` only in `docker-compose.yml`/`docker-compose.openbao.yml`, unreachable over Tailscale regardless of ACL, by design (SSH tunnel is the intended path), except APISIX admin's `9180` which the user asked to add explicitly (implies a `APISIX_ADMIN_PORT_BINDING` override to the Tailscale interface when needed). **`22` is required even though this src/dst pair is also covered by the `ssh` ACL block below** — Tailscale's `ssh` section only grants permission to use the SSH feature, it does not itself open the underlying network path; that's still governed by `acls`, so the first version of this change (without `22`) locked the user out of `ssh staging`/`ssh prod` until `22` was added back and the policy re-applied in the Tailscale Admin Console — confirmed live: SSH restored, other scoped ports also confirmed working. `jq` valid. **Repo-only change — must be pasted into the Tailscale Admin Console per the README's "Apply ACLs" step to take effect; not part of any automated deploy flow.** (Applied and verified live 2026-07-31.))
 - [ ] T7.3.2 [deploy]: Gate prod SSH behind a separate rarely-held tag; consider Tailscale SSH check mode and session recording (`:72-84`) (depends on T7.3.1)
 - [ ] **G7.3: M4 — a compromised dev laptop cannot reach prod** — acceptance test
 
@@ -274,7 +274,7 @@
 - [ ] T7.5.1 [specs]: Record L5 (`referer-restriction bypass_missing: true`, 7 files) as a deliberate spam filter, not a security boundary — no code change
 - [ ] T7.5.2 [specs]: Reframe M6 and L4 as dev-isolation assertions rather than findings — prod is correctly hardened (etcd client-cert auth, no published ports, Keycloak `start` + `KC_HOSTNAME_STRICT=true`, no pgAdmin); the risk is regression, not current state
 - [ ] T7.5.3 [deploy]: Add a CI assertion that the dev-only patterns (`ALLOW_NONE_AUTHENTICATION`, `start-dev`, published DB/admin ports, `KEYCLOAK_ADMIN_ALLOWED_CIDR=0.0.0.0/0`) never appear outside `dev/` (depends on T7.5.2)
-- [ ] T7.5.4 [deploy]: `chmod 600` staging/dev `.env*` for consistency (L2) — they hold no secrets since Phase 5.6, so this is hygiene
+- [x] T7.5.4 [deploy]: `chmod 600` staging/dev `.env*` for consistency (L2) — they hold no secrets since Phase 5.6, so this is hygiene (2026-07-31; `dev/.env`, `dev/.env.config.sh`, `dev/.env_info` chmod'd 600 — dev runs locally straight out of this checkout, so these are the live files. staging/prod `.env*` are never synced from this repo (`common/scripts/deploy-lib.sh:207-215` — they live only on the remote, hand-maintained via SSH) so the local `staging/.env`/`staging/.env.config.sh` copies chmod'd here are cosmetic consistency only; the real staging + prod host files were already fixed by the user directly via SSH before this task ran. `prod/.env`/`prod/.env.config.sh` local copies were already 600.)
 - [ ] **G7.5: accepted risks are documented and regression-guarded** — acceptance test
 
 ### G7.6 [deploy]: Phase 5.6 parked gaps
@@ -315,6 +315,9 @@
 
 ## Ready now
 
+> **Recomputed 2026-07-31** — T7.3.1 and T7.5.4 done (see task notes above). **T7.3.2 newly
+> unblocked** (depends on T7.3.1, now done) — added to Deploy below. G7.3 and G7.5 both stay open —
+> each still has other unchecked children (T7.3.2 itself; T7.5.1–T7.5.3 respectively).
 > Recomputed 2026-07-30 (**G6.4 closed** — T6.4.1–T6.4.4 all done: Keycloak `passwordPolicy`,
 > `sslRequired: external`, explicit brute-force params all landed in `01-realm.json`; T6.4.4's MFA
 > question evaluated and deliberately deferred (recorded in `decisions.md`), not left undone.
@@ -355,16 +358,16 @@
   blocking G3.5, fully unblocked (dep T3.5.4 done), just implemented wrong.
 
 **Deploy**
-> 2026-07-31: T3.2.6, T6.1.2, T6.3.1, T6.3.3, T7.4.1, T7.6.2, T7.7.1, T7.7.3, T7.7.4, T7.7.5 all done
-> (see task notes above). **T6.3.2 newly unblocked** (depends on T6.3.1, now done) — not yet
-> attempted. T6.3.4 and T7.7.2 were in the same batch but deliberately skipped: both need a scope/
-> product decision from the user rather than a mechanical fix (T6.3.4: Postgres has no TLS at all,
-> fixing it properly means standing up server-side TLS, bigger than the task as scoped; T7.7.2: an
-> explicit "decide whether X is warranted" call). Both remain listed below pending that decision.
+> 2026-07-31: T3.2.6, T6.1.2, T6.3.1, T6.3.2, T6.3.3, T7.3.1, T7.4.1, T7.5.4, T7.6.2, T7.7.1, T7.7.3,
+> T7.7.4, T7.7.5 all done (see task notes above). **T7.3.2 newly unblocked** (depends on T7.3.1, now
+> done) — not yet attempted. T6.3.4 and T7.7.2 were in the same batch but deliberately skipped: both
+> need a scope/product decision from the user rather than a mechanical fix (T6.3.4: Postgres has no
+> TLS at all, fixing it properly means standing up server-side TLS, bigger than the task as scoped;
+> T7.7.2: an explicit "decide whether X is warranted" call). Both remain listed below pending that
+> decision.
 - T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1, done 2026-07-30) — **unblocked 2026-07-30**; needs real journeys (staging or prod), not the disposable harness used for T2.3.1. **Closes G2.3 → G2, a hard gate on G4.** Parked for now (2026-07-30) — no other ready work depends on it, since G4 is far from starting anyway.
 - T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies) — **blocked pending a scope decision**, see banner above.
-- T7.3.1 [deploy]: Replace `dst: ["*:*"]` Tailscale ACLs with specific services/ports (M4) (no dependencies)
-- T7.5.4 [deploy]: `chmod 600` staging/dev `.env*` (L2 hygiene) (no dependencies)
+- T7.3.2 [deploy]: Gate prod SSH behind a separate rarely-held tag; consider Tailscale SSH check mode and session recording (`:72-84`) (depends on T7.3.1, done 2026-07-31)
 - T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` is warranted (no dependencies) — **blocked pending a product decision**, see banner above.
 
 **Specs**
