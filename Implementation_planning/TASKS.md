@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`5068a14` frontend:`3eef131` deploy:`69c077c` (2026-07-30, reconciled after
+> Last baselined: backend:`5068a14` frontend:`a72ddcf` deploy:`69c077c` (2026-07-30, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 
@@ -113,8 +113,8 @@
 - [x] T3.5.1 [backend]: Add an image upload endpoint returning `{url}`, reusing the existing multipart path and `sniff_mime` magic-byte validation (2026-07-30)
 - [x] T3.5.2 [backend]: Stop calling `encode_image_to_base64` on read in `exam.py:129,148` and `exam_session.py:360,678-679`; return the stored relative path (depends on T3.5.1) (2026-07-31)
 - [x] T3.5.3 [backend]: Migrate existing base64 `image_url` values in `questions` to stored files + paths (depends on T3.5.2) (2026-07-31)
-- [ ] T3.5.4 [frontend]: `question-editor.tsx:115,153` — upload before submitting the template instead of `readAsDataURL` (depends on T3.5.1 [backend])
-- [ ] T3.5.5 [frontend]: Serve images via a static/asset route; verify `img-src` in the CSP still covers them (depends on T3.5.4)
+- [x] T3.5.4 [frontend]: `question-editor.tsx:115,153` — upload before submitting the template instead of `readAsDataURL` (depends on T3.5.1 [backend]) (2026-07-31)
+- [x] T3.5.5 [frontend]: Serve images via a static/asset route; verify `img-src` in the CSP still covers them (depends on T3.5.4) (2026-07-31)
 - [ ] **G3.5: exam images round-trip by URL** — end-to-end test
 
 ### G3.6 [backend]: Declared field limits
@@ -341,8 +341,7 @@
 - T6.2.3 [backend]: Regression test — a token minted for a different realm client is rejected with 401 (depends on T6.2.2, done 2026-07-31) — note: `test_invalid_audience_raises_401` added under T6.2.2 already exercises the wrong-audience→401 path, so this may already be satisfied; confirm before doing it separately
 
 **Frontend**
-- T3.5.5 [frontend]: Serve images via a static/asset route; verify `img-src` in the CSP still covers them (depends on T3.5.4, done 2026-07-31)
-> T3.3.2 done 2026-07-30; T3.5.4 done 2026-07-31 (uncommitted — bump baseline after commit). T5.3.2/T5.4.1 remain held for the deploy-owned live-stack soak (BR-CSP-007).
+> T3.3.2 done 2026-07-30; T3.5.4 and T3.5.5 done 2026-07-31 (committed — baseline updated to `a72ddcf`). T5.3.2/T5.4.1 remain held for the deploy-owned live-stack soak (BR-CSP-007).
 
 **Deploy**
 - T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1, done 2026-07-30) — **unblocked 2026-07-30**; needs real journeys (staging or prod), not the disposable harness used for T2.3.1. **Closes G2.3 → G2, a hard gate on G4.** Parked for now (2026-07-30) — no other ready work depends on it, since G4 is far from starting anyway.
