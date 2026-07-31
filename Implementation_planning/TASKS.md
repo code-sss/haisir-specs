@@ -112,7 +112,7 @@
 ### G3.5 [backend, frontend]: Exam images by reference
 - [x] T3.5.1 [backend]: Add an image upload endpoint returning `{url}`, reusing the existing multipart path and `sniff_mime` magic-byte validation (2026-07-30)
 - [x] T3.5.2 [backend]: Stop calling `encode_image_to_base64` on read in `exam.py:129,148` and `exam_session.py:360,678-679`; return the stored relative path (depends on T3.5.1) (2026-07-31)
-- [ ] T3.5.3 [backend]: Migrate existing base64 `image_url` values in `questions` to stored files + paths (depends on T3.5.2)
+- [x] T3.5.3 [backend]: Migrate existing base64 `image_url` values in `questions` to stored files + paths (depends on T3.5.2) (2026-07-31)
 - [ ] T3.5.4 [frontend]: `question-editor.tsx:115,153` — upload before submitting the template instead of `readAsDataURL` (depends on T3.5.1 [backend])
 - [ ] T3.5.5 [frontend]: Serve images via a static/asset route; verify `img-src` in the CSP still covers them (depends on T3.5.4)
 - [ ] **G3.5: exam images round-trip by URL** — end-to-end test
@@ -221,7 +221,7 @@
 ### G6.2 [backend]: JWT audience validation
 - [x] T6.2.1 [backend]: Confirm APISIX-injected tokens actually carry the `haisir-backend-admin` audience before enforcing — enabling this blind will 401 every request (2026-07-30)
 - [x] T6.2.2 [backend]: Set `verify_aud: True` with the expected audience in `src/auth/user.py:73` (BR-SEC-020) (depends on T6.2.1) (2026-07-31)
-- [ ] T6.2.3 [backend]: Regression test — a token minted for a different realm client is rejected with 401 (depends on T6.2.2)
+- [x] T6.2.3 [backend]: Regression test — a token minted for a different realm client is rejected with 401 (depends on T6.2.2) (2026-07-31) — satisfied by `test_invalid_audience_raises_401` added under T6.2.2
 - [ ] **G6.2: BR-SEC-020 — audience confusion closed** — integration test
 
 ### G6.3 [deploy]: Internal TLS verification
@@ -337,8 +337,6 @@
 > carries an explicit BR-CSP-007 "MUST NOT proceed" note pending the deploy-owned live-stack soak.
 
 **Backend**
-- T3.3.1 [backend]: Load the last N messages from `DoubtMessageRepository` in the route instead of reading `body.history` (no dependencies)
-- T3.3.3 [backend]: Fix E1 — guard the `_persist_ai_reply` spawn on non-empty accumulated text (`haitu.py:316-329`) (no dependencies)
 - T3.5.3 [backend]: Migrate existing base64 `image_url` values in `questions` to stored files + paths (depends on T3.5.2, done 2026-07-31)
 - T6.2.3 [backend]: Regression test — a token minted for a different realm client is rejected with 401 (depends on T6.2.2, done 2026-07-31) — note: `test_invalid_audience_raises_401` added under T6.2.2 already exercises the wrong-audience→401 path, so this may already be satisfied; confirm before doing it separately
 
