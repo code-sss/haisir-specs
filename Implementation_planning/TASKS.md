@@ -1,9 +1,14 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`5068a14` frontend:`a72ddcf` deploy:`69c077c` (2026-07-30, reconciled after
+> Last baselined: backend:`5068a14` frontend:`a72ddcf` deploy:`d55f05a` (2026-07-30, reconciled after
 > Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
+> **2026-07-31: deploy baseline bumped to `d55f05a`** — T3.2.6/T6.1.2/T6.3.1/T6.3.2/T6.3.3/T7.4.1/
+> T7.6.2/T7.7.1/T7.7.3/T7.7.4/T7.7.5 all committed + pushed to `main` in `d55f05a`
+> ("chore(deploy): harden internal TLS verification, admin scope, and secrets-at-rest").
+> T6.3.4/T7.7.2 remain unstarted, deferred pending a scope/product decision (see "Deploy" entries
+> in Ready now below).
 
 ## G1 [deploy]: Gateway build modernised and self-maintained
 
@@ -95,7 +100,7 @@
 - [x] T3.2.3a [backend]: Add `GET /api/haitu/exam-review-chat/{attempt_id}` — same router/ownership+status guards as the POST, returns messages where `is_seed = false` ordered `(created_at, id)` (depends on T3.2.3) (2026-07-30; follow-up fix `b865ec1` added the CSRF guard that was missing from the initial GET route)
 - [x] T3.2.4 [backend]: Accept `{attempt_id, message}`; keep `history` accepted-but-ignored for one release for compatibility (depends on T3.2.3) (2026-07-30)
 - [x] T3.2.5 [frontend]: Stop sending `history` from `use-exam-review-chat.ts:296,241`; load the thread via GET on mount (depends on T3.2.3a [backend], T3.2.4 [backend]) (2026-07-30; already shipped in frontend `343939d` — POST body is `{attempt_id, message}` with no `history`, `getExamReviewChatThread` GET loads the thread on mount; verified lint+typecheck+test:coverage 100%)
-- [ ] T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema` `required: [attempt_id, message, history]`; add a matching APISIX GET route for T3.2.3a (depends on T3.2.4 [backend])
+- [x] T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema` `required: [attempt_id, message, history]`; add a matching APISIX GET route for T3.2.3a (depends on T3.2.4 [backend]) (2026-07-31; `history` dropped from `required` in `21-api-haitu-exam-review.json` (kept in `properties`, still accepted-but-ignored per T3.2.4). New route `common/routes/23-api-haitu-exam-review-get.json`: `GET /api/haitu/exam-review-chat/*`, priority 20 so it doesn't fall through to the generic `04-api-read.json` `/api/*` catch-all, `secured-api` plugin_config, no body_schema, standard 6s timeouts (DB read, not the POST route's 600s streaming timeout). `jq` valid both files. All G3.2 children now done — gate test not force-closed (no live-stack verification available this session), ready for live e2e check.)
 - [ ] **G3.2: review chat works with a {attempt_id, message} body** — end-to-end test
 
 ### G3.3 [backend, frontend]: topic-doubt stops replaying stored history
@@ -213,7 +218,7 @@
 
 ### G6.1 [deploy, backend]: TLS verification on Keycloak channels
 - [x] T6.1.1 [deploy]: Remove `OAUTH__KEYCLOAK__SSL_VERIFY=false` from `prod/.env:39` and `staging/.env:39`; the code default is already `true` (BR-SEC-021) (2026-07-29)
-- [ ] T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed (depends on T6.1.1)
+- [x] T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed (depends on T6.1.1) (2026-07-31; deploy doesn't own the backend Dockerfile, so implemented as a runtime trust mount instead of an image rebuild: new external volume `haisir-backend-ca-cert` (holds only `ca.pem`, the same CA that signs Keycloak's cert) mounted read-only at `/certs` in both `backend` and `worker` (`common/docker-compose.yml`), `REQUESTS_CA_BUNDLE`/`SSL_CERT_FILE` env vars point at it. `env-setup.sh` uploads `ca.pem` into the volume, added to `REQUIRED_VOLUMES`. Manual step (user completed live): `export BACKEND_CA_CERT_VOLUME="haisir-backend-ca-cert"` added to dev/staging/prod `.env.config.sh`. T6.1.3/T6.1.4 (backend repo) still needed before this has an effect — trust alone doesn't remove the `CERT_NONE` bypass.)
 - [ ] T6.1.3 [backend]: Remove or gate the `check_hostname = False` / `CERT_NONE` context in `src/auth/user.py:37-42` so production cannot silently reach it (depends on T6.1.2)
 - [ ] T6.1.4 [backend]: Verify introspection and Keycloak-admin calls succeed with verification on (depends on T6.1.3)
 - [ ] **G6.1: BR-SEC-021 — no unverified TLS to Keycloak** — integration test
@@ -225,10 +230,10 @@
 - [ ] **G6.2: BR-SEC-020 — audience confusion closed** — integration test
 
 ### G6.3 [deploy]: Internal TLS verification
-- [ ] T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in `03-secured-api.json:450`, `01-secured-authenticated.json:308`, `04-secured-api-upload.json:311` (M5) — line numbers re-verified 2026-07-29; Phase 6.5's WAF commit shifted all three (`03` by +43, `01`/`04` by +3), so the originally-scoped `407`/`305`/`308` are stale
-- [ ] T6.3.2 [deploy]: Enable `etcd.tls.verify` in `common/apisix_conf/config.yaml:48` — client certs already ship (depends on T6.3.1)
-- [ ] T6.3.3 [deploy]: Move the CrowdSec LAPI channel to https and enable `ssl_verify` (`config.yaml:67,72`) — the bouncer key currently traverses the Docker network in plaintext
-- [ ] T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (`common/openbao/bootstrap.sh:252`)
+- [x] T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in `03-secured-api.json:450`, `01-secured-authenticated.json:308`, `04-secured-api-upload.json:311` (M5) — line numbers re-verified 2026-07-29; Phase 6.5's WAF commit shifted all three (`03` by +43, `01`/`04` by +3), so the originally-scoped `407`/`305`/`308` are stale (2026-07-31; `ssl_verify: false → true` in all three. Pre-flight check: APISIX had no `lua_ssl_trusted_certificate` set anywhere, so flipping this blind would have broken every OIDC login against Keycloak's self-signed cert — added `nginx_config.http.lua_ssl_trusted_certificate: /usr/local/apisix/certs/ca.pem` to `common/apisix_conf/config.yaml` (the cert is already mounted into the APISIX container for etcd TLS, no new volume needed). `jq`/`yamllint` valid.)
+- [x] T6.3.2 [deploy]: Enable `etcd.tls.verify` in `common/apisix_conf/config.yaml:48` — client certs already ship (depends on T6.3.1) (2026-07-31; `verify: false → true`. Lower risk than T6.3.1/T6.3.3 — etcd already spoke TLS (`https://etcd:2379`), already had `cert`/`key`/`ca_cert` configured via `docker-compose.yml`'s `ETCD_CERT_FILE`/`ETCD_KEY_FILE`/`ETCD_TRUSTED_CA_FILE`; `verify` was the only thing off. `yamllint`/parse valid.)
+- [x] T6.3.3 [deploy]: Move the CrowdSec LAPI channel to https and enable `ssl_verify` (`config.yaml:67,72`) — the bouncer key currently traverses the Docker network in plaintext (2026-07-31; `crowdsec_lapi_scheme: https` + `ssl_verify: true` in `config.yaml`, reusing the `lua_ssl_trusted_certificate` added for T6.3.1. CrowdSec's LAPI itself had no TLS configured (own service, deployed via manual scp per its README, not part of `common/docker-compose.yml`) — added `common/scripts/certs/generate-certs-crowdsec.sh` (mirrors `generate-certs-keycloak.sh`, CN/SAN=`crowdsec`, signed by the same internal CA) and `other/services/crowdsec/config.yaml.local` (CrowdSec's own override-merge mechanism, confirmed via docs) setting `api.server.tls.cert_file/key_file`; `docker-compose.yml` bind-mounts `./tls/` + `./config.yaml.local` (`.gitignore`d tls dir). README "TLS Setup" section + renumbered prod checklist document the manual cert-generate+copy+restart step on the actual CrowdSec host — not executable from this session (remote host, no SSH access here).)
+- [ ] T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (`common/openbao/bootstrap.sh:252`) — **BLOCKED, not attempted 2026-07-31**: Postgres has no TLS configured anywhere (no cert/key, no `ssl=on`, checked `postgres-docker/Dockerfile` + the `db` service in `common/docker-compose.yml`). Flipping this alone would just break OpenBao's DB connection (dynamic role creation, rotate-root). Fixing it properly means standing up full Postgres server-side TLS — bigger blast radius than this task implies, affects every DB client (backend/worker/db-init/OpenBao), not just OpenBao's connection. User chose to skip and revisit as a scoped decision later rather than expand scope silently.
 - [ ] **G6.3: internal channels verify TLS** — integration test
 
 ### G6.4 [deploy]: Keycloak realm hardening
@@ -261,7 +266,7 @@
 - [ ] **G7.3: M4 — a compromised dev laptop cannot reach prod** — acceptance test
 
 ### G7.4 [deploy]: Header cleanup
-- [ ] T7.4.1 [deploy]: Set `X-XSS-Protection: 0` across all four plugin configs (L3, BR-CSP-006)
+- [x] T7.4.1 [deploy]: Set `X-XSS-Protection: 0` across all four plugin configs (L3, BR-CSP-006) (2026-07-31; `"1; mode=block"` → `"0"` in all four `response-rewrite` blocks. `jq` valid.)
 - [ ] T7.4.2 [deploy]: Add the gateway backstop CSP (`frame-ancestors`, `base-uri`, `object-src`, `form-action`) scoped to non-HTML routes only, so it never collides with `proxy.ts`'s policy per BR-CSP-004 (depends on T5.4.1 [frontend])
 - [ ] **G7.4: header ownership matches the spec table** — integration test
 
@@ -274,15 +279,15 @@
 
 ### G7.6 [deploy]: Phase 5.6 parked gaps
 - [x] T7.6.1 [deploy]: Fix `common/scripts/setup.sh`'s `APISIX_ADMIN_KEY` pre-check failing under `set -u` on standalone invocation — landed as a side effect of Phase 6.5's deploy work (the required-var check moved to after the OpenBao render hook runs); confirmed on reconciliation, 2026-07-29
-- [ ] T7.6.2 [deploy]: Reconcile `common/docker-compose.yml`'s hardcoded `haisir-net` against the documented dev network `haisir-net-dev`
+- [x] T7.6.2 [deploy]: Reconcile `common/docker-compose.yml`'s hardcoded `haisir-net` against the documented dev network `haisir-net-dev` (2026-07-31; `networks.haisir-net.name` was a bare literal `"haisir-net"`, ignoring `NETWORK_NAME` entirely even though `env-setup.sh` (the script that actually creates this external network) already reads a `NETWORK_NAME` override with this same default. Changed to `${NETWORK_NAME:-haisir-net}`, matching `env-setup.sh`'s own default exactly — zero-risk when unset (resolves to the identical literal as before), takes effect if an env ever sets `NETWORK_NAME`. Did not change `env-setup.sh`'s default or rename any live network — out of scope to avoid a live-host network-recreate; whether staging/prod's `.env.config.sh` currently set `NETWORK_NAME` at all needs operator verification, not something checkable from this session per the `.env*` read restriction.)
 - [ ] **G7.6: Phase 5.6's parked deploy gaps closed** — integration test
 
 ### G7.7 [deploy]: New anomalies from the 2026-07-27 audit
-- [ ] T7.7.1 [deploy]: Narrow APISIX `allow_admin` from the whole Docker subnet (`config.yaml:38`) — any container on `haisir-net` that learns the admin key can rewrite every route
-- [ ] T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` (`config.yaml:35`) is warranted; it is a routing-config web UI behind a single static key with no MFA
-- [ ] T7.7.3 [deploy]: Harden `env-setup.sh:139` so a set `TMPDIR` cannot place the rendered secret env file on disk-backed storage instead of `/dev/shm`
-- [ ] T7.7.4 [deploy]: `chmod 600` the files inside `.templated/` — the 0700 directory is currently the only protection on 0664 files containing resolved secrets
-- [ ] T7.7.5 [deploy]: Migrate `other/services/sonarqube/.env` (`SONAR_DB_PASSWORD`, mode 0664) out of plaintext, or document the `other/services/*` stacks as explicitly outside the OpenBao boundary
+- [x] T7.7.1 [deploy]: Narrow APISIX `allow_admin` from the whole Docker subnet (`config.yaml:38`) — any container on `haisir-net` that learns the admin key can rewrite every route (2026-07-31; audited for a legitimate in-container caller of `:9180` first — none found, every admin API call (`setup.sh`, `create_*_config.sh`, cert sync) runs from the host, already covered by the `10.0.2.0/24` entry. Removed the `{{DOCKER_NETWORK_SUBNET}}` entry entirely, no functional loss. `yamllint` valid.)
+- [ ] T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` (`config.yaml:35`) is warranted; it is a routing-config web UI behind a single static key with no MFA — **not attempted 2026-07-31**, this is a product/ops judgment call (keep the dashboard UI vs. disable it), not a mechanical fix; deferred to the user, same category as T6.3.4.
+- [x] T7.7.3 [deploy]: Harden `env-setup.sh:139` so a set `TMPDIR` cannot place the rendered secret env file on disk-backed storage instead of `/dev/shm` (2026-07-31; `mktemp "${TMPDIR:-/dev/shm}/..."` → `mktemp "/dev/shm/..."` — TMPDIR can no longer redirect this file. `shellcheck` clean on the changed line.)
+- [x] T7.7.4 [deploy]: `chmod 600` the files inside `.templated/` — the 0700 directory is currently the only protection on 0664 files containing resolved secrets (2026-07-31; single `chmod 600 "$output_file"` added at the end of `template-configs.sh`'s `replace_placeholders()` function — one edit point covers all four call sites (plugin_configs/routes/keycloak/apisix_conf), placed after the optional ip-restriction-strip `mv` so it applies to the final file regardless of path. `shellcheck` clean.)
+- [x] T7.7.5 [deploy]: Migrate `other/services/sonarqube/.env` (`SONAR_DB_PASSWORD`, mode 0664) out of plaintext, or document the `other/services/*` stacks as explicitly outside the OpenBao boundary (2026-07-31; documented — new `other/services/sonarqube/README.md`, consistent with T7.5.1/T7.5.2's precedent of documenting accepted risk for standalone `other/services/*` stacks rather than pulling them into the OpenBao boundary. Manual step (not done by this tool per the `.env*` hard constraint — permission-only `chmod` isn't on the explicit allow-list either): operator runs `chmod 600 other/services/sonarqube/.env`.)
 - [ ] **G7.7: audit anomalies closed or documented** — acceptance test
 
 - [ ] **G7: Residual review items** — integration test
@@ -344,21 +349,17 @@
 > T3.3.2 done 2026-07-30; T3.5.4 and T3.5.5 done 2026-07-31 (committed — baseline updated to `a72ddcf`). T5.3.2/T5.4.1 remain held for the deploy-owned live-stack soak (BR-CSP-007).
 
 **Deploy**
+> 2026-07-31: T3.2.6, T6.1.2, T6.3.1, T6.3.3, T7.4.1, T7.6.2, T7.7.1, T7.7.3, T7.7.4, T7.7.5 all done
+> (see task notes above). **T6.3.2 newly unblocked** (depends on T6.3.1, now done) — not yet
+> attempted. T6.3.4 and T7.7.2 were in the same batch but deliberately skipped: both need a scope/
+> product decision from the user rather than a mechanical fix (T6.3.4: Postgres has no TLS at all,
+> fixing it properly means standing up server-side TLS, bigger than the task as scoped; T7.7.2: an
+> explicit "decide whether X is warranted" call). Both remain listed below pending that decision.
 - T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1, done 2026-07-30) — **unblocked 2026-07-30**; needs real journeys (staging or prod), not the disposable harness used for T2.3.1. **Closes G2.3 → G2, a hard gate on G4.** Parked for now (2026-07-30) — no other ready work depends on it, since G4 is far from starting anyway.
-- T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema`; add the matching GET route (depends on T3.2.4, done 2026-07-30)
-- T6.1.2 [deploy]: Trust the internal CA in the backend image so self-signed Keycloak certs validate rather than being bypassed, now that `OAUTH__KEYCLOAK__SSL_VERIFY=false` is gone (depends on T6.1.1, done)
-- T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in the three named plugin configs (M5) (no dependencies)
-- T6.3.3 [deploy]: Move the CrowdSec LAPI channel to https and enable `ssl_verify` (no dependencies)
-- T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies)
+- T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies) — **blocked pending a scope decision**, see banner above.
 - T7.3.1 [deploy]: Replace `dst: ["*:*"]` Tailscale ACLs with specific services/ports (M4) (no dependencies)
-- T7.4.1 [deploy]: Set `X-XSS-Protection: 0` across all four plugin configs (L3, BR-CSP-006) (no dependencies)
 - T7.5.4 [deploy]: `chmod 600` staging/dev `.env*` (L2 hygiene) (no dependencies)
-- T7.6.2 [deploy]: Reconcile `docker-compose.yml`'s hardcoded `haisir-net` against `haisir-net-dev` (no dependencies)
-- T7.7.1 [deploy]: Narrow APISIX `allow_admin` from the whole Docker subnet (no dependencies)
-- T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` is warranted (no dependencies)
-- T7.7.3 [deploy]: Harden `env-setup.sh:139` against a set `TMPDIR` (no dependencies)
-- T7.7.4 [deploy]: `chmod 600` the files inside `.templated/` (no dependencies)
-- T7.7.5 [deploy]: Migrate `other/services/sonarqube/.env` out of plaintext, or document it outside the OpenBao boundary (no dependencies)
+- T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` is warranted (no dependencies) — **blocked pending a product decision**, see banner above.
 
 **Specs**
 - T7.5.1 [specs]: Record L5 as a deliberate spam filter, not a security boundary — no code change (no dependencies)
