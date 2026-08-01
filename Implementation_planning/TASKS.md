@@ -287,7 +287,7 @@
 - [x] T7.1.2 [backend]: Delete `_validate_file_uploads` (`request_middleware.py:189`), `_extract_filename` (`:230`) and `_is_allowed_file_type` (`:240`) — spanning roughly `:189-250`, plus the `self._validate_file_uploads(request)` call site at `:184`. They read a request-level `Content-Disposition` that never exists for multipart, so they have never rejected anything (B2). The originally-scoped range `208-228` was wrong at scoping time — it points at the `Content-Disposition` block *inside* the first function, not the three definitions (depends on T7.1.1) (2026-07-30)
 - [x] T7.1.3 [backend]: Chunk-read extraction uploads and abort past the cap in `admin_extraction.py:175-181` and `parent_extraction.py:182-188`, currently fully spooled before the 50 MB check; shared helper next to `sniff_mime` (B4) (2026-07-30)
 - [x] T7.1.4 [backend]: Malformed `Content-Length` returns 400, not an unhandled 500 (B3) (depends on T7.1.1) (2026-07-31)
-- [ ] **G7.1: size limits hold under chunked encoding** — integration test
+- [x] **G7.1: size limits hold under chunked encoding** — integration test (2026-08-01; added `test_real_chunked_transfer_encoding_over_cap_returns_413` to `tests/unit/auth/test_middleware.py` — a genuine HTTP/1.1 request with `Transfer-Encoding: chunked` (no `Content-Length` on the wire) sent over a real socket to a live uvicorn instance, asserting 413 from the streaming byte-cap path. The existing `test_streamed_payload_over_cap_returns_413` only drove the ASGI `receive` callable directly, not an actual chunked-encoded request, so this closes the gap the gate asked for. Verified the new test fails (200 instead of 413) when the byte-cap check is neutered, confirming it actually exercises the enforcement path rather than passing vacuously; 69/69 tests in the file pass with the fix restored. Change made in the `backend` VS Code devcontainer (`/workspaces/haisir-backend`, separate checkout from the host clone) per the user's instruction — uncommitted as of this note, not yet pushed.)
 
 ### G7.2 [deploy, backend]: Jenkins parameter injection
 - [x] T7.2.1 [backend]: Validate `params.TAG` against `^[A-Za-z0-9._-]+$` and pass via `withEnv` + single-quoted `sh` in `haisir-backend/Jenkinsfile:197,209,305,340` — currently untouched since the review (M3) (2026-07-29)
@@ -373,10 +373,9 @@
 **Closed this pass (2026-07-31, sixth pass)** — G3.1, G3.3, G3.5, G3.6, G5.2, G6.2, G7.6 all
 checked off above; see the top banner and each gate's own line for evidence. No code changed.
 
-**Still ready to close (all children done, gate row still `[ ]`, needs one more check first)**
-- G7.1 [backend]: "size limits hold under chunked encoding" — T7.1.1–T7.1.4 done, but confirm a
-  real chunked-transfer-encoding request was actually exercised (not just the `Content-Length`
-  path) before checking this one off — not pure bookkeeping like the ones just closed.
+**Closed this pass (2026-08-01)** — G7.1: added a real over-the-wire chunked-encoding test,
+verified it fails without the fix; see its own line above for evidence. Uncommitted in the
+`backend` devcontainer — needs a commit before it counts as landed.
 
 **Not yet unlockable**
 - G3 overall [backend, frontend, deploy]: G3.1/G3.3/G3.5/G3.6 now closed, but G3.2 and G3.4 remain
