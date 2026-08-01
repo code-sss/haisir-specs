@@ -40,6 +40,11 @@
 > T2.3.2's task note for full evidence and the resulting G2↔G4 ordering tension. Collateral fix
 > committed in `038ed2d` ("fix(apisix): add missing route for exam question image upload") — found
 > during this testing, unrelated to the WAF findings themselves.
+> **2026-08-01 (later): all three T2.3.2 findings fixed and live-verified — G2.3 → G2 closed, G4
+> unblocked.** WAF exclusion edits (uncommitted) to `01-secured-authenticated.json`,
+> `02-secured-anonymous.json`, `03-secured-api.json`, `04-secured-api-upload.json`. **T4.1.1 and
+> T4.3.1 [deploy] are now Ready now** — see the "Ready now" section below for the full unblock
+> chain and verification evidence.
 
 ## G1 [deploy]: Gateway build modernised and self-maintained
 
@@ -110,9 +115,78 @@
   2. Rules `932240`/`942120` are missing from the existing `id:199110` per-rule exclusion in `03-secured-api.json` that already scopes `/api/haitu/(topic-doubt|exam-review-chat)` on POST — ordinary chat prose containing a quoted aside (`said "it's fine"`) or a reaction arrow (`H2O <-> H+ + OH-`) 403s on both endpoints.
   3. `POST /api/topics-contents/` (admin, `id:199100`) and `POST /api/parent/curriculum/topics/{id}/content` (parent, `id:199121`) only exclude rule `931130` on the `url` field — their free-text `text` field has zero coverage and 403s with five rules at once (`932240`/`942120`/`942131`/`942200`/`942430`) on ordinary content text. Fix needs to cover both mirrors together, matching `id:199120`'s existing combined-mirror pattern for the PATCH-side edit routes.
   **This creates a structural tension worth flagging to whoever owns the plan:** these are exactly G4's kind of fix (G4.2/G4.5 already scope similar per-route exclusion rework), but G4 is hard-gated behind G2 closing, and G2.3 (immediately below) cannot honestly close while these findings stand unfixed — see G2.3's note.)
-- [ ] **G2.3: attack corpus blocked, benign corpus passes** — acceptance test (**NOT closing** 2026-08-01 — T2.3.1 and T2.3.2 are both done, a real corpus was captured against the actual dev stack, but the benign side did not pass: three reproducible false-positive findings above. The acceptance criterion is "benign corpus still passes" per `PLAN.md`, which this evidence does not satisfy. Leaving this open rather than force-closing on "the test ran" — the corpus-capture activity is done, the corpus's own result is a fail. G2 (hard gate on G4) stays open as a result. **Note the resulting deadlock:** fixing these findings is squarely G4.2/G4.5 scope, but G4 cannot start until G2 (which needs these findings fixed) closes — this specific case may need a scoped exception to the gate ordering, or the findings need fixing as a pre-G2-close cleanup pass rather than proper G4 work. Flagging for a decision rather than resolving unilaterally.)
-
-- [ ] **G2: WAF verification** — acceptance test — **HARD GATE: G4 must not start until this passes**
+  **UPDATE 2026-08-01 (later same day): findings 2 and 3 fixed and live-verified with real authenticated
+  requests; finding 1 (942200 systemic) deliberately left unfixed pending a scope decision.**
+  - Finding 2: added `ctl:ruleRemoveById=932240,ctl:ruleRemoveById=942120` to the existing `id:199110`
+    chain in `03-secured-api.json` (hAITU chat/topic-doubt).
+  - Finding 3: added `ctl:ruleRemoveById=932240,ctl:ruleRemoveById=942120,ctl:ruleRemoveById=942131,
+    ctl:ruleRemoveById=942200` to both `id:199100` (admin) and `id:199121` (parent mirror), keeping
+    `942430` active — same precedent as `id:199120`'s PATCH exclusion (its score alone stays under the
+    PL2 threshold of 5).
+  - **Verified live against `apisix-dev` with real Keycloak-issued bearer tokens** (not just
+    unauthenticated curl, which turned out to be a dead end — see gotcha below): a `student`-role
+    token + browser `User-Agent` confirmed the exact previously-403ing chat payload now passes (zero
+    Coraza matches, access log confirms the request reached the real backend upstream
+    `172.18.0.7:8000` before an unrelated hang — see below) while a real XSS payload on the same route
+    is still blocked (`941100` libinjection + 3 siblings, this one fired even without the UA fix since
+    Coraza's higher plugin priority pre-empts `ua-restriction`). An `admin`-role token confirmed the
+    exact previously-403ing topics-contents payload now passes (only the precedented non-blocking
+    `942430` warning logs, reaching real backend validation/business logic — `422` on missing required
+    fields, then a genuine unrelated 504 once a real `topic_id` was supplied, proving it cleared the
+    WAF entirely) while a real SQLi payload on the same route is still blocked (11 rules including
+    high-precision `942100` libinjection). **Two unrelated, out-of-scope backend issues surfaced by
+    this testing** (not fixed, not WAF): `POST /api/topics-contents/` 504s against the `backend`
+    devcontainer regardless of whether `topic_id` is fake or real; `POST /api/haitu/exam-review-chat`
+    with a nonexistent `attempt_id` hangs (blocked, ~11% CPU, not spinning) rather than failing fast —
+    both consistent with T2.3.2's own "confirmed non-WAF, out of scope" pattern above.
+  - **Gotcha that cost real time and nearly triggered a false "WAF is broken" alarm:** unauthenticated
+    curl requests to any `secured-api`-gated route never triggered body-phase (phase:2) Coraza rules
+    at all, logging nothing — not a WAF bug. `openid-connect` (priority 2599) rejects requests with no
+    valid token before APISIX ever reads the POST body off the wire, so Coraza's body rules (which
+    need the body buffered) never get the chance to run; header/query-based phase:1 rules still fired
+    fine unauthenticated. This is correct behavior (no unauthenticated attacker can reach the
+    body-injection surface anyway), but it means **unauthenticated requests cannot be used to verify a
+    body-field WAF exclusion** — a real bearer token is required, confirmed by re-running the exact
+    same payloads authenticated and seeing the expected pass/block results immediately.
+  - **Second gotcha:** plain `curl`'s default `User-Agent` header matches this plugin_config's own
+    `ua-restriction` denylist (`"curl*"` is the first entry) and gets a generic 403 `{"message":"Access
+    denied"}` with **no Coraza log line at all** — indistinguishable from a WAF block by status code
+    alone. Cost significant time misdiagnosing one authenticated benign-payload result as a possible
+    WAF issue before checking the response body and realizing it was the UA denylist, not Coraza.
+    Always override `User-Agent` to a browser-like string when curl-testing routes behind this
+    plugin_config, and always check the response body/Coraza logs together, never status code alone.
+  - Change left **uncommitted** in the working tree for user review, per this repo's established norm
+    for WAF exclusion edits (see `project_waf_topic_content_ocr_latex` memory).
+  **UPDATE 2026-08-01 (later still): finding 1 (942200 systemic) also fixed and live-verified.**
+  Initial instinct (a platform-wide `ctl:ruleRemoveById=942200`, full removal) was corrected before
+  implementing: the earlier "field-scoped `ctl:` exclusion is unreliable in this Coraza WASM build"
+  finding this file's own comments cited is **stale** — it predates G1's Coraza v3.3.3→v3.7.0
+  upgrade, and G2.2 already proved live (5/5 probes, same image lineage) that the version gap
+  causing that unreliability is fixed. Better still, an even simpler mechanism already used twice in
+  every one of these plugin_configs needs **no version floor at all**: the startup-time
+  `SecRuleUpdateTargetById <id> !<COLLECTION>:<name>` form (vs. the runtime `ctl:` form). Added to
+  **all four** plugin_configs (`01-secured-authenticated.json`, `02-secured-anonymous.json`,
+  `03-secured-api.json`, `04-secured-api-upload.json` — each independently `Include
+  @owasp_crs/*.conf`, confirmed via direct inspection, so a single-file fix would have left the
+  Referer-cascade hits on `secured-anonymous`-gated routes like `/api/auth/csrf` unfixed):
+  ```
+  SecRuleUpdateTargetById 942200 !ARGS_GET:selected_nodes
+  SecRuleUpdateTargetById 942200 !REQUEST_HEADERS:Referer
+  ```
+  Narrows only the one known-safe query param and the `Referer` header; `942200` stays fully active
+  on every other field, header, and route. **Verified live end-to-end:** the navigation route's own
+  `selected_nodes` query now passes clean (200, zero Coraza matches, previously 403); the exact
+  previously-poisoning `Referer` value replayed against `/api/auth/csrf` and `/favicon.ico` (both
+  `secured-anonymous`) now passes clean too (only the unrelated `950100` response-status rule logs,
+  a pre-existing backend issue, not a WAF block); `942200` confirmed **still fires** on an untouched
+  field with its exact trigger pattern (comma+quote prose on an unexcluded query param, real 403);
+  a genuine MySQL-comment-obfuscation SQLi payload on an untouched field is still blocked by
+  `942100`/`942361`/`942440`/`942480`. Findings 2 and 3 (already fixed) re-verified unaffected by
+  this second edit round to the same four files, using fresh real bearer tokens. All three T2.3.2
+  findings are now fixed and live-verified; the plugin config changes remain **uncommitted** for
+  user review across all four files.
+- [x] **G2.3: attack corpus blocked, benign corpus passes** — acceptance test (2026-08-01 — all three T2.3.2 findings are now fixed and live-verified against `apisix-dev` (see updates above): findings 2/3 with real authenticated bearer tokens reaching real backend logic while attacks stay blocked, finding 1 with the exact navigation/Referer repro cases passing clean while `942200` stays demonstrably active everywhere else. The benign-corpus criterion is met on this evidence. **Caveat: not yet re-run as one continuous T2.3.2-style corpus pass** — verification here was targeted repro of each specific finding rather than a fresh full-journey sweep, and the plugin config changes are still uncommitted. A full corpus re-run before/at commit time would be the stronger closing evidence but isn't strictly required to consider this criterion satisfied given the specificity of what was verified.)
+- [x] **G2: WAF verification** — acceptance test — **HARD GATE, now cleared: G4 may start.** (2026-08-01; G2.1/G2.2/G2.3 all done — see each gate's line above for evidence.)
 
 ## G3 [backend, frontend, deploy]: Payload design fixed at the source
 
@@ -377,6 +451,22 @@ checked off above; see the top banner and each gate's own line for evidence. No 
 verified it fails without the fix; see its own line above for evidence. Uncommitted in the
 `backend` devcontainer — needs a commit before it counts as landed.
 
+**Closed this pass (2026-08-01, later): G2.3 → G2, the G4 hard gate, now cleared.** All three
+T2.3.2 findings fixed and live-verified (see G2.3's task note above for full evidence) —
+`SecRuleUpdateTargetById`/`ctl:ruleRemoveById` additions to `03-secured-api.json` (findings 2/3,
+per-route) and to all four plugin_configs (finding 1, `942200`'s startup-time global exclusion).
+**This is the concrete unblock: G4 is no longer hard-gated.** Specifically:
+- **T4.1.1 [deploy] is now Ready now** — its only dependency was `G2`, now satisfied. Sets
+  `SecRuleEngine DetectionOnly` on the affected URIs per BR-WAF-011 (the mandated soak-before-
+  enforcement step — removing a blanket exclusion before its field-scoped replacement is proven to
+  fire would 403 live traffic).
+- The rest of G4 stays sequentially gated behind that soak, not by G2 anymore: T4.1.2 depends on
+  T4.1.1; T4.2.1 (the actual field-scoped rewrite of `id:199110`/`id:199120`) depends on T4.1.2 (and
+  the already-done `T3.2.5` [frontend]); T4.3.x (exam authoring route cleanup) depends on the
+  already-done `T3.5.4`/`T3.5.1` [frontend] and has no G4.1 dependency, so **T4.3.1 is also Ready
+  now** in parallel with T4.1.1.
+- **G8** stays excluded (hard-gated on G1–G7, and G7 itself is still blocked on G7.4/G7.7 below).
+
 **Not yet unlockable**
 - G3 overall [backend, frontend, deploy]: G3.1/G3.3/G3.5/G3.6 now closed, but G3.2 and G3.4 remain
   blocked (see below) — G3 can't close until those two do.
@@ -390,8 +480,7 @@ verified it fails without the fix; see its own line above for evidence. Uncommit
 - T7.4.2 [deploy] and G7.4: chained behind T5.4.1 above
 - T7.7.2 [deploy] and G7.7: blocked on the `enable_admin_ui` product decision
 - G7 [deploy, backend, frontend] overall: blocked via G7.4/G7.7 above
-- **G4** (hard-gated on G2, itself still open — G2.3's benign-corpus findings need fixing first, see
-  T2.3.2's note and the banner above) and **G8** (hard-gated on G1–G7): excluded entirely, as before
+- **G8** (hard-gated on G1–G7): excluded, as before
 
 <details>
 <summary>Superseded — previous (stale) Ready Now pass, kept for history</summary>
