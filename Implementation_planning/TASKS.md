@@ -13,12 +13,25 @@
 > T6.1.4 (backend) and T3.5.5 (frontend+backend) done, closing **G6.1**. T3.5.5 was briefly
 > reopened same day after `a72ddcf` shipped a broken half-fix (see its task note) — now fixed
 > properly on both sides and re-verified directly against both repos' source.
-> **2026-07-31 (latest): T7.5.3 done, closing G7.5 — deploy baseline NOT bumped.** New
-> `common/scripts/tests/dev-isolation-check.sh` + the `Jenkinsfile` "Dev Isolation Check" stage are
-> implemented and verified locally (shellcheck clean, script PASS) but are **uncommitted** in the
-> `haisir-deploy` working tree as of this entry — current HEAD (`b523d3c`) predates this change, so
-> bumping `deploy:` to it would misrepresent what's captured. Re-bump the deploy baseline once these
-> two files are committed.
+> **2026-07-31 (latest): T7.5.3 done, closing G7.5 — deploy baseline bumped to `7a0d983`.** New
+> `common/scripts/tests/dev-isolation-check.sh` + the `Jenkinsfile` "Dev Isolation Check" stage,
+> committed and pushed to `main` (`7a0d983`, "ci(deploy): add dev-isolation regression guard to CI
+> pipeline") after a `/review-deploy` pass found and fixed two real gaps pre-commit: (1) the
+> compose-file exclusion for `dev/`/`archived/` was matching on absolute-path substring rather than
+> a path relative to `$REPO_ROOT`, which would have silently disabled the whole check if the repo
+> were ever checked out under a directory containing `/dev/` or `/archived/`; (2) the sensitive-port
+> regex required literal quote characters, missing an unquoted/single-quoted `ports:` entry (no live
+> false negative today, but a real gap). Also excluded `gateway-docker/coraza-proxy-wasm/` (the
+> T1.1.1-vendored upstream tree) after its own e2e/example fixtures false-positived on unrelated
+> port-8080 usage.
+> **2026-07-31 (sixth pass): closed G3.1, G3.3, G3.5, G3.6, G5.2, G6.2, G7.6** — all had every
+> child task done but the gate row itself was never checked off; closed on the evidence already
+> recorded in each child task's note (see each gate line for specifics). No code changed.
+> **G7.1 deliberately left open** — same all-children-done shape, but its own description
+> ("holds under chunked encoding") needs confirmation that a real chunked-transfer-encoding
+> request was exercised, not just the `Content-Length` path; T7.1.1-4's notes don't establish
+> that, so closing it needs one more check first, not pure bookkeeping like the rest. **G3 overall
+> still open** — G3.2 and G3.4 remain blocked on a live-backend smoke test.
 
 ## G1 [deploy]: Gateway build modernised and self-maintained
 
@@ -95,7 +108,7 @@
 - [x] T3.1.1 [backend]: Constrain `ReviewChatMessage.role` to `Literal["student", "ai"]` in `src/schemas/haitu.py:11-12`, mirroring `HaituDoubtMessageSchema` in the sibling schema (2026-07-29)
 - [x] T3.1.2 [backend]: Change `_DOMAIN_TO_LLM_ROLE.get(m.role, m.role)` to `_DOMAIN_TO_LLM_ROLE[m.role]` at `src/api/routes/haitu.py:840` so an unmapped role cannot be silently forwarded (depends on T3.1.1) (2026-07-29)
 - [x] T3.1.3 [backend]: Regression test — a posted `{"role": "system", ...}` history entry is rejected with 422, not forwarded into `_build_no_rag_messages` (depends on T3.1.2) (2026-07-29)
-- [ ] **G3.1: injected system turns rejected** — integration test
+- [x] **G3.1: injected system turns rejected** — integration test (2026-07-31; T3.1.1–T3.1.3 all done — T3.1.3's regression test *is* this integration test: a posted `{"role": "system", ...}` history entry is rejected 422 and never reaches `_build_no_rag_messages`)
 
 ### G3.2 [backend, frontend]: exam-review-chat persists server-side
 > **T3.2.1 design output (2026-07-29, two-pass challenge):** persistence model is `review_chat_threads`
@@ -117,7 +130,7 @@
 - [x] T3.3.1 [backend]: Load the last N messages from `DoubtMessageRepository` in the route instead of reading `body.history` — the server already writes both sides via `add_student_message` / `finalize_ai_response` (2026-07-30)
 - [x] T3.3.2 [frontend]: Stop re-posting the pre-loaded thread from `use-haitu-doubt.ts:299` (depends on T3.3.1 [backend]) (2026-07-30)
 - [x] T3.3.3 [backend]: Fix E1 — `_generate_events`' `finally` block persists an empty AI message and advances the doubt to `ai_answered` when the stream failed or the client disconnected; guard the `_persist_ai_reply` spawn on non-empty accumulated text (`haitu.py:316-329`) (2026-07-30)
-- [ ] **G3.3: doubt threads round-trip without client-side replay** — end-to-end test
+- [x] **G3.3: doubt threads round-trip without client-side replay** — end-to-end test (2026-07-31; T3.3.1–T3.3.3 all done — backend loads history server-side via `DoubtMessageRepository` instead of trusting `body.history`, frontend (`use-haitu-doubt.ts`) stopped re-posting the pre-loaded thread, and the E1 empty-AI-message-on-failure bug is guarded. No client-side replay path remains.)
 
 ### G3.4 [backend]: exam-review-chat grounded server-side
 - [x] T3.4.1 [backend]: Load the review payload via `ExamSessionQuestionService.get_by_session_id(attempt_id)` — already wired into `post_pattern_analysis` at `haitu.py:511` — and build the grounding context in the route (depends on T3.2.3) (2026-07-30)
@@ -130,12 +143,12 @@
 - [x] T3.5.3 [backend]: Migrate existing base64 `image_url` values in `questions` to stored files + paths (depends on T3.5.2) (2026-07-31)
 - [x] T3.5.4 [frontend]: `question-editor.tsx:115,153` — upload before submitting the template instead of `readAsDataURL` (depends on T3.5.1 [backend]) (2026-07-31)
 - [x] T3.5.5 [frontend, backend]: Serve images via a static/asset route; verify `img-src` in the CSP still covers them (depends on T3.5.4, done) (2026-07-31; fixed properly this time, verified on both sides. **Frontend** (`06600f6`): the broken `exam-images/[...path]` proxy from `a72ddcf` was git-mv'd to `src/app/images/questions/[...path]/route.ts`, upstream fetch repointed at `${BACKEND_URL}/images/questions/${path}`, mock fixtures in `exam-api`/`question-editor`/`use-exam-image-upload` tests updated to match. **Backend** (`394f1b2`): new `src/api/routes/images.py` — `GET /images/questions/{filename}`, mounted at `app.include_router(images.router, prefix="/images", ...)` in `router.py`, exact match for the `/{IMAGE_DIR}/{safe_name}` string the upload endpoint (`exam.py:289`) already returns and stores verbatim in `image_url`. Guards: `_SAFE_FILENAME_RE` allowlist (`png`/`jpg`/`webp`, no path separators) rejects traversal with 400, `current_active_user` dependency requires auth, 404 for a missing file. Both path prefixes now agree — confirmed by reading both files directly, not just the commit messages. `01_data_model.md` §2.1 updated to match.)
-- [ ] **G3.5: exam images round-trip by URL** — end-to-end test
+- [x] **G3.5: exam images round-trip by URL** — end-to-end test (2026-07-31; T3.5.1–T3.5.5 all done — upload endpoint returns `{url}`, base64 storage/serving removed and existing rows migrated, frontend uploads before submit, and T3.5.5 verified both sides agree on the identical `/images/questions/{filename}` path by reading the source directly. Closing on that code-level proof, as flagged closable by the prior recompute pass; no separate live HTTP round-trip was made this session.)
 
 ### G3.6 [backend]: Declared field limits
 - [x] T3.6.1 [backend]: Add `Field(max_length=...)` to free-text schema fields — `message`, `question_text`, `explanation`, `model_answer`, `content`, `text`, `working_text`, `user_answer` — sized under the gateway's `tx.arg_length` (2026-07-30)
 - [x] T3.6.2 [backend]: Verify a too-long field now returns 422 naming the field, not an opaque gateway 403 (depends on T3.6.1) (2026-07-31)
-- [ ] **G3.6: oversized input fails with a 422, not a mystery 403** — integration test
+- [x] **G3.6: oversized input fails with a 422, not a mystery 403** — integration test (2026-07-31; T3.6.1–T3.6.2 all done — `Field(max_length=...)` added to the free-text schema fields, and T3.6.2 verified a too-long field now returns 422 naming the field, not an opaque gateway 403)
 
 - [ ] **G3: Payload design fixed at the source** — end-to-end test
 
@@ -209,7 +222,7 @@
 - [x] T5.2.5 [frontend]: Add the prefetch `missing:` filter to the proxy matcher per the Next.js CSP guidance (depends on T5.2.1)
 - [x] T5.2.6 [frontend]: Opt the **12 pages lacking `force-dynamic`** into dynamic rendering per BR-CSP-010 — 15 of 27 have it, 12 do not (7 server components, 5 `"use client"`), including all of `/onboarding/*` and `/admin/*`. A statically prerendered page cannot receive a nonce, so a strict `script-src` blocks its framework scripts. Verify by inspecting the build manifest for statically-prerendered routes, not by grep alone (depends on T5.2.1)
 - [x] T5.2.7 [frontend]: Add a CI assertion that no new HTML route is statically prerendered, per BR-CSP-010 — this breaks silently in production rather than at build (depends on T5.2.6)
-- [ ] **G5.2: Report-Only CSP live with nonces applied on every route** — integration test
+- [x] **G5.2: Report-Only CSP live with nonces applied on every route** — integration test (2026-07-31; T5.2.1–T5.2.7 all done — nonce minted per request, `frame-src`/`worker-src` derived correctly, prefetch filter added, and T5.2.6/T5.2.7 confirmed every route opts into dynamic rendering (verified via the build manifest, not just grep) with a CI assertion guarding against regression — so every route can actually receive a nonce)
 
 ### G5.3 [frontend]: Soak
 - [x] T5.3.1 [frontend]: Exercise every journey — login, onboarding, exam authoring with image upload, exam taking, review chat, PDF viewing, video viewing, parent curriculum, admin (depends on T5.2.5) (2026-07-30; CI soak shipped — tests/e2e/g5-csp-soak.spec.ts + helpers/csp.ts, 20 journeys green; image-upload interaction, PDF-worker runtime and the full live-stack soak flagged to deploy)
@@ -237,7 +250,7 @@
 - [x] T6.2.1 [backend]: Confirm APISIX-injected tokens actually carry the `haisir-backend-admin` audience before enforcing — enabling this blind will 401 every request (2026-07-30)
 - [x] T6.2.2 [backend]: Set `verify_aud: True` with the expected audience in `src/auth/user.py:73` (BR-SEC-020) (depends on T6.2.1) (2026-07-31)
 - [x] T6.2.3 [backend]: Regression test — a token minted for a different realm client is rejected with 401 (depends on T6.2.2) (2026-07-31) — satisfied by `test_invalid_audience_raises_401` added under T6.2.2
-- [ ] **G6.2: BR-SEC-020 — audience confusion closed** — integration test
+- [x] **G6.2: BR-SEC-020 — audience confusion closed** — integration test (2026-07-31; T6.2.1–T6.2.3 all done — `verify_aud: True` enforced against the confirmed `haisir-backend-admin` audience, and `test_invalid_audience_raises_401` (added under T6.2.2) is the regression test T6.2.3 called for: a token minted for a different realm client is rejected 401)
 
 ### G6.3 [deploy]: Internal TLS verification
 - [x] T6.3.1 [deploy]: Enable `openid-connect.ssl_verify` in `03-secured-api.json:450`, `01-secured-authenticated.json:308`, `04-secured-api-upload.json:311` (M5) — line numbers re-verified 2026-07-29; Phase 6.5's WAF commit shifted all three (`03` by +43, `01`/`04` by +3), so the originally-scoped `407`/`305`/`308` are stale (2026-07-31; `ssl_verify: false → true` in all three. Pre-flight check: APISIX had no `lua_ssl_trusted_certificate` set anywhere, so flipping this blind would have broken every OIDC login against Keycloak's self-signed cert — added `nginx_config.http.lua_ssl_trusted_certificate: /usr/local/apisix/certs/ca.pem` to `common/apisix_conf/config.yaml` (the cert is already mounted into the APISIX container for etcd TLS, no new volume needed). `jq`/`yamllint` valid.)
@@ -290,7 +303,7 @@
 ### G7.6 [deploy]: Phase 5.6 parked gaps
 - [x] T7.6.1 [deploy]: Fix `common/scripts/setup.sh`'s `APISIX_ADMIN_KEY` pre-check failing under `set -u` on standalone invocation — landed as a side effect of Phase 6.5's deploy work (the required-var check moved to after the OpenBao render hook runs); confirmed on reconciliation, 2026-07-29
 - [x] T7.6.2 [deploy]: Reconcile `common/docker-compose.yml`'s hardcoded `haisir-net` against the documented dev network `haisir-net-dev` (2026-07-31; `networks.haisir-net.name` was a bare literal `"haisir-net"`, ignoring `NETWORK_NAME` entirely even though `env-setup.sh` (the script that actually creates this external network) already reads a `NETWORK_NAME` override with this same default. Changed to `${NETWORK_NAME:-haisir-net}`, matching `env-setup.sh`'s own default exactly — zero-risk when unset (resolves to the identical literal as before), takes effect if an env ever sets `NETWORK_NAME`. Did not change `env-setup.sh`'s default or rename any live network — out of scope to avoid a live-host network-recreate; whether staging/prod's `.env.config.sh` currently set `NETWORK_NAME` at all needs operator verification, not something checkable from this session per the `.env*` read restriction.)
-- [ ] **G7.6: Phase 5.6's parked deploy gaps closed** — integration test
+- [x] **G7.6: Phase 5.6's parked deploy gaps closed** — integration test (2026-07-31; T7.6.1–T7.6.2 all done — `setup.sh`'s `APISIX_ADMIN_KEY` pre-check ordering fixed, and `haisir-net` now resolves `${NETWORK_NAME:-haisir-net}`, matching `env-setup.sh`'s own default)
 
 ### G7.7 [deploy]: New anomalies from the 2026-07-27 audit
 - [x] T7.7.1 [deploy]: Narrow APISIX `allow_admin` from the whole Docker subnet (`config.yaml:38`) — any container on `haisir-net` that learns the admin key can rewrite every route (2026-07-31; audited for a legitimate in-container caller of `:9180` first — none found, every admin API call (`setup.sh`, `create_*_config.sh`, cert sync) runs from the host, already covered by the `10.0.2.0/24` entry. Removed the `{{DOCKER_NETWORK_SUBNET}}` entry entirely, no functional loss. `yamllint` valid.)
@@ -325,7 +338,45 @@
 
 ## Ready now
 
-> **Recomputed 2026-07-31 (newest)** — T7.5.3 done, closing **G7.5** (T7.5.1–T7.5.4 all done).
+> **Recomputed 2026-07-31 (fifth pass)** — the previous list was stale: **T3.5.3 and T6.2.3
+> [backend] were already done** (both closed 2026-07-31, see task notes above) but still listed
+> below. Removed. Checked every remaining unchecked leaf task in the file: T2.3.2, T5.3.2, T5.4.1,
+> T5.4.2, T6.3.4, T7.4.2, T7.7.2 — every single one is individually flagged blocked, either pending
+> a scope/product decision or live-stack/staging access this session doesn't have. Per instruction,
+> these are parked below and not treated as "ready now." **The only actionable work left is closing
+> gate rows whose child tasks are all already done but whose own gate line is still unchecked** —
+> not new work, a verify-and-check-off pass against evidence already recorded in the task notes
+> above.
+
+**Closed this pass (2026-07-31, sixth pass)** — G3.1, G3.3, G3.5, G3.6, G5.2, G6.2, G7.6 all
+checked off above; see the top banner and each gate's own line for evidence. No code changed.
+
+**Still ready to close (all children done, gate row still `[ ]`, needs one more check first)**
+- G7.1 [backend]: "size limits hold under chunked encoding" — T7.1.1–T7.1.4 done, but confirm a
+  real chunked-transfer-encoding request was actually exercised (not just the `Content-Length`
+  path) before checking this one off — not pure bookkeeping like the ones just closed.
+
+**Not yet unlockable**
+- G3 overall [backend, frontend, deploy]: G3.1/G3.3/G3.5/G3.6 now closed, but G3.2 and G3.4 remain
+  blocked (see below) — G3 can't close until those two do.
+
+**Parked / blocked — excluded above per your instruction to skip these for now**
+- T2.3.2 [deploy]: needs a real benign-traffic corpus from staging/prod, not runnable in isolation
+- G3.2 [backend, frontend], G3.4 [backend]: both need a live-backend smoke test not available this
+  session
+- T5.3.2/T5.4.1/T5.4.2 [frontend] and G5.3/G5.4/G5: chained behind the deploy-owned live-stack
+  Keycloak OIDC soak (BR-CSP-007)
+- T6.3.4 [deploy] and G6.3/G6: blocked on the Postgres-TLS scope decision
+- T7.4.2 [deploy] and G7.4: chained behind T5.4.1 above
+- T7.7.2 [deploy] and G7.7: blocked on the `enable_admin_ui` product decision
+- G7 [deploy, backend, frontend] overall: blocked via G7.4/G7.7 above
+- **G4** (hard-gated on G2, itself still open on T2.3.2) and **G8** (hard-gated on G1–G7): excluded
+  entirely, as before
+
+<details>
+<summary>Superseded — previous (stale) Ready Now pass, kept for history</summary>
+
+> T7.5.3 done, closing **G7.5** (T7.5.1–T7.5.4 all done).
 > Removed from Deploy below. Nothing depends on T7.5.3, so no further tasks unblock. **G7 stays
 > open** — G7.1, G7.4, G7.6, G7.7 all still have unchecked children/gates.
 > **Recomputed 2026-07-31 (latest)** — T7.5.1/T7.5.2 done (see task notes above). **T7.5.3 newly
@@ -387,3 +438,5 @@
 
 **Specs**
 - _(none)_ — T7.5.1/T7.5.2 done 2026-07-31 (see task notes above).
+
+</details>
