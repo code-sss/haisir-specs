@@ -97,8 +97,12 @@
   > `CLAUDE.md`. Either point their payload sets at the harness or use a disposable staging-like
   > environment. **Do not close this task on a source-only or engine-level proof** — its entire value
   > is exercising the wasm/APISIX integration layer that all three defects live in.
-- [ ] T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1)
-- [ ] **G2.3: attack corpus blocked, benign corpus passes** — acceptance test
+- [x] T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1) (2026-08-01; **corpus captured against the real dev stack, not a disposable harness** — Phase 7 gateway image (`v2026.6`, same build as the already-gated `t134-fixed`/commit `69c077c`) loaded onto `apisix-dev` via the documented dev reload flow, all 25 routes/plugin_configs resynced from the current repo tree first (two were stale: `api-haitu-exam-review` still had `T3.2.6`'s pre-fix `body_schema`, and `api-haitu-exam-review-get`/the new `api-exams-images-upload` route below were never loaded at all — fixed by regenerating `common/routes/.templated/dev/` and reloading). Real authenticated browser journeys exercised: login, exam authoring, exam submission (with real quotes/contractions/chemistry notation/LaTeX), image upload, PDF viewing, video viewing, category/topic navigation, parent curriculum browsing + content creation, admin topic-content creation, extraction-job upload. **Result: NOT zero blocks** — three real, reproducible Coraza findings, none attributable to test artifacts (see below and `gulzar`'s memory `project_waf_942200_systemic.md` / `project_waf_exam_review_chat.md` / `project_waf_topic_content_ocr_latex.md` for full evidence). Collateral fix landed during this session, unrelated to the WAF corpus itself but discovered by it: new route `common/routes/24-api-exams-images-upload.json` (priority 20, multipart-only, no `body_schema`) for `POST /api/exams/images` (T3.5.1's endpoint), which had no APISIX route at all and 400'd via the generic `/api/*` write catch-all's JSON `body_schema` check — **uncommitted, awaiting user commit**. Also confirmed non-WAF, out of scope: no `worker` service exists in `dev/docker-compose.yml` so extraction-job async processing never completes; a frontend image-serving proxy 502 (`BACKEND_URL` misconfig in the frontend devcontainer); two frontend request-abort/no-submit quirks (dev-mode React double-fetch pattern). **Findings, all recorded/not fixed per user decision to log for G4 rather than patch ahead of the G2→G4 gate order:**
+  1. **Rule `942200` is systemic, not route-specific** — false-positives on ordinary comma-adjacent prose (e.g. `, don't she said "`) across three independently-tested, genuinely representative routes: category/topic navigation (`selected_nodes` query param, also cascades via `Referer` to subsequent unrelated requests), hAITU chat (`exam-review-chat`/`topic-doubt`), and topic-content creation. None share a plugin_config exclusion for it. Recommendation for whoever picks up G4: this likely needs a platform-wide decision (lower PL for this rule, or a broader scoped exclusion) rather than continuing to patch routes one at a time — run past the adversarial WAF-exclusion review norm either way, since 942200 is nominally "critical" severity. (A fourth instance, `PATCH /api/categories/{id}`, was found but judged non-representative test input by the user and excluded from this conclusion.)
+  2. Rules `932240`/`942120` are missing from the existing `id:199110` per-rule exclusion in `03-secured-api.json` that already scopes `/api/haitu/(topic-doubt|exam-review-chat)` on POST — ordinary chat prose containing a quoted aside (`said "it's fine"`) or a reaction arrow (`H2O <-> H+ + OH-`) 403s on both endpoints.
+  3. `POST /api/topics-contents/` (admin, `id:199100`) and `POST /api/parent/curriculum/topics/{id}/content` (parent, `id:199121`) only exclude rule `931130` on the `url` field — their free-text `text` field has zero coverage and 403s with five rules at once (`932240`/`942120`/`942131`/`942200`/`942430`) on ordinary content text. Fix needs to cover both mirrors together, matching `id:199120`'s existing combined-mirror pattern for the PATCH-side edit routes.
+  **This creates a structural tension worth flagging to whoever owns the plan:** these are exactly G4's kind of fix (G4.2/G4.5 already scope similar per-route exclusion rework), but G4 is hard-gated behind G2 closing, and G2.3 (immediately below) cannot honestly close while these findings stand unfixed — see G2.3's note.)
+- [ ] **G2.3: attack corpus blocked, benign corpus passes** — acceptance test (**NOT closing** 2026-08-01 — T2.3.1 and T2.3.2 are both done, a real corpus was captured against the actual dev stack, but the benign side did not pass: three reproducible false-positive findings above. The acceptance criterion is "benign corpus still passes" per `PLAN.md`, which this evidence does not satisfy. Leaving this open rather than force-closing on "the test ran" — the corpus-capture activity is done, the corpus's own result is a fail. G2 (hard gate on G4) stays open as a result. **Note the resulting deadlock:** fixing these findings is squarely G4.2/G4.5 scope, but G4 cannot start until G2 (which needs these findings fixed) closes — this specific case may need a scoped exception to the gate ordering, or the findings need fixing as a pre-G2-close cleanup pass rather than proper G4 work. Flagging for a decision rather than resolving unilaterally.)
 
 - [ ] **G2: WAF verification** — acceptance test — **HARD GATE: G4 must not start until this passes**
 
@@ -338,6 +342,16 @@
 
 ## Ready now
 
+> **Recomputed 2026-08-01 (seventh pass).** T2.3.2 done — see its task note above for full evidence.
+> Result: **not zero blocks**, three real Coraza findings recorded (942200 systemic across 3 routes;
+> 932240/942120 missing from the hAITU 199110 exclusion; topics-contents/parent-content-creation
+> text field has zero coverage). **G2.3 stays open** — its acceptance criterion ("benign corpus
+> passes") is not met by this evidence, so G2 (hard gate on G4) stays open too. This surfaces a real
+> structural tension: the fixes these findings need are G4.2/G4.5-shaped work, but G4 can't start
+> until G2 closes, and G2 can't honestly close until these are fixed. Not resolved unilaterally —
+> flagged for a scope/ordering decision. No other task unblocks as a result of T2.3.2 landing, since
+> its result didn't satisfy G2.3's pass condition.
+
 > **Recomputed 2026-07-31 (fifth pass)** — the previous list was stale: **T3.5.3 and T6.2.3
 > [backend] were already done** (both closed 2026-07-31, see task notes above) but still listed
 > below. Removed. Checked every remaining unchecked leaf task in the file: T2.3.2, T5.3.2, T5.4.1,
@@ -361,7 +375,6 @@ checked off above; see the top banner and each gate's own line for evidence. No 
   blocked (see below) — G3 can't close until those two do.
 
 **Parked / blocked — excluded above per your instruction to skip these for now**
-- T2.3.2 [deploy]: needs a real benign-traffic corpus from staging/prod, not runnable in isolation
 - G3.2 [backend, frontend], G3.4 [backend]: both need a live-backend smoke test not available this
   session
 - T5.3.2/T5.4.1/T5.4.2 [frontend] and G5.3/G5.4/G5: chained behind the deploy-owned live-stack
@@ -370,8 +383,8 @@ checked off above; see the top banner and each gate's own line for evidence. No 
 - T7.4.2 [deploy] and G7.4: chained behind T5.4.1 above
 - T7.7.2 [deploy] and G7.7: blocked on the `enable_admin_ui` product decision
 - G7 [deploy, backend, frontend] overall: blocked via G7.4/G7.7 above
-- **G4** (hard-gated on G2, itself still open on T2.3.2) and **G8** (hard-gated on G1–G7): excluded
-  entirely, as before
+- **G4** (hard-gated on G2, itself still open — G2.3's benign-corpus findings need fixing first, see
+  T2.3.2's note and the banner above) and **G8** (hard-gated on G1–G7): excluded entirely, as before
 
 <details>
 <summary>Superseded — previous (stale) Ready Now pass, kept for history</summary>
