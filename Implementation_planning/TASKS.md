@@ -45,6 +45,16 @@
 > `02-secured-anonymous.json`, `03-secured-api.json`, `04-secured-api-upload.json`. **T4.1.1 and
 > T4.3.1 [deploy] are now Ready now** — see the "Ready now" section below for the full unblock
 > chain and verification evidence.
+> **2026-08-01 (even later): T4.1.1 and T4.3.1 both done.** T4.1.1 added the `id:199130`/`id:199131`
+> `ctl:ruleEngine=DetectionOnly` soak block to `03-secured-api.json`, scoped to the exact
+> `id:199110`/`id:199120` URI+method pairs — the BR-WAF-011 safety net for G4.2's future rewrite,
+> without touching the existing exclusion lists themselves. T4.3.1 removed the four obsolete
+> `image_url` exclusions from `12-api-exams-static.json` now that G3.5 moved exam images to URL
+> references. Both `jq`-valid, both left **uncommitted** for user review (established norm for WAF
+> edits). **Neither gate closes yet**: G4.1 still needs T4.1.2 (a real-traffic log-review soak —
+> not completable in a single session, same shape as T2.3.2) and G4.3 still needs T4.3.2–T4.3.4.
+> **Newly Ready now**: T4.1.2 (depends on T4.1.1, now done) and T4.3.2/T4.3.3 (both depend only on
+> T4.3.1, now done) — see "Ready now" below.
 
 ## G1 [deploy]: Gateway build modernised and self-maintained
 
@@ -241,7 +251,7 @@
 ## G4 [deploy, backend]: Exclusions rewritten field-scoped or deleted
 
 ### G4.1 [deploy]: Soak before enforcement
-- [ ] T4.1.1 [deploy]: Set `SecRuleEngine DetectionOnly` on the affected URIs per BR-WAF-011 (depends on G2)
+- [x] T4.1.1 [deploy]: Set `SecRuleEngine DetectionOnly` on the affected URIs per BR-WAF-011 (depends on G2) (2026-08-01; added `id:199130`/`id:199131` chained `SecRule` blocks to `common/plugin_configs/03-secured-api.json`, right after the `id:199110`/`id:199120` blanket-exclusion blocks they soak for — `ctl:ruleEngine=DetectionOnly` scoped to the exact same URI+method pairs (`POST /api/haitu/(topic-doubt|exam-review-chat)`, `PATCH /api/(topics-contents|parent/curriculum/topic-contents)/[^/]+`). Deliberately does not touch the existing `ctl:ruleRemoveById` lists — that rewrite is T4.2.1's job, gated behind T4.1.2. `jq` valid. Left **uncommitted** in the working tree for user review, per this repo's established norm for WAF exclusion edits.)
 - [ ] T4.1.2 [deploy]: Collect and review logs across real journeys before restoring blocking (depends on T4.1.1)
 - [ ] **G4.1: soak evidence collected** — acceptance test
 
@@ -274,7 +284,7 @@
 > `image_url` exclusions are obsoleted by G3.5. The exclusions on `question_text`, `explanation`,
 > `model_answer`, `.text`, `json.description` and `correct_answers` address real, unrelated false
 > positives in science prose, mathematical notation and quoted text and **must be preserved**.
-- [ ] T4.3.1 [deploy]: Remove only the four `image_url` exclusions (`ATTACK-RCE`, `ATTACK-GENERIC`, `ATTACK-XSS`, `ATTACK-SQLI`) now that images are URL references; leave every other field exclusion in place (depends on T3.5.4 [frontend])
+- [x] T4.3.1 [deploy]: Remove only the four `image_url` exclusions (`ATTACK-RCE`, `ATTACK-GENERIC`, `ATTACK-XSS`, `ATTACK-SQLI`) now that images are URL references; leave every other field exclusion in place (depends on T3.5.4 [frontend]) (2026-08-01; removed the 4 `SecRuleUpdateTargetByTag ... !ARGS_POST:/image_url/` directives plus their base64-image justification comment block from `common/routes/12-api-exams-static.json`; every other field exclusion (`question_text`, `explanation`, `model_answer`, `.text`, `json.description`, `correct_answers`, `932271`, `920420`, session-cookie rules) left untouched, per G4.3's explicit "do not delete" warning. `jq` valid; grepped the file post-edit to confirm no `image_url` directive remains. Left **uncommitted** in the working tree for user review, per this repo's established norm for WAF exclusion edits.)
 - [ ] T4.3.2 [deploy]: Restore `inbound_anomaly_score_threshold` from 12 to the platform default of 5 (`id:199101`) per BR-WAF-006 (depends on T4.3.1)
 - [ ] T4.3.3 [deploy]: Restore `id:199104` in `12-api-exams-static.json` to the platform defaults now that base64 image arguments are gone — the platform baseline is `id:199004`, identical across all seven configs that set it: `max_file_size=1048576`, `combined_file_sizes=1048576`, `max_num_args=512`, `arg_name_length=256`, `arg_length=4096`, `total_arg_length=65535`. Current raised values to be retired: `max_file_size=52428800`, `combined_file_sizes=104857600`, `max_num_args=2000`, `arg_length=52428800`, `total_arg_length=104857600`. Also drop the separate `id:199110` `max_num_args=2000` SecAction at `:39` in this same file — it re-raises what this task lowers (depends on T4.3.1)
 - [ ] T4.3.4 [deploy]: Confirm the surviving field exclusions still suppress their original false positives at anomaly threshold 5 — the threshold raise may have been masking cases the field exclusions alone do not cover (depends on T4.3.2)
@@ -541,7 +551,11 @@ per-route) and to all four plugin_configs (finding 1, `942200`'s startup-time gl
 > scope/product decision from the user rather than a mechanical fix (T6.3.4: Postgres has no TLS at
 > all, fixing it properly means standing up server-side TLS, bigger than the task as scoped; T7.7.2:
 > an explicit "decide whether X is warranted" call). Both remain listed below pending that decision.
-- T2.3.2 [deploy]: Capture a benign-traffic corpus from real journeys and assert zero blocks at the platform anomaly threshold (depends on T2.3.1, done 2026-07-30) — **unblocked 2026-07-30**; needs real journeys (staging or prod), not the disposable harness used for T2.3.1. **Closes G2.3 → G2, a hard gate on G4.** Parked for now (2026-07-30) — no other ready work depends on it, since G4 is far from starting anyway.
+> 2026-08-01: T4.1.1 and T4.3.1 done (see task notes above). T2.3.2 (done 2026-07-31/2026-08-01,
+> see task note) removed from this list — stale carry-over from an earlier recompute pass.
+- T4.1.2 [deploy]: Collect and review logs across real journeys before restoring blocking (depends on T4.1.1, done 2026-08-01) — **unblocked 2026-08-01**; needs a real-traffic log-review soak (staging or prod) over time, not completable in a single session — same shape as T2.3.2. Closes G4.1, which T4.2.1 (the actual field-scoped rewrite) depends on.
+- T4.3.2 [deploy]: Restore `inbound_anomaly_score_threshold` from 12 to the platform default of 5 (`id:199101`) per BR-WAF-006 (depends on T4.3.1, done 2026-08-01) — **unblocked 2026-08-01**.
+- T4.3.3 [deploy]: Restore `id:199104` in `12-api-exams-static.json` to platform defaults, and drop the separate `id:199110` `max_num_args=2000` `SecAction` in the same file (depends on T4.3.1, done 2026-08-01) — **unblocked 2026-08-01**.
 - T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies) — **blocked pending a scope decision**, see banner above.
 - T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` is warranted (no dependencies) — **blocked pending a product decision**, see banner above.
 
