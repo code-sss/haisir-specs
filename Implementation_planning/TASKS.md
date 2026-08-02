@@ -55,6 +55,18 @@
 > not completable in a single session, same shape as T2.3.2) and G4.3 still needs T4.3.2–T4.3.4.
 > **Newly Ready now**: T4.1.2 (depends on T4.1.1, now done) and T4.3.2/T4.3.3 (both depend only on
 > T4.3.1, now done) — see "Ready now" below.
+> **2026-08-02: T4.3.2, T4.3.3, T4.3.4 done — G4.3 CLOSED.** Threshold restored 12→5, `id:199104`
+> body limits restored to the platform `id:199004` baseline, the redundant `id:199110`
+> `max_num_args` re-raise deleted. T4.3.4 verified all of it live against a real
+> `haisir-gateway:v2026.6` image via a disposable isolated stack (adapted
+> `common/scripts/tests/waf-harness.sh`'s pattern, non-secret throwaway admin key, no real
+> `apisix-dev`/OpenBao secrets touched) — 12/12 checks: every surviving exclusion's original FP case
+> passes individually AND combined in one request (the specific "threshold may have been masking
+> this" risk this task existed to rule out), `image_url` now correctly blocks a real attack while
+> still passing benign URLs, unrelated attack payloads still blocked. Nothing else in TASKS.md
+> depends on G4.3/T4.3.4 closing, so no further task unblocks as a direct result — G4 overall stays
+> open on G4.1/G4.2/G4.4/G4.5. All three changes left **uncommitted** with T4.3.1, same WAF-edit
+> review norm.
 
 ## G1 [deploy]: Gateway build modernised and self-maintained
 
@@ -285,10 +297,10 @@
 > `model_answer`, `.text`, `json.description` and `correct_answers` address real, unrelated false
 > positives in science prose, mathematical notation and quoted text and **must be preserved**.
 - [x] T4.3.1 [deploy]: Remove only the four `image_url` exclusions (`ATTACK-RCE`, `ATTACK-GENERIC`, `ATTACK-XSS`, `ATTACK-SQLI`) now that images are URL references; leave every other field exclusion in place (depends on T3.5.4 [frontend]) (2026-08-01; removed the 4 `SecRuleUpdateTargetByTag ... !ARGS_POST:/image_url/` directives plus their base64-image justification comment block from `common/routes/12-api-exams-static.json`; every other field exclusion (`question_text`, `explanation`, `model_answer`, `.text`, `json.description`, `correct_answers`, `932271`, `920420`, session-cookie rules) left untouched, per G4.3's explicit "do not delete" warning. `jq` valid; grepped the file post-edit to confirm no `image_url` directive remains. Left **uncommitted** in the working tree for user review, per this repo's established norm for WAF exclusion edits.)
-- [ ] T4.3.2 [deploy]: Restore `inbound_anomaly_score_threshold` from 12 to the platform default of 5 (`id:199101`) per BR-WAF-006 (depends on T4.3.1)
-- [ ] T4.3.3 [deploy]: Restore `id:199104` in `12-api-exams-static.json` to the platform defaults now that base64 image arguments are gone — the platform baseline is `id:199004`, identical across all seven configs that set it: `max_file_size=1048576`, `combined_file_sizes=1048576`, `max_num_args=512`, `arg_name_length=256`, `arg_length=4096`, `total_arg_length=65535`. Current raised values to be retired: `max_file_size=52428800`, `combined_file_sizes=104857600`, `max_num_args=2000`, `arg_length=52428800`, `total_arg_length=104857600`. Also drop the separate `id:199110` `max_num_args=2000` SecAction at `:39` in this same file — it re-raises what this task lowers (depends on T4.3.1)
-- [ ] T4.3.4 [deploy]: Confirm the surviving field exclusions still suppress their original false positives at anomaly threshold 5 — the threshold raise may have been masking cases the field exclusions alone do not cover (depends on T4.3.2)
-- [ ] **G4.3: exam authoring route back to platform-default thresholds with field exclusions intact** — integration test
+- [x] T4.3.2 [deploy]: Restore `inbound_anomaly_score_threshold` from 12 to the platform default of 5 (`id:199101`) per BR-WAF-006 (depends on T4.3.1) (2026-08-02; `id:199101`'s `setvar:tx.inbound_anomaly_score_threshold` `12` → `5` in `common/routes/12-api-exams-static.json`; `outbound_anomaly_score_threshold=4` untouched, not in scope. `jq` valid. Left uncommitted with T4.3.1/T4.3.3, same WAF-edit review norm.)
+- [x] T4.3.3 [deploy]: Restore `id:199104` in `12-api-exams-static.json` to the platform defaults now that base64 image arguments are gone — the platform baseline is `id:199004`, identical across all seven configs that set it: `max_file_size=1048576`, `combined_file_sizes=1048576`, `max_num_args=512`, `arg_name_length=256`, `arg_length=4096`, `total_arg_length=65535`. Current raised values to be retired: `max_file_size=52428800`, `combined_file_sizes=104857600`, `max_num_args=2000`, `arg_length=52428800`, `total_arg_length=104857600`. Also drop the separate `id:199110` `max_num_args=2000` SecAction at `:39` in this same file — it re-raises what this task lowers (depends on T4.3.1) (2026-08-02; `id:199104` restored to the exact platform-baseline `tx.*` values listed above (added `arg_name_length=256`, previously unset on this route entirely); the separate `id:199110` `SecAction` re-raising `max_num_args=2000` deleted outright. `SecRequestBodyLimit`/`SecRequestBodyNoFilesLimit` (100MB, a different directive, not part of `id:199104`'s `tx.*` vars) deliberately left untouched — still needed for legitimate PDF/large uploads and not named by this task. `jq` valid.)
+- [x] T4.3.4 [deploy]: Confirm the surviving field exclusions still suppress their original false positives at anomaly threshold 5 — the threshold raise may have been masking cases the field exclusions alone do not cover (depends on T4.3.2) (2026-08-02; verified live against a real gateway image (`registry.haisir.in/haisir-gateway:v2026.6`, same build already gated at T2.3.2/T1.3.4) via a disposable isolated stack — adapted `common/scripts/tests/waf-harness.sh`'s pattern (throwaway etcd+upstream+APISIX, non-secret placeholder admin key, fully torn down after) rather than touching the real `apisix-dev`/OpenBao secrets, since this route needs no OIDC token to reach Coraza's body-phase rules and the harness avoids all real-secret handling. Loaded `12-api-exams-static.json`'s exact post-T4.3.2/T4.3.3 route-level `coraza-filter` config. **12/12 checks passed:** each surviving exclusion's original false-positive example (question_text math/units, explanation rhyme-scheme + tilde `~100` + PHP-like `system(`, model_answer essay prose, `options[].text` 'cat / dog', correct_answers mixed numbers) individually passes (200) at threshold 5; **all of them combined in one request also passes (200)** — the specific case this task exists to check, proving threshold 12 wasn't masking a multi-rule score that tips over 5 once lowered; `image_url` (exclusion removed by T4.3.1) now correctly blocks a real XSS payload (403) while a plain benign URL still passes (200); a real SQLi/XSS payload on an unexcluded field is still blocked (403), confirming the lowered threshold didn't weaken unrelated protection. Script kept at the session scratchpad, not committed to the repo — this was a one-off verification run, not a reusable test suite addition.)
+- [x] **G4.3: exam authoring route back to platform-default thresholds with field exclusions intact** — integration test (2026-08-02; T4.3.1–T4.3.4 all done — T4.3.4's live harness run above is this gate's own integration test: threshold restored to 5, surviving field exclusions demonstrably still suppress their false positives (individually and combined), the four obsolete `image_url` exclusions are gone and that field is now genuinely protected, and unrelated attack payloads are unaffected.)
 
 ### G4.4 [deploy]: Unambiguous route matching
 - [ ] T4.4.1 [deploy]: Raise the exact-URI routes `21-api-haitu-exam-review.json` and `22-api-haitu-pattern-analysis.json` above `19-api-haitu.json`'s `/api/haitu/*` per BR-WAF-012
@@ -434,6 +446,26 @@
 
 ## Ready now
 
+> **Recomputed 2026-08-02 (eighth pass).** T4.1.1, T4.3.1, T4.3.2, T4.3.3, T4.3.4 all done since the
+> seventh pass (see task notes above and the top-of-file banners). **G4.3 is now CLOSED** —
+> live-verified via a disposable isolated-stack harness (adapted `waf-harness.sh`'s pattern, no real
+> secrets touched): threshold restored to 5, surviving field exclusions still suppress their FPs
+> individually and combined, `image_url` now genuinely protected, unrelated attacks still blocked.
+> Nothing else depends on G4.3 closing, so no further task unblocks as a direct result.
+> **Currently Ready now: T4.1.2** [deploy] (depends on T4.1.1, done) — the BR-WAF-011 soak's
+> log-collection step; needs a real-traffic review window on staging/prod, not completable in a
+> single session, same shape as T2.3.2. Closes G4.1, which T4.2.1 (the actual `id:199110`/`id:199120`
+> field-scoped rewrite) depends on.
+> **Also newly surfaced this pass, not evaluated in any recompute since G2 closed:** T4.4.1 [deploy]
+> (route-priority fix, `21-api-haitu-exam-review.json`/`22-api-haitu-pattern-analysis.json` above
+> `19-api-haitu.json`) and T4.5.1/T4.5.3 [deploy] (exclusion-hygiene: `931130` justification
+> correction, re-scoping the `18-api-exam-session-submit.json`/`01`/`02`/`04` exclusions) — both
+> carry **no listed dependency** in TASKS.md and aren't blocked by G4.1/G4.2/G4.3 (independent
+> workstreams under the same G4 parent per PLAN.md's goal tree, not a sequential chain). T4.5.2 is
+> [backend], also dependency-free. These were previously excluded wholesale only because "all of G4"
+> was hard-gated behind G2; now that G2 has closed, they haven't individually been picked up yet —
+> flagging rather than silently deferring again.
+
 > **Recomputed 2026-08-01 (seventh pass).** T2.3.2 done — see its task note above for full evidence.
 > Result: **not zero blocks**, three real Coraza findings recorded (942200 systemic across 3 routes;
 > 932240/942120 missing from the hAITU 199110 exclusion; topics-contents/parent-content-creation
@@ -553,9 +585,9 @@ per-route) and to all four plugin_configs (finding 1, `942200`'s startup-time gl
 > an explicit "decide whether X is warranted" call). Both remain listed below pending that decision.
 > 2026-08-01: T4.1.1 and T4.3.1 done (see task notes above). T2.3.2 (done 2026-07-31/2026-08-01,
 > see task note) removed from this list — stale carry-over from an earlier recompute pass.
+> 2026-08-02: T4.3.2/T4.3.3/T4.3.4 done, **G4.3 closed** (see task notes above). Removed from this
+> list — nothing else depends on G4.3 closing.
 - T4.1.2 [deploy]: Collect and review logs across real journeys before restoring blocking (depends on T4.1.1, done 2026-08-01) — **unblocked 2026-08-01**; needs a real-traffic log-review soak (staging or prod) over time, not completable in a single session — same shape as T2.3.2. Closes G4.1, which T4.2.1 (the actual field-scoped rewrite) depends on.
-- T4.3.2 [deploy]: Restore `inbound_anomaly_score_threshold` from 12 to the platform default of 5 (`id:199101`) per BR-WAF-006 (depends on T4.3.1, done 2026-08-01) — **unblocked 2026-08-01**.
-- T4.3.3 [deploy]: Restore `id:199104` in `12-api-exams-static.json` to platform defaults, and drop the separate `id:199110` `max_num_args=2000` `SecAction` in the same file (depends on T4.3.1, done 2026-08-01) — **unblocked 2026-08-01**.
 - T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies) — **blocked pending a scope decision**, see banner above.
 - T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` is warranted (no dependencies) — **blocked pending a product decision**, see banner above.
 
