@@ -1,10 +1,33 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`e2e0f0f` frontend:`a72ddcf` deploy:`8e07d47` (2026-08-03, T4.5.2
-> committed and pushed to origin/main; reconciled after Phase 6.5 shipped in the interim — see
-> `PLAN.md`'s reconciliation note)
+> Last baselined: backend:`e2e0f0f` frontend:`06600f6` deploy:`c938e17` (2026-08-03, reconciled
+> against each repo's actual `origin/main` — see the note immediately below for what moved)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
+> **2026-08-03 (reconciliation pass): several "left uncommitted for review" edits were confirmed
+> landed on `origin/main` in all three repos — no task's completion status changes, only the
+> commit/push state.** Checked every sibling repo directly (`git fetch` + `git log`), not just
+> `TASKS.md`'s own notes, since a prior baseline banner (deploy `8e07d47`, frontend `a72ddcf`) had
+> drifted stale behind real commits that landed without the banner being updated.
+> - **`haisir-deploy` HEAD is now `c938e17`** (was `7a0d983` per the last-recorded caution) — three
+>   further commits, all previously described in this file as "left uncommitted in the working tree
+>   for user review," are confirmed committed and pushed to `origin/main`, working tree clean:
+>   `7403320` (2026-08-01, "close WAF false positives on hAITU chat, topic content, and nav" — T2.3.2's
+>   three findings), `05af369` (2026-08-02, "adjust anomaly score thresholds and restore request body
+>   limits for image uploads" — T4.1.1's `DetectionOnly` soak block plus T4.3.1/T4.3.2/T4.3.3's
+>   restores), `c938e17` (2026-08-02, "disambiguate hAITU route priority, correct 931130 note" —
+>   T4.4.1's route-priority fix plus T4.5.1's justification correction). The "left uncommitted for
+>   user review" line in each of those tasks' notes below is superseded by this — the review norm
+>   still applies to future WAF edits (T4.2.1 when it lands), just not to these, which are landed.
+> - **`haisir-backend` origin/main is `e2e0f0f`**, two commits ahead of what this file's per-task
+>   notes assumed uncommitted: `93d92ce` (2026-08-01, "add chunked transfer encoding test for
+>   RequestBodySizeLimitMiddleware") is **G7.1's real over-the-wire test, confirmed committed and
+>   pushed** — the "needs a commit + push before it counts as landed" caveat on G7.1's gate note is
+>   resolved. `e2e0f0f` (T4.5.2) sits on top of it, already correctly recorded. (The host checkout at
+>   `/home/gulzar/Workspace/haisir-backend` was one `git pull` behind at the time this note was first
+>   written — user pulled same day, host checkout now also at `e2e0f0f`, no gap remains.)
+> - **No other drift found** — `haisir-frontend` origin/main matches the already-recorded `06600f6`,
+>   and no sibling repo has uncommitted working-tree changes beyond these.
 > **2026-07-31: deploy baseline bumped to `d55f05a`** — T3.2.6/T6.1.2/T6.3.1/T6.3.2/T6.3.3/T7.4.1/
 > T7.6.2/T7.7.1/T7.7.3/T7.7.4/T7.7.5 all committed + pushed to `main` in `d55f05a`
 > ("chore(deploy): harden internal TLS verification, admin scope, and secrets-at-rest").
@@ -446,6 +469,20 @@
 - [ ] **G8: Review gate and closeout** — acceptance test — **HARD GATE: no merge until this passes**
 
 ## Ready now
+
+> **Recomputed 2026-08-03 (twelfth pass — reconciliation only, no new task work).** Verified every
+> sibling repo's actual `origin/main` against this file's task notes (see the top-of-file banner for
+> full detail): the deploy WAF edits for T2.3.2/T4.1.1/T4.3.1–T4.3.3/T4.4.1/T4.5.1 and the G7.1
+> backend test are all confirmed committed and pushed, closing out every "left uncommitted" caveat
+> that predates this pass. **No task's checkbox state changes and no new task unblocks** — commit
+> status isn't a dependency edge in this file's graph. Exhaustively re-walked all 18 remaining
+> unchecked leaf tasks (`T4.1.2`, `T4.2.1–T4.2.3`, `T5.3.2`, `T5.4.1–T5.4.2`, `T6.3.4`, `T7.4.2`,
+> `T7.7.2`, `T8.1.1–T8.1.3`, `T8.2.1–T8.2.2`, `T8.3.1–T8.3.3`) against their listed dependencies:
+> every one is correctly parked below — either sequentially blocked, waiting on live-stack/real-traffic
+> access this session doesn't have, waiting on a scope/product decision, or hard-gated behind G8.
+> **None are ready-but-mislabeled.** Ready now stays exactly: **[deploy] T4.1.2** (soak, not
+> single-session-completable) plus the parked **T6.3.4 / T7.7.2**. **[backend]/[frontend]/[specs]:
+> none.**
 
 > **Recomputed 2026-08-03 (eleventh pass).** T4.5.2 [backend] done — committed `e2e0f0f` and pushed
 > to `origin/main` (real-service PATCH URL-enforcement regression tests; no production code change,
