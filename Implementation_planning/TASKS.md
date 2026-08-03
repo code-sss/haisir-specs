@@ -1,8 +1,9 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`5068a14` frontend:`a72ddcf` deploy:`8e07d47` (2026-07-30, reconciled after
-> Phase 6.5 shipped in the interim — see `PLAN.md`'s reconciliation note)
+> Last baselined: backend:`e2e0f0f` frontend:`a72ddcf` deploy:`8e07d47` (2026-08-03, T4.5.2
+> committed and pushed to origin/main; reconciled after Phase 6.5 shipped in the interim — see
+> `PLAN.md`'s reconciliation note)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 > **2026-07-31: deploy baseline bumped to `d55f05a`** — T3.2.6/T6.1.2/T6.3.1/T6.3.2/T6.3.3/T7.4.1/
 > T7.6.2/T7.7.1/T7.7.3/T7.7.4/T7.7.5 all committed + pushed to `main` in `d55f05a`
@@ -309,9 +310,9 @@
 
 ### G4.5 [deploy]: Exclusion hygiene
 - [x] T4.5.1 [deploy]: Correct the `id:199100` `931130` justification in `03-secured-api.json` — it still says the topic-content URL allowlist is "tracked in backend task"; it shipped (https-only + hostname allowlist, rejects protocol-relative `//evil.com`), per BR-WAF-008. `id:199121` (the parent-route mirror added 2026-07-29) already carries a correct, complete justification — no fix needed there, verify only (2026-08-02; `id:199100`'s `RESIDUAL RISK` comment in `03-secured-api.json` rewritten from "(tracked in backend task: validate_topic_content_url)" to "IMPLEMENTED in the backend create-side validator — https-only scheme plus hostname allowlist, rejects protocol-relative '//evil.com'; the PATCH-side parity gap is tracked in T4.5.2 [backend]". `id:199121` re-verified — its justification already states the shipped control correctly, no "tracked in backend task" stale text, **no change**. Comment-only edit, `jq` valid. Left **uncommitted** with T4.4.1, same G4 review norm.)
-- [ ] T4.5.2 [backend]: Close the related gap — `TopicContentUpdate.validate_url` enforces scheme + allowlist but not the "external URLs only for `content_type == video`" rule that create applies, so PATCH can attach an allowlisted external URL to a `pdf`/`text` item
+- [x] T4.5.2 [backend]: Close the related gap — `TopicContentUpdate.validate_url` enforces scheme + allowlist but not the "external URLs only for `content_type == video`" rule that create applies, so PATCH can attach an allowlisted external URL to a `pdf`/`text` item (2026-08-03; **no production code change needed** — the gap was already functionally closed at the service layer by `TopicContentService._normalize_update_url` (raises `ValueError` for an external URL on a non-video row, since commit `c24d17e` 2026-07-10), wired through both PATCH routes (`PATCH /api/topics-contents/{id}` admin, `PATCH /api/parent/curriculum/topic-contents/{id}` parent) which map it to HTTP 400. The schema `TopicContentUpdate` structurally cannot enforce the content_type rule — `content_type` is deliberately excluded (immutable after creation) — so the service is the correct and only enforcer for PATCH, mirroring how create's service trusts its own schema. Verified there is no third PATCH/update path accepting a user-supplied url that bypasses `_normalize_update_url`. The actual work was locking the regression: the existing route tests mocked the entire service (`side_effect=ValueError`), so they would still pass if the guard were deleted. Added real-service-through-real-route regression tests (parametrized over pdf/image/text/question/question_answer → 400 "video" with repo write not awaited; video → 200 verbatim; local path on non-video → 200 normalized) plus a parent PATCH wrong-role 403 test. Sanity-verified: disabling the `content_type != video` branch made all rejection tests fail (200 instead of 400); restored. Committed 2026-08-03 as `e2e0f0f` (`test(topic-content): lock PATCH external-URL enforcement end-to-end (T4.5.2)`) and pushed to `origin/main`; full suite 4983 passed, coverage 100%.)
 - [x] T4.5.3 [deploy]: Re-scope or delete the remaining exclusions on `18-api-exam-session-submit.json` and the `01`/`02`/`04` plugin configs to field-scoped form per BR-WAF-004 (2026-08-02; **no file edit required — all four files already comply with BR-WAF-004.** Verified by exhaustive grep: `ctl:ruleRemoveById` (the prohibited whole-rule/whole-request form) = **0** in `18-api-exam-session-submit.json`, `01-secured-authenticated.json`, `02-secured-anonymous.json`, `04-secured-api-upload.json`. Every exclusion is the startup-time field-scoped form BR-WAF-004 prescribes — `SecRuleUpdateTargetById <id> !REQUEST_COOKIES:<name>`/`!ARGS_GET:<name>`/`!REQUEST_HEADERS:<name>` (01/02/04, 17–18 each) and `SecRuleUpdateTargetByTag <tag> "!ARGS_POST:/<field>/"` (route 18, text_answer/working_text). Every exclusion carries a written justification (BR-WAF-007); none reference a shipped-but-unretired compensating control (BR-WAF-008 — the only stale one, `id:199100`'s 931130, is T4.5.1's, in `03` not in scope here). Route 18's `id:199204` body-limit raises (`arg_length=32768`, `total_arg_length=524288`) are justified body limits for essay `text_answer`, not rule exclusions — retained. The deliverable is the verification, not a fabricated edit; G4.5's "field-scoped" half is satisfied for these files, leaving only T4.5.2 [backend] before G4.5 can close.)
-- [ ] **G4.5: every surviving exclusion is field-scoped and truthfully justified** — acceptance test
+- [x] **G4.5: every surviving exclusion is field-scoped and truthfully justified** — acceptance test (2026-08-03; all three children done — T4.5.1 corrected the stale `931130` justification in `03-secured-api.json`, T4.5.3 verified `18`/`01`/`02`/`04` already comply with BR-WAF-004 (all exclusions field-scoped `SecRuleUpdateTarget*`, zero `ctl:ruleRemoveById`, every exclusion justified), T4.5.2 closed the backend PATCH-side URL-allowlist parity gap. Every surviving exclusion is field-scoped and carries a truthful justification per BR-WAF-007/BR-WAF-008; no stale "tracked in backend task" text remains. G4 itself stays open on G4.1/T4.1.2 soak and G4.2/T4.2.1.)
 
 - [ ] **G4: Exclusions rewritten field-scoped or deleted** — integration test
 
@@ -445,6 +446,16 @@
 - [ ] **G8: Review gate and closeout** — acceptance test — **HARD GATE: no merge until this passes**
 
 ## Ready now
+
+> **Recomputed 2026-08-03 (eleventh pass).** T4.5.2 [backend] done — committed `e2e0f0f` and pushed
+> to `origin/main` (real-service PATCH URL-enforcement regression tests; no production code change,
+> the guard already existed at the service layer). All three G4.5 children now done (T4.5.1, T4.5.2,
+> T4.5.3) → **G4.5 CLOSED** (acceptance: every surviving exclusion is field-scoped and truthfully
+> justified — verified by the deploy-side T4.5.1/T4.5.3 work plus T4.5.2's backend parity). No new
+> task unblocks as a direct result — nothing in TASKS.md depends on G4.5 or T4.5.2. **G4 stays open**
+> on G4.1 (T4.1.2 soak) and G4.2 (T4.2.1) only. **Currently Ready now [backend]: none** (T4.5.2 was
+> the last freely-ready backend task). Ready now [deploy] unchanged: T4.1.2, plus the parked
+> T6.3.4 / T7.7.2 (scope/product decisions). Backend baseline bumped to `e2e0f0f`.
 
 > **Recomputed 2026-08-02 (tenth pass).** T4.4.2 [deploy] done — **G4.4 CLOSED** (T4.4.1 + T4.4.2
 > both done; the 4/4 disposable-harness run is the gate's integration test). The verification also
