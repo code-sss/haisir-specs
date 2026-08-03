@@ -1,9 +1,25 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`e2e0f0f` frontend:`06600f6` deploy:`c938e17` (2026-08-03, reconciled
+> Last baselined: backend:`e2e0f0f` frontend:`06600f6` deploy:`e337f83` (2026-08-03, reconciled
 > against each repo's actual `origin/main` — see the note immediately below for what moved)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
+> **2026-08-03 (thirteenth pass): T4.1.2 done, closing G4.1 — deploy baseline bumped to `e337f83`.**
+> A live dev-stack traffic soak (see T4.1.2's task note for full methodology and evidence) found and
+> fixed 2 real WAF gaps on the `PATCH topics-contents`/parent-mirror route (`942120`; and
+> `932200`/`942131`/`942440` + a `tx.arg_length` bump for `920370`), adversarially reviewed before
+> the attack-signature rules were excluded, live-verified clean including one real successful save.
+> Committed and pushed by the user themselves (`e337f83`, "fix(apisix): update rule exclusions and
+> raise argument length for topic-content edits"), confirmed on `origin/main`. **G4.1 closes.**
+> **T4.2.1 [deploy] is now Ready now** — its only remaining dependency was T4.1.2 (T3.2.5 [frontend]
+> was already done 2026-07-30). Worth flagging for whoever picks up T4.2.1: this session's fixes
+> stayed blanket `ctl:ruleRemoveById` (same as the rest of this route's existing exclusions), not a
+> field-scoped rewrite — the 2026-07-01 finding that `ctl:ruleRemoveTargetById` is unreliable on this
+> Coraza WASM build (APISIX 3.17.0 + coraza-proxy-wasm 0.6.0) held again by inference (not re-tested
+> directly), so T4.2.1 may need to reconsider whether field-scoping is achievable at all on this
+> build before attempting it, rather than assuming the task's literal wording is still the right
+> design. **G4 stays open** on G4.2 (T4.2.1), G4.4 already closed, G4.5 already closed — G4.3 already
+> closed too, so G4 now hinges solely on G4.2.
 > **2026-08-03 (reconciliation pass): several "left uncommitted for review" edits were confirmed
 > landed on `origin/main` in all three repos — no task's completion status changes, only the
 > commit/push state.** Checked every sibling repo directly (`git fetch` + `git log`), not just
@@ -288,8 +304,19 @@
 
 ### G4.1 [deploy]: Soak before enforcement
 - [x] T4.1.1 [deploy]: Set `SecRuleEngine DetectionOnly` on the affected URIs per BR-WAF-011 (depends on G2) (2026-08-01; added `id:199130`/`id:199131` chained `SecRule` blocks to `common/plugin_configs/03-secured-api.json`, right after the `id:199110`/`id:199120` blanket-exclusion blocks they soak for — `ctl:ruleEngine=DetectionOnly` scoped to the exact same URI+method pairs (`POST /api/haitu/(topic-doubt|exam-review-chat)`, `PATCH /api/(topics-contents|parent/curriculum/topic-contents)/[^/]+`). Deliberately does not touch the existing `ctl:ruleRemoveById` lists — that rewrite is T4.2.1's job, gated behind T4.1.2. `jq` valid. Left **uncommitted** in the working tree for user review, per this repo's established norm for WAF exclusion edits.)
-- [ ] T4.1.2 [deploy]: Collect and review logs across real journeys before restoring blocking (depends on T4.1.1)
-- [ ] **G4.1: soak evidence collected** — acceptance test
+- [x] T4.1.2 [deploy]: Collect and review logs across real journeys before restoring blocking (depends on T4.1.1) (2026-08-03; **methodology**: a live dev-stack (`apisix-dev`) traffic soak substituting for a staging/prod real-traffic window, a deliberate substitution the user explicitly approved ("we can test the same rigorously with dev as staging/prod... this is going to be very close to real and even worse than that") — dev runs the identical Coraza/CRS config, and manual testing here can deliberately probe edge cases organic traffic might not surface for weeks. Real journeys exercised across admin/student/instructor roles, covering exactly the 3 URI+method pairs `id:199130`/`199131`'s `DetectionOnly` soak protects: (1) `POST /api/haitu/exam-review-chat`, (2) `POST /api/haitu/topic-doubt`, (3) `PATCH /api/(topics-contents|parent/curriculum/topic-contents)/*`. 4 realistic content patterns tried per route (quoted asides, chemistry/math notation, markdown-formatted long-form prose, LaTeX symbols), each read live via `docker logs apisix-dev | grep -oE 'id "[0-9]+"'`. Routes 1–2: 4/4 clean, no gaps. Route 3: **2 real gaps found**, both would have 403'd real users without T4.1.1's soak:
+  - `942120` (SQLi 'SQL Operator Detected', critical) — chemistry reaction-arrow notation (`H2O <-> H+ + OH-`). Identical gap already fixed on the sibling `id:199110` (2026-08-01) but never carried over to this route.
+  - `932200`/`942131`/`942440` (RCE Bypass/SQLi-boolean/SQL-comment, all critical) — long-form AI-generated-review-style prose with markdown `##` headers. An adversarial review was run first (per `feedback_waf_challenger_review`, since two are real attack-signature families, not just noise rules) before excluding: verdict was blanket `ctl:ruleRemoveById` for all three (low-precision keyword/phrase matches on this content class; field-scoped `ctl:ruleRemoveTargetById` already confirmed unreliable on this Coraza WASM build by the 2026-07-01 retest referenced in G4.2 below, so blanket remains the only confirmed-working mechanism here too — same conclusion as the rest of this route's existing exclusions).
+  - `920370` ('Argument value too long', critical) fired on the same request (4498-char field vs. the 4096 platform baseline) — the adversarial review **rejected** blanket removal for this one specifically (it's a pure size threshold, not a content signature; blanket-removing it would blind the route to oversized-argument abuse in any field, permanently). Fixed instead via a new URI-scoped `id:199122` block raising `tx.arg_length` to 16384, mirroring the existing `id:199204` precedent (`18-api-exam-session-submit.json`) for the same class of problem — raising the limit is the correct fix for a size problem, not rule removal.
+
+  All 4 fixes use the SAME combined URI regex already used by `id:199120`/`id:199131` (`^/api/(topics-contents|parent/curriculum/topic-contents)/[^/]+$`), so the parent-owned mirror route is covered by construction — no separate edit needed. Both live-reloaded onto `apisix-dev` (`template-configs.sh` + `setup.sh --plugins-only`, `OPENBAO_DEPLOY_SECRETS=true`) and re-verified clean, including one real successful content save (initially blocked by an unrelated backend 422, see below).
+
+  **Bonus, out of T4.1.2's formal scope**: also tested exam question add/edit (`PATCH /api/exams/*/static` — no `DetectionOnly` protection on this route). 4/4 WAF-clean. Separately surfaced a reproducible backend `500`-then-retry-succeeds pattern on first save attempt — confirmed NOT WAF-related (Coraza behavior identical on both attempts), not investigated further per the user's explicit call to set it aside.
+
+  **Separately identified, NOT WAF, NOT this repo's scope**: backend's `TopicContentUpdate.text` Pydantic `max_length=4000` (`haisir-backend`) produced a `422` on the first long-content test (~4500 chars). Confirmed unrelated to WAF — Coraza passed the request both before and after the exclusion fix; the 422 came from the backend's own schema validation. Flagged to the user, who declined to record it as a task.
+
+  Committed and pushed by the user themselves in `e337f83` ("fix(apisix): update rule exclusions and raise argument length for topic-content edits"), confirmed on `origin/main`, working tree clean as of this note.)
+- [x] **G4.1: soak evidence collected** — acceptance test (2026-08-03; T4.1.2's live dev-stack soak produced real, actionable evidence — 2 genuine gaps found, both fixed and re-verified clean live, including a real successful save. See T4.1.2 for full evidence.)
 
 ### G4.2 [deploy]: Retire the blanket-removal blocks
 > **Scope widened 2026-07-29 on reconciliation.** Two more `ctl:ruleRemoveById` blocks landed in
@@ -469,6 +496,18 @@
 - [ ] **G8: Review gate and closeout** — acceptance test — **HARD GATE: no merge until this passes**
 
 ## Ready now
+
+> **Recomputed 2026-08-03 (thirteenth pass).** T4.1.2 [deploy] done — **G4.1 CLOSED**. See the
+> top-of-file banner and T4.1.2's own task note for full methodology/evidence (a live dev-stack
+> soak substituting for staging/prod real traffic, 2 real gaps found and fixed, committed and pushed
+> as `e337f83`). **T4.2.1 [deploy] is now Ready now** — its only remaining dependency (T4.1.2) is
+> done, and T3.2.5 [frontend] was already done 2026-07-30. Flag for whoever picks this up: T4.1.2's
+> fixes stayed blanket-style, consistent with the existing 2026-07-01 finding that field-scoped
+> `ctl:ruleRemoveTargetById` is unreliable on this Coraza WASM build — T4.2.1 may need to revisit
+> whether a field-scoped rewrite is achievable at all before attempting one. **G4 stays open** on
+> G4.2 (T4.2.1) only — G4.1/G4.3/G4.4/G4.5 are all now closed. Ready now [deploy] otherwise unchanged
+> from the twelfth pass: **T4.2.1** (new), plus the parked **T6.3.4 / T7.7.2**. **[backend]/
+> [frontend]/[specs]: none.**
 
 > **Recomputed 2026-08-03 (twelfth pass — reconciliation only, no new task work).** Verified every
 > sibling repo's actual `origin/main` against this file's task notes (see the top-of-file banner for
