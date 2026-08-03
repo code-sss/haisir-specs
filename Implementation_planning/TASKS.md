@@ -330,10 +330,94 @@
 > `ctl:ruleRemoveById` block at `03-secured-api.json:251-252`. The *other* `199110` is a
 > `setvar:'tx.max_num_args=2000'` SecAction at `12-api-exams-static.json:39`, which belongs to
 > T4.3.3, not here. Scope every edit by file, not by rule ID.
-- [ ] T4.2.1 [deploy]: Replace `id:199110`'s (hAITU chat-history) and `id:199120`'s (OCR'd
+- [x] T4.2.1 [deploy]: Replace `id:199110`'s (hAITU chat-history) and `id:199120`'s (OCR'd
       topic-content edits) `ctl:ruleRemoveById` lists in `03-secured-api.json` with field-scoped
       `ctl:ruleRemoveTargetById` targets — or delete either outright wherever G3's design fixes
-      removed the offending prose from the body (depends on T4.1.2, T3.2.5 [frontend])
+      removed the offending prose from the body (depends on T4.1.2, T3.2.5 [frontend]) (2026-08-03;
+      **the prior pass's caution that field-scoping "may not be achievable on this build" was stale
+      and is now retracted.** `apisix-dev` runs `registry.haisir.in/haisir-gateway:v2026.6`, image ID
+      `b9e9ed42904c` — byte-identical to `haisir-gateway:t134-fixed`, the image G2.2/T2.2.2 proved
+      regex collection keys work on. Verified by reading the shipped wasm directly rather than
+      trusting the tag: `corazawaf/coraza/v3@v3.7.0` and `crs_setup_version=4251` are both embedded in
+      `/usr/local/apisix/proxywasm/coraza-proxy-wasm.wasm`, and `_initialize` is present (reactor
+      build, so `69c077c`'s "plugin never actually loaded" fix is in). The 2026-07-01 "unreliable in
+      this Coraza WASM build" finding was a real observation with a wrong attributed cause — a v3.3.3
+      version gap, closed by G1.
+      **Scope taken: 4 blocks, not 2** (user-approved widening). `id:199110` (hAITU, 40 blanket IDs),
+      `id:199120` (topic-content PATCH, 7), and `id:199100`/`id:199121` (topic-content POST, 5 each)
+      — the last two were out of G4.2's original scope per a note written 2026-07-29, but the
+      2026-08-01 walkthrough had since added the same four prose rules (932240/942120/942131/942200)
+      to them, i.e. the same disease. Leaving them would have made T4.2.3's "all affected endpoints"
+      claim false.
+      **Result: `ctl:ruleRemoveById` count in `03-secured-api.json` drops 57 → 2.** The 2 survivors
+      are both `931130` on `id:199100`/`id:199121`, which inspects `TX:rfi_parameter_args_post`, a
+      CRS-internal TX variable rather than `ARGS` — field-scoping is structurally impossible for it,
+      as its own pre-existing comment already said.
+      **Target regexes** (from the backend source, not guessed): hAITU →
+      `ARGS_POST:/^json\.(message|history\.\d+\.content)$/` (`HaituDoubtRequest` is
+      `{topic_id, enrollment_id, message}`, `ExamReviewChatRequest` is `{attempt_id, message}` + a
+      `question_id` UUID — `message` is the only prose field either still receives; `history` kept
+      solely for T3.2.4's accepted-but-ignored compat window, marked in-file for removal when it
+      closes). Topic-content (all three blocks) → `ARGS_POST:/^json\.(title|description|text)$/` —
+      `TopicContentCreate`/`TopicContentUpdate`/`ParentTopicContentCreate` share those three free-text
+      fields exactly; `order` is an int and `url` is allowlist-validated.
+      **920370 deleted from `id:199110`'s list, not rewritten** — two independent reasons: it inspects
+      `&TX:ARG_LENGTH`, so field-scoping is impossible; and G3.2/G3.3 deleted the multi-KB
+      `history[*].content` payload it was added for, leaving only `message`, capped at 4000 by
+      T3.6.1's `Field(max_length=4000)`, under the 4096 `tx.arg_length` baseline at `id:199004`.
+      **`id:199132` added** — a third `ctl:ruleEngine=DetectionOnly` soak pair covering
+      `POST /api/topics-contents/` and `POST /api/parent/curriculum/topics/{id}/content`, which had no
+      soak because they were out of scope when T4.1.1 wrote that block. BR-WAF-011 requires a soak
+      across an exclusion change and those two blocks were changed, so they get one. All three pairs
+      (`199130`/`199131`/`199132`) come out at the G4.2 gate, per an in-file note.
+      **VERIFICATION — isolated harness, enforce mode, not a log-grep.** `waf-harness.sh`-pattern
+      throwaway stack on `v2026.6`, loaded with the REAL edited `03-secured-api.json` coraza-filter
+      config with the three DetectionOnly pairs stripped, so every result is an unambiguous 403-vs-200
+      rather than a DetectionOnly log reading. (`default_directives` confirmed present first — T2.2.2's
+      silent no-WAF gotcha.) Live-stack testing was attempted first and abandoned for a real reason
+      worth recording: **on `apisix-dev` an unauthenticated request is rejected 401 by `openid-connect`
+      at the access phase, before the body phase runs, so Coraza never sees the JSON body at all.**
+      Body-level WAF probing on a real stack needs a real session; the harness has no OIDC and needs
+      none.
+      - **Field-scoping proven, A/B on one payload** (`admin' or 1=1 -- x`): in `json.message`
+        (excluded) only `942100`+`942390` fire; in `json.topic_id` (not excluded) `942100 942130
+        942180 942330 942390 942440 942521`; in a `foo` cookie `942100 942180 942330 942390 942440`.
+        The five extra IDs are all in `id:199110`'s list — suppressed on the named field, still firing
+        on another body field and on cookies. This also settles the open question the plan flagged:
+        an `ARGS_POST:` key **does** narrow rules that declare `ARGS` (all 39 CRS rules here declare
+        `ARGS`, none declare `ARGS_POST`), matching the already-live precedent of
+        `SecRuleUpdateTargetById 942200 !ARGS_GET:selected_nodes`.
+      - **No new false positives — before/after on the same corpus.** T4.1.2's four real FP patterns
+        (quoted asides + chemistry reaction arrows, markdown `##` long-form prose, OCR'd LaTeX MCQ,
+        markdown table + backticks + `<br>`) replayed against all five URI+method pairs under the new
+        config and again under `git show HEAD:`'s blanket config. **Rule-ID sets identical in every
+        case.** Where a corpus item still 403s (e.g. `932130` on hAITU, `942150` on topic-content
+        PATCH) it is a rule that was never in that route's list — a pre-existing per-route coverage
+        difference, present identically before the rewrite. Field-scoping lost no suppression the
+        blanket form provided.
+      - **T4.2.2's question answered in passing**: a 3900-char `message` fires **nothing at all**
+        (`920370` gone); a 5000-char one fires `920370`, which is correct — it is over the platform
+        baseline and the backend would 422 it anyway. `920390` never fired.
+      - **T4.2.3's question answered in passing**: SQLi in `Referer` → `942100 942480 942521`; in
+        `User-Agent` → `913100 942100 942521`; XSS in a query arg → `941100 941110 941160 941320
+        941390 942131`. `942521`, `941320`, `941390` and `942131` are all in `id:199110`'s list and
+        fire anyway outside the named fields — headers, cookies and query args demonstrably regained
+        inspection. XSS in the excluded `message` field still fires `941100 941110 941160 941180`:
+        the high-precision libinjection/vector detectors were never excluded and stay active even on
+        the excluded field.
+      - **No detection regression**: SQLi and XSS on an unrelated `/api/*` route still 403 with the
+        full rule set; a benign hAITU message still 200s clean. Harness torn down.
+      Also reloaded onto `apisix-dev` (`template-configs.sh` from `dev/` + `setup.sh --plugins-only`,
+      `APP_ENV=dev OPENBAO_DEPLOY_SECRETS=true`) — 4/4 plugin_configs updated, zero Coraza init errors,
+      WAF active. No dev container was restarted.
+      `jq` valid. Left **uncommitted** in the working tree for user review, per this repo's norm for
+      WAF exclusion edits.
+      **DEPLOY GATE — do not ship this plugin_config ahead of the gateway image.** The field-scoped
+      form matches nothing on Coraza < v3.5.0 and fails **silently**, which would 403 live hAITU and
+      topic-content traffic. `releases/` has no `v2026.6` entry, so staging/prod are still on the
+      pre-upgrade gateway. This must ship in the same release that bumps `GATEWAY_IMAGE_TAG` to
+      ≥ `v2026.6`, or after it. Recorded in-file as a `DEPLOY PREREQUISITE` comment on both rewritten
+      blocks.)
 - [ ] T4.2.2 [deploy]: Confirm 920370 and 920390 no longer fire on the hAITU endpoints now that
       bodies are small (depends on T4.2.1)
 - [ ] T4.2.3 [deploy]: Confirm headers, cookies and query args regained inspection on all affected
@@ -496,6 +580,35 @@
 - [ ] **G8: Review gate and closeout** — acceptance test — **HARD GATE: no merge until this passes**
 
 ## Ready now
+
+> **Recomputed 2026-08-03 (fourteenth pass).** T4.2.1 [deploy] done — the four blanket
+> `ctl:ruleRemoveById` blocks in `03-secured-api.json` are now field-scoped
+> `ctl:ruleRemoveTargetById`; the file's blanket-removal count drops **57 → 2** (both survivors are
+> `931130`, which inspects a CRS-internal TX variable and cannot be field-scoped). **The thirteenth
+> pass's caution below is retracted**: field-scoping is not merely achievable, it is verified. The
+> shipped gateway is Coraza **v3.7.0** / CRS **4.25.1**, read out of the wasm binary itself
+> (`corazawaf/coraza/v3@v3.7.0`, `crs_setup_version=4251`, `_initialize` present) rather than
+> inferred from the image tag — the 2026-07-01 "unreliable on this build" finding was a v3.3.3
+> version gap that G1 closed. Proven on an isolated enforce-mode harness: same payload suppressed in
+> `json.message` but still firing in `json.topic_id`, in a cookie, in `Referer`, in `User-Agent` and
+> in a query arg; and the whole T4.1.2 FP corpus produces **rule-ID-identical** results before and
+> after the rewrite, so no suppression was lost. Scope was widened with user approval from the 2
+> named blocks to 4 (`id:199100`/`id:199121` had picked up the same four prose rules on 2026-08-01),
+> and a third DetectionOnly soak pair (`id:199132`) was added to keep BR-WAF-011 satisfied for the
+> two newly-in-scope POST routes.
+> **Newly Ready now: T4.2.2 and T4.2.3 [deploy]** — both depended only on T4.2.1. Note both are
+> confirmation-only tasks and T4.2.1's harness run already produced their evidence (920370 fires on a
+> 5000-char `message` but not a 3900-char one, and `920390` never fires; headers/cookies/query args
+> demonstrably regained inspection). Whoever picks them up should decide whether to close on that
+> evidence or re-confirm against a live authenticated stack — worth knowing that **body-level WAF
+> probing on `apisix-dev` requires a real session**, because `openid-connect` 401s an unauthenticated
+> request at the access phase before Coraza's body phase ever runs.
+> **G4 stays open on G4.2 only**, now pending T4.2.2/T4.2.3. Ready now [deploy] otherwise unchanged:
+> the parked **T6.3.4 / T7.7.2**. **[backend]/[frontend]/[specs]: none.**
+> **Deploy baseline NOT bumped** — T4.2.1's edit is uncommitted in the working tree for user review,
+> per this repo's norm for WAF exclusion edits; `haisir-deploy` HEAD remains `e337f83`. **When it does
+> ship, it must not go out ahead of a `GATEWAY_IMAGE_TAG` ≥ `v2026.6`** — the field-scoped form
+> matches nothing on Coraza < v3.5.0 and fails silently.
 
 > **Recomputed 2026-08-03 (thirteenth pass).** T4.1.2 [deploy] done — **G4.1 CLOSED**. See the
 > top-of-file banner and T4.1.2's own task note for full methodology/evidence (a live dev-stack
@@ -695,7 +808,9 @@ per-route) and to all four plugin_configs (finding 1, `942200`'s startup-time gl
 > see task note) removed from this list — stale carry-over from an earlier recompute pass.
 > 2026-08-02: T4.3.2/T4.3.3/T4.3.4 done, **G4.3 closed** (see task notes above). Removed from this
 > list — nothing else depends on G4.3 closing.
-- T4.1.2 [deploy]: Collect and review logs across real journeys before restoring blocking (depends on T4.1.1, done 2026-08-01) — **unblocked 2026-08-01**; needs a real-traffic log-review soak (staging or prod) over time, not completable in a single session — same shape as T2.3.2. Closes G4.1, which T4.2.1 (the actual field-scoped rewrite) depends on.
+> 2026-08-03: T4.1.2 done (**G4.1 closed**) and T4.2.1 done — both removed from this list.
+- T4.2.2 [deploy]: Confirm 920370 and 920390 no longer fire on the hAITU endpoints (depends on T4.2.1, done 2026-08-03) — **unblocked 2026-08-03**. T4.2.1's harness run already produced the evidence (3900-char `message` → no rules at all; 5000-char → `920370`, correct since it exceeds the 4096 baseline and the backend would 422 it; `920390` never fired). Decide whether to close on that or re-confirm on a live authenticated stack.
+- T4.2.3 [deploy]: Confirm headers, cookies and query args regained inspection on all affected endpoints (depends on T4.2.1, done 2026-08-03) — **unblocked 2026-08-03**. Same situation: T4.2.1's harness run showed `942521`/`941320`/`941390`/`942131` — all in `id:199110`'s exclusion list — still firing in `Referer`, `User-Agent`, a cookie and a query arg. Note body-level probing on `apisix-dev` needs a real session; `openid-connect` 401s at the access phase before Coraza's body phase runs.
 - T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies) — **blocked pending a scope decision**, see banner above.
 - T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` is warranted (no dependencies) — **blocked pending a product decision**, see banner above.
 
