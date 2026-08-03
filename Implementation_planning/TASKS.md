@@ -303,14 +303,14 @@
 - [x] **G4.3: exam authoring route back to platform-default thresholds with field exclusions intact** — integration test (2026-08-02; T4.3.1–T4.3.4 all done — T4.3.4's live harness run above is this gate's own integration test: threshold restored to 5, surviving field exclusions demonstrably still suppress their false positives (individually and combined), the four obsolete `image_url` exclusions are gone and that field is now genuinely protected, and unrelated attack payloads are unaffected.)
 
 ### G4.4 [deploy]: Unambiguous route matching
-- [ ] T4.4.1 [deploy]: Raise the exact-URI routes `21-api-haitu-exam-review.json` and `22-api-haitu-pattern-analysis.json` above `19-api-haitu.json`'s `/api/haitu/*` per BR-WAF-012
-- [ ] T4.4.2 [deploy]: Verify the intended `body_schema` is the one actually enforced (depends on T4.4.1)
-- [ ] **G4.4: route precedence explicit** — integration test
+- [x] T4.4.1 [deploy]: Raise the exact-URI routes `21-api-haitu-exam-review.json` and `22-api-haitu-pattern-analysis.json` above `19-api-haitu.json`'s `/api/haitu/*` per BR-WAF-012 (2026-08-02; both routes `priority: 20 → 30`, clear of route 19's wildcard (priority 20) and route 18 (21). `desc` updated to cite BR-WAF-012 and the strict-schema-enforcement rationale. Route 23 (`/api/haitu/exam-review-chat/*`) untouched — GET-only, no POST collision with route 19. `jq` valid both files. Left **uncommitted** in the working tree for user review, per this repo's established norm for G4 WAF/route edits.)
+- [x] T4.4.2 [deploy]: Verify the intended `body_schema` is the one actually enforced (depends on T4.4.1) (2026-08-02; **verified 4/4 against a disposable isolated APISIX stack** — throwaway etcd + stock `apache/apisix:3.17.0-ubuntu` on a distinct network (127.0.0.1-bound ports, torn down after), adapted `waf-harness.sh`'s pattern, no dev stack / no secrets / no custom gateway image (`request-validation` is a core plugin). Loaded the three real working-tree route JSONs (stripped of `plugin_config_id` + `id` so OIDC/ua-restriction/coraza don't mask the schema signal; neither field affects URI/method/priority matching). Probes: (1) `POST /api/haitu/exam-review-chat {}` → **400** carrying route 21's exact `rejected_msg` ("...body must include attempt_id (UUID) and message (string)") — route 21's strict schema won; (2) `POST /api/haitu/pattern-analysis {}` → **400** carrying route 22's `rejected_msg` ("...body must include attempt_id (UUID)") — route 22 won; (3) `POST /api/haitu/topic-doubt {}` → **503** (only route 19 matches; loose schema passes; absent upstream) — control: route 19 still owns the rest of `/api/haitu/*`; (4) valid body → 503 (strict schema accepts valid input, then proxy fails). Routes 21/22 (priority 30) demonstrably outrank route 19 (priority 20). **The verification caught and fixed a real deployment-breaking bug in T4.4.1's own edit:** the lengthened `desc` field on routes 21/22 was 404 chars, over APISIX's 256-char `desc` limit, so the admin API rejected the route PUTs (`"invalid configuration: property \"desc\" validation failed: string too long, expected at most 256, got 404"`) — the routes would have silently failed to load in staging/prod and fallen through to route 19's loose schema, the exact failure BR-WAF-012 exists to prevent. Corrected both `desc` fields to ≤256 chars (233/216) keeping the BR-WAF-012 rationale. Script kept at the session scratchpad, not committed (T4.3.4 one-off precedent). All three route files `jq`-valid; left **uncommitted** with T4.4.1/T4.5.1/T4.5.3, same G4 review norm.)
+- [x] **G4.4: route precedence explicit** — integration test (2026-08-02; T4.4.1 + T4.4.2 both done — T4.4.2's 4/4 disposable-harness run above IS this gate's integration test: the strict `body_schema` on routes 21/22 is the one actually enforced, route 19's wildcard no longer tie-breaks, and the deployment-breaking `desc`-length bug the verification surfaced is fixed.)
 
 ### G4.5 [deploy]: Exclusion hygiene
-- [ ] T4.5.1 [deploy]: Correct the `id:199100` `931130` justification in `03-secured-api.json` — it still says the topic-content URL allowlist is "tracked in backend task"; it shipped (https-only + hostname allowlist, rejects protocol-relative `//evil.com`), per BR-WAF-008. `id:199121` (the parent-route mirror added 2026-07-29) already carries a correct, complete justification — no fix needed there, verify only.
+- [x] T4.5.1 [deploy]: Correct the `id:199100` `931130` justification in `03-secured-api.json` — it still says the topic-content URL allowlist is "tracked in backend task"; it shipped (https-only + hostname allowlist, rejects protocol-relative `//evil.com`), per BR-WAF-008. `id:199121` (the parent-route mirror added 2026-07-29) already carries a correct, complete justification — no fix needed there, verify only (2026-08-02; `id:199100`'s `RESIDUAL RISK` comment in `03-secured-api.json` rewritten from "(tracked in backend task: validate_topic_content_url)" to "IMPLEMENTED in the backend create-side validator — https-only scheme plus hostname allowlist, rejects protocol-relative '//evil.com'; the PATCH-side parity gap is tracked in T4.5.2 [backend]". `id:199121` re-verified — its justification already states the shipped control correctly, no "tracked in backend task" stale text, **no change**. Comment-only edit, `jq` valid. Left **uncommitted** with T4.4.1, same G4 review norm.)
 - [ ] T4.5.2 [backend]: Close the related gap — `TopicContentUpdate.validate_url` enforces scheme + allowlist but not the "external URLs only for `content_type == video`" rule that create applies, so PATCH can attach an allowlisted external URL to a `pdf`/`text` item
-- [ ] T4.5.3 [deploy]: Re-scope or delete the remaining exclusions on `18-api-exam-session-submit.json` and the `01`/`02`/`04` plugin configs to field-scoped form per BR-WAF-004
+- [x] T4.5.3 [deploy]: Re-scope or delete the remaining exclusions on `18-api-exam-session-submit.json` and the `01`/`02`/`04` plugin configs to field-scoped form per BR-WAF-004 (2026-08-02; **no file edit required — all four files already comply with BR-WAF-004.** Verified by exhaustive grep: `ctl:ruleRemoveById` (the prohibited whole-rule/whole-request form) = **0** in `18-api-exam-session-submit.json`, `01-secured-authenticated.json`, `02-secured-anonymous.json`, `04-secured-api-upload.json`. Every exclusion is the startup-time field-scoped form BR-WAF-004 prescribes — `SecRuleUpdateTargetById <id> !REQUEST_COOKIES:<name>`/`!ARGS_GET:<name>`/`!REQUEST_HEADERS:<name>` (01/02/04, 17–18 each) and `SecRuleUpdateTargetByTag <tag> "!ARGS_POST:/<field>/"` (route 18, text_answer/working_text). Every exclusion carries a written justification (BR-WAF-007); none reference a shipped-but-unretired compensating control (BR-WAF-008 — the only stale one, `id:199100`'s 931130, is T4.5.1's, in `03` not in scope here). Route 18's `id:199204` body-limit raises (`arg_length=32768`, `total_arg_length=524288`) are justified body limits for essay `text_answer`, not rule exclusions — retained. The deliverable is the verification, not a fabricated edit; G4.5's "field-scoped" half is satisfied for these files, leaving only T4.5.2 [backend] before G4.5 can close.)
 - [ ] **G4.5: every surviving exclusion is field-scoped and truthfully justified** — acceptance test
 
 - [ ] **G4: Exclusions rewritten field-scoped or deleted** — integration test
@@ -445,6 +445,27 @@
 - [ ] **G8: Review gate and closeout** — acceptance test — **HARD GATE: no merge until this passes**
 
 ## Ready now
+
+> **Recomputed 2026-08-02 (tenth pass).** T4.4.2 [deploy] done — **G4.4 CLOSED** (T4.4.1 + T4.4.2
+> both done; the 4/4 disposable-harness run is the gate's integration test). The verification also
+> caught + fixed a deployment-breaking `desc`-length bug in T4.4.1's own edit (routes 21/22 `desc`
+> was 404 chars > APISIX's 256 limit → admin API rejected the route PUT → routes would have
+> silently failed to load and fallen through to route 19's loose schema, the exact BR-WAF-012
+> failure; corrected to ≤256). No new task unblocks as a direct result of G4.4 closing — T4.2.1
+> (the `id:199110`/`id:199120` field-scoped rewrite) is still gated behind T4.1.2's real-traffic
+> soak, not G4.4. **G4 stays open** on G4.1 (T4.1.2 soak), G4.2 (T4.2.1), G4.5 (T4.5.2 [backend]).
+> **Currently Ready now [deploy]: T4.1.2** (the soak — not single-session-completable, same shape
+> as T2.3.2) plus the parked **T6.3.4 / T7.7.2** (scope/product decisions). **[backend]: T4.5.2**
+> (dependency-free, the only remaining G4.5 child).
+
+> **Recomputed 2026-08-02 (ninth pass).** T4.4.1, T4.5.1, T4.5.3 [deploy] all done this pass (see
+> task notes above). **T4.4.2 [deploy] newly unblocked** — its only dependency was T4.4.1, now
+> done; it verifies the intended `body_schema` is the one actually enforced on the two exact-URI
+> hAITU routes now that they outrank the `/api/haitu/*` wildcard. G4.4 stays open on T4.4.2.
+> G4.5 stays open on **T4.5.2 [backend]** (dependency-free, the only remaining G4.5 child) — the
+> deploy-side exclusion-hygiene work for G4.5 is complete (T4.5.1 + T4.5.3); what's left is a
+> backend parity fix in `TopicContentUpdate.validate_url`. No parent gate closes this pass:
+> G4.4 (T4.4.2 open), G4.5 (T4.5.2 open), G4 (G4.1/G4.2/G4.4/G4.5 open).
 
 > **Recomputed 2026-08-02 (eighth pass).** T4.1.1, T4.3.1, T4.3.2, T4.3.3, T4.3.4 all done since the
 > seventh pass (see task notes above and the top-of-file banners). **G4.3 is now CLOSED** —
