@@ -190,6 +190,117 @@ input,textarea,select{font-family:inherit;}
 
 .node-info-banner{background:#FAEEDA;border:0.5px solid #FAC775;border-radius:8px;padding:10px 13px;font-size:12px;color:#633806;}
 
+/* ─── TOPIC CARD BODY: content rows + jobs + add-content ─ */
+.tc-body{padding:0 14px 12px;display:flex;flex-direction:column;gap:8px;}
+.tc-section-empty{padding:8px 0 2px;color:#888780;font-size:11px;font-style:italic;}
+.tc-jobs{display:flex;flex-direction:column;gap:5px;}
+.tc-jobs-hd{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888780;margin:4px 0 2px;}
+.job-row{display:flex;align-items:center;gap:9px;padding:7px 9px;background:#fff;border:0.5px solid #e5e3dc;border-radius:6px;}
+.job-icon{font-size:14px;flex-shrink:0;width:20px;text-align:center;}
+.job-main{flex:1;min-width:0;}
+.job-name{font-size:11px;font-weight:500;color:#1a1a18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.job-meta{font-size:10px;color:#888780;margin-top:1px;}
+.job-bar{height:2px;background:#f0efe9;border-radius:1px;overflow:hidden;margin-top:4px;}
+.job-fill{height:100%;background:#EF9F27;border-radius:1px;transition:width .4s;}
+.job-fill.extracting{background:#BA7517;animation:jpulse 1.2s ease-in-out infinite;}
+@keyframes jpulse{0%,100%{opacity:.55;}50%{opacity:1;}}
+.job-status{flex-shrink:0;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;display:flex;align-items:center;gap:4px;}
+.js-pending{background:#FAEEDA;color:#854F0B;}
+.js-uploading{background:#E1F5EE;color:#0F6E56;}
+.js-extracting{background:#FDEBD6;color:#854F0B;}
+.js-failed{background:#FAECE7;color:#712B13;}
+.job-actions{display:flex;gap:4px;flex-shrink:0;}
+.job-btn{font-size:10px;padding:3px 8px;border-radius:4px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
+.job-btn:hover{border-color:#3D2000;color:#3D2000;}
+.spinner{display:inline-block;width:9px;height:9px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:jspin .7s linear infinite;}
+@keyframes jspin{to{transform:rotate(360deg);}}
+
+.tc-content{display:flex;flex-direction:column;gap:6px;}
+.cg-card{border:0.5px solid #e5e3dc;border-radius:7px;background:#fff;overflow:hidden;}
+.cg-row{display:flex;align-items:center;gap:9px;padding:8px 10px;}
+.cg-icon{font-size:14px;flex-shrink:0;width:20px;text-align:center;}
+.cg-main{flex:1;min-width:0;}
+.cg-name{font-size:11px;font-weight:600;color:#1a1a18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text;border-radius:3px;padding:1px 3px;margin:-1px -3px;}
+.cg-name:hover{background:#fafaf8;}
+.cg-name[contenteditable="true"]{background:#fff;outline:1.5px solid #BA7517;cursor:text;white-space:normal;overflow:visible;}
+.cg-meta{font-size:10px;color:#888780;margin-top:1px;}
+.cg-chevron{font-size:9px;color:#5f5e5a;cursor:pointer;flex-shrink:0;padding:3px 6px;border-radius:4px;border:0.5px solid #d3d1c7;background:transparent;white-space:nowrap;}
+.cg-chevron:hover{border-color:#3D2000;color:#3D2000;}
+.cg-actions{display:flex;align-items:center;gap:5px;flex-shrink:0;}
+.pub-toggle{display:flex;border:0.5px solid #d3d1c7;border-radius:5px;overflow:hidden;flex-shrink:0;}
+.pub-opt{font-size:9px;padding:4px 8px;background:#fff;color:#5f5e5a;border:none;border-right:0.5px solid #d3d1c7;white-space:nowrap;}
+.pub-opt:last-child{border-right:none;}
+.pub-opt:hover{background:#f5f4f0;}
+.pub-opt.on{background:#1D9E75;color:#fff;}
+.cg-pages{border-top:0.5px dashed #e5e3dc;padding:5px 10px 8px 38px;display:flex;flex-direction:column;gap:4px;}
+.cg-page-row{display:flex;align-items:center;gap:8px;padding:5px 8px;background:#fafaf8;border:0.5px solid #eee;border-radius:5px;}
+.cg-page-icon{font-size:11px;flex-shrink:0;width:16px;text-align:center;}
+.cg-page-main{flex:1;min-width:0;}
+.cg-page-title{font-size:10px;font-weight:500;color:#1a1a18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cg-page-badge{font-size:9px;padding:1px 6px;border-radius:8px;font-weight:600;flex-shrink:0;}
+.cg-page-badge.pub{background:#E1F5EE;color:#085041;}
+.cg-page-badge.draft{background:#f0efe9;color:#888780;}
+
+.tc-add-content{padding:8px;border:1px dashed #d3d1c7;border-radius:7px;background:transparent;color:#5f5e5a;font-size:11px;font-weight:500;display:flex;align-items:center;justify-content:center;gap:6px;}
+.tc-add-content:hover{border-color:#BA7517;color:#BA7517;background:#fdf8f2;}
+
+/* ─── ADD / EDIT CONTENT MODALS ──────────────────────── */
+.ac-shell{background:#fff;border-radius:12px;padding:20px 24px;width:400px;max-width:calc(100vw - 40px);box-shadow:0 8px 32px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:14px;max-height:85vh;overflow-y:auto;}
+.ac-wide{width:560px;}
+.ac-title{font-size:14px;font-weight:600;color:#1a1a18;}
+.ac-sub{font-size:11px;color:#888780;margin-top:-8px;}
+.ac-shell label{font-size:11px;font-weight:600;color:#5f5e5a;display:block;margin-bottom:4px;}
+.ac-shell input[type=text],.ac-shell input[type=url],.ac-shell textarea{width:100%;padding:8px 10px;border:0.5px solid #d3d1c7;border-radius:6px;font-size:12px;font-family:inherit;outline:none;}
+.ac-shell input:focus,.ac-shell textarea:focus{border-color:#BA7517;}
+.ac-actions{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px;}
+.ac-actions-right{display:flex;gap:8px;}
+.ac-cancel{font-size:12px;padding:8px 16px;border-radius:7px;border:0.5px solid #d3d1c7;background:transparent;color:#5f5e5a;}
+.ac-confirm{font-size:12px;padding:8px 18px;border-radius:7px;background:#3D2000;color:#fff;border:none;font-weight:700;}
+.ac-confirm:hover{background:#5c3000;}
+.ac-confirm:disabled{background:#b4b2a9;}
+.ac-quota{font-size:10px;color:#888780;}
+
+.uc-types{display:flex;gap:8px;flex-wrap:wrap;}
+.uc-type{flex:1;min-width:110px;padding:12px 10px;border:1px solid #e5e3dc;border-radius:8px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;transition:all .12s;}
+.uc-type:hover{border-color:#3D2000;background:#fafaf8;}
+.uc-type.sel{border-color:#3D2000;background:#3D2000;color:#fff;}
+.uc-type-icon{font-size:20px;line-height:1;}
+.uc-type-label{font-size:11px;font-weight:600;}
+.uc-type-sub{font-size:9px;color:#888780;font-weight:400;}
+.uc-type.sel .uc-type-sub{color:rgba(255,255,255,.55);}
+.uc-drop{border:1.5px dashed #d3d1c7;border-radius:10px;padding:22px 16px;text-align:center;background:#fafaf8;cursor:pointer;transition:all .12s;}
+.uc-drop:hover,.uc-drop.dragover{border-color:#BA7517;background:#fff;}
+.uc-drop-icon{font-size:22px;margin-bottom:6px;}
+.uc-drop-title{font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:3px;}
+.uc-drop-sub{font-size:11px;color:#888780;}
+.uc-drop-hint{font-size:10px;color:#888780;margin-top:8px;font-style:italic;}
+.uc-files{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;}
+.uc-file{display:flex;align-items:center;gap:10px;padding:9px 11px;border:0.5px solid #e5e3dc;border-radius:7px;background:#fff;}
+.uc-file-icon{font-size:16px;flex-shrink:0;width:24px;text-align:center;}
+.uc-file-main{flex:1;min-width:0;}
+.uc-file-name{font-size:11px;font-weight:500;color:#1a1a18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.uc-file-meta{font-size:10px;color:#888780;margin-top:2px;display:flex;align-items:center;gap:6px;}
+.uc-file-bar{height:3px;background:#f0efe9;border-radius:2px;overflow:hidden;margin-top:5px;}
+.uc-file-fill{height:100%;background:#BA7517;border-radius:2px;transition:width .3s;}
+.uc-file-fill.done{background:#1D9E75;}
+.uc-file-fill.err{background:#DC2626;}
+.uc-file-x{background:transparent;border:none;color:#888780;font-size:14px;padding:2px 4px;flex-shrink:0;}
+.uc-file-x:hover{color:#DC2626;}
+.uc-form-row{display:flex;flex-direction:column;gap:5px;}
+
+/* ─── EDIT MODAL: preview / raw markdown tabs ────────── */
+.ec-tabs{display:flex;gap:4px;}
+.ec-tab{font-size:10px;padding:3px 10px;border-radius:5px;border:0.5px solid #d3d1c7;background:#fff;color:#5f5e5a;font-weight:500;}
+.ec-tab:hover{border-color:#3D2000;color:#3D2000;}
+.ec-tab.on{background:#3D2000;color:#fff;border-color:#3D2000;}
+.ec-preview{border:0.5px solid #d3d1c7;border-radius:6px;padding:14px 16px;font-size:12px;line-height:1.7;color:#1a1a18;min-height:160px;max-height:320px;overflow-y:auto;background:#fafaf8;}
+.ec-preview h2{font-size:15px;margin:0 0 8px;color:#3D2000;}
+.ec-preview h3{font-size:13px;margin:10px 0 6px;color:#3D2000;}
+.ec-preview h4{font-size:12px;margin:8px 0 4px;color:#3D2000;}
+.ec-preview p{margin:0 0 8px;}
+.ec-preview ul{margin:0 0 8px 18px;}
+.ec-preview li{margin-bottom:3px;}
+
 /* ─── ADOPT MODAL ────────────────────────────────────── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center;}
 .modal-overlay.open{display:flex;}
@@ -387,6 +498,57 @@ input,textarea,select{font-family:inherit;}
   </div>
 </div>
 
+<!-- ══ ADD CONTENT MODAL ═══════════════════════════════════ -->
+<div class="modal-overlay" id="modal-add-content" onclick="if(event.target===this)closeAddContent()">
+  <div class="ac-shell ac-wide">
+    <div>
+      <div class="ac-title">Add content</div>
+      <div class="ac-sub" id="ac-topic-label">Topic: —</div>
+    </div>
+    <div>
+      <label style="display:block;margin-bottom:6px;">Content type</label>
+      <div class="uc-types" id="uc-types"></div>
+    </div>
+    <div id="uc-body"></div>
+    <div class="ac-actions">
+      <span class="ac-quota" id="ac-quota">—</span>
+      <div class="ac-actions-right">
+        <button class="ac-cancel" onclick="closeAddContent()">Cancel</button>
+        <button class="ac-confirm" id="uc-confirm-btn" onclick="confirmAddContent()">Upload</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ EDIT CONTENT MODAL ══════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-content" onclick="if(event.target===this)closeEditContent()">
+  <div class="ac-shell ac-wide">
+    <div>
+      <div class="ac-title">Edit content</div>
+      <div class="ac-sub" id="ec-prov-line">—</div>
+    </div>
+    <div>
+      <label>Title</label>
+      <input type="text" id="ec-title">
+    </div>
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <label id="ec-body-label" style="margin-bottom:0;">Content</label>
+        <div class="ec-tabs" id="ec-tabs"></div>
+      </div>
+      <div id="ec-preview" class="ec-preview"></div>
+      <textarea id="ec-body" rows="9" style="font-family:'SF Mono',Menlo,monospace;resize:vertical;"></textarea>
+      <div id="ec-body-hint" style="font-size:10px;color:#888780;margin-top:4px;"></div>
+    </div>
+    <div class="ac-actions" style="justify-content:flex-end;">
+      <div class="ac-actions-right">
+        <button class="ac-cancel" onclick="closeEditContent()">Cancel</button>
+        <button class="ac-confirm" onclick="confirmEditContent()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -458,13 +620,21 @@ const platformBoards = [
 /* Mutable parent curriculum tree (for builder) */
 let curriculumTree = [
   { id:'n1', label:'Algebra Prep', type:'module', icon:'📐', expanded:true, topics:[
-    { id:'tp1', name:'Algebra Basics', status:'live', content:2, exams:1 },
-    { id:'tp2', name:'Quadratic Equations', status:'live', content:1, exams:1 },
-    { id:'tp3', name:'Word Problems', status:'draft', content:0, exams:0 },
+    { id:'tp1', name:'Algebra Basics', status:'live', exams:1, jobs:[], contents:[
+      { id:'g1', kind:'group', source:'algebra-notes.pdf', publishedSide:'document', expanded:false, pages:[
+        { id:'g1p1', title:'Page 1 — Variables and Expressions', body:'# Variables and Expressions\n\nA variable is a letter that stands in for an unknown number…' },
+        { id:'g1p2', title:'Page 2 — Simplifying Expressions', body:'# Simplifying Expressions\n\nCombine like terms to simplify an expression…' },
+      ]},
+      { id:'c1', kind:'video', title:"Khan Academy: Intro to Algebra", body:'https://youtube.com/watch?v=NybHckSEQBI', meta:'youtube.com/watch?v=NybHckSEQBI', published:false },
+    ]},
+    { id:'tp2', name:'Quadratic Equations', status:'live', exams:1, jobs:[], contents:[
+      { id:'c2', kind:'text', title:'Quick notes: the quadratic formula', body:'x = (-b ± √(b² - 4ac)) / 2a', meta:'128 chars · authored', published:true },
+    ]},
+    { id:'tp3', name:'Word Problems', status:'draft', exams:0, jobs:[], contents:[] },
   ]},
   { id:'n2', label:'English Grammar', type:'module', icon:'📝', expanded:false, topics:[
-    { id:'tp4', name:'Parts of Speech', status:'live', content:3, exams:1 },
-    { id:'tp5', name:'Tenses', status:'draft', content:0, exams:0 },
+    { id:'tp4', name:'Parts of Speech', status:'live', exams:1, jobs:[], contents:[] },
+    { id:'tp5', name:'Tenses', status:'draft', exams:0, jobs:[], contents:[] },
   ]},
 ];
 
@@ -473,6 +643,7 @@ let activeTab     = 'overview';
 let activeNodeId  = null;
 let adoptSelectedGradeId = null;
 let addNodeParentId = null;
+let parentQuota = { concurrent: 0, today: 12 };
 
 /* ════════════════════════════════════════════════
    ROUTING
@@ -709,21 +880,7 @@ function renderBuilderDetail() {
   const node = curriculumTree.find(n => n.id === activeNodeId);
   if (!node) return;
 
-  const topicRows = node.topics.map(t => `
-    <div class="topic-card">
-      <div class="tc-row">
-        <div class="tc-icon">📄</div>
-        <div class="tc-main">
-          <div class="tc-name">${t.name}</div>
-          <div class="tc-meta">${t.content} content item(s) · ${t.exams} exam(s)</div>
-        </div>
-        <div class="tc-right">
-          <span class="tc-status ${t.status === 'live' ? 'tcs-live' : 'tcs-draft'}">${t.status === 'live' ? 'Live' : 'Draft'}</span>
-          <button class="row-btn" onclick="showToast('Upload content — connect to backend')">Upload content</button>
-          <button class="row-btn row-btn-amber" onclick="showToast('Create exam — connect to backend')">+ Exam</button>
-        </div>
-      </div>
-    </div>`).join('');
+  const topicRows = node.topics.map(t => renderTopicCard(t)).join('');
 
   const originNote = node.origin === 'adopted'
     ? `<div class="node-info-banner">📋 Adopted from NCERT Grade 6. You can add topics, upload notes, and create exams. Existing topics are your copy.</div>` : '';
@@ -743,6 +900,522 @@ function renderBuilderDetail() {
       ${originNote}
       ${topicRows || '<div style="color:#888780;font-size:12px;text-align:center;padding:20px;">No topics yet. Add your first topic above.</div>'}
     </div>`;
+}
+
+/* ════════════════════════════════════════════════
+   TOPIC CARD — content rows, jobs strip, add-content
+════════════════════════════════════════════════ */
+function renderTopicCard(t) {
+  const contents = t.contents || [];
+  const jobs = (t.jobs || []).filter(j => j.status !== 'done');
+  const jobsHtml = jobs.length ? `
+    <div class="tc-jobs">
+      <div class="tc-jobs-hd">In progress (${jobs.length})</div>
+      ${jobs.map(j => renderJobRow(j, t.id)).join('')}
+    </div>` : '';
+  const contentsHtml = contents.length ? `
+    <div class="tc-content">${contents.map(c => c.kind === 'group' ? renderContentGroup(c, t.id) : renderContentRow(c, t.id)).join('')}</div>`
+    : (jobs.length ? '' : `<div class="tc-section-empty">No content yet — add a PDF, image, video URL, or text below.</div>`);
+
+  return `
+    <div class="topic-card">
+      <div class="tc-row">
+        <div class="tc-icon">📄</div>
+        <div class="tc-main">
+          <div class="tc-name">${t.name}</div>
+          <div class="tc-meta">${contents.length} content item(s)${jobs.length ? ` · ${jobs.length} processing` : ''} · ${t.exams} exam(s)</div>
+        </div>
+        <div class="tc-right">
+          <span class="tc-status ${t.status === 'live' ? 'tcs-live' : 'tcs-draft'}">${t.status === 'live' ? 'Live' : 'Draft'}</span>
+          <button class="row-btn" onclick="toggleTopicStatus('${t.id}')">${t.status === 'live' ? 'Set draft' : 'Set live'}</button>
+          <button class="row-btn row-btn-amber" onclick="showToast('Create exam — connect to backend')">+ Exam</button>
+        </div>
+      </div>
+      <div class="tc-body">
+        ${contentsHtml}
+        ${jobsHtml}
+        <button class="tc-add-content" onclick="openAddContent('${t.id}','${t.name.replace(/'/g, "\\'")}')">+ Add content</button>
+      </div>
+    </div>`;
+}
+
+// Raw upload (pdf/image) + its extracted text pages, one publish choice for the whole group (BR-DATA-024).
+function renderContentGroup(g, topicId) {
+  const side = g.publishedSide; // 'document' | 'text' | 'draft'
+  return `
+    <div class="cg-card">
+      <div class="cg-row">
+        <div class="cg-icon">📄</div>
+        <div class="cg-main">
+          <div class="cg-name" style="cursor:default;">${escapeHtml(g.source)}</div>
+          <div class="cg-meta">${g.pages.length} page(s) extracted · ✨ from ${escapeHtml(g.source)}</div>
+        </div>
+        <div class="pub-toggle" title="Choose what your child sees">
+          <button class="pub-opt ${side === 'document' ? 'on' : ''}" onclick="setPublishSide('${topicId}','${g.id}','document')">Document</button>
+          <button class="pub-opt ${side === 'text' ? 'on' : ''}" onclick="setPublishSide('${topicId}','${g.id}','text')">Text</button>
+        </div>
+        <div class="cg-actions">
+          <button class="job-btn" onclick="showToast('Opening raw PDF viewer — connect to backend')">View</button>
+          <button class="cg-chevron" onclick="toggleGroupExpand('${topicId}','${g.id}')">${g.expanded ? '▾ Hide pages' : '▸ Show pages'}</button>
+          <button class="job-btn" onclick="deleteContentItem('${topicId}','${g.id}')">Delete</button>
+        </div>
+      </div>
+      ${g.expanded ? `<div class="cg-pages">${g.pages.map(p => renderPageRow(p, side)).join('')}</div>` : ''}
+    </div>`;
+}
+
+function renderPageRow(p, side) {
+  const published = side === 'text';
+  return `
+    <div class="cg-page-row">
+      <div class="cg-page-icon">📝</div>
+      <div class="cg-page-main"><div class="cg-page-title">${escapeHtml(p.title)}</div></div>
+      <span class="cg-page-badge ${published ? 'pub' : 'draft'}">${published ? 'Published' : 'Draft'}</span>
+      <button class="job-btn" onclick="openEditContent('${p.id}')">Edit</button>
+    </div>`;
+}
+
+// Standalone video / manually-authored text row (source_extraction_job_id IS NULL — a group of one).
+function renderContentRow(c, topicId) {
+  const icon = c.kind === 'video' ? '🎬' : '📝';
+  const published = !!c.published;
+  return `
+    <div class="cg-card">
+      <div class="cg-row">
+        <div class="cg-icon">${icon}</div>
+        <div class="cg-main">
+          <div class="cg-name" title="Click to rename" onclick="beginInlineTitleEdit(this,'${c.id}')">${escapeHtml(c.title)}</div>
+          <div class="cg-meta">${escapeHtml(c.meta || '')}</div>
+        </div>
+        <button class="pub-opt ${published ? 'on' : ''}" style="border-radius:5px;border:0.5px solid #d3d1c7;" onclick="toggleContentPublish('${topicId}','${c.id}')">${published ? 'Published' : 'Draft'}</button>
+        <div class="cg-actions">
+          <button class="job-btn" onclick="openEditContent('${c.id}')">Edit</button>
+          <button class="job-btn" onclick="deleteContentItem('${topicId}','${c.id}')">Delete</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderJobRow(j, topicId) {
+  const icon = j.sourceType === 'pdf' ? '📄' : '🖼️';
+  const statusBlock = ({
+    pending:    `<span class="job-status js-pending">⏱ Queued</span>`,
+    uploading:  `<span class="job-status js-uploading"><span class="spinner"></span> Uploading ${Math.round(j.progress)}%</span>`,
+    extracting: `<span class="job-status js-extracting"><span class="spinner"></span> Extracting</span>`,
+    failed:     `<span class="job-status js-failed">✕ Failed</span>`,
+  })[j.status] || '';
+  const fillClass = j.status === 'extracting' ? 'extracting' : '';
+  let fillWidth = 0;
+  if (j.status === 'uploading') fillWidth = j.progress;
+  else if (j.status === 'extracting') fillWidth = Math.min(j.progress, 95);
+  else if (j.status === 'pending') fillWidth = 5;
+  else if (j.status === 'failed') fillWidth = 100;
+  const metaText = j.status === 'uploading' ? `uploading ${formatBytes(j.sizeBytes || 0)}…`
+                  : j.status === 'extracting' ? 'reading text & images via vision LLM'
+                  : j.status === 'pending' ? 'queued for extraction'
+                  : j.status === 'failed' ? (j.error || 'extraction error')
+                  : 'processing';
+  return `
+    <div class="job-row">
+      <div class="job-icon">${icon}</div>
+      <div class="job-main">
+        <div class="job-name">${j.source}</div>
+        <div class="job-meta">${j.sourceType === 'pdf' && j.pages ? `${j.pages} page(s) · ` : ''}${metaText}</div>
+        <div class="job-bar"><div class="job-fill ${fillClass}" style="width:${fillWidth}%"></div></div>
+      </div>
+      ${statusBlock}
+      <div class="job-actions">
+        ${j.status === 'failed' ? `<button class="job-btn" onclick="retryJob('${topicId}','${j.id}')">Retry</button>` : ''}
+        ${j.status !== 'extracting' ? `<button class="job-btn" onclick="cancelJob('${topicId}','${j.id}')">Cancel</button>` : ''}
+      </div>
+    </div>`;
+}
+
+/* ── Lookups ── */
+function findTopicById(topicId) {
+  for (const node of curriculumTree) {
+    const t = node.topics.find(x => x.id === topicId);
+    if (t) return t;
+  }
+  return null;
+}
+function findGroup(topicId, groupId) {
+  const t = findTopicById(topicId);
+  return t ? (t.contents || []).find(c => c.id === groupId) || null : null;
+}
+function findContentAnywhere(contentId) {
+  for (const node of curriculumTree) {
+    for (const t of node.topics) {
+      for (const c of (t.contents || [])) {
+        if (c.kind === 'group') {
+          const p = (c.pages || []).find(x => x.id === contentId);
+          if (p) return { topic: t, group: c, page: p };
+        } else if (c.id === contentId) {
+          return { topic: t, content: c };
+        }
+      }
+    }
+  }
+  return {};
+}
+
+/* ── Topic / content actions ── */
+function toggleTopicStatus(topicId) {
+  const t = findTopicById(topicId); if (!t) return;
+  t.status = t.status === 'live' ? 'draft' : 'live';
+  renderBuilderDetail(); renderBuilderTree();
+}
+function toggleGroupExpand(topicId, groupId) {
+  const g = findGroup(topicId, groupId); if (!g) return;
+  g.expanded = !g.expanded;
+  renderBuilderDetail();
+}
+function setPublishSide(topicId, groupId, side) {
+  const g = findGroup(topicId, groupId); if (!g) return;
+  g.publishedSide = side;
+  renderBuilderDetail();
+  showToast(`Publishing as ${side === 'document' ? 'Document (raw file)' : 'Extracted text'} — visible to your child.`);
+}
+function toggleContentPublish(topicId, contentId) {
+  const t = findTopicById(topicId); if (!t) return;
+  const c = (t.contents || []).find(x => x.id === contentId); if (!c) return;
+  c.published = !c.published;
+  renderBuilderDetail();
+  showToast(c.published ? 'Published — visible to your child.' : 'Set to draft.');
+}
+function deleteContentItem(topicId, id) {
+  const t = findTopicById(topicId); if (!t) return;
+  const item = (t.contents || []).find(x => x.id === id); if (!item) return;
+  if (!confirm(`Delete "${item.kind === 'group' ? item.source : item.title}"?\n\nProvenance is preserved in the audit log.`)) return;
+  t.contents = t.contents.filter(x => x.id !== id);
+  renderBuilderDetail();
+  showToast('Content deleted.');
+}
+function beginInlineTitleEdit(el, contentId) {
+  if (el.getAttribute('contenteditable') === 'true') return;
+  el.setAttribute('contenteditable', 'true');
+  el.dataset.original = el.textContent;
+  const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
+  const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  el.focus();
+  el.onkeydown = (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); el.blur(); }
+    if (ev.key === 'Escape') { el.textContent = el.dataset.original; el.blur(); }
+  };
+  el.onblur = () => {
+    el.removeAttribute('contenteditable');
+    const next = el.textContent.trim();
+    el.onkeydown = null; el.onblur = null;
+    if (!next || next === el.dataset.original) { el.textContent = el.dataset.original; return; }
+    const found = findContentAnywhere(contentId);
+    if (found.content) { found.content.title = next; showToast('Title updated.'); }
+  };
+}
+
+/* ── Edit content modal (title + body) ──
+   Opens read-only "Preview" (rendered markdown) by default — this is the
+   review surface for extracted/authored text (BR-EXT-036), not just an
+   editor. "Raw markdown" tab switches to the editable textarea. Video has
+   no markdown to preview, so it skips straight to the URL field. */
+let editingContentId = null;
+let editingKind = null;
+let ecMode = 'preview';
+
+function openEditContent(contentId) {
+  const found = findContentAnywhere(contentId);
+  const item = found.content || found.page;
+  if (!item) return;
+  editingContentId = contentId;
+  editingKind = found.group ? 'text' : item.kind;
+  ecMode = 'preview';
+  document.getElementById('ec-title').value = item.title || '';
+  document.getElementById('ec-body').value = item.body || '';
+  const provLine = document.getElementById('ec-prov-line');
+  const label = document.getElementById('ec-body-label');
+  const hint = document.getElementById('ec-body-hint');
+  if (found.group) {
+    provLine.innerHTML = `✨ Extracted from <strong>${escapeHtml(found.group.source)}</strong>. Edits don't affect the audit record.`;
+    label.textContent = 'Content';
+    hint.textContent = 'Fix OCR errors or rewrite — the extraction record stays.';
+  } else if (item.kind === 'video') {
+    provLine.textContent = 'Video URL content.';
+    label.textContent = 'Video URL';
+    hint.textContent = 'YouTube or Vimeo URL.';
+  } else {
+    provLine.textContent = 'Text content (manually authored).';
+    label.textContent = 'Content';
+    hint.textContent = 'Plain markdown.';
+  }
+  renderEcTabs();
+  renderEcBodyView();
+  document.getElementById('modal-edit-content').classList.add('open');
+}
+function renderEcTabs() {
+  const wrap = document.getElementById('ec-tabs');
+  if (editingKind === 'video') { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `
+    <button class="ec-tab ${ecMode === 'preview' ? 'on' : ''}" onclick="switchEcTab('preview')">Preview</button>
+    <button class="ec-tab ${ecMode === 'raw' ? 'on' : ''}" onclick="switchEcTab('raw')">Raw markdown</button>`;
+}
+function switchEcTab(mode) {
+  ecMode = mode;
+  renderEcTabs();
+  renderEcBodyView();
+}
+function renderEcBodyView() {
+  const textarea = document.getElementById('ec-body');
+  const preview = document.getElementById('ec-preview');
+  if (editingKind === 'video' || ecMode === 'raw') {
+    textarea.style.display = '';
+    preview.style.display = 'none';
+  } else {
+    preview.innerHTML = renderMarkdownLite(textarea.value);
+    preview.style.display = '';
+    textarea.style.display = 'none';
+  }
+}
+function renderMarkdownLite(md) {
+  const lines = escapeHtml(md || '').split('\n');
+  let html = ''; let inList = false;
+  const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+  for (const line of lines) {
+    if (/^###\s+/.test(line)) { closeList(); html += `<h4>${line.replace(/^###\s+/, '')}</h4>`; continue; }
+    if (/^##\s+/.test(line))  { closeList(); html += `<h3>${line.replace(/^##\s+/, '')}</h3>`; continue; }
+    if (/^#\s+/.test(line))   { closeList(); html += `<h2>${line.replace(/^#\s+/, '')}</h2>`; continue; }
+    if (/^\s*[-*]\s+/.test(line)) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${line.replace(/^\s*[-*]\s+/, '')}</li>`;
+      continue;
+    }
+    closeList();
+    if (line.trim() !== '') html += `<p>${line}</p>`;
+  }
+  closeList();
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/(?<!\w)_(.+?)_(?!\w)/g, '<em>$1</em>');
+  return html || '<p style="color:#888780;">(empty)</p>';
+}
+function closeEditContent() {
+  document.getElementById('modal-edit-content').classList.remove('open');
+  editingContentId = null; editingKind = null;
+}
+function confirmEditContent() {
+  if (!editingContentId) return;
+  const found = findContentAnywhere(editingContentId);
+  const item = found.content || found.page;
+  if (!item) return;
+  const newTitle = document.getElementById('ec-title').value.trim();
+  const newBody = document.getElementById('ec-body').value;
+  if (!newTitle) { alert('Title cannot be empty.'); return; }
+  item.title = newTitle; item.body = newBody;
+  if (item.kind === 'video') item.meta = newBody;
+  closeEditContent();
+  renderBuilderDetail();
+  showToast('Content saved.');
+}
+
+/* ── Add content modal — upload + extraction lifecycle ── */
+const CONTENT_TYPES = [
+  { id:'pdf',   icon:'📄', label:'PDF',       sub:'extracted to text' },
+  { id:'image', icon:'🖼️', label:'Image(s)',  sub:'OCR via vision LLM' },
+  { id:'video', icon:'🎬', label:'Video URL', sub:'YouTube, Vimeo…' },
+  { id:'text',  icon:'📝', label:'Text',      sub:'paste or write' },
+];
+const MAX_FILES = 10;
+let ucState = { topicId:null, topicName:'', type:'pdf', files:[], url:'', text:'', title:'', textTitle:'' };
+
+function openAddContent(topicId, topicName) {
+  ucState = { topicId, topicName, type:'pdf', files:[], url:'', text:'', title:'', textTitle:'' };
+  document.getElementById('ac-topic-label').textContent = `Topic: ${topicName}`;
+  document.getElementById('ac-quota').textContent = `${parentQuota.concurrent} job(s) in progress · ${parentQuota.today}/100 uploads today`;
+  renderUcTypes();
+  renderUcBody();
+  document.getElementById('modal-add-content').classList.add('open');
+}
+function closeAddContent() { document.getElementById('modal-add-content').classList.remove('open'); }
+
+function renderUcTypes() {
+  document.getElementById('uc-types').innerHTML = CONTENT_TYPES.map(t => `
+    <button class="uc-type ${ucState.type === t.id ? 'sel' : ''}" onclick="selectUcType('${t.id}')">
+      <div class="uc-type-icon">${t.icon}</div>
+      <div class="uc-type-label">${t.label}</div>
+      <div class="uc-type-sub">${t.sub}</div>
+    </button>`).join('');
+}
+function selectUcType(id) {
+  ucState.type = id;
+  ucState.files = []; ucState.url = ''; ucState.text = ''; ucState.title = ''; ucState.textTitle = '';
+  renderUcTypes(); renderUcBody();
+}
+
+function renderUcBody() {
+  const body = document.getElementById('uc-body');
+  const confirmBtn = document.getElementById('uc-confirm-btn');
+  if (ucState.type === 'pdf' || ucState.type === 'image') {
+    const accept = ucState.type === 'pdf' ? '.pdf' : '.jpg,.jpeg,.png,.webp';
+    const hint = ucState.type === 'pdf'
+      ? 'Drop a PDF here or click to browse · max 10 files · 50 MB each'
+      : 'Drop image(s) here or click to browse · JPG/PNG/WebP · max 10 files';
+    const filesHtml = ucState.files.length ? `
+      <div class="uc-files" style="margin-top:10px;">
+        ${ucState.files.map((f,i) => `
+          <div class="uc-file">
+            <div class="uc-file-icon">${ucState.type === 'pdf' ? '📄' : '🖼️'}</div>
+            <div class="uc-file-main">
+              <div class="uc-file-name">${f.name}</div>
+              <div class="uc-file-meta"><span>${formatBytes(f.size)}</span><span>·</span><span>Ready</span></div>
+              <div class="uc-file-bar"><div class="uc-file-fill" style="width:0%"></div></div>
+            </div>
+            <button class="uc-file-x" onclick="removeUcFile(${i})" title="Remove">✕</button>
+          </div>`).join('')}
+      </div>` : '';
+    body.innerHTML = `
+      <div class="uc-drop" id="uc-drop" onclick="document.getElementById('uc-file-input').click()">
+        <div class="uc-drop-icon">📥</div>
+        <div class="uc-drop-title">Drop files here or click to browse</div>
+        <div class="uc-drop-sub">${hint}</div>
+        ${ucState.files.length >= MAX_FILES ? `<div class="uc-drop-hint">Max ${MAX_FILES} files reached. Split larger batches.</div>` : ''}
+      </div>
+      <input type="file" id="uc-file-input" accept="${accept}" multiple style="display:none;" onchange="addUcFiles(this.files)">
+      ${filesHtml}`;
+    wireDropZone();
+    confirmBtn.disabled = ucState.files.length === 0;
+    confirmBtn.textContent = `Upload ${ucState.files.length || ''} ${ucState.type === 'pdf' ? 'PDF' : 'image'}${ucState.files.length === 1 ? '' : 's'}`.trim();
+  } else if (ucState.type === 'video') {
+    body.innerHTML = `
+      <div class="uc-form-row">
+        <label>Video URL</label>
+        <input type="url" placeholder="https://youtube.com/watch?v=…" value="${ucState.url}" oninput="ucState.url=this.value;document.getElementById('uc-confirm-btn').disabled=!this.value.trim();">
+      </div>
+      <div class="uc-form-row" style="margin-top:10px;">
+        <label>Title (optional)</label>
+        <input type="text" placeholder="e.g. Khan Academy: Intro to Algebra" value="${ucState.title || ''}" oninput="ucState.title=this.value;">
+      </div>`;
+    confirmBtn.disabled = !ucState.url.trim();
+    confirmBtn.textContent = 'Add video';
+  } else if (ucState.type === 'text') {
+    body.innerHTML = `
+      <div class="uc-form-row">
+        <label>Title</label>
+        <input type="text" placeholder="e.g. Quick reference notes" value="${ucState.textTitle || ''}" oninput="ucState.textTitle=this.value;">
+      </div>
+      <div class="uc-form-row" style="margin-top:10px;">
+        <label>Content</label>
+        <textarea rows="6" placeholder="Paste or write content here…" oninput="ucState.text=this.value;document.getElementById('uc-confirm-btn').disabled=!this.value.trim();">${ucState.text}</textarea>
+      </div>`;
+    confirmBtn.disabled = !ucState.text.trim();
+    confirmBtn.textContent = 'Save text';
+  }
+}
+
+function wireDropZone() {
+  const dz = document.getElementById('uc-drop'); if (!dz) return;
+  ['dragenter','dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('dragover'); }));
+  ['dragleave','drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('dragover'); }));
+  dz.addEventListener('drop', ev => addUcFiles(ev.dataTransfer.files));
+}
+function addUcFiles(fileList) {
+  const remaining = MAX_FILES - ucState.files.length;
+  const files = Array.from(fileList).slice(0, remaining);
+  files.forEach(f => ucState.files.push({ name:f.name, size:f.size, status:'pending' }));
+  if (fileList.length > remaining) showToast(`Only added first ${remaining} — max ${MAX_FILES} per upload.`);
+  renderUcBody();
+}
+function removeUcFile(i) { ucState.files.splice(i, 1); renderUcBody(); }
+
+function confirmAddContent() {
+  const topic = findTopicById(ucState.topicId); if (!topic) return;
+  topic.contents = topic.contents || []; topic.jobs = topic.jobs || [];
+
+  if (ucState.type === 'video') {
+    topic.contents.unshift({ id:'c-' + Date.now(), kind:'video', title:(ucState.title || ucState.url.slice(0, 60)), body:ucState.url, meta:ucState.url, published:false });
+    closeAddContent(); renderBuilderDetail(); renderBuilderTree();
+    showToast('Video added — draft until you publish it.'); return;
+  }
+  if (ucState.type === 'text') {
+    topic.contents.unshift({ id:'c-' + Date.now(), kind:'text', title:(ucState.textTitle || 'Untitled text'), body:ucState.text, meta:ucState.text.length + ' chars · just now', published:false });
+    closeAddContent(); renderBuilderDetail(); renderBuilderTree();
+    showToast('Text saved — draft until you publish it.'); return;
+  }
+
+  // PDF / Image — create one job per file immediately on the topic card, close
+  // modal, run upload+extract in the background. The topic card is the single
+  // source of truth for progress; closing the modal never affects in-flight work.
+  const newJobs = ucState.files.filter(f => f.status === 'pending').map(f => ({
+    id:         'j-' + Date.now() + '-' + Math.random().toString(36).slice(2,5),
+    source:     f.name,
+    sourceType: ucState.type,
+    sizeBytes:  f.size,
+    status:     'uploading',
+    progress:   0,
+    pages:      ucState.type === 'pdf' ? Math.max(1, Math.ceil(f.size / 100000)) : 1,
+  }));
+  topic.jobs.push(...newJobs);
+  parentQuota.today += newJobs.length;
+  const count = newJobs.length;
+  closeAddContent();
+  renderBuilderDetail(); renderBuilderTree();
+  showToast(`${count} ${ucState.type === 'pdf' ? 'PDF' : 'image'}${count === 1 ? '' : 's'} queued — track progress on the topic.`);
+  newJobs.forEach(j => simulateUpload(j, topic));
+}
+
+function simulateUpload(job, topic) {
+  const tick = setInterval(() => {
+    job.progress += 10 + Math.random() * 15;
+    if (job.progress >= 100) {
+      job.progress = 100; clearInterval(tick);
+      job.status = 'pending'; job.progress = 0;
+      renderBuilderDetail();
+      simulateExtraction(job, topic);
+    } else {
+      renderBuilderDetail();
+    }
+  }, 220);
+}
+
+function simulateExtraction(job, topic) {
+  setTimeout(() => {
+    job.status = 'extracting'; job.progress = 5;
+    renderBuilderDetail();
+    const tick = setInterval(() => {
+      job.progress += 7 + Math.random() * 9;
+      if (job.progress >= 100) {
+        job.progress = 100; job.status = 'done';
+        clearInterval(tick);
+        const pages = [];
+        for (let p = 1; p <= job.pages; p++) {
+          pages.push({ id:'p-' + Date.now() + '-' + p, title:`Page ${p} — extracted heading`, body:`# Page ${p}\n\n_Extracted markdown from ${job.source}…_` });
+        }
+        topic.contents.push({ id:'g-' + Date.now(), kind:'group', source:job.source, publishedSide:'draft', expanded:false, pages });
+        topic.jobs = topic.jobs.filter(j => j.id !== job.id);
+        renderBuilderDetail(); renderBuilderTree();
+        showToast(`${job.source} extracted — ${job.pages} page(s) ready to review and publish.`);
+      } else {
+        renderBuilderDetail();
+      }
+    }, 500);
+  }, 900);
+}
+
+function retryJob(topicId, jobId) {
+  const t = findTopicById(topicId); const j = (t.jobs || []).find(x => x.id === jobId); if (!j) return;
+  j.status = 'pending'; j.progress = 0; simulateExtraction(j, t);
+  renderBuilderDetail();
+}
+function cancelJob(topicId, jobId) {
+  const t = findTopicById(topicId); t.jobs = (t.jobs || []).filter(j => j.id !== jobId);
+  renderBuilderDetail();
+  showToast('Job cancelled.');
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+  return (b/(1024*1024)).toFixed(1) + ' MB';
+}
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /* ════════════════════════════════════════════════

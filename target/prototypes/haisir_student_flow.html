@@ -123,6 +123,66 @@ input,textarea{font-family:inherit;}
 .start-btn:hover{opacity:.85;}
 .topic-empty{padding:40px 20px;text-align:center;color:#888780;font-size:12px;}
 
+/* ─── TOPIC CONTENT VIEWER ────────────────────────────────── */
+.topic-list.cv-mode{padding:0;display:flex;flex-direction:column;}
+.content-strip{display:flex;gap:6px;padding:8px 13px;background:#fff;border-bottom:0.5px solid #e5e3dc;overflow-x:auto;flex-shrink:0;}
+.content-chip{font-size:11px;padding:5px 11px;border-radius:20px;border:0.5px solid #d3d1c7;background:#fff;color:#5f5e5a;white-space:nowrap;flex-shrink:0;}
+.content-chip:hover{border-color:#378ADD;}
+.content-chip.on-p{background:#185FA5;border-color:#185FA5;color:#fff;}
+.content-chip.on-hs{background:#1D9E75;border-color:#1D9E75;color:#fff;}
+.viewer-hd{background:#fff;border-bottom:0.5px solid #e5e3dc;padding:10px 13px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.viewer-hd-main{flex:1;min-width:0;}
+.viewer-title{font-size:13px;font-weight:600;color:#1a1a18;}
+.viewer-meta{font-size:10px;color:#888780;margin-top:1px;}
+.btn-haitu{font-size:11px;padding:6px 14px;border-radius:20px;background:#534AB7;color:#fff;border:none;font-weight:600;flex-shrink:0;}
+.btn-haitu:hover{background:#443C99;}
+.viewer-body{flex:1;overflow-y:auto;padding:16px;}
+.viewer-empty{padding:50px 20px;text-align:center;color:#888780;font-size:12px;}
+
+.doc-panel{background:#fff;border:0.5px solid #e5e3dc;border-radius:10px;padding:22px 26px;max-width:640px;margin:0 auto;font-size:13px;line-height:1.8;color:#1a1a18;}
+.doc-panel h2{font-size:17px;margin:0 0 12px;color:#0A1F5C;}
+.doc-panel h3{font-size:14px;margin:14px 0 8px;color:#0A1F5C;}
+.doc-panel h4{font-size:12px;margin:10px 0 6px;color:#0A1F5C;}
+.doc-panel p{margin:0 0 10px;}
+.doc-panel ul{margin:0 0 10px 20px;}
+.doc-panel li{margin-bottom:4px;}
+
+.mock-doc-viewer{max-width:480px;margin:0 auto;background:#fff;border:0.5px solid #e5e3dc;border-radius:10px;overflow:hidden;}
+.mdv-bar{background:#f5f4f0;border-bottom:0.5px solid #e5e3dc;padding:8px 14px;font-size:11px;color:#5f5e5a;display:flex;align-items:center;gap:8px;}
+.mdv-page{aspect-ratio:3/4;background:#fafaf8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#b4b2a9;padding:20px;text-align:center;line-height:1.6;}
+.mdv-page-icon{font-size:38px;}
+
+.video-panel{max-width:600px;margin:0 auto;}
+.video-frame{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#000;}
+.video-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
+.video-caption{font-size:12px;color:#5f5e5a;margin-top:8px;text-align:center;}
+
+/* ─── hAITU SLIDE-IN DOUBT PANEL ──────────────────────────── */
+.haitu-overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:200;display:none;}
+.haitu-overlay.open{display:block;}
+.haitu-panel{position:fixed;top:0;right:0;bottom:0;width:320px;max-width:92vw;background:#fff;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,.15);transform:translateX(100%);transition:transform .25s ease;}
+.haitu-overlay.open .haitu-panel{transform:translateX(0);}
+.haitu-hd{background:#0A1F5C;padding:14px 16px;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;}
+.haitu-hd-title{font-size:13px;font-weight:600;color:#fff;}
+.haitu-hd-sub{font-size:10px;color:rgba(255,255,255,.5);margin-top:2px;}
+.haitu-close{background:none;border:none;color:rgba(255,255,255,.7);font-size:18px;line-height:1;}
+.haitu-close:hover{color:#fff;}
+.haitu-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.haitu-empty{color:#888780;font-size:11px;text-align:center;padding:20px 10px;line-height:1.6;}
+.hmsg{max-width:85%;padding:8px 11px;border-radius:10px;font-size:12px;line-height:1.5;}
+.hmsg-student{align-self:flex-end;background:#f5f4f0;color:#1a1a18;}
+.hmsg-ai{align-self:flex-start;background:#EEEDFE;color:#3a3470;}
+.hmsg-system{align-self:center;background:#FAEEDA;color:#7A4E00;font-size:10px;text-align:center;padding:6px 10px;}
+.haitu-typing{align-self:flex-start;font-size:11px;color:#888780;padding:4px 4px;}
+.haitu-escalate{margin:0 14px 10px;width:calc(100% - 28px);font-size:11px;padding:9px;border-radius:8px;background:#FAEEDA;border:0.5px solid #FAC775;color:#7A4E00;font-weight:600;text-align:center;}
+.haitu-escalate:hover{background:#F6DFB0;}
+.haitu-composer{border-top:0.5px solid #e5e3dc;padding:10px;display:flex;gap:6px;flex-shrink:0;}
+.haitu-input{flex:1;font-size:12px;padding:8px 10px;border:0.5px solid #d3d1c7;border-radius:7px;outline:none;resize:none;font-family:inherit;}
+.haitu-input:focus{border-color:#534AB7;}
+.haitu-send{font-size:12px;padding:8px 14px;border-radius:7px;background:#534AB7;color:#fff;border:none;font-weight:600;flex-shrink:0;}
+.haitu-send:hover{background:#443C99;}
+.haitu-send:disabled{background:#b4b2a9;}
+
 /* ─── EXAM FLOW ──────────────────────────────────────────── */
 .exam-source-bar{padding:6px 20px;font-size:11px;display:flex;align-items:center;gap:6px;border-bottom:0.5px solid #e5e3dc;flex-shrink:0;}
 .esb-p{background:#EBF4FD;color:#185FA5;}
@@ -294,6 +354,25 @@ input,textarea{font-family:inherit;}
   </div>
 </div>
 
+<!-- ══ hAITU DOUBT PANEL (slide-in overlay) ═══════════════════ -->
+<div class="haitu-overlay" id="haitu-overlay" onclick="if(event.target===this)closeHaitu()">
+  <div class="haitu-panel">
+    <div class="haitu-hd">
+      <div>
+        <div class="haitu-hd-title" id="haitu-hd-title">Ask hAITU</div>
+        <div class="haitu-hd-sub">Scoped to this topic</div>
+      </div>
+      <button class="haitu-close" onclick="closeHaitu()">×</button>
+    </div>
+    <div class="haitu-msgs" id="haitu-msgs"></div>
+    <div id="haitu-escalate-wrap"></div>
+    <div class="haitu-composer">
+      <textarea class="haitu-input" id="haitu-input" rows="1" placeholder="Ask a question about this content…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendHaitu();}"></textarea>
+      <button class="haitu-send" id="haitu-send-btn" onclick="sendHaitu()">Send</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -312,9 +391,14 @@ const platformCourses = [
     progress: 62, topics: 18, done: 11,
     chapters: [
       { id: 'ch1', label: 'Knowing Our Numbers', icon: '🔢', topics: [
-        { id: 't1', name: 'Large Numbers', type: 'platform', status: 'done', exams: 1 },
-        { id: 't2', name: 'Roman Numerals', type: 'platform', status: 'done', exams: 1 },
-        { id: 't3', name: 'Estimation', type: 'platform', status: 'new', exams: 0 },
+        { id: 't1', name: 'Large Numbers', type: 'platform', status: 'done', exams: 1, contents: [
+          { id:'pc-t1-1', kind:'text', title:'Introduction to large numbers', body:'# Introduction\n\nLarge numbers extend our place-value system beyond thousands.\n\n- Lakh = 1,00,000\n- Crore = 1,00,00,000\n\nEach digit\'s value depends on its position in the number.' },
+          { id:'pc-t1-2', kind:'video', title:'Khan Academy: Place Value', url:'https://www.youtube.com/watch?v=metOSGne_hI' },
+        ]},
+        { id: 't2', name: 'Roman Numerals', type: 'platform', status: 'done', exams: 1, contents: [
+          { id:'pc-t2-1', kind:'pdf', title:'roman-numerals-notes.pdf', meta:'4 pages · published as Document' },
+        ]},
+        { id: 't3', name: 'Estimation', type: 'platform', status: 'new', exams: 0, contents: [] },
       ]},
       { id: 'ch2', label: 'Fractions', icon: '📐', topics: [
         { id: 't4', name: 'Types of Fractions', type: 'platform', status: 'prog', exams: 2 },
@@ -347,9 +431,13 @@ const homeStudyCurriculum = {
   label: "Meena's Study Plan",
   chapters: [
     { id: 'hch1', label: 'Algebra Prep', icon: '📐', topics: [
-      { id: 'ht1', name: 'Algebra Basics', type: 'hs', status: 'done', exams: 1 },
-      { id: 'ht2', name: 'Quadratic Equations', type: 'hs', status: 'prog', exams: 1 },
-      { id: 'ht3', name: 'Word Problems', type: 'hs', status: 'new', exams: 0 },
+      { id: 'ht1', name: 'Algebra Basics', type: 'hs', status: 'done', exams: 1, contents: [
+        { id:'hc-ht1-1', kind:'pdf', title:'algebra-notes.pdf', meta:'2 pages · published as Document by Meena' },
+      ]},
+      { id: 'ht2', name: 'Quadratic Equations', type: 'hs', status: 'prog', exams: 1, contents: [
+        { id:'hc-ht2-1', kind:'text', title:'Quick notes: the quadratic formula', body:'# The quadratic formula\n\nFor an equation of the form **ax² + bx + c = 0**, the solutions are:\n\n- x = (-b + root(b² - 4ac)) / 2a\n- x = (-b - root(b² - 4ac)) / 2a\n\nThis works for any quadratic equation, even when it does not factor neatly.' },
+      ]},
+      { id: 'ht3', name: 'Word Problems', type: 'hs', status: 'new', exams: 0, contents: [] },
     ]},
     { id: 'hch2', label: 'English Grammar', icon: '📝', topics: [
       { id: 'ht4', name: 'Parts of Speech', type: 'hs', status: 'done', exams: 1 },
@@ -390,10 +478,48 @@ const examTemplate = {
 ════════════════════════════════════════════════ */
 let activeNavSource = 'platform'; // 'platform' | 'hs'
 let activeChapterId = null;
+let activeTopicId = null;
+let activeContentId = null;
 let activeExam = null;
 let examAnswers = {};
 let examTimerInterval = null;
 let examSecondsLeft = 0;
+let haituState = { topicId:null, topicName:'', isHS:false, messages:[], repliedOnce:false, escalated:false };
+
+/* ════════════════════════════════════════════════
+   SHARED HELPERS
+════════════════════════════════════════════════ */
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function contentIcon(kind) { return { pdf:'📄', image:'🖼️', text:'📝', video:'🎬' }[kind] || '📄'; }
+function extractYouTubeId(url) {
+  const m = String(url || '').match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{6,})/);
+  return m ? m[1] : null;
+}
+// Tiny markdown-ish renderer for the text content viewer — headings, lists, bold. Not a full parser.
+function renderMarkdownLite(md) {
+  const lines = escapeHtml(md || '').split('\n');
+  let html = ''; let inList = false;
+  const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+  for (const line of lines) {
+    if (/^###\s+/.test(line)) { closeList(); html += `<h4>${line.replace(/^###\s+/, '')}</h4>`; continue; }
+    if (/^##\s+/.test(line))  { closeList(); html += `<h3>${line.replace(/^##\s+/, '')}</h3>`; continue; }
+    if (/^#\s+/.test(line))   { closeList(); html += `<h2>${line.replace(/^#\s+/, '')}</h2>`; continue; }
+    if (/^\s*[-*]\s+/.test(line)) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${line.replace(/^\s*[-*]\s+/, '')}</li>`;
+      continue;
+    }
+    closeList();
+    if (line.trim() !== '') html += `<p>${line}</p>`;
+  }
+  closeList();
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/(?<!\w)_(.+?)_(?!\w)/g, '<em>$1</em>');
+  return html || '<p style="color:#888780;">(empty)</p>';
+}
 
 /* ════════════════════════════════════════════════
    ROUTING
@@ -527,6 +653,9 @@ function selectChapter(id) {
 }
 
 function renderTopicList() {
+  activeTopicId = null;
+  document.getElementById('topic-list').classList.remove('cv-mode');
+
   const isHS = activeNavSource === 'hs';
   const chapters = isHS ? homeStudyCurriculum.chapters : platformCourses.flatMap(c => c.chapters);
   const ch = chapters.find(c => c.id === activeChapterId);
@@ -540,20 +669,172 @@ function renderTopicList() {
     const [cls, label] = statusMap[t.status];
     const isH = t.type === 'hs';
     const hasExam = t.exams > 0;
+    const contents = t.contents || [];
+    const cIcons = [...new Set(contents.map(c => c.kind))].map(contentIcon).join(' ');
     return `
-      <div class="topic-row">
+      <div class="topic-row" onclick="openTopic('${t.id}')">
         <div class="tr-icon ${isH ? 'tr-icon-hs' : ''}">${ch.icon}</div>
         <div class="tr-main">
           <div class="tr-title">${t.name}</div>
-          <div class="tr-meta">${hasExam ? t.exams + ' exam' + (t.exams > 1 ? 's' : '') + ' available' : 'No exams yet'}</div>
+          <div class="tr-meta">${cIcons ? cIcons + ' · ' : ''}${hasExam ? t.exams + ' exam' + (t.exams > 1 ? 's' : '') + ' available' : 'No exams yet'}</div>
         </div>
         <div class="tr-right">
           <span class="tbadge ${cls}">${label}</span>
-          ${hasExam ? `<button class="start-btn ${isH ? 'start-btn-hs' : ''}" onclick="startExam('${t.type === 'hs' ? 'hs' : 'platform'}')">Take exam</button>` : ''}
+          ${hasExam ? `<button class="start-btn ${isH ? 'start-btn-hs' : ''}" onclick="event.stopPropagation();startExam('${t.type === 'hs' ? 'hs' : 'platform'}')">Take exam</button>` : ''}
         </div>
       </div>`;
   }).join('');
   document.getElementById('topic-list').innerHTML = html || '<div class="topic-empty">No topics yet.</div>';
+}
+
+/* ════════════════════════════════════════════════
+   TOPIC CONTENT VIEWER
+   Dispatches by content_type; only items the uploader published ever
+   reach this data in the first place (BR-STU-025 / BR-DATA-025).
+════════════════════════════════════════════════ */
+function findActiveTopic() {
+  const isHS = activeNavSource === 'hs';
+  const chapters = isHS ? homeStudyCurriculum.chapters : platformCourses.flatMap(c => c.chapters);
+  const ch = chapters.find(c => c.id === activeChapterId);
+  const t = ch ? ch.topics.find(x => x.id === activeTopicId) : null;
+  return { t, ch, isHS };
+}
+
+function openTopic(topicId) {
+  activeTopicId = topicId;
+  const { t } = findActiveTopic();
+  const contents = t ? (t.contents || []) : [];
+  activeContentId = contents.length ? contents[0].id : null;
+  renderTopicContent();
+}
+
+function selectContent(contentId) {
+  activeContentId = contentId;
+  renderTopicContent();
+}
+
+function renderTopicContent() {
+  const { t, ch, isHS } = findActiveTopic();
+  if (!t || !ch) return;
+
+  const list = document.getElementById('topic-list');
+  list.classList.add('cv-mode');
+  document.getElementById('nav-main-header').innerHTML =
+    `<span class="bc-link" onclick="renderTopicList()">← ${escapeHtml(ch.label)}</span><span class="bc-sep"> › </span><span class="bc-cur">${escapeHtml(t.name)}</span>`;
+
+  const contents = t.contents || [];
+  const active = contents.find(c => c.id === activeContentId) || null;
+
+  const stripHtml = contents.length > 1 ? `
+    <div class="content-strip">${contents.map(c => `
+      <button class="content-chip ${c.id === activeContentId ? (isHS ? 'on-hs' : 'on-p') : ''}" onclick="selectContent('${c.id}')">${contentIcon(c.kind)} ${escapeHtml(c.title)}</button>`).join('')}</div>` : '';
+
+  const bodyHtml = active ? renderContentBody(active) : `<div class="viewer-empty">📭 No content published for this topic yet — check back soon.</div>`;
+
+  list.innerHTML = `
+    <div class="viewer-hd">
+      <div class="viewer-hd-main">
+        <div class="viewer-title">${escapeHtml(t.name)}</div>
+        <div class="viewer-meta">${contents.length} item(s) published${t.exams ? ` · ${t.exams} exam${t.exams > 1 ? 's' : ''} available` : ''}</div>
+      </div>
+      <button class="btn-haitu" onclick="openHaitu()">✨ Ask hAITU</button>
+    </div>
+    ${stripHtml}
+    <div class="viewer-body">${bodyHtml}</div>`;
+}
+
+function renderContentBody(c) {
+  if (c.kind === 'text') {
+    return `<div class="doc-panel">${renderMarkdownLite(c.body || '')}</div>`;
+  }
+  if (c.kind === 'video') {
+    const ytId = extractYouTubeId(c.url);
+    const player = ytId
+      ? `<iframe src="https://www.youtube-nocookie.com/embed/${ytId}" title="${escapeHtml(c.title)}" allowfullscreen></iframe>`
+      : `<div class="mdv-page"><div class="mdv-page-icon">🎬</div>Video unavailable — <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener">watch on the original site</a></div>`;
+    return `<div class="video-panel">
+      <div class="video-frame">${player}</div>
+      <div class="video-caption">${escapeHtml(c.title)}</div>
+    </div>`;
+  }
+  // pdf / image — the real app streams the file from GET /api/topic-contents/{id}/file;
+  // this prototype has no backend, so it shows a representative reader frame instead.
+  const icon = c.kind === 'image' ? '🖼️' : '📄';
+  return `<div class="mock-doc-viewer">
+    <div class="mdv-bar">${icon} ${escapeHtml(c.title)} <span style="margin-left:auto;color:#b4b2a9;">${escapeHtml(c.meta || '')}</span></div>
+    <div class="mdv-page"><div class="mdv-page-icon">${icon}</div>Secure in-browser viewer<br><span style="font-size:10px;">(rendered from the published file)</span></div>
+  </div>`;
+}
+
+/* ════════════════════════════════════════════════
+   hAITU DOUBT PANEL
+   Persistence (doubts + doubt_messages, the doubt_id SSE event, the
+   teacher-escalation queue) is server-side per 11_haitu_ai_layer.md —
+   this simulates the streamed reply client-side for the prototype.
+════════════════════════════════════════════════ */
+function openHaitu() {
+  const { t, isHS } = findActiveTopic();
+  if (!t) return;
+  haituState = { topicId: t.id, topicName: t.name, isHS: !!isHS, messages: [], repliedOnce: false, escalated: false };
+  document.getElementById('haitu-hd-title').textContent = `Ask hAITU — ${t.name}`;
+  document.getElementById('haitu-input').value = '';
+  renderHaituMsgs();
+  renderHaituEscalate();
+  document.getElementById('haitu-overlay').classList.add('open');
+}
+function closeHaitu() { document.getElementById('haitu-overlay').classList.remove('open'); }
+
+function renderHaituMsgs() {
+  const el = document.getElementById('haitu-msgs');
+  if (!haituState.messages.length) {
+    el.innerHTML = `<div class="haitu-empty">Ask a question about this topic and hAITU will answer using its published content.</div>`;
+    return;
+  }
+  el.innerHTML = haituState.messages.map(m => {
+    if (m.sender === 'system') return `<div class="hmsg hmsg-system">${escapeHtml(m.text)}</div>`;
+    return `<div class="hmsg ${m.sender === 'student' ? 'hmsg-student' : 'hmsg-ai'}">${escapeHtml(m.text)}</div>`;
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+// BR-AI-011: escalation to the shared instructor queue is blocked for Home Study
+// (parent-owned) topics — there's no instructor overseeing private parent content.
+function renderHaituEscalate() {
+  const wrap = document.getElementById('haitu-escalate-wrap');
+  const canEscalate = haituState.repliedOnce && !haituState.escalated && !haituState.isHS;
+  wrap.innerHTML = canEscalate ? `<button class="haitu-escalate" onclick="escalateHaitu()">Request teacher help →</button>` : '';
+}
+
+function sendHaitu() {
+  const input = document.getElementById('haitu-input');
+  const text = input.value.trim();
+  if (!text) return;
+  haituState.messages.push({ sender:'student', text });
+  input.value = '';
+  renderHaituMsgs();
+  const sendBtn = document.getElementById('haitu-send-btn');
+  sendBtn.disabled = true;
+  const el = document.getElementById('haitu-msgs');
+  el.insertAdjacentHTML('beforeend', `<div class="haitu-typing" id="haitu-typing">hAITU is thinking…</div>`);
+  el.scrollTop = el.scrollHeight;
+  setTimeout(() => {
+    const typing = document.getElementById('haitu-typing');
+    if (typing) typing.remove();
+    const reply = `Here's an explanation grounded in "${haituState.topicName}": work through it step by step using what's covered in the published content above. Want me to break down a specific part further?`;
+    haituState.messages.push({ sender:'ai', text: reply });
+    haituState.repliedOnce = true;
+    sendBtn.disabled = false;
+    renderHaituMsgs();
+    renderHaituEscalate();
+  }, 1100);
+}
+
+function escalateHaitu() {
+  haituState.escalated = true;
+  haituState.messages.push({ sender:'system', text:"Escalated to a teacher — you'll be notified when they reply." });
+  renderHaituMsgs();
+  renderHaituEscalate();
+  showToast('Doubt escalated to a teacher.');
 }
 
 /* ════════════════════════════════════════════════
