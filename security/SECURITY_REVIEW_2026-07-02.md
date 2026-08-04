@@ -40,13 +40,14 @@ Severity legend: **High** = fix before you treat this as production-secure; **Me
 | M2 — chunked-encoding size bypass | **OPEN**, and worse than described | G7.1 |
 | M3 — Jenkins param injection | **PARTIAL** — deploy half-fixed, backend untouched | G7.2 |
 | M4 — Tailscale dev tags `*:*` | **OPEN** — byte-identical | G7.3 |
-| M5 — OIDC/etcd TLS verification off | **OPEN** | G6.3 |
+| M5 — OIDC/etcd TLS verification off | **CLOSED 2026-08-04** — T6.3.1–T6.3.3 fixed; T6.3.4 (Postgres TLS) **accepted risk**, see annotation | G6.3 done |
 | M6 — etcd auth disabled | **CONFIRMED FIXED for prod/staging** (re-verified 2026-07-31) — dev-only pattern, correctly isolated; regression guard (T7.5.3) still to build | T7.5.2 done, G7.5 |
 | L1 — `.env_bak` not gitignored | **FIXED** | — |
 | L2 — host `.env*` world-readable | **FIXED for prod**, open staging/dev (now hold no secrets) | G7.5 |
 | L3 — deprecated `X-XSS-Protection` | **OPEN** — 4 plugin configs | G7.4 |
 | L4 — dev conveniences | **CONFIRMED FIXED for prod** (re-verified 2026-07-31) — regression guard (T7.5.3) still to build | T7.5.2 done, G7.5 |
 | L5 — `referer-restriction bypass_missing` | **RECORDED, deliberately not fixed** — accepted as a spam filter, not a boundary | T7.5.1 done, G7.5 |
+| (post-review) APISIX admin UI on a static key | **CLOSED 2026-08-04** — `enable_admin_ui: false` for staging/prod; static-key residual **accepted risk** | T7.7.2 done, G7.7 done |
 
 **Not re-verified this pass** (host/infrastructure state rather than repo state): on-server file
 modes beyond those visible locally, and live Tailscale ACL enforcement.
@@ -69,6 +70,44 @@ complete picture. Full detail in `Implementation_planning/decisions.md` (2026-07
 - Six further infrastructure anomalies (APISIX `allow_admin` covering the whole Docker subnet,
   admin UI enabled behind a single static key, CrowdSec LAPI key over plaintext HTTP, OpenBao's DB
   engine at `sslmode=disable`, `.templated/` files at 0664, `sonarqube/.env` at 0664). Phase 7 G7.7.
+
+  > **[2026-08-04, T7.7.2] FIXED for the admin-UI item, with an accepted-risk record for the
+  > residual. This closes G7.7.** `enable_admin_ui: false` in `common/apisix_conf/config.yaml`
+  > (staging/prod); `dev/apisix_conf/config.yaml` deliberately keeps it `true`, the same isolation
+  > pattern as L4. `enable_admin_cors` follows it to `false` — admin CORS exists only to serve
+  > browser clients of the Admin API, and the dashboard was the only one.
+  >
+  > **The finding as written conflates two things, and only one of them is about the UI.** "A
+  > routing-config web UI behind a single static key with no MFA" — the *Admin API on the same port*
+  > has the identical property. One static key (from OpenBao KV `secret/haisir/gateway`), no MFA, no
+  > per-operator identity, no audit trail of who rewrote which route. `curl -H "X-API-KEY: …"` does
+  > everything the dashboard did. Disabling the UI does **not** close that gap and should not be
+  > recorded as having done so.
+  >
+  > **What disabling it does close**, and the actual reason for doing it: the dashboard was the only
+  > path by which `APISIX_ADMIN_KEY` ever entered a browser — localStorage, devtools, history on the
+  > admin workstation, reachable by a malicious extension or page. (Classic CSRF never applied here:
+  > auth is a custom header, not a cookie.) Secondary benefit: one less bundled-JS surface patched on
+  > APISIX's release schedule rather than ours. The team works via CLI and does not use the
+  > dashboard, so this costs nothing operationally — that, not "the UI is dangerous", is the whole
+  > argument. Behind three stacked gates (tailnet membership, tailnet ACL `tag:dev1 → tag:prod:9180`,
+  > and APISIX's own `allow_admin` of `10.0.2.0/24` + two `/32`s) the UI was never
+  > internet-reachable.
+  >
+  > **Accepted risk (residual):** the Admin API keeps a single static key, no MFA, and no
+  > route-change audit trail. Mitigated by those same three gates plus the key living in OpenBao and
+  > being rotatable. Deliberately not fixed further — APISIX has no native MFA for the Admin API, and
+  > fronting the gateway's own admin port with an OIDC proxy adds a bootstrap-order dependency and a
+  > failure mode squarely in the path of every deploy. Re-open if the Admin API is ever reachable
+  > from outside the tailnet, or if more than one operator needs distinguishable admin access.
+  >
+  > Guarded mechanically: `dev-isolation-check.sh` now fails the build if `enable_admin_ui: true`
+  > appears in any `apisix_conf/config.yaml` outside `dev/`. Verified to fire against an injected
+  > violation.
+  >
+  > The other five anomalies in this bullet were addressed separately (T7.7.1 for `allow_admin`,
+  > T6.3.3 for the CrowdSec LAPI, T6.3.4 for `sslmode=disable` — see the accepted-risk record under
+  > M5 — and the file-mode items under G7.5).
 
 ---
 
@@ -129,6 +168,54 @@ Size and upload checks read `int(request.headers.get("content-length", 0))`. A c
 
 ### M5 — OIDC/etcd TLS verification disabled
 > **[2026-07-31] MOSTLY FIXED, one item remains — noted here for consistency with the M6 update above, not itself a T7.5.x task.** `openid-connect.ssl_verify` → `true` on all three plugin configs (T6.3.1), `etcd.tls.verify` → `true` (T6.3.2), CrowdSec LAPI moved to `https` + `ssl_verify: true` (T6.3.3) — all done 2026-07-31. Still open: OpenBao's database secrets engine connection (`sslmode=disable`, `common/openbao/bootstrap.sh:252`) — T6.3.4, deliberately parked pending a scope decision (fixing it means standing up Postgres server-side TLS, out of this task's original scope). Phase 7 G6.3 stays open on this alone.
+>
+> **[2026-08-04, T6.3.4] ACCEPTED RISK — deliberately not fixed. This closes G6.3.** Postgres runs
+> without TLS and OpenBao's DB connection stays at `sslmode=disable`. The reasoning, verified against
+> `haisir-deploy` at `aa553a9` rather than assumed:
+>
+> - **Exposure surface.** `db` publishes `${BACKEND_DB_PORT_BINDING:-127.0.0.1:5432}`. Prod sets that
+>   to the Tailscale IP in the untracked host-side `prod/.env` (not `prod/.env.config.sh` — the
+>   compose comment claimed staging/prod override it there and was simply wrong; corrected in the
+>   same commit as this record). So cleartext DB traffic exists in two places: the `haisir-net`
+>   docker bridge, and the tailnet. Tailnet traffic is WireGuard-encrypted end to end, so only the
+>   bridge is actually cleartext.
+> - **What crosses the bridge.** backend↔db, worker↔db, db-init↔db, and openbao↔db. The last one is
+>   the high-value channel: it carries the Postgres **superuser** password on every dynamic-role
+>   creation and on `rotate-root`.
+> - **Who could read it — three candidates, all closed.** (1) Root on the prod host: yes, but root can
+>   already `docker exec` into `db` or read the agent-rendered `/secrets/postgres_password`. TLS adds
+>   nothing; not a delta. (2) A neighbouring container sniffing passively: **no** — a Linux bridge is
+>   a switch, unicast backend→db frames are never delivered to a third container's veth, and
+>   promiscuous capture needs `CAP_NET_RAW`. (3) A neighbouring container ARP-spoofing `db` to MITM:
+>   **no** — every service on `haisir-net` (`db`, `backend`, `worker`, `frontend`, `keycloak`,
+>   `keycloak-db`, `etcd`, `apisix`, and all five `vault-agent-*`, which re-add only `IPC_LOCK`) sets
+>   `cap_drop: ALL`. No `NET_RAW` → no raw socket → no forged ARP. Prod also runs rootless Docker, so
+>   a container escape lands as an unprivileged host user.
+> - **The literal fix would not have bought much anyway.** The task specified `sslmode=require`, which
+>   encrypts but does *not* verify the server certificate. It defends against passive sniffing
+>   (already impossible) and does nothing against active MITM (also already impossible). The only
+>   version that changes the threat model is full server-side TLS with `verify-full` and CA
+>   distribution to all four client types — issuing and renewing a server cert for a `read_only: true`
+>   container, `ssl=on` in the Postgres image, and flipping backend, worker, db-init and the OpenBao
+>   bootstrap in lockstep. Four ways to break prod for no measured risk reduction.
+>
+> **This acceptance is load-bearing on the capability drops**, so it is now guarded mechanically:
+> `common/scripts/tests/dev-isolation-check.sh` (already CI-wired via the Jenkinsfile *Dev Isolation
+> Check* stage) fails the build if any compose file outside `dev/` grants `NET_RAW` or `NET_ADMIN`.
+> The check was verified to fire against an injected violation, not merely to pass.
+>
+> **Re-open triggers** — any one of these invalidates the reasoning above and puts Postgres TLS back
+> on the table:
+> 1. The database moves off-box, or any split-host / multi-VM topology is introduced.
+> 2. Any container on `haisir-net` gains `NET_RAW` or `NET_ADMIN` (CI now blocks this).
+> 3. Any third-party or otherwise untrusted container joins `haisir-net`.
+> 4. Rootless Docker is abandoned on prod.
+> 5. The tailnet ACL widens beyond `tag:dev1` for `tag:prod:5432`.
+>
+> Related tightening in the same commit: prod's `5432` was listening on the Tailscale IP with **no**
+> ACL rule granting it, so the port was exposed on the interface but unreachable. The ACL now grants
+> `tag:prod:5432` to `tag:dev1` only, for occasional operator `psql`. Nothing in the stack connects
+> to the database over the tailnet.
 
 **Repo:** haisir-deploy · `common/plugin_configs/03-secured-api.json` (`openid-connect.ssl_verify: false`), `common/apisix_conf/config.yaml` (`etcd.tls.verify: false`, `crowdsec ssl_verify: false`)
 TLS peer verification is off on the APISIX→Keycloak OIDC channel and the APISIX→etcd channel. These are container-internal today (low risk), but "verify off" is a habit that doesn't survive a move to split hosts/mTLS, and etcd holds all gateway routing config.

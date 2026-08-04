@@ -4,6 +4,57 @@
 
 ---
 
+## 2026-08-04 — T6.3.4 / T7.7.2: the two parked security decisions, settled
+
+> Context: Phase 7 G6.3 and G7.7. Both had sat since 2026-07-31 as "needs a scope/product decision
+> from the user, not a mechanical fix". Full evidence and re-open triggers are recorded in
+> `security/SECURITY_REVIEW_2026-07-02.md` (under M5 and under the post-review anomalies bullet);
+> this entry records the reasoning and the shape of the decision. Deploy branch
+> `security/close-t6.3.4-t7.7.2`, commit `602d155`.
+
+- **T6.3.4 — Postgres runs without TLS. Accepted risk, not deferred.** The question was framed as
+  "we terminate SSL at APISIX and the DB is not externally reachable — is internal cleartext fine?"
+  Verified rather than assumed: cleartext DB traffic exists only on the `haisir-net` docker bridge.
+  (Prod also publishes `5432` on the Tailscale IP — set in the untracked host-side `prod/.env`, a
+  fact the compose comment got wrong — but tailnet traffic is WireGuard-encrypted, so that path is
+  not cleartext.) A compromised neighbouring container cannot read the bridge traffic: a Linux
+  bridge is a switch, so unicast backend→db frames never reach a third container's veth, and both
+  promiscuous capture and ARP-spoof MITM require `CAP_NET_RAW` — which nothing has, since all
+  twelve services on the network set `cap_drop: ALL` (the five `vault-agent-*` re-add only
+  `IPC_LOCK`). Root-on-host can read it, but can already `docker exec` into `db`, so TLS is no
+  delta there.
+- **The ticket's literal fix was weaker than it looked.** `sslmode=require` encrypts without
+  verifying the server certificate — it defends against passive sniffing (already impossible here)
+  and not at all against active MITM (also already impossible). Only `verify-full` with CA
+  distribution to all four DB client types would change the threat model, and that is the full
+  server-side-TLS project the task was correctly scoped away from. Doing the weak version would
+  have looked like progress while buying nothing.
+- **The acceptance is load-bearing on the capability drops, so it is now mechanical.** The existing
+  CI stage (`dev-isolation-check.sh`, wired in the Jenkinsfile since T7.5.3) fails the build on any
+  `NET_RAW`/`NET_ADMIN` grant outside `dev/`. Reused rather than built new — this is the same guard
+  pattern T7.5.3 established. Re-open triggers (DB moves off-box, untrusted container joins the
+  network, rootless Docker abandoned, ACL widens) are recorded in the review.
+- **T7.7.2 — the APISIX admin dashboard is disabled for staging/prod.** The finding's headline
+  ("routing-config web UI behind a single static key with no MFA") conflates two things, and the
+  serious half is not about the UI: the Admin API on the same port has the identical property, and
+  `curl -H "X-API-KEY: …"` does everything the dashboard did. Disabling the UI does not close that
+  gap and is not recorded as having done so.
+- **What disabling it does close** is narrow but real and free: the dashboard was the only path by
+  which `APISIX_ADMIN_KEY` ever entered a browser (localStorage, devtools, history — reachable by a
+  malicious extension), plus one bundled-JS surface patched on APISIX's release schedule. The team
+  works via CLI and does not use it. That — not "the UI is dangerous" — is the whole argument;
+  behind tailnet membership, the ACL, and `allow_admin` it was never internet-reachable.
+  `enable_admin_cors` follows it off, since the dashboard was the Admin API's only browser client.
+- **Residual accepted: one static Admin-API key, no MFA, no route-change audit trail.** Not fixed
+  further because APISIX has no native Admin-API MFA, and fronting the gateway's own admin port
+  with an OIDC proxy introduces a bootstrap-order dependency squarely in the path of every deploy.
+  Re-open if the Admin API becomes reachable outside the tailnet, or if more than one operator
+  needs distinguishable admin access.
+- **Both new CI checks were verified by injecting violations**, not just by observing a pass — a
+  guard that cannot fail is not a guard.
+
+---
+
 ## 2026-07-30 — T6.4.4: MFA for `admin`/`institution_admin` deferred, evaluated not implemented
 
 > Context: Phase 7 G6.4 (Keycloak realm hardening, H3). T6.4.4 asks to "evaluate requiring
