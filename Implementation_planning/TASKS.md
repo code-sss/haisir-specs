@@ -5,6 +5,16 @@
 > after T4.2.1/T4.2.4/T4.2.5 landed in one commit — "fix(waf): refine rule exclusions and enhance
 > field-scoping for topic-content edits", pushed and confirmed on `origin/main`)
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
+> **2026-08-04 (security-review refresh): `security/SECURITY_REVIEW_2026-07-02.md` re-verified
+> end to end** against backend `e2e0f0f`, frontend `cb930b7`, deploy `ffaab67` — checked against
+> source, not carried forward from these planning docs. Eight findings moved to closed (H2, H3, M2,
+> M3, M4, M5, L2, L3) plus the post-review admin-UI anomaly; several rows had been stale for days
+> (e.g. L3's `X-XSS-Protection` is already `"0"` in all four plugin configs, and the backend
+> `Jenkinsfile` param gate the review called "untouched" now exists). **Only two items in that
+> document remain open: M1** — a real per-request nonce CSP now exists in `haisir-frontend/src/proxy.ts`
+> but is still emitted `Content-Security-Policy-Report-Only`, so enforcement (G5.4) is the gap —
+> **and T7.4.2**, chained behind that same CSP work. Everything else is fixed or carries a written
+> accepted-risk record. Not T8.3.2: that task still owns the formal Phase 7 closeout of the file.
 > **2026-08-04 (latest): T6.3.4 and T7.7.2 both resolved — closing G6.3, G6 and G7.7.** The two
 > decisions parked since 2026-07-31 are settled, on branch `security/close-t6.3.4-t7.7.2` (deploy
 > `602d155`, **not yet merged or deployed**). **T6.3.4 — accepted risk, no Postgres TLS:** cleartext
