@@ -54,7 +54,8 @@
   reaches prod over SSH, so no deploy path regresses. The cost is real but small — direct `curl` to
   prod's Admin API from the dev workstation is gone, admin work goes through SSH to prod first — and
   it makes `APISIX_ADMIN_ALLOWED_CIDR` dead config on prod, which is an operator step to unset.
-  Staging keeps `9180`, since that is where debugging happens and the blast radius is not prod's.
+  Staging was initially left alone (debugging, smaller blast radius), then closed the same way at
+  the user's call — both envs identical, so no per-env condition survives.
 - **The binding follows the ACL, for a specific reason.** The tailnet policy is applied by hand in
   the Tailscale Admin Console and can drift from the repo copy, so an ACL entry is a single point of
   failure — pasting back an older policy would silently re-expose the port. Prod therefore also stops

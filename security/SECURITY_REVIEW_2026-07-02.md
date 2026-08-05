@@ -97,13 +97,13 @@ complete picture. Full detail in `Implementation_planning/decisions.md` (2026-07
   > for `tag:prod` entirely, so the Admin API is reachable only from the prod host itself
   > (`10.0.2.0/24` plus the host's own Tailscale IP). Every automated caller — `setup.sh`,
   > `create_*_config.sh`, cert sync — already runs there, and Jenkins reaches prod over SSH
-  > (`tag:ci → tag:prod:22,53`), so nothing in the deploy path regresses. Staging keeps `9180` for
-  > debugging. **Consequence for operators:** `curl` against prod's Admin API from the dev
+  > (`tag:ci → tag:prod:22,53`), so nothing in the deploy path regresses. Staging was given the same
+  > treatment on 2026-08-04 (see below). **Consequence for operators:** `curl` against prod's Admin API from the dev
   > workstation no longer works; admin operations go through SSH to prod first. **Consequence for
   > config:** `APISIX_ADMIN_ALLOWED_CIDR` (the admin-workstation `/32`) becomes dead config on prod —
   > it was never dashboard-specific, it gates the Admin API too, but with the port unreachable it
   > now allowlists an address that cannot arrive. Operator step, noted in `config.yaml`: unset it in
-  > `prod/.env.config.sh` so it falls back to the `127.0.0.1/32` default. Staging still uses it.
+  > `prod/.env.config.sh` so it falls back to the `127.0.0.1/32` default. Same for `staging/`.
   >
   > **And the port binding itself.** The tailnet ACL is applied by hand in the Tailscale Admin
   > Console and can drift from the repo copy, so the ACL alone is a single point of failure — an old
@@ -129,10 +129,23 @@ complete picture. Full detail in `Implementation_planning/decisions.md` (2026-07
   > 3. `prod/.env.config.sh` — remove the `APISIX_ADMIN_ALLOWED_CIDR` export (see above).
   > 4. Redeploy, then confirm `setup.sh --wait` still reaches the Admin API.
   >
-  > Staging keeps its Tailscale binding; `9180` remains in staging's ACL for debugging.
-  > `TAILSCALE_ADMIN_CIDR` (prod's own IP `/32`) becomes redundant once the port is loopback-only —
-  > under rootless Docker the host's own traffic reaches APISIX as `10.0.2.2`, already covered — but
-  > it is harmless and was left alone.
+  > **Staging is now the same as prod** (2026-08-04, user's call): `9180` removed from staging's ACL,
+  > binding unset there too. Do the same three `.env*` edits in `staging/`. Note staging's
+  > `CLIENT_ADMIN_TAILSCALE_IP` also feeds `KEYCLOAK_ADMIN_ALLOWED_CIDR` — that one stays.
+  > `TAILSCALE_ADMIN_CIDR` (the host's own IP `/32`) becomes redundant once the port is
+  > loopback-only — under rootless Docker the host's own traffic reaches APISIX as `10.0.2.2`,
+  > already covered — but it is harmless and was left alone.
+  >
+  > **Why this was not made a templated `{{PLACEHOLDER}}`** (the obvious "make it configurable"
+  > move, and it is a trap in this repo): `replace_placeholders()` in `template-configs.sh` is a
+  > plain `sed`, and `config.yaml`'s own NOTE requires every `{{X}}` to be double-quoted or
+  > yamllint/shfmt rewrites it to flow style. A templated boolean would therefore render as the
+  > **string** `"false"` — and in Lua every non-nil string is truthy, so the dashboard would be
+  > silently *enabled* by config that reads as disabled. With staging and prod both off there is no
+  > per-env condition left anyway: re-enabling is one word in one shared file, plus an ACL entry and
+  > `APISIX_ADMIN_PORT_BINDING` in whichever env needs it. **The port binding, by contrast, was
+  > always configurable** — it is an ordinary env var with a loopback default; closing it is
+  > *removing* an override, not adding a condition.
   >
   > **Accepted risk (residual):** the Admin API keeps a single static key, no MFA, and no
   > route-change audit trail. Mitigated by those same three gates plus the key living in OpenBao and
