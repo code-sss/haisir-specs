@@ -105,6 +105,35 @@ complete picture. Full detail in `Implementation_planning/decisions.md` (2026-07
   > now allowlists an address that cannot arrive. Operator step, noted in `config.yaml`: unset it in
   > `prod/.env.config.sh` so it falls back to the `127.0.0.1/32` default. Staging still uses it.
   >
+  > **And the port binding itself.** The tailnet ACL is applied by hand in the Tailscale Admin
+  > Console and can drift from the repo copy, so the ACL alone is a single point of failure — an old
+  > policy pasted back in would silently re-expose `9180`. Prod should therefore also stop binding
+  > the admin port to the Tailscale interface. Audited before recommending it: **every Admin API
+  > caller already executes on the prod host**, so nothing needs that interface —
+  > `deploy.sh` wraps both of its `setup.sh` invocations in `remote_exec` (`ssh … bash -s`) and
+  > builds the URL from `${APISIX_ADMIN_PORT_BINDING:-127.0.0.1:9180}`, which falls back correctly
+  > when unset; `Jenkinsfile.deploy` only calls `deploy.sh`; `haisir-sync-certs.sh` is a certbot
+  > deploy hook running as root against `/etc/letsencrypt` on prod; `configure-ssl.sh` reads
+  > `~/certs` on prod and defaults to `localhost:9180`; `env-setup.sh`, `env-full-setup.sh` and
+  > `apisix-admin-auth-probe.sh` are dev-local. Nothing calls prod's Admin API from a workstation.
+  >
+  > **Operator steps on prod** (`.env*` files are never edited from tooling, per the repo rule):
+  > 1. `prod/.env` — remove the `APISIX_ADMIN_PORT_BINDING` line so compose falls back to
+  >    `127.0.0.1:9180`.
+  > 2. `prod/.env.config.sh` — remove the `APISIX_ADMIN_PORT_BINDING` export, **and** the
+  >    `APISIX_ADMIN_URL` export. **This second one is the trap:** if the binding moves to loopback
+  >    while `APISIX_ADMIN_URL` still points at the Tailscale IP, `haisir-sync-certs.sh` and
+  >    `configure-ssl.sh` keep dialling an address nothing listens on — and the cert-renewal hook
+  >    would fail *silently, months later, at renewal time*. With it unset, both scripts fall back to
+  >    their own `http://localhost:9180` default.
+  > 3. `prod/.env.config.sh` — remove the `APISIX_ADMIN_ALLOWED_CIDR` export (see above).
+  > 4. Redeploy, then confirm `setup.sh --wait` still reaches the Admin API.
+  >
+  > Staging keeps its Tailscale binding; `9180` remains in staging's ACL for debugging.
+  > `TAILSCALE_ADMIN_CIDR` (prod's own IP `/32`) becomes redundant once the port is loopback-only —
+  > under rootless Docker the host's own traffic reaches APISIX as `10.0.2.2`, already covered — but
+  > it is harmless and was left alone.
+  >
   > **Accepted risk (residual):** the Admin API keeps a single static key, no MFA, and no
   > route-change audit trail. Mitigated by those same three gates plus the key living in OpenBao and
   > being rotatable. Deliberately not fixed further — APISIX has no native MFA for the Admin API, and

@@ -55,6 +55,17 @@
   prod's Admin API from the dev workstation is gone, admin work goes through SSH to prod first — and
   it makes `APISIX_ADMIN_ALLOWED_CIDR` dead config on prod, which is an operator step to unset.
   Staging keeps `9180`, since that is where debugging happens and the blast radius is not prod's.
+- **The binding follows the ACL, for a specific reason.** The tailnet policy is applied by hand in
+  the Tailscale Admin Console and can drift from the repo copy, so an ACL entry is a single point of
+  failure — pasting back an older policy would silently re-expose the port. Prod therefore also stops
+  binding `9180` to the Tailscale interface. Audited first rather than assumed: every Admin API
+  caller already runs on the prod host (`deploy.sh` wraps its `setup.sh` calls in `remote_exec`,
+  Jenkins only calls `deploy.sh`, the cert-sync hook is a root certbot hook on prod, `configure-ssl.sh`
+  reads `~/certs` there), and all of them fall back to loopback when the variable is unset. The one
+  real trap is `APISIX_ADMIN_URL`, which prod also pins to the Tailscale IP: leave it set while the
+  binding moves to loopback and the certbot renewal hook fails **silently, months later, at renewal
+  time**. Both exports must go together. Recorded as operator steps in the security review — `.env*`
+  files are never edited from tooling.
 - **Residual accepted: one static Admin-API key, no MFA, no route-change audit trail.** Not fixed
   further because APISIX has no native Admin-API MFA, and fronting the gateway's own admin port
   with an OIDC proxy introduces a bootstrap-order dependency squarely in the path of every deploy.
