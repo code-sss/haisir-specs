@@ -1,9 +1,12 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> Last baselined: backend:`e2e0f0f` frontend:`06600f6` deploy:`aa553a9` (2026-08-04, deploy bumped
-> after T4.2.1/T4.2.4/T4.2.5 landed in one commit — "fix(waf): refine rule exclusions and enhance
-> field-scoping for topic-content edits", pushed and confirmed on `origin/main`)
+> Last baselined: backend:`e2e0f0f` frontend:`cb930b7` deploy:`ffaab67` (2026-08-05, re-verified
+> against each sibling repo's actual `origin/main`, all three working trees clean). Deploy bumped
+> past `aa553a9` by the merged T6.3.4/T7.7.2 chain (see the 2026-08-04 entry below); frontend bumped
+> past `06600f6` by two commits that map to **no** Phase 7 task — `fb8b423` (useAuth backed by a
+> single Context provider, fixing a gateway-flooding 429) and `cb930b7` (undici/brace-expansion
+> bump) — recorded here so the baseline stops drifting, not treated as unblocking anything.
 > Phase 7 scoped 2026-07-27 — see `PLAN.md` for the goal tree and scope locks.
 > **2026-08-04 (security-review refresh): `security/SECURITY_REVIEW_2026-07-02.md` re-verified
 > end to end** against backend `e2e0f0f`, frontend `cb930b7`, deploy `ffaab67` — checked against
@@ -16,8 +19,14 @@
 > **and T7.4.2**, chained behind that same CSP work. Everything else is fixed or carries a written
 > accepted-risk record. Not T8.3.2: that task still owns the formal Phase 7 closeout of the file.
 > **2026-08-04 (latest): T6.3.4 and T7.7.2 both resolved — closing G6.3, G6 and G7.7.** The two
-> decisions parked since 2026-07-31 are settled, on branch `security/close-t6.3.4-t7.7.2` (deploy
-> `602d155`, **not yet merged or deployed**). **T6.3.4 — accepted risk, no Postgres TLS:** cleartext
+> decisions parked since 2026-07-31 are settled. **Merge status corrected 2026-08-05:** the working
+> SHA `602d155` cited below and on the G6.3/G7.7 gate rows was on the since-merged branch
+> `security/close-t6.3.4-t7.7.2` and no longer exists in `haisir-deploy`; the work is on `origin/main`
+> as `1b20bf9` (disable admin UI + guard the no-DB-TLS acceptance), `56e4cfa` (record prod
+> `APISIX_ADMIN_PORT_BINDING` unset), `0d1502a` (close the Admin API on staging too) and `ffaab67`
+> (grant `tag:dev1` Postgres access to staging — a T7.7.2 follow-up fixing the same ACL-narrowing
+> regression T6.3.4's note flagged for prod). Working tree clean. **T6.3.4 — accepted risk, no
+> Postgres TLS:** cleartext
 > DB traffic exists only on the `haisir-net` bridge (prod's tailnet-published `5432` is
 > WireGuard-encrypted), and a compromised neighbouring container can reach neither passive sniffing
 > (a bridge is a switch; needs promiscuous mode) nor ARP-spoof MITM — both require `CAP_NET_RAW`,
@@ -741,7 +750,7 @@
 - [x] T6.3.2 [deploy]: Enable `etcd.tls.verify` in `common/apisix_conf/config.yaml:48` — client certs already ship (depends on T6.3.1) (2026-07-31; `verify: false → true`. Lower risk than T6.3.1/T6.3.3 — etcd already spoke TLS (`https://etcd:2379`), already had `cert`/`key`/`ca_cert` configured via `docker-compose.yml`'s `ETCD_CERT_FILE`/`ETCD_KEY_FILE`/`ETCD_TRUSTED_CA_FILE`; `verify` was the only thing off. `yamllint`/parse valid.)
 - [x] T6.3.3 [deploy]: Move the CrowdSec LAPI channel to https and enable `ssl_verify` (`config.yaml:67,72`) — the bouncer key currently traverses the Docker network in plaintext (2026-07-31; `crowdsec_lapi_scheme: https` + `ssl_verify: true` in `config.yaml`, reusing the `lua_ssl_trusted_certificate` added for T6.3.1. CrowdSec's LAPI itself had no TLS configured (own service, deployed via manual scp per its README, not part of `common/docker-compose.yml`) — added `common/scripts/certs/generate-certs-crowdsec.sh` (mirrors `generate-certs-keycloak.sh`, CN/SAN=`crowdsec`, signed by the same internal CA) and `other/services/crowdsec/config.yaml.local` (CrowdSec's own override-merge mechanism, confirmed via docs) setting `api.server.tls.cert_file/key_file`; `docker-compose.yml` bind-mounts `./tls/` + `./config.yaml.local` (`.gitignore`d tls dir). README "TLS Setup" section + renumbered prod checklist document the manual cert-generate+copy+restart step on the actual CrowdSec host — not executable from this session (remote host, no SSH access here).)
 - [x] T6.3.4 [deploy]: Set `sslmode=require` on OpenBao's database secrets engine connection (`common/openbao/bootstrap.sh:252`) — **RESOLVED AS ACCEPTED RISK, 2026-08-04** (was: BLOCKED, not attempted 2026-07-31 — Postgres has no TLS configured anywhere, so flipping this alone would just break OpenBao's DB connection; fixing it properly means standing up full Postgres server-side TLS, affecting every DB client). Full record in `security/SECURITY_REVIEW_2026-07-02.md` under M5. Decision basis, verified against deploy `aa553a9` rather than assumed: (1) cleartext DB traffic exists only on the `haisir-net` docker bridge — prod's `5432` is also published on the Tailscale IP (set in the untracked host-side `prod/.env`, **not** `prod/.env.config.sh`; the compose comment claiming otherwise was wrong and is now corrected), but tailnet traffic is WireGuard-encrypted; (2) a neighbouring container cannot read that bridge traffic — a Linux bridge is a switch so unicast frames never reach a third veth, and both promiscuous capture and ARP-spoof MITM need `CAP_NET_RAW`, which nothing has: all twelve services on `haisir-net` set `cap_drop: ALL` and the five `vault-agent-*` re-add only `IPC_LOCK`; (3) root-on-host can read it but can already `docker exec` into `db` or read `/secrets/postgres_password`, so TLS is no delta there; (4) the literal fix (`sslmode=require`) does not verify the server cert, so it defends only against passive sniffing, which is already impossible — only `verify-full` with CA distribution to all four client types would change the threat model, and that is the full-TLS project this task was correctly scoped away from. Acceptance is load-bearing on the capability drops, so `common/scripts/tests/dev-isolation-check.sh` (already CI-wired) now fails the build on any `NET_RAW`/`NET_ADMIN` grant outside `dev/` — verified to fire against an injected violation, not merely to pass. Re-open triggers recorded in the security-review record. Related fix in the same commit: prod's `5432` was listening on the tailnet IP with **no** ACL rule granting it — a regression, not a posture. Direct operator `psql` over the tailnet is the established workflow (not an SSH tunnel); it broke silently when T7.3.1 narrowed the dev tags off `dst: ["*:*"]` on 2026-07-31 without enumerating `5432`. The ACL now grants `tag:prod:5432` to `tag:dev1` alone.
-- [x] **G6.3: internal channels verify TLS** — integration test (2026-08-04; T6.3.1–T6.3.3 fixed the three live `verify: false` channels, T6.3.4 resolved as a documented accepted risk with a CI-enforced invariant rather than left open. Deploy commit `602d155`.)
+- [x] **G6.3: internal channels verify TLS** — integration test (2026-08-04; T6.3.1–T6.3.3 fixed the three live `verify: false` channels, T6.3.4 resolved as a documented accepted risk with a CI-enforced invariant rather than left open. Deploy commits `1b20bf9`+`ffaab67` on `origin/main` — the `602d155` recorded here at the time was a pre-merge branch SHA, corrected 2026-08-05.)
 
 ### G6.4 [deploy]: Keycloak realm hardening
 - [x] T6.4.1 [deploy]: Add `passwordPolicy` to `common/keycloak/01-realm.json` — e.g. `length(12) and notUsername and notEmail and passwordHistory(3)` (H3) (2026-07-30; added `"passwordPolicy": "length(12) and notUsername and notEmail and passwordHistory(3)"` — min 12 chars, can't contain username/email, can't reuse last 3 passwords. Scoped strictly to this task: `sslRequired` (T6.4.2) and explicit brute-force params (T6.4.3) untouched. `jq` valid. Applies going forward via `setup-keycloak.sh`'s realm load — does not retroactively invalidate existing passwords. Needs `keycloak_setup: true` in the release manifest.)
@@ -795,7 +804,7 @@
 - [x] T7.7.3 [deploy]: Harden `env-setup.sh:139` so a set `TMPDIR` cannot place the rendered secret env file on disk-backed storage instead of `/dev/shm` (2026-07-31; `mktemp "${TMPDIR:-/dev/shm}/..."` → `mktemp "/dev/shm/..."` — TMPDIR can no longer redirect this file. `shellcheck` clean on the changed line.)
 - [x] T7.7.4 [deploy]: `chmod 600` the files inside `.templated/` — the 0700 directory is currently the only protection on 0664 files containing resolved secrets (2026-07-31; single `chmod 600 "$output_file"` added at the end of `template-configs.sh`'s `replace_placeholders()` function — one edit point covers all four call sites (plugin_configs/routes/keycloak/apisix_conf), placed after the optional ip-restriction-strip `mv` so it applies to the final file regardless of path. `shellcheck` clean.)
 - [x] T7.7.5 [deploy]: Migrate `other/services/sonarqube/.env` (`SONAR_DB_PASSWORD`, mode 0664) out of plaintext, or document the `other/services/*` stacks as explicitly outside the OpenBao boundary (2026-07-31; documented — new `other/services/sonarqube/README.md`, consistent with T7.5.1/T7.5.2's precedent of documenting accepted risk for standalone `other/services/*` stacks rather than pulling them into the OpenBao boundary. Manual step (not done by this tool per the `.env*` hard constraint — permission-only `chmod` isn't on the explicit allow-list either): operator runs `chmod 600 other/services/sonarqube/.env`.)
-- [x] **G7.7: audit anomalies closed or documented** — acceptance test (2026-08-04; T7.7.1–T7.7.5 all done — `allow_admin` narrowed, admin dashboard disabled for staging/prod with the static-key residual documented as accepted risk, `TMPDIR` redirection closed, `.templated/` files at 0600, and the `other/services/*` stacks documented as outside the OpenBao boundary. Verified by running `dev-isolation-check.sh` directly (PASS) *and* by injecting violations to confirm the two new checks actually fire. Deploy commit `602d155`.)
+- [x] **G7.7: audit anomalies closed or documented** — acceptance test (2026-08-04; T7.7.1–T7.7.5 all done — `allow_admin` narrowed, admin dashboard disabled for staging/prod with the static-key residual documented as accepted risk, `TMPDIR` redirection closed, `.templated/` files at 0600, and the `other/services/*` stacks documented as outside the OpenBao boundary. Verified by running `dev-isolation-check.sh` directly (PASS) *and* by injecting violations to confirm the two new checks actually fire. Deploy commits `1b20bf9`/`56e4cfa`/`0d1502a`/`ffaab67` on `origin/main` — the `602d155` recorded here at the time was a pre-merge branch SHA, corrected 2026-08-05.)
 
 - [ ] **G7: Residual review items** — integration test
 
@@ -821,6 +830,30 @@
 - [ ] **G8: Review gate and closeout** — acceptance test — **HARD GATE: no merge until this passes**
 
 ## Ready now
+
+> **Recomputed 2026-08-05 (eighteenth pass).** No task completed this pass — this is a staleness
+> reconciliation against each sibling repo's real `origin/main`, plus the first recompute since
+> T6.3.4/T7.7.2 landed. **The two scope/product decisions that were the only "Ready now" deploy
+> items for five straight passes are gone** — both resolved 2026-08-04, closing G6.3 → G6 and G7.7.
+> **G1, G2, G3.1, G3.3, G3.5, G3.6, G4, G5.1, G5.2, G6, G7.1, G7.2, G7.3, G7.5, G7.6, G7.7 are all
+> closed. Nothing mechanical is left in this plan.**
+> **Ready now — three items, all live-environment checks this tool cannot run:**
+> 1. **G3.2** [backend, frontend] — every child task (T3.2.1–T3.2.6) is done; the gate needs a
+>    live-backend round-trip on a `{attempt_id, message}` body (exam-review-chat persists server-side).
+> 2. **G3.4** [backend] — T3.4.1/T3.4.2 done; needs a live-backend check that model answers come from
+>    server-held session data, not client claims. G3.2 + G3.4 are the only things holding **G3**.
+> 3. **T5.3.2** [deploy-owned, filed under frontend] — the Keycloak OIDC round-trip CSP soak. Not
+>    frontend-runnable: `07`/`08`/`09-auth-*` are APISIX-owned and redirect cross-origin, so there is
+>    no `src/` route to drive. **This is the single highest-leverage blocker in the phase** — the
+>    whole tail (T5.4.1 → T5.4.2 + T7.4.2 → G5.4/G5 + G7.4/G7 → G8) sits behind it, and BR-CSP-007
+>    forbids enforcing CSP before it passes.
+> **[backend]/[specs]: nothing newly unblocked.** G8 stays correctly not-ready — `T8.1.1` lists no
+> dependency but reviews the whole diff, and G3/G5/G7 are still open, so it would review a moving
+> target.
+> **Baselines corrected this pass:** deploy `aa553a9` → `ffaab67`, frontend `06600f6` → `cb930b7`
+> (see the header banner — the frontend delta is unrelated to Phase 7). The `602d155` SHA cited on
+> the G6.3/G7.7 gate rows was a pre-merge branch SHA and no longer exists; replaced with the real
+> `origin/main` commits.
 
 > **Recomputed 2026-08-04 (seventeenth pass).** T4.2.5 [deploy] done — user explicitly overrode the
 > "wait for a real environment ≥ v2026.6" reading of BR-WAF-011 (`apisix-dev` already satisfies it
