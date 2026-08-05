@@ -90,9 +90,20 @@ complete picture. Full detail in `Implementation_planning/decisions.md` (2026-07
   > auth is a custom header, not a cookie.) Secondary benefit: one less bundled-JS surface patched on
   > APISIX's release schedule rather than ours. The team works via CLI and does not use the
   > dashboard, so this costs nothing operationally — that, not "the UI is dangerous", is the whole
-  > argument. Behind three stacked gates (tailnet membership, tailnet ACL `tag:dev1 → tag:prod:9180`,
-  > and APISIX's own `allow_admin` of `10.0.2.0/24` + two `/32`s) the UI was never
-  > internet-reachable.
+  > argument. Behind three stacked gates (tailnet membership, the tailnet ACL, and APISIX's own
+  > `allow_admin`) the UI was never internet-reachable.
+  >
+  > **Followed through on the port, not just the flag.** `9180` is now removed from the tailnet ACL
+  > for `tag:prod` entirely, so the Admin API is reachable only from the prod host itself
+  > (`10.0.2.0/24` plus the host's own Tailscale IP). Every automated caller — `setup.sh`,
+  > `create_*_config.sh`, cert sync — already runs there, and Jenkins reaches prod over SSH
+  > (`tag:ci → tag:prod:22,53`), so nothing in the deploy path regresses. Staging keeps `9180` for
+  > debugging. **Consequence for operators:** `curl` against prod's Admin API from the dev
+  > workstation no longer works; admin operations go through SSH to prod first. **Consequence for
+  > config:** `APISIX_ADMIN_ALLOWED_CIDR` (the admin-workstation `/32`) becomes dead config on prod —
+  > it was never dashboard-specific, it gates the Admin API too, but with the port unreachable it
+  > now allowlists an address that cannot arrive. Operator step, noted in `config.yaml`: unset it in
+  > `prod/.env.config.sh` so it falls back to the `127.0.0.1/32` default. Staging still uses it.
   >
   > **Accepted risk (residual):** the Admin API keeps a single static key, no MFA, and no
   > route-change audit trail. Mitigated by those same three gates plus the key living in OpenBao and
@@ -212,10 +223,12 @@ Size and upload checks read `int(request.headers.get("content-length", 0))`. A c
 > 4. Rootless Docker is abandoned on prod.
 > 5. The tailnet ACL widens beyond `tag:dev1` for `tag:prod:5432`.
 >
-> Related tightening in the same commit: prod's `5432` was listening on the Tailscale IP with **no**
-> ACL rule granting it, so the port was exposed on the interface but unreachable. The ACL now grants
-> `tag:prod:5432` to `tag:dev1` only, for occasional operator `psql`. Nothing in the stack connects
-> to the database over the tailnet.
+> Related fix in the same commit: prod's `5432` was listening on the Tailscale IP with **no** ACL
+> rule granting it. This was a regression, not a deliberate posture — direct operator `psql` to prod
+> over the tailnet is the established workflow (not an SSH tunnel), and it broke silently on
+> 2026-07-31 when T7.3.1 narrowed the dev tags off `dst: ["*:*"]` and `5432` was not among the ports
+> enumerated in its place. The ACL now grants `tag:prod:5432` to `tag:dev1` only. Nothing in the
+> stack connects to the database over the tailnet — this port is for operator access alone.
 
 **Repo:** haisir-deploy · `common/plugin_configs/03-secured-api.json` (`openid-connect.ssl_verify: false`), `common/apisix_conf/config.yaml` (`etcd.tls.verify: false`, `crowdsec ssl_verify: false`)
 TLS peer verification is off on the APISIX→Keycloak OIDC channel and the APISIX→etcd channel. These are container-internal today (low risk), but "verify off" is a habit that doesn't survive a move to split hosts/mTLS, and etcd holds all gateway routing config.

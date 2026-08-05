@@ -17,7 +17,10 @@
   Verified rather than assumed: cleartext DB traffic exists only on the `haisir-net` docker bridge.
   (Prod also publishes `5432` on the Tailscale IP — set in the untracked host-side `prod/.env`, a
   fact the compose comment got wrong — but tailnet traffic is WireGuard-encrypted, so that path is
-  not cleartext.) A compromised neighbouring container cannot read the bridge traffic: a Linux
+  not cleartext. Separately: no ACL rule granted `tag:prod:5432`, so direct operator `psql` over the
+  tailnet — the established workflow — had been silently broken since T7.3.1 narrowed the dev tags
+  off `dst: ["*:*"]` on 2026-07-31 without enumerating that port. Restored explicitly for
+  `tag:dev1`.) A compromised neighbouring container cannot read the bridge traffic: a Linux
   bridge is a switch, so unicast backend→db frames never reach a third container's veth, and both
   promiscuous capture and ARP-spoof MITM require `CAP_NET_RAW` — which nothing has, since all
   twelve services on the network set `cap_drop: ALL` (the five `vault-agent-*` re-add only
@@ -45,6 +48,13 @@
   works via CLI and does not use it. That — not "the UI is dangerous" — is the whole argument;
   behind tailnet membership, the ACL, and `allow_admin` it was never internet-reachable.
   `enable_admin_cors` follows it off, since the dashboard was the Admin API's only browser client.
+- **The port followed the flag.** Turning off the dashboard while leaving `9180` open on the tailnet
+  would have been half a decision, so `9180` is removed from the ACL for `tag:prod`: the Admin API is
+  now reachable only from the prod host itself. Every automated caller already runs there and Jenkins
+  reaches prod over SSH, so no deploy path regresses. The cost is real but small — direct `curl` to
+  prod's Admin API from the dev workstation is gone, admin work goes through SSH to prod first — and
+  it makes `APISIX_ADMIN_ALLOWED_CIDR` dead config on prod, which is an operator step to unset.
+  Staging keeps `9180`, since that is where debugging happens and the blast radius is not prod's.
 - **Residual accepted: one static Admin-API key, no MFA, no route-change audit trail.** Not fixed
   further because APISIX has no native Admin-API MFA, and fronting the gateway's own admin port
   with an OIDC proxy introduces a bootstrap-order dependency squarely in the path of every deploy.
