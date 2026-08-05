@@ -149,8 +149,17 @@ input,textarea{font-family:inherit;}
 
 .mock-doc-viewer{max-width:480px;margin:0 auto;background:#fff;border:0.5px solid #e5e3dc;border-radius:10px;overflow:hidden;}
 .mdv-bar{background:#f5f4f0;border-bottom:0.5px solid #e5e3dc;padding:8px 14px;font-size:11px;color:#5f5e5a;display:flex;align-items:center;gap:8px;}
-.mdv-page{aspect-ratio:3/4;background:#fafaf8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#b4b2a9;padding:20px;text-align:center;line-height:1.6;}
+.mdv-toolbar{display:flex;align-items:center;gap:8px;padding:6px 14px;background:#fafaf8;border-bottom:0.5px solid #e5e3dc;font-size:11px;color:#5f5e5a;flex-wrap:wrap;}
+.mdv-btn{font-size:11px;padding:3px 9px;border-radius:5px;border:0.5px solid #d3d1c7;background:#fff;color:#5f5e5a;cursor:pointer;}
+.mdv-btn:hover:not(:disabled){border-color:#378ADD;color:#378ADD;}
+.mdv-btn:disabled{opacity:.4;cursor:default;}
+.mdv-page-num{white-space:nowrap;}
+.mdv-zoom-group{display:flex;align-items:center;gap:6px;margin-left:auto;}
+.mdv-zoom-label{min-width:36px;text-align:center;}
+.mdv-page-wrap{overflow:auto;max-height:520px;padding:16px 0;}
+.mdv-page{aspect-ratio:3/4;background:#fafaf8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#b4b2a9;padding:20px;text-align:center;line-height:1.6;transform-origin:top center;transition:transform .15s ease;}
 .mdv-page-icon{font-size:38px;}
+.doc-pager{display:flex;align-items:center;gap:8px;margin:-4px 0 14px;padding-bottom:12px;border-bottom:0.5px solid #e5e3dc;font-size:11px;color:#5f5e5a;}
 
 .video-panel{max-width:600px;margin:0 auto;}
 .video-frame{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#000;}
@@ -392,17 +401,24 @@ const platformCourses = [
     chapters: [
       { id: 'ch1', label: 'Knowing Our Numbers', icon: '🔢', topics: [
         { id: 't1', name: 'Large Numbers', type: 'platform', status: 'done', exams: 1, contents: [
-          { id:'pc-t1-1', kind:'text', title:'Introduction to large numbers', body:'# Introduction\n\nLarge numbers extend our place-value system beyond thousands.\n\n- Lakh = 1,00,000\n- Crore = 1,00,00,000\n\nEach digit\'s value depends on its position in the number.' },
+          { id:'pc-t1-1', kind:'text', title:'Introduction to large numbers', pages: [
+            { body:'# Introduction\n\nLarge numbers extend our place-value system beyond thousands.\n\n- Lakh = 1,00,000\n- Crore = 1,00,00,000\n\nEach digit\'s value depends on its position in the number.' },
+            { body:'# Worked example\n\nWrite 4,50,203 in expanded form:\n\n- 4,00,000 (4 lakh)\n- 50,000 (5 ten-thousand)\n- 200 (2 hundred)\n- 3 (3 ones)\n\nAdd these back together to check your answer.' },
+          ]},
           { id:'pc-t1-2', kind:'video', title:'Khan Academy: Place Value', url:'https://www.youtube.com/watch?v=metOSGne_hI' },
         ]},
         { id: 't2', name: 'Roman Numerals', type: 'platform', status: 'done', exams: 1, contents: [
-          { id:'pc-t2-1', kind:'pdf', title:'roman-numerals-notes.pdf', meta:'4 pages · published as Document' },
+          { id:'pc-t2-1', kind:'pdf', title:'roman-numerals-notes.pdf', meta:'4 pages · published as Document', pageCount:4 },
         ]},
         { id: 't3', name: 'Estimation', type: 'platform', status: 'new', exams: 0, contents: [] },
       ]},
       { id: 'ch2', label: 'Fractions', icon: '📐', topics: [
-        { id: 't4', name: 'Types of Fractions', type: 'platform', status: 'prog', exams: 2 },
-        { id: 't5', name: 'Operations on Fractions', type: 'platform', status: 'new', exams: 0 },
+        { id: 't4', name: 'Types of Fractions', type: 'platform', status: 'prog', exams: 2, contents: [
+          { id:'pc-t4-1', kind:'image', title:'fraction-types-diagram.jpg', meta:'1 page · published as Document', pageCount:1 },
+        ]},
+        { id: 't5', name: 'Operations on Fractions', type: 'platform', status: 'new', exams: 0, contents: [
+          { id:'pc-t5-1', kind:'video', title:'External tutorial (non-YouTube link)', url:'https://example.com/fractions-tutorial' },
+        ]},
       ]},
       { id: 'ch3', label: 'Algebra', icon: '🔣', topics: [
         { id: 't6', name: 'Variables & Expressions', type: 'platform', status: 'new', exams: 0 },
@@ -432,10 +448,13 @@ const homeStudyCurriculum = {
   chapters: [
     { id: 'hch1', label: 'Algebra Prep', icon: '📐', topics: [
       { id: 'ht1', name: 'Algebra Basics', type: 'hs', status: 'done', exams: 1, contents: [
-        { id:'hc-ht1-1', kind:'pdf', title:'algebra-notes.pdf', meta:'2 pages · published as Document by Meena' },
+        { id:'hc-ht1-1', kind:'pdf', title:'algebra-notes.pdf', meta:'2 pages · published as Document by Meena', pageCount:2 },
       ]},
       { id: 'ht2', name: 'Quadratic Equations', type: 'hs', status: 'prog', exams: 1, contents: [
-        { id:'hc-ht2-1', kind:'text', title:'Quick notes: the quadratic formula', body:'# The quadratic formula\n\nFor an equation of the form **ax² + bx + c = 0**, the solutions are:\n\n- x = (-b + root(b² - 4ac)) / 2a\n- x = (-b - root(b² - 4ac)) / 2a\n\nThis works for any quadratic equation, even when it does not factor neatly.' },
+        { id:'hc-ht2-1', kind:'text', title:'Quick notes: the quadratic formula', pages: [
+          { body:'# The quadratic formula\n\nFor an equation of the form **ax² + bx + c = 0**, the solutions are:\n\n- x = (-b + root(b² - 4ac)) / 2a\n- x = (-b - root(b² - 4ac)) / 2a\n\nThis works for any quadratic equation, even when it does not factor neatly.' },
+          { body:'# Worked example\n\nSolve x² - 5x + 6 = 0:\n\n- a = 1, b = -5, c = 6\n- root(b² - 4ac) = root(25 - 24) = 1\n- x = (5 + 1) / 2 = 3, or x = (5 - 1) / 2 = 2\n\nSo x = 2 or x = 3.' },
+        ]},
       ]},
       { id: 'ht3', name: 'Word Problems', type: 'hs', status: 'new', exams: 0, contents: [] },
     ]},
@@ -480,6 +499,8 @@ let activeNavSource = 'platform'; // 'platform' | 'hs'
 let activeChapterId = null;
 let activeTopicId = null;
 let activeContentId = null;
+let viewerPage = 1;
+let viewerZoom = 1;
 let activeExam = null;
 let examAnswers = {};
 let examTimerInterval = null;
@@ -705,12 +726,56 @@ function openTopic(topicId) {
   const { t } = findActiveTopic();
   const contents = t ? (t.contents || []) : [];
   activeContentId = contents.length ? contents[0].id : null;
+  viewerPage = 1; viewerZoom = 1;
   renderTopicContent();
 }
 
 function selectContent(contentId) {
   activeContentId = contentId;
+  viewerPage = 1; viewerZoom = 1;
   renderTopicContent();
+}
+
+function activeContentItem() {
+  const { t } = findActiveTopic();
+  const contents = t ? (t.contents || []) : [];
+  return contents.find(c => c.id === activeContentId) || null;
+}
+
+function pageCountOf(c) {
+  if (!c) return 1;
+  if (c.kind === 'text') return (c.pages && c.pages.length) || 1;
+  if (c.kind === 'pdf' || c.kind === 'image') return c.pageCount || 1;
+  return 1;
+}
+
+function viewerPrevPage() {
+  if (viewerPage > 1) { viewerPage--; renderTopicContent(); }
+}
+
+function viewerNextPage() {
+  const c = activeContentItem();
+  if (c && viewerPage < pageCountOf(c)) { viewerPage++; renderTopicContent(); }
+}
+
+function viewerZoomBy(delta) {
+  viewerZoom = Math.min(2, Math.max(0.6, +(viewerZoom + delta).toFixed(2)));
+  renderTopicContent();
+}
+
+function renderPagerBar(totalPages, cls, showZoom) {
+  const zoomHtml = showZoom ? `
+    <span class="mdv-zoom-group">
+      <button class="mdv-btn" onclick="viewerZoomBy(-0.2)">−</button>
+      <span class="mdv-zoom-label">${Math.round(viewerZoom * 100)}%</span>
+      <button class="mdv-btn" onclick="viewerZoomBy(0.2)">+</button>
+    </span>` : '';
+  return `<div class="${cls}">
+    <button class="mdv-btn" onclick="viewerPrevPage()" ${viewerPage <= 1 ? 'disabled' : ''}>‹ Prev</button>
+    <span class="mdv-page-num">Page ${viewerPage} of ${totalPages}</span>
+    <button class="mdv-btn" onclick="viewerNextPage()" ${viewerPage >= totalPages ? 'disabled' : ''}>Next ›</button>
+    ${zoomHtml}
+  </div>`;
 }
 
 function renderTopicContent() {
@@ -745,7 +810,10 @@ function renderTopicContent() {
 
 function renderContentBody(c) {
   if (c.kind === 'text') {
-    return `<div class="doc-panel">${renderMarkdownLite(c.body || '')}</div>`;
+    const pages = c.pages && c.pages.length ? c.pages : [{ body: c.body }];
+    const page = pages[viewerPage - 1] || pages[0];
+    const pager = pages.length > 1 ? renderPagerBar(pages.length, 'doc-pager', false) : '';
+    return `<div class="doc-panel">${pager}${renderMarkdownLite(page.body || '')}</div>`;
   }
   if (c.kind === 'video') {
     const ytId = extractYouTubeId(c.url);
@@ -758,11 +826,16 @@ function renderContentBody(c) {
     </div>`;
   }
   // pdf / image — the real app streams the file from GET /api/topic-contents/{id}/file;
-  // this prototype has no backend, so it shows a representative reader frame instead.
+  // this prototype has no backend, so it shows a representative reader frame with the
+  // pagination + zoom controls a real in-browser PDF/image reader would have.
   const icon = c.kind === 'image' ? '🖼️' : '📄';
+  const totalPages = pageCountOf(c);
   return `<div class="mock-doc-viewer">
     <div class="mdv-bar">${icon} ${escapeHtml(c.title)} <span style="margin-left:auto;color:#b4b2a9;">${escapeHtml(c.meta || '')}</span></div>
-    <div class="mdv-page"><div class="mdv-page-icon">${icon}</div>Secure in-browser viewer<br><span style="font-size:10px;">(rendered from the published file)</span></div>
+    ${renderPagerBar(totalPages, 'mdv-toolbar', true)}
+    <div class="mdv-page-wrap"><div class="mdv-page" style="transform:scale(${viewerZoom});">
+      <div class="mdv-page-icon">${icon}</div>Page ${viewerPage} of ${totalPages}<br><span style="font-size:10px;">(rendered from the published file)</span>
+    </div></div>
   </div>`;
 }
 
