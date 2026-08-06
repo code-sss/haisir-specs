@@ -4,6 +4,50 @@
 
 ---
 
+## 2026-08-06 — T5.3.11: `style-src-attr 'unsafe-inline'` accepted, so CSP can be enforced
+
+> Context: Phase 7 G5.3/G5.4. Closing the CSP soak (T5.3.9) required deciding what to do about
+> inline `style="…"` attributes, which a nonce can never cover. T5.3.7/T5.3.8 removed every static
+> one and explicitly deferred this call to the enforcement task. Frontend commits `e80a760` and
+> `14a1b47`.
+
+- **Decision: relax `style-src-attr` to `'unsafe-inline'`; keep `style-src` nonce-gated.** The
+  policy now reads `style-src 'self' 'nonce-…'; style-src-attr 'unsafe-inline'`. `style-src-attr`
+  overrides `style-src` **for attributes only**, so `<style>` elements and `<link>` stylesheets
+  remain nonce-gated — element-level injection, which is the path that can actually load remote CSS
+  or be chained into script, is untouched.
+- **Why not "just remove the inline styles", which was the first instinct and is what T5.3.5/T5.3.7
+  did for every other case.** The ~11 survivors carry runtime-computed values: drag-resized panel
+  widths, tree indent depth, `--node-depth`. A style attribute is the only way to get a JS value
+  into CSS; there is no stylesheet formulation of "whatever width the user just dragged to". The
+  choice was therefore relax the directive or delete the features, not relax versus refactor.
+- **Residual risk, stated plainly.** A style attribute cannot execute script. The exposure is
+  CSS-based data exfiltration (attribute-selector side channels) and visual spoofing, and both
+  already require an HTML-injection foothold — at which point `style-src-elem` and `script-src`,
+  still strict, are the controls that matter. Accepted.
+- **The relaxation is locked against silent widening.** A unit test in `tests/unit/app/proxy.test.ts`
+  asserts both that `style-src-attr 'unsafe-inline'` is present *and* that `style-src` is still
+  exactly `'self' 'nonce-n'`. Without the second assertion a future edit could move
+  `'unsafe-inline'` onto `style-src` and quietly lose element protection while the first assertion
+  still passed.
+- **Re-open triggers:** any move to a UI approach where computed values no longer need attributes
+  (e.g. CSS Houdini custom properties with a registered syntax, or server-computed layout), or a
+  CSP Level 4 mechanism that scopes attributes more finely.
+
+### Companion finding, worth generalising beyond CSP
+
+- **Module-scope side effects in a client component are not a global initialiser.** T5.3.6 set Zod's
+  `jitless` flag at module scope in `src/app/providers.tsx` and verified `jitless:!0` in the built
+  bundle — which proved the flag *shipped*, not that it had *applied*. It had not: the code only
+  runs when that chunk evaluates, and `/courses` mounts its own `CoursesProviders` that never
+  imports the root providers at all. The live soak caught it; the build check could not.
+  Corrected in T5.3.10 by moving it to `src/instrumentation-client.ts`, Next's designated
+  before-everything-else client hook. **The general rule: "the code is in the bundle" and "the code
+  ran before the thing it must precede" are different claims, and only the second one matters for an
+  initialiser.**
+
+---
+
 ## 2026-08-04 — T6.3.4 / T7.7.2: the two parked security decisions, settled
 
 > Context: Phase 7 G6.3 and G7.7. Both had sat since 2026-07-31 as "needs a scope/product decision
