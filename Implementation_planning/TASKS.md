@@ -869,10 +869,27 @@
 > - Frontend commit `e80a760` carries a `Co-Authored-By: Claude` trailer, which `CLAUDE.md` marks
 >   as a hard prohibition. It is already on `origin/main`; rewriting published history is the
 >   user's call, noted here only so it is not mistaken for an oversight.
-> - Staging's `APISIX_ADMIN_URL` still points at the Tailscale IP `:9180` after T7.7.2 moved the
->   admin port to `127.0.0.1` only. `deploy.sh` overrides it so deploys work, but any **standalone**
->   script invocation fails with curl exit 7. Needs a `.env.config.sh` edit. Carried from the
->   nineteenth pass, still open.
+> - ~~Staging's `APISIX_ADMIN_URL` still points at the Tailscale IP~~ **FIXED 2026-08-06** —
+>   `~/haisir-deploy/staging/.env.config.sh:27` on the staging VM now reads `http://127.0.0.1:9180`
+>   (backup kept alongside as `.env.config.sh.bak-20260806`); the host checkout's copy was updated
+>   to match. Verified by contrast on the box: old Tailscale URL → HTTP 000 / **curl exit 7**, new
+>   loopback URL → HTTP 401 / **curl exit 0** (401 is an API-key artefact of the test, not
+>   connectivity). Deploys were never affected — `common/scripts/deploy.sh:862,874` override the URL
+>   inline — only standalone runs of `create_route_config.sh` / `create_plugin_config.sh` /
+>   `env-setup.sh`.
+>   **Prod is deliberately NOT changed and is not the same case.** Prod still binds the admin port
+>   to its Tailscale interface rather than loopback, because its server-side config sets
+>   `APISIX_ADMIN_PORT_BINDING="${TAILSCALE_IP}:9180"`, so its Tailscale `APISIX_ADMIN_URL` is
+>   *correct for prod as it actually runs* — changing it to loopback would have broken the certbot
+>   deploy hook. The reason is simply that **this phase is not deployed to prod yet** (user,
+>   2026-08-06); prod will need the same one-line change only once it is, and that is the user's
+>   call at deploy time, not a drift to "fix" now.
+>   **Two mechanics worth not re-deriving:** (1) `*/.env.config.sh` is gitignored (`.gitignore:1`
+>   `.env*`) and lives only on each server — `common/scripts/deploy-lib.sh` excludes it from rsync
+>   *and* backs it up across the wipe-and-recreate, so the server copy is authoritative and a deploy
+>   never overwrites it; edits must be made on the box, and local copies are reference only.
+>   (2) `common/deploy-remote-common.sh` (the legacy path behind `staging/deploy-remote.sh`) does
+>   **not** have those exclusions and would delete `.env.config.sh` — do not use it.
 
 > **Recomputed 2026-08-05 (nineteenth pass).** **T5.3.2 done — the item the eighteenth pass called
 > "the single highest-leverage blocker in the phase".** It was run live against staging on `v2026.6`
