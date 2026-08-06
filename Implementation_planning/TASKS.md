@@ -732,7 +732,7 @@
 - [x] **G5.3: zero unexplained violations across all journeys** — acceptance test (2026-08-06; closed on T5.3.9 run 2 — full OIDC round-trip plus `/home`, `/courses`, `/teacher/doubts`, `/doubts/[id]` and `/` walked live on staging against image `407e94ecca9b` with **zero** violation reports. **Two honest limits on the evidence, both of which matter for T5.4.1:** (i) the live soak covers only the routes actually walked — a nonce-less `<style>` on an unvisited page would still be a genuine `style-src-elem` violation under enforcement; the backstop is T5.3.8's narrowed CI filter across 21 journeys, which runs against `pnpm dev`. (ii) The dev CI soak structurally **cannot** reproduce either T5.3.9 finding: dev `script-src` carries `'unsafe-eval'` (a nonce nullifies `'unsafe-inline'` but *not* `'unsafe-eval'`), so the Zod probe never reports there, and with `style-src-attr` now relaxed, attribute reports no longer exist anywhere. Green CI means "no regression", never "the production policy holds" — only a staging re-run settles that.)
 
 ### G5.4 [frontend]: Enforce
-- [ ] T5.4.1 [frontend]: Switch to the enforcing header name, keeping `report-uri` live per BR-CSP-009 (depends on T5.3.3)
+- [x] T5.4.1 [frontend]: Switch to the enforcing header name, keeping `report-uri` live per BR-CSP-009 (depends on T5.3.3) (2026-08-06; `src/proxy.ts` now emits `Content-Security-Policy` in production and `Content-Security-Policy-Report-Only` in development. Enforce-in-prod / Report-Only-in-dev split is deliberate, not unconditional: the e2e CI soak runs against `pnpm dev` and Next.js dev-tools inject nonce-less `<style>` elements that under Report-Only merely report (filtered as dev artifacts by `isDevArtifactReport`), but under enforcement the nonce nullifies `'unsafe-inline'` and they would be BLOCKED — firing `securitypolicyviolation` events that break the soak's `expect(violations).toHaveLength(0)` and degrading the dev overlay. The codebase already splits directives dev/prod (`isDev`); the header name now follows the same split. This matches G5.3/T5.3.9's note that "green CI means 'no regression', never 'the production policy holds'" — CI is the dev Report-Only regression surface; enforcement is prod, verified by the T5.3.9 live staging soak (zero reports, full OIDC round-trip). `buildCsp` is unchanged — `report-uri /csp-report` retained in both modes (BR-CSP-009). The duplicated `NODE_ENV === "development"` read vs the one inside `buildCsp` is deliberate (`buildCsp` is independently tested/called; no shared helper — YAGNI). **T5.4.2 (dependent, next) is out of scope here**: its "injected inline script is blocked" negative test belongs against a PRODUCTION build (enforcing, no `'unsafe-inline'` in script-src), not dev's permissive policy — the split gives it a real enforcing environment to target rather than blocking it. Unit tests in `tests/unit/app/proxy.test.ts` updated: the `proxy — CSP header` block now stubs `NODE_ENV=production` and asserts `Content-Security-Policy` on public/non-public/redirect paths + a per-request nonce, plus a dev-branch test (`NODE_ENV=development` → Report-Only present, enforcing absent) and a BR-CSP-009 emission-layer test (enforcing header contains `report-uri /csp-report`). `buildCsp`/`frameHostnames`/`mintNonce`/`isPublicPath`/onboarding-guard blocks unchanged. E2e (`tests/e2e/g5-csp-soak.spec.ts` + `helpers/csp.ts`) unchanged — dev stays Report-Only so `expectCspReportOnlyHeader` and all 21 journey tests pass as before. Verified: `pnpm lint` + `pnpm typecheck` + `pnpm test:coverage` (100% statements/branches/functions/lines, 3944 tests / 223 files). **Committed to branch `fix/csp-enforce-t5.4.1` (`d6adec7`) and pushed to `origin`; PR pending merge to `main` — bump the frontend baseline after merge.** (The `no-commit-to-branch` pre-commit hook protects `main`, so this lands via PR, not a direct push.) **Note on live verification:** green CI is NOT proof the production policy holds; a post-enforcement live check on staging (re-run the T5.3.9 journeys under the enforcing header) is the real proof and is owed before T7.4.2's gateway backstop ships against this.)
 - [ ] T5.4.2 [frontend]: Negative test — an injected inline script is blocked (depends on T5.4.1)
 - [ ] **G5.4: CSP enforced** — end-to-end test
 
@@ -850,11 +850,29 @@
 > code-level inference).
 > **G1, G2, G3, G4, G6 are all now closed.** Only **G5** (behind T5.4.1) and **G7** (behind T7.4.2,
 > which itself is behind T5.4.1) remain — G8 is gated on those two alone now.
-> **Ready now — one item, and it is the whole remaining critical path:** **T5.4.1** [frontend],
-> unchanged from the twentieth pass — see below.
-> Dev stack left running (`apisix-dev`, backend `uvicorn --reload`, frontend `next dev`) in case
-> it's useful for T5.4.1's devcontainer work; stop them if not wanted.
-
+**T5.4.1 done — the critical-path item the
+> twentieth pass named is cleared.** `src/proxy.ts` now emits the enforcing `Content-Security-Policy`
+> header in production (Report-Only retained in development as the CI regression surface — see the
+> task note for why unconditional enforcement would have broken the `pnpm dev` e2e soak).
+> `report-uri /csp-report` stays live in both modes (BR-CSP-009). Lint + typecheck + test:coverage
+> (100%) green; **uncommitted in `haisir-frontend`, baseline bump owed after commit.**
+> **Ready now — two items, the whole remaining tail of the phase:**
+> 1. **T5.4.2** [frontend] — negative test that an injected inline script is blocked. Its only
+>    dependency (T5.4.1) is now done. **Design note carried from T5.4.1:** blocking only happens under
+>    an enforcing header, and the CI e2e surface is `pnpm dev` (Report-Only), so T5.4.2 must run
+>    against a PRODUCTION build (`next build` + `next start`, or `NODE_ENV=production`), not plain dev.
+>    Under the prod policy `script-src` has no `'unsafe-inline'`, so a nonce-less inline script is
+>    blocked — that is the assertion. Plan for a prod-build harness rather than reusing the dev soak.
+> 2. **T7.4.2** [deploy] — gateway backstop CSP (`frame-ancestors`, `base-uri`, `object-src`,
+>    `form-action`) scoped to non-HTML routes only, so it never collides with `proxy.ts`'s policy
+>    (BR-CSP-004). Its only dependency (T5.4.1 [frontend]) is now done. **Read T5.4.1's note before
+>    starting:** a post-enforcement live check on staging (re-run the T5.3.9 journeys under the
+>    enforcing header) is owed and should settle before the gateway backstop ships against this.
+> **Completion chain from here:** T5.4.2 → G5.4 → G5; T7.4.2 → G7.4 → G7; then G8 (the hard review
+> gate). G3.2 and G3.4 remain Ready now, unchanged (both still need a live-backend round-trip).
+> **Baselines:** frontend `origin/main` is `e94ff33` (unchanged — T5.4.1 uncommitted); bump after
+> commit. Deploy unchanged at `fc24e6f`.
+>
 > **Recomputed 2026-08-06 (twentieth pass).** **T5.3.7, T5.3.8, T5.3.9 done, plus two new tasks
 > T5.3.10/T5.3.11 opened and closed inside T5.3.9 — G5.3 CLOSES.** This was the item the last three
 > passes called the whole critical path, and it is now cleared.
