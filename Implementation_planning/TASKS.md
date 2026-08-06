@@ -309,7 +309,7 @@
 - [x] T3.2.4 [backend]: Accept `{attempt_id, message}`; keep `history` accepted-but-ignored for one release for compatibility (depends on T3.2.3) (2026-07-30)
 - [x] T3.2.5 [frontend]: Stop sending `history` from `use-exam-review-chat.ts:296,241`; load the thread via GET on mount (depends on T3.2.3a [backend], T3.2.4 [backend]) (2026-07-30; already shipped in frontend `343939d` — POST body is `{attempt_id, message}` with no `history`, `getExamReviewChatThread` GET loads the thread on mount; verified lint+typecheck+test:coverage 100%)
 - [x] T3.2.6 [deploy]: Relax `21-api-haitu-exam-review.json`'s `body_schema` `required: [attempt_id, message, history]`; add a matching APISIX GET route for T3.2.3a (depends on T3.2.4 [backend]) (2026-07-31; `history` dropped from `required` in `21-api-haitu-exam-review.json` (kept in `properties`, still accepted-but-ignored per T3.2.4). New route `common/routes/23-api-haitu-exam-review-get.json`: `GET /api/haitu/exam-review-chat/*`, priority 20 so it doesn't fall through to the generic `04-api-read.json` `/api/*` catch-all, `secured-api` plugin_config, no body_schema, standard 6s timeouts (DB read, not the POST route's 600s streaming timeout). `jq` valid both files. All G3.2 children now done — gate test not force-closed (no live-stack verification available this session), ready for live e2e check.)
-- [ ] **G3.2: review chat works with a {attempt_id, message} body** — end-to-end test
+- [x] **G3.2: review chat works with a {attempt_id, message} body** — end-to-end test (2026-08-06; live e2e round trip against dev stack — user logged in as a real student (`user_id 576ed7e1-...`) with a completed exam, opened the review chat for `attempt_id 421ff05d-9fdb-4670-89f3-dfb4d4d4eebf`, sent two turns, and reloaded twice. Backend access log shows the real sequence `GET → POST → POST → GET → GET`, all `200`, no `history` field involved (T3.2.6's relaxed `body_schema` in effect). Verified directly in Postgres, not just the log: `review_chat_threads` has exactly one row for this `attempt_id`, FK'd to `exam_sessions` and owned by the same `user_id`; `review_chat_messages` has the seed pattern-analysis message (`is_seed=true`) plus both student/AI turns, correctly ordered by `(created_at, id)` — exactly what T3.2.3a's `GET` query returns, so the two post-send `GET`s in the log are proven to be real reloads picking up server-persisted state, not client-cached state.)
 
 ### G3.3 [backend, frontend]: topic-doubt stops replaying stored history
 - [x] T3.3.1 [backend]: Load the last N messages from `DoubtMessageRepository` in the route instead of reading `body.history` — the server already writes both sides via `add_student_message` / `finalize_ai_response` (2026-07-30)
@@ -320,7 +320,7 @@
 ### G3.4 [backend]: exam-review-chat grounded server-side
 - [x] T3.4.1 [backend]: Load the review payload via `ExamSessionQuestionService.get_by_session_id(attempt_id)` — already wired into `post_pattern_analysis` at `haitu.py:511` — and build the grounding context in the route (depends on T3.2.3) (2026-07-30)
 - [x] T3.4.2 [frontend]: Stop pasting question text into the message string in `use-exam-review-chat.ts:310-314`; send `question_id` (depends on T3.4.1 [backend]) (2026-07-30; `explainQuestion(questionId, number)` sends `Explain question <n>` + `question_id` body field, no pasted text; threaded through send/attempt/retry via `lastFailedRef`. Verified lint+typecheck+test:coverage 100%. Uncommitted — frontend HEAD still `343939d`; bump baseline after commit. G3.4 integration test pending live-backend smoke)
-- [ ] **G3.4: model answers from server-held session data, not client claims** — integration test
+- [x] **G3.4: model answers from server-held session data, not client claims** — integration test (2026-08-06; same live session as G3.2 — user clicked "Explain question 1", which per T3.4.2 sends only `{message: "Explain question 1", question_id}`, no question content. The AI's reply quoted `**Your Answer:** kinetic energy and potential energy` and `Marked: Wrong (0/5 marks)` — verified against Postgres directly: that is the *literal* `user_answer` (`"kinetic energy and potential energy"`) and `ai_score` (`0`) stored on this attempt's essay question (`exam_session_questions.order = 7`), text the student's chat message never contained. Confirms the route is loading real session data server-side via `question_id` (T3.4.1's `ExamSessionQuestionService.get_by_session_id`) rather than trusting anything the client claims — a spoofed client could not have produced that exact stored answer text unprompted.)
 
 ### G3.5 [backend, frontend]: Exam images by reference
 - [x] T3.5.1 [backend]: Add an image upload endpoint returning `{url}`, reusing the existing multipart path and `sniff_mime` magic-byte validation (2026-07-30)
@@ -335,7 +335,7 @@
 - [x] T3.6.2 [backend]: Verify a too-long field now returns 422 naming the field, not an opaque gateway 403 (depends on T3.6.1) (2026-07-31)
 - [x] **G3.6: oversized input fails with a 422, not a mystery 403** — integration test (2026-07-31; T3.6.1–T3.6.2 all done — `Field(max_length=...)` added to the free-text schema fields, and T3.6.2 verified a too-long field now returns 422 naming the field, not an opaque gateway 403)
 
-- [ ] **G3: Payload design fixed at the source** — end-to-end test
+- [x] **G3: Payload design fixed at the source** — end-to-end test (2026-08-06; G3.1–G3.6 all done — G3.2 and G3.4 closed this pass on a live dev-stack round trip, see their notes above. G3 closes.)
 
 ## G4 [deploy, backend]: Exclusions rewritten field-scoped or deleted
 
@@ -838,6 +838,22 @@
 - [ ] **G8: Review gate and closeout** — acceptance test — **HARD GATE: no merge until this passes**
 
 ## Ready now
+
+> **Recomputed 2026-08-06 (twenty-first pass).** **G3.2 and G3.4 done — G3 CLOSES.** Live round trip
+> against the dev stack (not staging): `apisix-dev` was stopped and both `backend`'s `uvicorn` and
+> `frontend`'s `next dev` were not running — started all three for this session (reversible,
+> nothing else touched). User drove the exam-review-chat UI as a real student against a real
+> completed exam (`attempt_id 421ff05d-9fdb-4670-89f3-dfb4d4d4eebf`); verified directly in Postgres
+> (`review_chat_threads`/`review_chat_messages`) and the backend access log, not just the browser —
+> see G3.2/G3.4's notes above for the full evidence, including the exact stored answer text the AI
+> quoted back that the client-sent message never contained (proves server-side grounding, not a
+> code-level inference).
+> **G1, G2, G3, G4, G6 are all now closed.** Only **G5** (behind T5.4.1) and **G7** (behind T7.4.2,
+> which itself is behind T5.4.1) remain — G8 is gated on those two alone now.
+> **Ready now — one item, and it is the whole remaining critical path:** **T5.4.1** [frontend],
+> unchanged from the twentieth pass — see below.
+> Dev stack left running (`apisix-dev`, backend `uvicorn --reload`, frontend `next dev`) in case
+> it's useful for T5.4.1's devcontainer work; stop them if not wanted.
 
 > **Recomputed 2026-08-06 (twentieth pass).** **T5.3.7, T5.3.8, T5.3.9 done, plus two new tasks
 > T5.3.10/T5.3.11 opened and closed inside T5.3.9 — G5.3 CLOSES.** This was the item the last three
