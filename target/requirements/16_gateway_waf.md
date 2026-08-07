@@ -6,6 +6,52 @@
 >
 > **Status note (2026-07-27):** the shipped build pins `coraza-proxy-wasm 0.6.0` → **Coraza v3.3.3** + **OWASP CRS v4.14.0**. Both are materially out of date: CRS 4.14.0 is affected by **CVE-2026-21876** (CVSS 9.3), and Coraza v3.3.3 predates the v3.5.0 feature that makes precise exclusions possible at all. The resulting tuning treadmill is documented under "Problem" below. This spec defines the target state; Phase 7 implements it.
 >
+> ## ✅ **STATUS: SHIPPED — Phase 7 closed 2026-08-06 (T8.3.1)**
+>
+> Everything below this box describes the target state and the reasoning that produced it. It is now
+> **implemented**. What actually shipped, verified against the tree rather than the task log:
+>
+> | | At scoping (2026-07-27) | Shipped |
+> |---|---|---|
+> | Coraza engine | v3.3.3 | **v3.7.0** (BR-WAF-002 floor is v3.5.0) |
+> | OWASP CRS | v4.14.0 — **CVE-2026-21876**, CVSS 9.3 | **v4.25.1 LTS** (`crs_setup_version=4251`) |
+> | Blanket `ctl:ruleRemoveById` | **38 rule IDs** | **1** (`931130`) |
+> | Field-scoped exclusions | impossible on v3.3.3 | 41 `ctl:ruleRemoveTargetById` + 15 `SecRuleUpdateTargetById` + 5 `…ByTag` |
+> | Build source | `git clone` at build time + awk patch script | vendored in-tree, patch script deleted |
+>
+> **The treadmill is closed.** The one surviving blanket removal, `931130`, is a justified structural
+> exception rather than residue: it targets a **`TX` variable**, so the `ARGS_POST` regex form that
+> replaced the other 37 cannot apply. Recorded in `03-secured-api.json` at the directive itself.
+>
+> **Build (`haisir-deploy/gateway-docker/`).** `coraza-proxy-wasm` is vendored in-tree from upstream
+> `0.6.0` with **ten** documented divergences — five file-level patches (APISIX body-processing
+> opt-ins; registration moved to `init()` with an empty `main()` for the WASI reactor build; a
+> `wasip1-bigstack.json` 4 MB linker stack, since CRS regex compilation recurses past 64 KB;
+> `magefile.go` wired to it with `-buildmode=c-shared`; wasilibs operators off by default) and five
+> version floors (Coraza v3.7.0, CRS v4.25.1, `go-re2 v1.12.0`, `nottinygc` removed,
+> `coraza.rule.no_regex_multiline`). Go 1.25 / TinyGo 0.39.0. Base images are digest-pinned.
+>
+> **This component fails silently, and the verification reflects that.** An image whose WAF never
+> executes still builds, links, emits a valid `main.wasm`, and reports its version — that shipped
+> once (`VERSIONS.md`, "T2.2.1/T2.3.1"). So: the `Dockerfile` asserts all ten divergences before
+> building (the five version floors added under T8.1.3, after the Phase 7 review found a re-vendor
+> could silently revert CVE-2026-21876 and the Coraza floor while passing every gate), and
+> `common/scripts/tests/waf-harness.sh` — the only check that proves filtering — is now a
+> **blocking `WAF Functional Gate` stage in `gateway-docker/Jenkinsfile`, before `Push to
+> Registry`**. Note the harness proves the WAF *runs*, not which ruleset it runs; the floors cover
+> the rest.
+>
+> **Operational ceiling:** each nginx worker compiles the full CRS ruleset into its own WASM VM, so
+> `worker_processes` is pinned to **1** and `mem_limit` is **3g** on a host with ~4 GB free. That
+> lever is spent — a larger ruleset needs RAM or fewer rules. Dropping `nottinygc` moved container
+> memory 1.46 → 2.47 GiB.
+>
+> **Upgrading:** follow `haisir-deploy/gateway-docker/UPGRADE-RUNBOOK.md` (T8.2.1/T8.2.2) — rebase
+> procedure, the Go/TinyGo bump trial this project still owes, G2 re-run steps, and the CRS cadence
+> / LTS-identification rules. Do not treat a green build as evidence of anything.
+>
+> ---
+>
 > **Status update (2026-07-30):** Phase 7 G2.2 closed — the "v3.3.3 silently matches nothing"
 > finding that justifies this whole phase is no longer just a 2026-07-01 field observation. T2.2.1
 > and T2.2.2 empirically proved both halves on the upgraded image (Coraza v3.7.0 / CRS 4.25.1,
@@ -182,7 +228,7 @@ Everything not named by the regex — headers, cookies, query arguments, and eve
 
 - **BR-WAF-001 — In-process only.** The WAF runs as a proxy-wasm filter inside APISIX. No out-of-process detector, so there is no fail-open/fail-closed mode to configure and no WAF-specific availability dependency. Any future out-of-process component (e.g. CrowdSec AppSec) is additive and per-route, and must not become the sole inspection path.
 - **BR-WAF-002 — Coraza floor v3.5.0.** The engine must be at or above the version that supports regex collection keys in `ctl:ruleRemoveTargetById` / `ByTag` / `ByMsg`. Below this, target-scoped exclusions fail silently and the only working form is whole-rule removal.
-- **BR-WAF-003 — CRS floor 4.22.0.** The ruleset must be at or above the CVE-2026-21876 fix. Target 4.25.1 LTS or later; prefer the LTS track for predictable upgrades.
+- **BR-WAF-003 — CRS floor 4.22.0, on the LTS track.** The ruleset must be at or above the CVE-2026-21876 fix. Target 4.25.1 LTS or later; prefer the LTS track for predictable upgrades. **LTS is identified by the GitHub release *name* (`v4.25.1 (LTS)`), never by the tag or the version number** — a higher version is routinely not LTS, so "upgrade to latest" silently leaves the supported track. Cadence, the authoritative LTS/advisory queries, and the current position against every open CRS advisory are maintained in `haisir-deploy/gateway-docker/UPGRADE-RUNBOOK.md` § "CRS upgrade cadence and where the LTS track is tracked" (T8.2.2). Summary as of 2026-08-06: rolling releases monthly, LTS patches roughly quarterly, security fixes landing on all supported lines the same day and the advisory publishing about a day later; **check quarterly and on any CRS advisory** — monthly checking buys nothing on an LTS track. We ship 4.25.1, which is the newest LTS and is patched against all four open advisories.
 - **BR-WAF-004 — Exclusions are field-scoped.** `ctl:ruleRemoveById` (whole-rule, whole-request) is prohibited for new exclusions. Prefer the **startup-time** form — `SecRuleUpdateTargetById <id> !<COLLECTION>:/regex/` or `SecRuleUpdateTargetByTag <tag> "!<COLLECTION>:/regex/"` — wherever the exclusion applies to a whole route config; it is simpler, has no engine-version floor, and is already proven in this codebase. Use the **runtime** form `ctl:ruleRemoveTargetById=<id>;<COLLECTION>:/regex/` only where the exclusion must be conditional (chained on URI or method inside a shared plugin config); that form requires Coraza ≥ v3.5.0 per BR-WAF-002.
 - **BR-WAF-005 — Unscoped tag-family removal is prohibited; field-scoped tag exclusion is the preferred form.** `ctl:ruleRemoveByTag=<tag>` strips high-precision detectors (libinjection-backed `942100`/`942101`, `941100`/`941101`) alongside the low-precision regex rules that actually false-positive, and is never acceptable. `SecRuleUpdateTargetByTag <tag> "!ARGS_POST:/field/"` is the opposite — it narrows one tag's scope by one named field and leaves everything else inspected. It is the recommended form wherever the exclusion applies to a whole route config (`12-api-exams-static.json` is the reference example).
 - **BR-WAF-006 — Anomaly thresholds are not route-tunable.** The `inbound_anomaly_score_threshold` stays at the platform default (5). Raising it per-route (as `12-api-exams-static.json` does, 5 → 12) silently weakens every rule at once and hides which specific rule needed attention.

@@ -36,7 +36,7 @@ Severity legend: **High** = fix before you treat this as production-secure; **Me
 | H1 — fail-open secret defaults | **FIXED** (Phase 5.5, BR-SEC-019) | — |
 | H2 — JWT audience not validated | **CLOSED 2026-08-04** — `verify_aud: True` against the expected audience | G6.2 done |
 | H3 — Keycloak password policy + sslRequired | **CLOSED 2026-08-04** — policy, `sslRequired: external`, explicit brute-force params | G6.4 done |
-| M1 — no CSP | **PARTIAL 2026-08-04** — real nonce CSP in `proxy.ts`, still **Report-Only**; enforcement pending | G5 (G5.4 open) |
+| M1 — no CSP | **CLOSED 2026-08-06** — enforcing `Content-Security-Policy` in prod (Report-Only in dev as the CI surface); live-verified on staging | G5 done |
 | M2 — chunked-encoding size bypass | **CLOSED 2026-08-04** — streaming byte cap, dead validator removed, capped reads | G7.1 done |
 | M3 — Jenkins param injection | **CLOSED 2026-08-04** — both Jenkinsfiles gate params by regex + `withEnv` | G7.2 done |
 | M4 — Tailscale dev tags `*:*` | **CLOSED 2026-08-04** — no `*:*`; prod reachable only from `tag:dev1`/`tag:prod-ssh` | G7.3 done |
@@ -44,7 +44,7 @@ Severity legend: **High** = fix before you treat this as production-secure; **Me
 | M6 — etcd auth disabled | **CLOSED** — fixed for prod/staging (2026-07-31); dev-only pattern correctly isolated, and the regression guard shipped (T7.5.3) | T7.5.2/T7.5.3 done, G7.5 done |
 | L1 — `.env_bak` not gitignored | **FIXED** | — |
 | L2 — host `.env*` world-readable | **CLOSED 2026-08-04** — staging/dev now `600` too; only `sonarqube/.env` left, documented | G7.5 done |
-| L3 — deprecated `X-XSS-Protection` | **CLOSED 2026-08-04** — `"0"` in all four plugin configs | G7.4 open on T7.4.2 |
+| L3 — deprecated `X-XSS-Protection` | **CLOSED 2026-08-04** — `"0"` in all four plugin configs | G7.4 done 2026-08-06 |
 | L4 — dev conveniences | **CLOSED** — fixed for prod (2026-07-31); regression guard shipped (T7.5.3) and since extended by T7.7.2 | T7.5.2/T7.5.3 done, G7.5 done |
 | L5 — `referer-restriction bypass_missing` | **RECORDED, deliberately not fixed** — accepted as a spam filter, not a boundary | T7.5.1 done, G7.5 |
 | (post-review) APISIX admin UI on a static key | **CLOSED 2026-08-04** — `enable_admin_ui: false` for staging/prod; static-key residual **accepted risk** | T7.7.2 done, G7.7 done |
@@ -57,6 +57,39 @@ Severity legend: **High** = fix before you treat this as production-secure; **Me
 > chained behind that same CSP work). Everything else in this document is either fixed or carries a
 > written accepted-risk record. This is a status refresh, **not** T8.3.2 — that task still owns the
 > formal Phase 7 closeout of this file.
+
+> ## ✅ **FINAL — Phase 7 closeout (T8.3.2, 2026-08-06)**
+>
+> **Every finding in this review is now closed or carries a written accepted-risk record. No row is
+> open.** The last two moved today: **M1** (CSP now enforcing in production, live-verified on
+> staging) and **G7.4/T7.4.2** (the gateway header-ownership table reconciled, with the backstop CSP
+> scoped to non-HTML routes so it never collides with the render-side policy).
+>
+> **Four findings were closed by deciding not to fix them.** That is the honest disposition, not an
+> evasion, and each has a written record rather than a silent pass: **L5** (`referer-restriction
+> bypass_missing: true` — a spam filter, never a boundary; the real boundary on every sensitive route
+> is CSRF + OIDC + IP allowlists), **M6/L4** (reframed as dev-isolation assertions — prod was already
+> correctly hardened, so the risk was regression, not current state, and it is now mechanically
+> guarded by a Jenkins CI stage), **M5's T6.3.4** (Postgres TLS, accepted with a CI guard), and the
+> **APISIX Admin API static key** (no native MFA exists in APISIX; fronting the gateway's own admin
+> port with an OIDC proxy would put a bootstrap-order dependency in the path of every deploy).
+>
+> **This review's own recommendation on M1 was wrong, and that is recorded rather than quietly
+> dropped** — it asked for a nonce-based CSP applied at the gateway, which is not implementable:
+> APISIX can set a header but cannot mint a per-request value and inject it into the rendered body.
+> The corrected split (nonce policy at the renderer, non-nonce headers and a document-directive
+> backstop at the gateway) is specified in `target/requirements/15_security_headers.md`.
+>
+> **What this document does not cover.** It is a 2026-07-02 artifact. Phase 7 surfaced findings
+> after it — listed under "Findings discovered after this review" below — and Phase 7's own diff was
+> then reviewed separately by two independent passes whose results live in
+> `security/PHASE7_SECURITY_REVIEW_PASS1.md`, `PASS2.md` and `PHASE7_REVIEW_RESOLUTIONS.md`. Read
+> those for the current posture; read this one for the 2026-07-02 baseline and its remediation trail.
+>
+> **Disposition:** per the Lifecycle note above, this file should now move to
+> `Implementation_planning/archive/`. Left in place at closeout because
+> `target/requirements/14_container_images.md` cites it for Phase 8 container-UID context — move it
+> when that citation is repointed, not before.
 
 **Not re-verified this pass** (host state that cannot be checked from a repo checkout): on-server
 file modes beyond those visible locally, and live Tailscale ACL enforcement — the tailnet policy is
@@ -208,6 +241,10 @@ Local JWKS validation checks signature, expiry, and issuer, but **not audience**
 > Two facts that make this cheaper than the review assumed: `haisir-frontend/src/proxy.ts` already exists (Next 16 renamed `middleware`→`proxy`), and `src/app/csp-report/route.ts` already exists — though it currently accepts reports and **discards** them. 15 of 27 pages already carry `force-dynamic`; the remaining 12 (including all of `/onboarding/*` and `/admin/*`) are statically prerendered and must be opted into dynamic rendering first, since a build-time-rendered page cannot receive a per-request nonce.
 >
 > **[2026-08-04] NOW PARTIAL, no longer "nothing shipped".** `haisir-frontend/src/proxy.ts` mints a per-request base64 nonce and forwards `x-nonce` so Next.js attaches it to framework scripts — the corrected (render-side, not gateway-side) approach this annotation called for. But the header is still emitted as **`Content-Security-Policy-Report-Only`**, so nothing is enforced yet. Enforcement is G5.4, gated on the live-stack Keycloak OIDC soak (BR-CSP-007). **M1 stays open.**
+>
+> **[2026-08-06] CLOSED.** `proxy.ts` now emits the enforcing `Content-Security-Policy` in production (Report-Only retained in development as the CI regression surface), with `report-uri /csp-report` live in both modes. Confirmed on staging: exactly one CSP header, enforcing, carrying a real per-request nonce — no Report-Only alongside it — and a real login click-through under enforcement. The 12 statically-prerendered pages this annotation flagged as a prerequisite were opted into dynamic rendering and are now guarded by a CI assertion; re-verified 2026-08-06 that **0 routes are statically prerendered**.
+>
+> Two relaxations are documented rather than silently taken: `style-src-attr 'unsafe-inline'` (surviving inline styles carry runtime-computed values no nonce can cover — `style-src` itself stays nonce-gated for `<style>` elements and `<link>` stylesheets, locked by a unit test) and `'wasm-unsafe-eval'` (pdfjs-dist's WASM font renderer). **This review's original recommendation — a nonce CSP at the gateway — was correctly rejected as unimplementable and remains so**; the gateway instead carries a backstop CSP (`frame-ancestors`/`base-uri`/`object-src`/`form-action`) scoped to non-HTML routes only, so it never collides with the render-side policy. **M1 closed.**
 
 **Repo:** haisir-frontend (`next.config.ts`) + haisir-deploy (route/plugin configs)
 CSP is set **nowhere**: not in `next.config.ts` (no `headers()`), not on the frontend HTML routes (`10-home.json`, `99-catch-all` → `secured-anonymous`), and the backend only sets CSP on its own `/api` JSON responses. The SPA — the primary XSS target — ships with no CSP. XSS risk today is low (React escapes, `react-markdown` runs without `rehype-raw`), but CSP is the expected defense-in-depth layer.
@@ -324,6 +361,8 @@ Secrets readable by any local user and needlessly executable.
 > **[2026-07-27] STILL OPEN.** Set on all four plugin configs. A four-file edit; now **BR-CSP-006**, Phase 7 G7.4 — sequenced with the CSP work since CSP is what replaces it.
 >
 > **[2026-08-04] CONFIRMED FIXED.** `"X-XSS-Protection": "0"` in all four plugin configs (`01-secured-authenticated`, `02-secured-anonymous`, `03-secured-api`, `04-secured-api-upload`) — the deprecated filter is now explicitly disabled rather than enabled. Closes L3. **G7.4 itself stays open** on T7.4.2 (reconciling the header-ownership table), which is chained behind the frontend CSP work in G5.
+>
+> **[2026-08-06] G7.4 now closed too.** T7.4.2 landed the gateway backstop CSP scoped to non-HTML routes only. The scoping was the substance: all four plugin configs are shared between real HTML routes and pure API/redirect routes, so setting it config-wide would have collided with `proxy.ts`'s own nonce-bearing header on every page load (APISIX `response-rewrite` overwrites rather than merges). Two-tier fix — `secured-api`/`secured-api-upload` at the plugin_config level (never reach the frontend), and six individual route files with a route-level override carrying the existing 7 headers plus the CSP. Live-verified: the backstop is present on `/api/auth/csrf`, `/api/notifications` (including its 401), the Keycloak realm proxy and `/auth/login`/`/auth/logout`, and **absent** on `/` and `/home`, which carry only `proxy.ts`'s header. Header ownership now matches the spec table with zero overlap.
 
 **Repos:** haisir-backend `security_middleware.py` / config, haisir-deploy `response-rewrite`.
 The `X-XSS-Protection` filter is deprecated and, when enabled, has itself caused vulnerabilities in some browsers. Modern guidance is `X-XSS-Protection: 0` and rely on CSP (see M1).

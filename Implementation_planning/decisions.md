@@ -4,6 +4,79 @@
 
 ---
 
+## 2026-08-06 — Phase 7 close-out (Gateway WAF Modernisation, CSP & Security Review Closeout)
+
+> Context: G8 closing. G1–G7 shipped; this entry records the phase-level outcome and the decisions
+> taken at closeout itself. Per-task decisions are logged in their own entries above and in
+> `TASKS.md`; this is the summary an outside reader should be able to start from.
+
+**Outcome against the root goal.** All three legs landed. The WAF detects precisely instead of being
+tuned into irrelevance: **blanket `ctl:ruleRemoveById` went from 38 rule IDs to 1**, with 41 runtime
+field-scoped exclusions now expressible at all. The browser enforces a strict CSP in production.
+Every finding from `security/SECURITY_REVIEW_2026-07-02.md` is closed or carries a written
+accepted-risk record — no row is open.
+
+- **The root cause was a version gap, not an engine defect, and fixing it dissolved the treadmill.**
+  Regex collection keys in `ctl:ruleRemoveTargetById` landed in Coraza v3.5.0; the shipped build was
+  v3.3.3, so every field-scoped exclusion parsed as a literal variable name and matched nothing —
+  silently, no error, no log line. That is why the workaround escalated to whole-request rule
+  removal. Coraza is now v3.7.0 and CRS v4.25.1 LTS (also clearing CVE-2026-21876, CVSS 9.3). The
+  one surviving blanket removal, `931130`, is a justified structural exception: it targets a `TX`
+  variable, so the `ARGS_POST` regex form cannot apply.
+- **Decision: keep `coraza-proxy-wasm` vendored in-tree, and delete the patch script.** The previous
+  build cloned upstream at a tag and rewrote `plugin.go` with an awk script matching source lines by
+  pattern — which breaks silently against newer upstream. Vendoring converts the patch into a
+  reviewable in-tree diff. Ten divergences from upstream `0.6.0` are now documented and
+  build-asserted.
+- **Decision: the CSP nonce lives at the renderer, not the gateway — the 2026-07-02 review's own
+  recommendation was rejected as unimplementable.** APISIX can set a header but cannot mint a
+  per-request value and inject it into the rendered body, so a gateway CSP is necessarily static and
+  forces `script-src 'unsafe-inline'`. The gateway instead carries a backstop of document-level
+  directives scoped to non-HTML routes only, so it never collides with `proxy.ts`'s policy.
+- **Decision: enforcement was gated on live evidence, and the evidence corrected two premises.** The
+  staging OIDC soak established that Keycloak is same-origin (proxied under `BASE_URL`) and carries
+  its own CSP with no `report-uri` — so violations there are structurally unreportable to our
+  collector — and that login/logout are `location.href` navigations, not form POSTs, so our
+  `form-action 'self'` is never exercised by our own code. Neither was knowable by reasoning.
+- **Decision: four findings closed by deciding not to fix them, each with a written record** — L5
+  (`referer-restriction bypass_missing` is a spam filter, never a boundary), M6/L4 (reframed as
+  dev-isolation assertions, since prod was already hardened and the risk was regression — now
+  guarded by a Jenkins CI stage), M5's Postgres-TLS residual, and the APISIX Admin API static key
+  (APISIX has no native Admin-API MFA, and fronting it with an OIDC proxy would put a bootstrap-order
+  dependency in the path of every deploy).
+
+**G8's two review passes, and what they cost.** Pass 1 and pass 2 were run independently — pass 2 by
+a separate agent on a different model, explicitly blind to pass 1 — producing 14 findings,
+11 distinct. Records: `security/PHASE7_SECURITY_REVIEW_PASS1.md`, `PASS2.md`,
+`PHASE7_REVIEW_RESOLUTIONS.md`.
+
+- **The independence earned its keep, in both directions.** Pass 2 found two things pass 1 missed,
+  including the phase's most consequential defect: `waf-harness.sh` — the only check that proves the
+  WAF filters at all — was wired into **no CI pipeline**, so the gateway job could build, scan, SBOM
+  and push an image whose WAF never executes, entirely green. Pass 1 in turn found two vendored-tree
+  defects pass 2 read past. And the passes **disagreed once**, with pass 2 wrong: it rated the
+  CVE-2026-21876 regression test clean, but the probe sent bare `curl` against a route whose
+  `ua-restriction` denylists `curl*` with a 403 — the exact status the test read as success. It
+  would have passed against a vulnerable ruleset.
+- **The recurring defect class in this phase is false assurance, not missing controls.** Three
+  separate instances: the CVE test that could not fail, the WAF gate that ran nowhere, and a
+  `VENDORED.md` that told re-vendorers the tree was "unmodified upstream" while listing load-bearing
+  patches two sections later — and whose "carry these forward" table omitted the version floors
+  entirely, so a faithful re-vendor would have restored CVE-2026-21876 and the broken Coraza while
+  passing every gate. **Decision: assert version floors at build time**, alongside the existing
+  file-level patch assertions, and state plainly in the runbook that a green harness proves the WAF
+  *runs*, not which ruleset it runs.
+- **Decision: fix at the root, not the symptom, where the two coincided.** The image-serving defect
+  (a Next.js route hairpinning through the public gateway into itself, and never forwarding auth)
+  was resolved by deleting the route and adding an APISIX route — the gateway already injects the
+  JWT for every other authenticated read. That deletion closed three findings at once.
+
+**Owed, and deliberately not claimed as done.** The image-route fix is verified statically and by
+unit tests only; G3.5 originally closed on exactly that basis and shipped a broken feature, so a
+live end-to-end load is owed before G8 closes. The new WAF gate has never executed in a real Jenkins
+run. And the `frontend` devcontainer carries one commit (`92a4da2`, CSP e2e soak) that **neither
+review pass covered** — both ran against the host range ending at `d6adec7`.
+
 ## 2026-08-06 — T5.3.11: `style-src-attr 'unsafe-inline'` accepted, so CSP can be enforced
 
 > Context: Phase 7 G5.3/G5.4. Closing the CSP soak (T5.3.9) required deciding what to do about

@@ -4,7 +4,50 @@
 >
 > Implementation is split by necessity: the nonce-bearing CSP lives in `haisir-frontend/src/proxy.ts`; the non-nonce headers stay at the gateway in `haisir-deploy/common/plugin_configs/*.json`. The split is deliberate and specified below.
 >
-> **Status note (2026-07-27):** six security headers are shipped and enforced at the gateway on all four plugin configs. **CSP is set nowhere** — not at the gateway, not in `next.config.ts`, not in `proxy.ts`. The backend sets CSP only on its own `/api` JSON responses, which are not a rendering context. Partial scaffolding exists: `src/app/csp-report/route.ts` accepts reports and **discards them**, and `/csp-report` is already allowlisted in `proxy.ts`'s `PUBLIC_PATHS`. This spec defines the target state; Phase 7 implements it.
+> ## ✅ **STATUS: SHIPPED — Phase 7 closed 2026-08-06 (T8.3.1)**
+>
+> Everything below describes the target state and the reasoning behind it. It is now **implemented**.
+>
+> | | At scoping (2026-07-27) | Shipped |
+> |---|---|---|
+> | CSP | **set nowhere** | **enforced** in production, Report-Only in dev |
+> | Nonce | none | per-request, minted in `proxy.ts`, `'strict-dynamic'` |
+> | Report collector | accepted reports and **discarded them** | persists a structured JSON line; 64 KiB streaming cap |
+> | `X-XSS-Protection` | `1; mode=block` (deprecated) | **`0`** on all four plugin configs |
+> | Gateway CSP backstop | none | `frame-ancestors`/`base-uri`/`object-src`/`form-action` on **non-HTML routes only** |
+>
+> **The split held.** The nonce-bearing policy lives in `haisir-frontend/src/proxy.ts`, because a
+> gateway cannot mint a per-request value and inject it into the response body — the reasoning under
+> "Why this cannot be done at the gateway" survived contact with implementation unchanged. The
+> gateway carries only the non-nonce headers plus a backstop CSP scoped to routes that never render
+> HTML, so it never collides with `proxy.ts`'s own policy (BR-CSP-004). That scoping was the hard
+> part: four plugin configs are shared between HTML and non-HTML routes, so six individual route
+> files carry a route-level `response-rewrite` override rather than setting it config-wide.
+>
+> **Enforcement was evidence-gated, not assumed.** Report-Only soaked across 21 CI journeys plus two
+> live staging runs including the full Keycloak OIDC round-trip. Two premises were corrected by that
+> soak rather than reasoned about: Keycloak is **same-origin** (proxied under `BASE_URL`) and carries
+> its own CSP with no `report-uri`, so violations there are structurally unreportable to our
+> collector; and login/logout are `location.href` navigations, not form POSTs, so our
+> `form-action 'self'` is never exercised by our own code. The soak also could not have passed
+> earlier — `POST /csp-report` was returning 404 in staging's entire history until a dedicated APISIX
+> route was added, and then 403 at the WAF until rule 920420's content-type allowlist was narrowed
+> for that one URI.
+>
+> **Two documented relaxations, both deliberate:** `style-src-attr 'unsafe-inline'` (the surviving
+> inline styles carry runtime-computed values — drag-resized widths, tree indent depth — that no
+> nonce can cover; `style-src` itself stays nonce-gated for `<style>` elements and `<link>`
+> stylesheets, locked by a unit test so it cannot silently widen), and `'wasm-unsafe-eval'` for
+> pdfjs-dist's WASM font renderer. Dev additionally carries `'unsafe-eval'`/`'unsafe-inline'`;
+> production does not.
+>
+> **Every route is dynamically rendered** (BR-CSP-010) with a CI assertion guarding it — a statically
+> prerendered page cannot receive a nonce, so a strict `script-src` would block its framework
+> scripts. Re-verified 2026-08-06 after the Phase 7 review removed a route: **0 static routes**.
+>
+> ---
+>
+> **Original scoping note (2026-07-27), retained for context:** six security headers shipped and enforced at the gateway on all four plugin configs. CSP was set nowhere — not at the gateway, not in `next.config.ts`, not in `proxy.ts`. The backend set CSP only on its own `/api` JSON responses, which are not a rendering context. Partial scaffolding existed: `src/app/csp-report/route.ts` accepted reports and discarded them, and `/csp-report` was already allowlisted in `proxy.ts`'s `PUBLIC_PATHS`.
 
 ---
 
