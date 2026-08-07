@@ -43,7 +43,7 @@ UI mapping files reference prototype screen IDs (e.g. `s-home` → `renderHome()
 ## Critical Rules (must not be violated)
 
 - **APISIX injects the JWT** — the client never sends a Bearer token. FastAPI receives it from the gateway.
-- **Role header is `X-Current-Role`** — not `X-Active-Role`. Required on all role-gated endpoints; missing header → `400`. Three exceptions (lenient path, no header required): `GET /api/users/me`, `POST /api/users/me/assign-role`, `PATCH /api/users/me/onboarding-complete`.
+- **Role header is `X-Current-Role`** — not `X-Active-Role`. Required on all role-gated endpoints; missing header → `400`. Four exceptions (lenient path, no header required): `GET /api/users/me`, `POST /api/users/me/assign-role`, `PATCH /api/users/me/onboarding-complete`, and `GET /images/questions/{filename}` — the last is a browser subresource fetched by `<img src>`, which cannot attach a custom header, so the strict dependency made it unreachable (400 on every render). Auth is still enforced; the role is simply never used there.
 - **CSRF on every mutation** — `POST`, `PUT`, `PATCH`, `DELETE` require `X-CSRF-Token`. Frontend uses `fetchWithCSRFRetry()`.
 - **No local users table** — identity is Keycloak `sub` as a raw UUID string. No FK constraints on user columns.
 - **Existing schema is sacred** — `course_path_nodes`, `topics`, `exam_templates`, `exam_sessions` etc. already exist. Extend, never drop or rename. Note: `assessments`, `assessment_attempts`, and `assessment_answers` are deprecated (Phase 0 decision) — the unified model is `exam_templates` with `purpose = 'quiz' | 'exam'`.

@@ -223,6 +223,14 @@ The `questions.question_type` column is a string enum. Full set after this exten
 
 `correct_answers`: `["L1:R1", "L2:R2"]` (left-id:right-id pair strings).
 
+> **`side` is derived, not required on input (added 2026-08-07).** The `L`/`R` ID prefix is the
+> canonical source of truth — it is what `correct_answers` pair strings and the grader key on. The
+> backend fills a missing `side` from that prefix (`L*` → `left`, `R*` → `right`) when constructing a
+> `Question`; an explicitly supplied `side` is always preserved, so callers that set it are
+> unaffected. This exists because the authoring UI omits `side`, which previously failed validation.
+> Storage is unchanged — persisted rows still carry `side`, so readers and the grader see the shape
+> documented above.
+
 Grading formula (default, `penalty_matching = false`): `correct_pairs / total_pairs × available_points`. Wrong pairings are ignored.
 
 Grading formula (penalty mode, `penalty_matching = true`): `max(0, (correct_pairs − extra_wrong_pairs) / total_pairs) × available_points`. Exam creators can enable this per-question to discourage guessing.

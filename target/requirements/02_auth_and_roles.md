@@ -70,10 +70,26 @@ CurrentUser: idp_sub, email, name, email_verified, roles: list[str], current_rol
 @router.get("/resource", dependencies=[Depends(require_role("student"))])
 ```
 
-**Endpoints exempt from `X-Current-Role`** (onboarding endpoints):
+**Endpoints exempt from `X-Current-Role`** (use `current_active_user_lenient`):
+
+*Onboarding — the client has not selected a role yet:*
 - `GET /api/users/me`
 - `PATCH /api/users/me/onboarding-complete`
 - `POST /api/users/me/assign-role`
+
+*Browser subresource — the request cannot carry a custom header (added 2026-08-07, T8.1.3):*
+- `GET /images/questions/{filename}`
+
+> The fourth exemption is a different *kind* of exemption from the first three and the distinction
+> matters. The onboarding endpoints are exempt because the role is not yet **known**. The image
+> endpoint is exempt because the header is not **sendable**: it is fetched by an `<img src>` tag, and
+> a browser attaches no custom headers to an image subresource — there is no client-side fix. Under
+> the strict dependency it returned `400 X-Current-Role header required` on every render, which is
+> how it was found on staging. Authentication is unchanged: the gateway still injects the JWT and
+> `verify_token` still runs. Only the role header is waived, and the endpoint never branched on role
+> — any authenticated user may read any question image, because students need them mid-exam.
+> Locked by a regression test in `tests/unit/routes/test_images.py` that overrides only
+> `verify_token`, so the header path actually executes; it fails against the strict dependency.
 
 ---
 
@@ -130,7 +146,7 @@ CurrentUser: idp_sub, email, name, email_verified, roles: list[str], current_rol
 - **BR-SEC-003:** Parent access to child data requires an active (`revoked_at IS NULL`) `parent_child_links` record; revocation removes access immediately.
 - **BR-SEC-004:** Parent content (`owner_type='parent'`) is never visible to students without a valid `parent_child_links` linking `owner_id` to the requesting student.
 - **BR-SEC-005:** Platform Admin cannot read or modify parent-owned content.
-- **BR-SEC-006:** `X-Current-Role` is required on all role-gated endpoints. Missing header returns `400 "X-Current-Role header required"`. Explicit exceptions (use lenient path — no header required): `GET /api/users/me`, `POST /api/users/me/assign-role`, `PATCH /api/users/me/onboarding-complete`.
+- **BR-SEC-006:** `X-Current-Role` is required on all role-gated endpoints. Missing header returns `400 "X-Current-Role header required"`. Explicit exceptions (use lenient path — no header required): `GET /api/users/me`, `POST /api/users/me/assign-role`, `PATCH /api/users/me/onboarding-complete`, and `GET /images/questions/{filename}` (browser subresource — an `<img src>` cannot send a custom header; authentication still enforced, role never used). See the exemption list above for why the fourth differs in kind from the first three.
 - **BR-SEC-007:** Never log JWT, CSRF tokens, or session cookies; use structlog with redaction.
 - **BR-SEC-008:** `POST /api/users/me/assign-role` accepts only `student` or `parent` → 422 otherwise.
 - **BR-SEC-009:** When `introspection_enabled`, the backend confirms the token is active via Keycloak introspection (RFC 7662) *after* local JWKS validation; an inactive (revoked) token returns `401` even when its signature and expiry are still valid.

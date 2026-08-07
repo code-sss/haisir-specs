@@ -387,3 +387,61 @@ twin of Phase 6's parent indexing-status gap; a dedicated IDOR test pass; authen
 on staging; gitleaks as a pre-commit hook; staging/prod OpenBao bring-up (runbook exists,
 execution deferred until those environments are stood up); and the `other/services/*` stacks,
 which were never inside the OpenBao migration boundary.
+
+---
+
+## Backlog — surfaced during Phase 7 close-out, deliberately not folded into it
+
+> Both were found on 2026-08-07 while verifying the Phase 7 staging deploy, and neither is Phase 7
+> scope. Recorded here rather than retrofitted into a closed phase, so the phase record stays honest
+> about what it actually covered.
+
+### B1 — Worker poller sessions sit `idle in transaction` (backend) — **the one worth fixing properly**
+
+**Observed:** on staging, the `extraction_jobs` and `essay_grading_jobs` poller sessions had held
+open transactions for **2h27m**. Confirmed identically on prod (2 sessions). Both loops use
+`FOR UPDATE SKIP LOCKED` and appear to leave the session open between polls rather than committing
+or rolling back.
+
+**Why this matters beyond tidiness — two distinct consequences:**
+
+1. **It blocks DDL, and does so in the worst way.** A `REINDEX`/`ALTER TABLE` needing
+   `ACCESS EXCLUSIVE` queues behind the idle transaction — and once that request is queued, **every
+   subsequent reader queues behind it too**. So the failure mode is not "migration fails fast", it is
+   "the whole app stalls." This was not theoretical: it is exactly how the first staging reindex
+   attempt behaved, and it had to be cancelled. **A future `alembic upgrade head` during a deploy can
+   stall the application the same way** — see the prod deploy caution in B2.
+2. **It holds back the xmin horizon**, so autovacuum cannot reclaim dead tuples anywhere in the
+   database for as long as the oldest transaction stays open.
+
+**Fix direction:** commit or roll back between poll iterations so the session returns to `idle`, not
+`idle in transaction`. A `statement_timeout`/`idle_in_transaction_session_timeout` on the worker role
+is a defence-in-depth backstop, not the fix. Restarting the worker only resets the clock.
+
+**Do not fix blind** — the loops are `FOR UPDATE SKIP LOCKED` claim-and-process, so transaction
+boundaries carry the claim semantics. Changing them needs its own tests.
+
+### B2 — Postgres collation version mismatch (ops)
+
+Both environments were created under glibc collation **2.42**; the OS now provides **2.43**. That
+makes text sort order potentially wrong in indexes built under the old version — 30 `text`/`varchar`
+indexes in each environment.
+
+- **staging: FIXED 2026-08-07** — `REINDEX DATABASE` (228 ms, 11 MB) then
+  `ALTER DATABASE … REFRESH COLLATION VERSION`, worker stopped for ~40 s. `datcollversion` 2.42 → 2.43,
+  0 invalid indexes, all 74 indexes intact.
+- **prod: FIXED 2026-08-07** — same procedure, run by the operator (stopping a prod container is outside
+  what the assistant is permitted to do). `datcollversion` 2.42 → 2.43, 0 invalid indexes, worker back
+  healthy, `/` and `/api/auth/csrf` both 200.
+
+  > Observed on the restart: `idle in transaction` was back at **2** within a minute. B1 reproduces
+  > immediately — restarting the worker only resets the clock, it does not avoid the problem.
+
+**Order is load-bearing:** `REINDEX` **first**, then `REFRESH COLLATION VERSION`. Refreshing alone
+silences the warning while leaving every index built under the old collation — it removes the signal
+and keeps the risk, which is strictly worse than doing nothing.
+
+**Caution for the prod v2026.6 deploy:** the deploy runs `alembic upgrade head`. With B1 unfixed and
+prod currently showing 2 idle-in-transaction sessions, a migration needing an exclusive lock can
+stall behind them and take the app with it. Stop `haisir-worker-prod` before the deploy, or confirm
+`SELECT count(*) FROM pg_stat_activity WHERE state='idle in transaction'` is 0 first.

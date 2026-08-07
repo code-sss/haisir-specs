@@ -81,3 +81,29 @@ Parent content is **private** — never shared to a marketplace, never visible t
 4. **Existing schema sacred** — `ALTER TABLE` only; no column drops or renames.
 5. **`admin` = Platform Admin** — scoped exclusively to platform board content management. No user management in this increment.
 6. **Parent as content creator** — parents are modelled similarly to tutors (content publishers) but their content is private to one linked child, not marketplace-facing. Parents are fully responsible for the quality of content and exams they create; no instructor oversight in this increment.
+
+7. **Domain `ValueError` maps to HTTP 400, with the message shown to the client** (added 2026-08-07). Domain
+   services raise `ValueError` for invalid user input — malformed questions, empty titles, disallowed video
+   hostnames. A dedicated `@app.exception_handler(ValueError)` in `src/main.py` returns
+   `400 {"detail": "<message>"}`. Previously these fell through to the `Exception` catch-all and surfaced as
+   an opaque `500`, which logged a stack trace and told the user nothing about what they had typed wrong.
+
+   **Only a *bare* `ValueError` is echoed.** `ValueError` has library subclasses whose `str()` is not safe
+   to return: `pydantic.ValidationError` renders field names, type codes and `input_value=` — the caller's
+   actual submitted data — and `json.JSONDecodeError` renders parser offsets. Both are `ValueError`
+   subclasses, so an unguarded handler leaks them. The handler therefore checks `type(exc) is ValueError`
+   and hands anything else to the generic 500 handler. This is safe to rely on because no domain exception
+   in `domain/exceptions.py` inherits from `ValueError` and all ~53 domain raise sites use it bare — if that
+   ever changes, the guard must change with it. Locked by tests in `tests/unit/test_main.py` that assert the
+   subclass premise and that neither field names, `input_value`, nor parser offsets reach the client.
+
+   **The consequence to keep in mind when writing one:** every bare `ValueError` message in `src/` is
+   user-facing. Write them as plain sentences aimed at the person who submitted the request, and do not
+   interpolate internal state (file paths, SQL, secrets, another user's identifiers). Echoing back a value
+   the caller themselves supplied — a hostname, a scheme, an ID from their own payload — is fine and is what
+   the current messages do. Stack traces and unhandled exceptions still go to the generic 500 handler and are
+   never returned.
+
+   > Note the dev/prod split: with `SECURITY__DEBUG=true` (dev only) Starlette's `ServerErrorMiddleware`
+   > renders an HTML traceback *instead of* deferring to the `Exception` catch-all, so 500s look very
+   > different there. `debug` defaults to `False` and is not set in staging/prod, so the catch-all governs.
