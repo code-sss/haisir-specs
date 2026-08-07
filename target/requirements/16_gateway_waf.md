@@ -238,6 +238,15 @@ Everything not named by the regex — headers, cookies, query arguments, and eve
 - **BR-WAF-010 — Version pins move as a set, with recorded evidence.** `GO_VERSION`, `TINYGO_VERSION`, `TINYGO_SHA256`, Coraza and CRS versions are upgraded together. Any pin held back below latest must record the **observed** failure — command, error output, date — not an asserted incompatibility.
 - **BR-WAF-011 — Exclusion changes soak before enforcement.** Rewriting or retiring an exclusion requires a `SecRuleEngine DetectionOnly` period on the affected URIs, with logs reviewed, before blocking is restored. Retiring a blanket exclusion without first proving the scoped replacement fires will 403 live traffic.
 - **BR-WAF-012 — Route matching is unambiguous.** No two routes may match the same URI at equal priority. (Live example: `19-api-haitu.json` (`/api/haitu/*`), `21-api-haitu-exam-review.json` and `22-api-haitu-pattern-analysis.json` all sit at priority 20, so which `body_schema` is enforced depends on radixtree tie-breaking rather than intent.)
+- **BR-WAF-013 — The WAF only sees requests that survive the REWRITE phase, so an unauthenticated probe cannot test WAF behaviour on an authenticated route.** `coraza-filter` is registered with `http_request_phase: "access"`; APISIX's `openid-connect` implements `_M.rewrite`. Rewrite runs before access, and plugin *priority* orders plugins only **within** a phase — so `coraza-filter`'s 7999 does **not** put it ahead of `openid-connect`'s 2599. On any route carrying `openid-connect` (`secured-api`, `secured-api-upload`, `secured-authenticated`), an unauthenticated request is terminated with 401 in rewrite and Coraza never evaluates it.
+
+  Verified live on staging 2026-08-07: an identical SQLi payload returns **403 on `/`** (`secured-anonymous`, no OIDC) with 8 Coraza rule matches, and **401 on `/api/*`** with **zero** Coraza log lines ever recorded for an `/api/` URI.
+
+  **This is not a protection gap** — authenticated traffic passes rewrite and does reach the WAF, which is exactly why T2.3.2's real browser journeys produced Coraza *false positives* on `/api/` routes. It is a constraint on how the WAF can be **tested**:
+
+  - A test asserting a WAF verdict on an authenticated route **must** send a valid token, or it can only ever observe the 401 and is structurally incapable of reaching the rule it claims to test.
+  - Prefer `common/scripts/tests/waf-harness.sh` for rule-level regression tests. It loads **only** `coraza-filter` (`jq '{plugins: {"coraza-filter": …}}'`), stripping `openid-connect`, `ua-restriction` and `uri-blocker` — so no other plugin can produce a look-alike 403, and no credentials are needed. That is where the CVE-2026-21876 probe lives.
+  - Asserting on a status code alone is insufficient where a payload could trip an unrelated rule. Assert the **rule ID** fired (the CVE probe checks for `id "922110"`, because its UTF-7 payload decodes to `<script>alert(1)</script>` and an XSS rule could otherwise mask a broken 922110).
 
 ---
 

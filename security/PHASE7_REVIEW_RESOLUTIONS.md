@@ -17,7 +17,7 @@ WAF/gateway edits.
 |---|---|---|---|---|
 | 1 | P2-1 — image proxy hairpins into itself (A) and never forwards auth (B) | CRITICAL | **FIXED** | new `common/routes/26-images-questions.json`; deleted `src/app/images/questions/[...path]/route.ts` + its test |
 | 2 | P2-2 — `waf-harness.sh` wired into no CI pipeline | HIGH | **FIXED** | new `WAF Functional Gate` stage in `gateway-docker/Jenkinsfile` |
-| 3 | F1 — CVE-2026-21876 regression test cannot fail for the right reason | HIGH | **FIXED** | `common/scripts/tests/18-test-cve-2026-21876-multipart.sh` |
+| 3 | F1 — CVE-2026-21876 regression test cannot fail for the right reason | HIGH | **FIXED** (revised 2026-08-07 — see note) | `18-test-cve-2026-21876-multipart.sh` + `waf-harness.sh` |
 | 4 | F3 — traversal guard caught only an exactly-`..` segment | MEDIUM | **CLOSED** by #1 | file deleted |
 | 5 | F4 / P2-3 — image upload buffers whole body before its size check | MEDIUM | **FIXED** | `src/api/routes/exam.py` |
 | 6 | F5 / P2-5 — base and utility images pulled by mutable tag | MEDIUM | **FIXED** | `gateway-docker/Dockerfile`, `common/scripts/deploy.sh`, `common/scripts/env-setup.sh` |
@@ -83,6 +83,31 @@ Four changes to `18-test-cve-2026-21876-multipart.sh`:
   (priority 10) → `secured-api`. Verified by enumerating every POST-capable `/api/*` route.
 
 `bash -n` and `shellcheck -S warning` both clean.
+
+> **Revised 2026-08-07, after running it live.** The fix above was necessary but not sufficient, and
+> one part of it was wrong.
+>
+> **The test could never reach rule 922110 at all.** Its premise — restated in my own correction —
+> was that `coraza-filter`'s priority 7999 puts it ahead of `openid-connect`'s 2599, so no token is
+> needed. That is false: `openid-connect` implements `_M.rewrite` (REWRITE phase) and `coraza-filter`
+> is registered `http_request_phase: "access"`. Rewrite runs first, and priority orders plugins only
+> *within* a phase. An unauthenticated `/api/*` request is 401'd before the WAF runs. Confirmed live:
+> identical SQLi → 403 on `/` with 8 rule matches, 401 on `/api/*` with **zero** Coraza log lines ever
+> recorded for an `/api/` URI. Now **BR-WAF-013**.
+>
+> **And my "correction" about which plugin_config was itself wrong.** I claimed the probe hits
+> `05-api-write.json` → `secured-api`. It does not: `16-api-extraction-upload.json` declares `uris`
+> (**plural**), which my route enumeration — keyed on `uri` — silently skipped, and it matches at
+> priority 20 with `secured-api-upload`. The file's original comment was right; I "fixed" a correct
+> statement into an incorrect one on the strength of an enumeration that had a blind spot.
+>
+> **Resolution.** The rule-level regression moved to `common/scripts/tests/waf-harness.sh`, which
+> loads only `coraza-filter` and therefore has no OIDC to intercept and no `ua-restriction` to fake a
+> 403 — three probes there (multipart control → 200, CVE payload → 403, and an assertion that
+> `id "922110"` fired, since the UTF-7 payload decodes to `<script>alert(1)</script>` and an XSS rule
+> could otherwise mask a broken 922110). Verified 7/7 against the deployed image. The standalone test
+> now demands a token and exits INCONCLUSIVE without one. **This is the third time in this phase that
+> a check looked green while proving nothing — and the second time my own fix for it was incomplete.**
 
 ### 5. Upload buffering (MEDIUM)
 
