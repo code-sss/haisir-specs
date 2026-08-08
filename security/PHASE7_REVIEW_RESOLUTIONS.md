@@ -109,6 +109,31 @@ Four changes to `18-test-cve-2026-21876-multipart.sh`:
 > now demands a token and exits INCONCLUSIVE without one. **This is the third time in this phase that
 > a check looked green while proving nothing — and the second time my own fix for it was incomplete.**
 
+> **Revised again 2026-08-08, after the v2026.6 staging integration run failed on it.** The revision
+> above made a token mandatory but left the control asserting **401** — a status that became
+> unreachable in the same change. With a valid token `openid-connect` passes in REWRITE, the request
+> reaches Coraza in ACCESS, and the app answers. Three defects, all now fixed in
+> `18-test-cve-2026-21876-multipart.sh`:
+>
+> 1. **`BODY=$(printf …)` truncated the multipart terminator.** Command substitution strips trailing
+>    newlines, so the closing `--boundary--\r\n` lost its CRLF. Coraza's Go reader failed with
+>    `multipart: NextPart: EOF` and rule **200002** denied it **400** in phase 2 — 922110 was never
+>    reached. Now built with `printf -v`.
+> 2. **The control's expected status was stale.** 401 was correct only in the tokenless premise this
+>    file had already disproved.
+> 3. **Status code alone could not tell the WAF from the app — the important one.** The test user is
+>    not an admin, so this route answers `403 {"detail":"Forbidden: insufficient permissions"}`
+>    (`application/json`), identical in status to a Coraza block (`text/html`). The attack probe read
+>    *any* 403 as "the WAF blocked the CVE payload", so it would have passed against a ruleset still
+>    vulnerable to CVE-2026-21876. Both probes now discriminate on `content_type`: gateway-sourced
+>    HTML vs app-sourced JSON.
+>
+> Verified live on staging 2026-08-08: control `403 application/json` (reached the app), attack
+> `403 text/html` (stopped at the gateway), and the APISIX log shows exactly one rule firing —
+> `[id "922110"] [msg "Illegal MIME Multipart Header content-type: charset parameter"]`. **Fourth
+> occurrence of this same failure mode in this phase.** Note the ordinary uploads path was never
+> affected: a well-formed `curl -F` upload traverses the gateway and reaches the backend normally.
+
 ### 5. Upload buffering (MEDIUM)
 
 `exam.py` now uses `read_upload_capped(file, _MAX_IMAGE_UPLOAD_BYTES)` — the streaming helper this
