@@ -490,3 +490,49 @@ would have made this a one-minute diagnosis instead of a multi-step bisection.
 
 > Related dependency worth noting: the rootless socket only exists while `sss` has a live systemd user
 > session. If linger is ever disabled, the hook breaks again at the next unattended renewal.
+
+### B5 — `allow_admin` assumes the wrong host address under rootless Docker (deploy)
+
+**Broke the v2026.6 prod deploy 2026-08-08.** `common/apisix_conf/config.yaml`'s `allow_admin` carries
+`10.0.2.0/24` commented *"rootless Docker slirp4netns (host appears as 10.0.2.2)"*. On prod the host
+does not appear as `10.0.2.2` — a host-originated call to a published port arrives as the **bridge
+gateway, `172.19.0.1`**. That address used to be covered by the `172.19.0.0/16` entry **T7.7.1
+removed**, and nothing noticed because `setup.sh` still reached the Admin API over the Tailscale IP,
+which its own `/32` allowed. T7.7.2 then moved the binding to loopback — and the two changes, each
+correct alone, left no entry matching the caller.
+
+Result: Step 8's `setup.sh` could not reach the Admin API, so **routes, plugin configs and global
+rules were never pushed**. Backend, frontend and gateway were all healthy on v2026.6 and login worked,
+because APISIX kept serving the previous route table — while `26-images-questions`, new in this
+release, was absent and V43 had already rewritten every `questions.image_url` to a path only that
+route can serve. A deploy that reports failure at the last step but leaves a *working-looking* site.
+
+Fixed live by setting `APISIX_ADMIN_ALLOWED_CIDR="172.19.0.1/32"` in `prod/.env.config.sh` — the
+bridge gateway only, deliberately **not** the `/16`, so T7.7.1's reason for removing it (any container
+on haisir-net that learned the admin key could rewrite every route) still holds: containers get
+`172.19.0.x`, `.1` is the bridge itself. `.env.config.sh` is gitignored and lives on the host, so the
+fix survives future deploys.
+
+**Open:** staging runs the same template and did not hit this. Understand why before assuming it is
+safe there — the likeliest explanations are a different `.env.config.sh` value or a different bridge
+subnet, and if it is the former, staging is one config change away from the same failure. The
+`10.0.2.0/24` comment should be corrected either way; it documents behaviour that is not happening.
+
+### B6 — Keycloak admin routes run with no IP allowlist (security, pre-existing)
+
+Surfaced incidentally while re-templating prod on 2026-08-08:
+
+```
+INFO: ip-restriction disabled for 13-keycloak-admin.json (CIDR variable is empty)
+INFO: ip-restriction disabled for 14-keycloak-master-realm.json (CIDR variable is empty)
+INFO: ip-restriction disabled for 15-keycloak-admin-resources.json (CIDR variable is empty)
+```
+
+`KEYCLOAK_ADMIN_ALLOWED_CIDR` is empty in `prod/.env.config.sh`, and `template-configs.sh` responds by
+**dropping the plugin entirely** rather than failing closed — so the Keycloak admin console and master
+realm are exposed with no network restriction. Predates Phase 7 and is unrelated to the v2026.6
+deploy; it is recorded here because nothing else would have surfaced it.
+
+Two separable pieces of work: set the CIDR on both envs, and change the empty-variable behaviour from
+"disable the restriction" to "fail the templating" — the current default silently weakens security on
+a missing value, which is the same fail-open shape as B4's swallowed stderr.
