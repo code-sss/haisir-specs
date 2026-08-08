@@ -513,10 +513,21 @@ on haisir-net that learned the admin key could rewrite every route) still holds:
 `172.19.0.x`, `.1` is the bridge itself. `.env.config.sh` is gitignored and lives on the host, so the
 fix survives future deploys.
 
-**Open:** staging runs the same template and did not hit this. Understand why before assuming it is
-safe there — the likeliest explanations are a different `.env.config.sh` value or a different bridge
-subnet, and if it is the former, staging is one config change away from the same failure. The
-`10.0.2.0/24` comment should be corrected either way; it documents behaviour that is not happening.
+**Why staging was unaffected — answered 2026-08-08, and it is not reassuring.** Staging's `allow_admin`
+is *identical* (`10.0.2.0/24`, own Tailscale `/32`, workstation `/32`), `APISIX_ADMIN*` is absent from
+its `.env` too, and its bridge gateway is also `172.19.0.1`. Same config, same subnet, opposite result:
+staging's Admin API answers **401** to a host-originated call (IP accepted) where prod answered 403.
+The difference is the **rootlesskit port driver** — neither host sets `--port-driver` explicitly, so
+each follows its own rootlesskit version, and the two rewrite the source address differently
+(`slirp4netns` → `10.0.2.2`, `builtin` → the bridge gateway). Staging is therefore not correct by
+design; it is correct by accident, and a rootlesskit upgrade there reproduces prod's failure exactly.
+
+**Fixed at the template 2026-08-08:** `allow_admin` now carries **both** `10.0.2.0/24` and
+`172.19.0.1/32`, so either port driver resolves. Prod's `APISIX_ADMIN_ALLOWED_CIDR="172.19.0.1/32"`
+override becomes redundant on its next deploy but is harmless. Residual worth naming: this is
+**environment drift at the container-runtime layer**, invisible to every config diff, and an IP
+allowlist was simply the first thing to depend on it. Pinning the rootless Docker/rootlesskit version
+across hosts is the real remedy and is not done.
 
 ### B6 — Keycloak admin routes run with no IP allowlist (security, pre-existing)
 
@@ -533,6 +544,29 @@ INFO: ip-restriction disabled for 15-keycloak-admin-resources.json (CIDR variabl
 realm are exposed with no network restriction. Predates Phase 7 and is unrelated to the v2026.6
 deploy; it is recorded here because nothing else would have surfaced it.
 
-Two separable pieces of work: set the CIDR on both envs, and change the empty-variable behaviour from
-"disable the restriction" to "fail the templating" — the current default silently weakens security on
-a missing value, which is the same fail-open shape as B4's swallowed stderr.
+**Confirmed reachable from the public internet, 2026-08-08:**
+
+```
+GET https://haisir.in/admin/                     -> 308
+GET https://haisir.in/admin/master/console/      -> 200
+GET https://haisir.in/realms/master/.well-known/openid-configuration -> 200
+```
+
+Not trivially exploitable — this release's realm policy sets `length(12) and notUsername and notEmail
+and passwordHistory(3)`, `failureFactor 30`, and `sslRequired external` — but it is an unauthenticated
+attack surface on the IdP that gates every other service, plus whatever Keycloak version-specific
+surface the console carries.
+
+**Deliberately NOT fixed in the v2026.6 window.** The obvious fix (set the CIDR to the admin
+workstation's Tailscale `/32`) does not work as written: admin traffic arrives through cftunnel, so the
+address `ip-restriction` evaluates is the real client IP extracted by `real-ip`, not a tailnet address.
+Applying that value would lock everyone out of the IdP admin console rather than restrict it. The
+decision needed first is **from where should the Keycloak admin console be reachable at all** — public
+with an IP allowlist, or removed from the public gateway entirely and reached over the tailnet
+directly. That is an owner decision, and making it at the end of a deploy window risks losing admin
+access to the system that authenticates everything else.
+
+Three pieces of work once decided: pick the exposure model, set the CIDR (or drop routes 13/14/15 from
+the public gateway), and change the empty-variable behaviour from "disable the restriction" to "fail
+the templating" — the current default silently weakens security on a missing value, the same fail-open
+shape as B4's swallowed stderr and B5's `10.0.2.0/24` assumption.
