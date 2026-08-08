@@ -445,3 +445,48 @@ and keeps the risk, which is strictly worse than doing nothing.
 prod currently showing 2 idle-in-transaction sessions, a migration needing an exclusive lock can
 stall behind them and take the app with it. Stop `haisir-worker-prod` before the deploy, or confirm
 `SELECT count(*) FROM pg_stat_activity WHERE state='idle in transaction'` is 0 first.
+
+### B3 — `other/` is outside the deploy rsync path, so hook fixes never reach the hosts (ops)
+
+`common/deploy-remote-common.sh` (sync step) rsyncs **only** `common/` and `${ENV}/`. Anything under
+`other/` — including `other/cert/haisir-sync-certs.sh`, installed as the certbot renewal hook — is
+hand-placed on each host and never updated by a deploy.
+
+**Found 2026-08-07, prod.** The T1.3.3 OpenBao fallback (`3abeda3`, 2026-07-16) had been in the repo
+for three weeks and had never reached prod. The installed hook was an older revision still, older
+than both HEAD and the March version. Effect: every certbot deploy hook since ~2026-07-16 aborted at
+its `APISIX_ADMIN_KEY` guard, before the cert copy — so certbot kept renewing correctly while
+**nothing distributed the result**. Discovered incidentally: `/etc/letsencrypt/live/haisir.in` held a
+cert valid to **Oct 14 2026** while APISIX was still serving one expiring **Aug 15 2026**, 8 days out.
+Invisible from outside because cftunnel terminates public TLS at Cloudflare's edge cert.
+
+Two candidate fixes — the second is the one that actually closes it:
+
+1. Extend the sync to cover `other/cert/`. Cheap, but only fixes files that happen to live under a
+   synced path; the installed copy at `/etc/letsencrypt/renewal-hooks/deploy/` is still a *copy*.
+2. Have the deploy assert the installed hook matches the repo (hash compare, fail loud). Catches
+   drift regardless of how the file got there.
+
+> The failure is silent by construction: a broken renewal hook produces no alert, and the only
+> symptom is a cert quietly approaching expiry behind an edge terminator that hides it.
+
+### B4 — T1.3.3's OpenBao render was never exercised as root (ops / deploy)
+
+`other/cert/haisir-sync-certs.sh` requires root (it reads `/etc/letsencrypt`), but T1.3.3 made it call
+`render_deploy_secrets_or_die` → `render-deploy-secrets.sh` → `docker exec openbao-prod`. staging and
+prod run **rootless** Docker under `sss` (`common/openbao/bootstrap.sh` notes this), so root sees a
+different, empty daemon and has no `docker` binary on `PATH`. The render therefore fails in the one
+context the hook actually runs in, while working fine under `deploy.sh` — which runs as `sss`.
+
+Fixed 2026-08-07 in `561e631`: when `EUID -eq 0`, point `DOCKER_HOST` at
+`/run/user/$(id -u sss)/docker.sock` and prepend `/home/sss/bin` to `PATH`, rather than dropping
+privileges (which would lose the `/etc/letsencrypt` access the rest of the script needs).
+
+**The wider item, unfixed:** `bao_deploy_token()` in `common/openbao/render-deploy-secrets.sh`
+redirects stderr to `/dev/null`, so *every* failure mode — container down, sealed vault, missing cert,
+unregistered role, `docker: command not found`, wrong socket — collapses into one generic message
+listing four causes, none of which was the actual one here. Surfacing the underlying stderr on failure
+would have made this a one-minute diagnosis instead of a multi-step bisection.
+
+> Related dependency worth noting: the rootless socket only exists while `sss` has a live systemd user
+> session. If linger is ever disabled, the hook breaks again at the next unattended renewal.
