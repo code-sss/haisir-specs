@@ -3,11 +3,19 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 583511d (Phase 6.5 close — singular route alias for file/publish endpoints, 2026-07-29) |
-| haisir-frontend | 3a57718 (Phase 6.5 close — view-dialog CSS fix + publish-body fix + Sonar dedupe, 2026-07-29) |
-| haisir-deploy | bc77132 (release manifest v2026.5.2 — Phase 6 + 6.5 bundled, content reset runbook + WAF exclusions committed, 2026-07-29) |
+| haisir-backend | 00c2c73 (Phase 7 close + post-deploy — DomainValidationError 400 mapping, 2026-08-09) |
+| haisir-frontend | 705833d (Phase 7 close — CSP enforcement soak stage in pipeline, 2026-08-09) |
+| haisir-deploy | 844e8f9 (Phase 7 close + v2026.6 prod deploy — allow_admin covers both rootless host addresses, 2026-08-09) |
 
-> Next session: run `git diff 583511d..HEAD` in haisir-backend, `git diff 3a57718..HEAD` in haisir-frontend, and `git diff bc77132..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 00c2c73..HEAD` in haisir-backend, `git diff 705833d..HEAD` in haisir-frontend, and `git diff 844e8f9..HEAD` in haisir-deploy to see only what changed since this snapshot.
+
+## Cross-cutting request constraints (Phase 7 G3)
+
+These apply to every endpoint below, so they are stated once rather than repeated per route.
+
+- **Free-text `max_length` at the schema boundary** (G3.6) — `question_text`, `explanation`, `model_answer`, paragraph `content`, hAITU `message` and `ReviewChatMessage.content`: **4000** chars; question option `text`: **1000**. Over-length input is a Pydantic `422`, not a WAF `403`. These caps exist because `tx.total_arg_length` is 65535 and rule 920390 is unexcluded — an unbounded free-text field would eventually 403 at the gateway with no application-side explanation.
+- **`RequestBodySizeLimitMiddleware`** (`src/auth/request_middleware.py`, registered in `main.py` with `max_bytes=settings.security.max_request_size`) — streamed, so it aborts mid-upload rather than after buffering, and it handles `Transfer-Encoding: chunked` where `Content-Length` is absent. Exceeding the cap → **413**.
+- **`DomainValidationError` → 400** (`src/domain/exceptions.py`, handler in `main.py`) — a `ValueError` subclass raised by domain code for invalid user input (empty titles, malformed questions). The handler gates on `isinstance(exc, DomainValidationError)` so *only* true domain validation is echoed; a bare `ValueError`, `pydantic.ValidationError` or `json.JSONDecodeError` reaching the same handler is treated as an internal fault and routed to the 500 handler, because their `str()` leaks field names, type codes and `input_value=` (the submitted data). Previously all of these fell through to the 500 catch-all, which logged a stack trace and hid the reason from the caller.
 
 ---
 
@@ -572,6 +580,24 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 - Query: topic_id? (optional, Pre-Phase-5 G3 — filters to templates having ≥1 question tagged with this topic_id; used by the student "Take Exam" deep-link from a topic)
 - Response: array of `{ id, course_path_node_id, title }`
 
+### POST /api/exams/images
+- Purpose: Upload a question or option image and get back a stored URL. Replaces the previous base64 `data:` URI embedding — the single largest payload on the authoring route, and the reason `12-api-exams-static.json` needed a 50 MB argument-size limit and an anomaly threshold of 12 (Phase 7 G3.5)
+- Auth: instructor (`require_instructor()`); CSRF required
+- Request: `multipart/form-data`, single `file` field. PNG / JPEG / WebP only, **5 MB cap**
+- Response: `201 ImageUploadResponse { url: "/images/questions/{safe_name}.{png|jpg|webp}" }` — a path relative to the server data dir, stored verbatim as `questions.image_url` or an option's `image_url` (no `BACKEND_URL` prefix added by the client)
+- Errors: **413** over 5 MB; **415** unsupported type
+- **MIME is sniffed from the file's leading bytes** (`sniff_mime(file_bytes[:8192])`), not from the `Content-Type` header or the filename extension, so a renamed executable is rejected. The filename is normalised through `get_safe_filename()` before it touches the filesystem
+- **The 5 MB cap is enforced by a streamed read** (`read_upload_capped` → `chunk_read_upload`, the same helper the two extraction routes use), not `await file.read()` followed by a length check. The old form materialised the whole body first, so the *real* ceiling was `SECURITY__MAX_REQUEST_SIZE` — 50 MB in staging/prod — against a 1 GB backend `mem_limit`, not the 5 MB the endpoint advertised (Phase 7 review finding F4/P2-3)
+- APISIX route `24-api-exams-images-upload.json` (new)
+
+### GET /images/questions/{filename}
+- Purpose: Serve a stored question image. Mounted at `/images`, **outside the `/api` prefix**
+- Auth: any authenticated user — **lenient dependency, no `X-Current-Role` required.** This is the **fourth** exemption to BR-SEC-006, alongside `GET /api/users/me`, `POST /api/users/me/assign-role` and `PATCH /api/users/me/onboarding-complete`. The reason is structural, not a relaxation: the endpoint is reached from an `<img src>` tag, and a browser cannot attach a custom header to an image subresource request, so the strict dependency returned `400 (X-Current-Role header required)` on **every render**. The JWT is still verified; the endpoint simply never branches on role, because students need question images during exam sessions
+- Request: `filename` path param, validated against `^[a-zA-Z0-9_\-]{1,70}\.(png|jpg|webp)$` — no directory separators, so path traversal is rejected before any filesystem access
+- Response: `FileResponse` with the detected media type
+- Errors: **400** on a filename failing the safe-name check; **404** if the file is not on disk
+- APISIX route `26-images-questions.json` (new). ⚠️ This route being absent is what made the v2026.6 prod deploy dangerous: V43 had already rewritten every `questions.image_url` to a path only this route can serve, while the route table push had silently failed (backlog **B5**). Fixed in the same window; **image serving and V43 were then verified working end-to-end on the deployed stack**
+
 ### POST /api/exam-sessions/session/create
 - Purpose: Create an exam session for the current student
 - Auth: student
@@ -825,6 +851,7 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 - Purpose: Run a student's doubt question through the 4-stage RAG pipeline (rewrite → retrieve → rerank → synthesize) scoped to an enrolled topic's subtree
 - Auth: student; CSRF required
 - Request: `HaituDoubtRequest { topic_id: UUID, enrollment_id: UUID | None = None, message: str, history: list[HaituDoubtMessage { role: "user"|"assistant"|"system", content: str }] (default []) }`
+- **History is now loaded server-side (Phase 7 G3.3, backend `b9d5cdd`).** Before the rate-limit check, the route calls `DoubtService.find_open_doubt(student_sub, topic_id)` (a read-only lookup — unlike `find_or_create_doubt` it creates nothing) and, when a thread exists, `get_recent_messages(doubt_id, limit=10)` to seed the LLM context window from `doubt_messages`. The client no longer replays the transcript, which was the single largest contributor to `total_arg_length` on this route and the reason its WAF exclusions kept growing. The `history` field remains in the schema and is accepted, but the server-loaded history is what reaches the model.
 - Response: **SSE stream** (`Content-Type: text/event-stream`). Frames (each `data: {…}\n\n`): `event: doubt_id` with `{"doubt_id": "<uuid>"}` **(emitted first, before any tokens)** → incremental `{"token": str}` → `{"escalation_ready": bool}` → terminal `{"done": true}`. 15 s `: ping` keepalives. Client disconnect (`request.is_disconnected()`) cancels the stream. The streaming Stage-4 path uses a single QA-mirroring prompt (bypasses `CompactAndRefine`, which the non-streaming `answer()` retains).
 - Pipeline: stage 1 rewrites the query (LLM → JSON, safe fallback); stage 2 retrieves via QueryFusionRetriever (hybrid pgvector, topic_id filter); stage 3 is a passthrough (inline cross-encoder removed in G0.3; `rerank_model` retained as a future-hook for an external rerank API — a non-empty value logs a warning and returns nodes unordered); stage 4 synthesizes (intent-specific prompts, escalation detection). `safe=False` from stage 1 short-circuits before retrieval.
 - Errors: 403 (enrollment invalid or topic outside enrolled subtree; or, for a parent-owned topic, no active parent-child link / topic not live); 429 `"Rate limit exceeded"` (HaituRateLimiter: 20 calls/student/hour, in-process) — both returned as HTTP errors **before** the stream starts. DB session closed before streaming begins.
@@ -840,7 +867,19 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 ### POST /api/haitu/exam-review-chat
 - Purpose: Stream a review chat (no RAG — model sees conversation only) about a completed exam session
 - Auth: student (`X-Current-Role: student`); CSRF required
-- Request: `ExamReviewChatRequest { attempt_id: UUID, message: str, history: list[{role, content}] (default []) }` — `session_id` accepted as a deprecated alias, copied to `attempt_id` via a `model_validator` when `attempt_id` is absent
+- Request: `ExamReviewChatRequest { attempt_id: UUID, message: str (max 4000), history: list[ReviewChatMessage { role: Literal["student","ai"], content: str (max 4000) }] (default []) }` — `session_id` accepted as a deprecated alias, copied to `attempt_id` via a `model_validator` when `attempt_id` is absent
+- **`role` is `Literal["student","ai"]` (Phase 7 G3.1, backend `414cf42`) — this closed a live prompt-injection hole.** `role` was a bare `str`, and the route mapped it into the LLM call, so an authenticated client could post `{"role": "system", "content": "…"}` and inject a system turn into the model's context. No WAF can see this: the payload is well-formed JSON on an authenticated endpoint and the injected text is ordinary prose. A regression test asserts `role: "system"` is rejected **422**. The role-mapping lookup was also changed from `.get()`-with-fallback to a strict dict lookup, so an unmapped value fails rather than silently defaulting.
+- **Grounding is built server-side; `history` is accepted-but-ignored (Phase 7 G3.4, backend `9f224bf`).** The system prompt is assembled from the attempt's own `exam_session_questions` + resolved `Question` entities, so the model answers from server-held data rather than from whatever the client claims the exam contained. The LLM conversation history is the **persisted non-seed thread** (`review_chat_messages`), not the request body. The `history` field is still declared and still validated — it is simply not read. This is what allowed the blanket WAF exclusions on this route to be retired rather than rewritten.
+- **Persistence:** the student turn is written immediately after the rate-limit check passes (so a 429 leaves no orphan row); the AI reply is written by a background task after streaming ends, including the partial text on an early client disconnect. The thread row is created lazily on first write.
+- ⚠️ **Known inert field — `question_id`.** The frontend sends `question_id` in this body (`haisir-frontend/src/features/student/api/student-api.ts:611`, commit `3eef131` "send question_id for server-side review-chat grounding"), but `ExamReviewChatRequest` does not declare it and Pydantic drops unknown keys (no `extra="forbid"`). The field is therefore **never read**. Behaviour is still correct — grounding covers *all* of the attempt's questions, so an "explain question N" request is answerable — but per-question grounding is not what happens. Tracked as a Phase 7.5 backlog item: either declare `question_id` and narrow the grounding to it, or drop it from the frontend payload.
+
+### GET /api/haitu/exam-review-chat/{attempt_id}
+- Purpose: Load the persisted post-exam review conversation so the panel restores prior turns instead of starting blank on every visit
+- Auth: student (`X-Current-Role: student`); **CSRF required — on a GET.** This deviates from the project rule that CSRF applies to POST/PUT/PATCH/DELETE. Kept deliberately (Phase 7 review finding F9): it is strictly *stricter* than the rule, not weaker, and every caller already routes through `fetchWithCSRFRetry()`. Documented in the route docstring because a plain `fetch()` against this path will get a 403 and the reason is otherwise non-obvious.
+- Request: `attempt_id` path param only
+- Response: `list[ReviewChatMessageRead { id: UUID, sender_type: str, content: str, created_at: datetime }]` — **non-seed messages only** (`is_seed = false`), ordered `created_at ASC, id ASC`. Returns `[]` when no thread exists yet (pattern-analysis has not run), which is a valid state, not an error
+- Errors: 403 if the session is missing, not owned by the caller, or not completed — the same ownership/status guard as the POST (`_load_owned_completed_session`), so this endpoint opens no new enumeration surface
+- APISIX route `23-api-haitu-exam-review-get.json` (new)
 - Response: **SSE stream** (`response_model=None`) when the caller sends `Accept: text/event-stream` — frames `data: {"token": str}` repeated, then `data: {"done": true}`; a mid-stream `data: {"error": str}` frame signals failure. **JSON fallback** `ExamReviewChatFallbackResponse { response: str }` when the Accept header is absent.
 - No hardcoded token cap (**changed 2026-07-01**, was `max_tokens=500`) — falls back to the configured `HAITU__MAX_TOKENS` default (2048); the prior 500 cap could truncate reasoning-model output since those models spend part of the budget on hidden `reasoning_content` before visible text
 - A mid-stream pump failure (e.g. the LLM backend goes unreachable) now pushes an explicit `data: {"error": "I couldn't generate a response right now. Please try again in a moment."}` frame before the terminal `done` (**changed 2026-07-01** — was a silent end-of-stream indistinguishable from a short-but-complete answer)

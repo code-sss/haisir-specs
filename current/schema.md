@@ -3,11 +3,11 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 583511d (Phase 6.5 close — singular route alias for file/publish endpoints, 2026-07-29) |
-| haisir-frontend | 3a57718 (Phase 6.5 close — view-dialog CSS fix + publish-body fix + Sonar dedupe, 2026-07-29) |
-| haisir-deploy | bc77132 (release manifest v2026.5.2 — Phase 6 + 6.5 bundled, content reset runbook + WAF exclusions committed, 2026-07-29) |
+| haisir-backend | 00c2c73 (Phase 7 close + post-deploy — DomainValidationError 400 mapping, 2026-08-09) |
+| haisir-frontend | 705833d (Phase 7 close — CSP enforcement soak stage in pipeline, 2026-08-09) |
+| haisir-deploy | 844e8f9 (Phase 7 close + v2026.6 prod deploy — allow_admin covers both rootless host addresses, 2026-08-09) |
 
-> Next session: run `git diff 583511d..HEAD` in haisir-backend, `git diff 3a57718..HEAD` in haisir-frontend, and `git diff bc77132..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Next session: run `git diff 00c2c73..HEAD` in haisir-backend, `git diff 705833d..HEAD` in haisir-frontend, and `git diff 844e8f9..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 
@@ -148,7 +148,7 @@
 - `explanation` (String, nullable)
 - `difficulty` (Enum: easy | medium | hard)
 - `tags` (JSONB, nullable)
-- `image_url` (String, nullable)
+- `image_url` (String, nullable) — **a path, never a data-URI, as of V43.** Written by `POST /api/exams/images` as `/images/questions/{safe_name}.{png|jpg|webp}` and served back by `GET /images/questions/{filename}`. **V43** is a one-time data migration that decodes every pre-existing `data:image…` value — on the column *and* inside each entry of `options` — to `{DATA_DIR}/images/questions/` and rewrites the value to the resulting path. Idempotent (rows already holding a path are untouched); payloads that fail to decode are skipped and left unchanged rather than aborting the migration. `downgrade()` is a **deliberate no-op** — restoring base64 is not attempted, so a rollback past V43 needs the pre-deploy dump
 - `essay_subtype` (VARCHAR(50), nullable) — `essay` questions only; valid values: `analytical`, `critical`, `extended`, `narrative`, `reflective`, `short`; rendering hint only, no grading impact (V27+V28)
 - `working_required` (BOOLEAN, default false) — `problem_solving` only; when true, UI renders a free-text working area (V27)
 - `penalty_matching` (BOOLEAN, default false) — `matching` only; when true, wrong pairings reduce score: `max(0, (correct − wrong) / total) × points` (V28)
@@ -446,6 +446,23 @@ Indexes: `idx_notifications_recipient (recipient_idp_sub)`; `idx_notifications_r
 - `text_search_tsv` (tsvector) — added by **V33 migration** via `fn_chunks_tsv_update()` BEFORE INSERT/UPDATE trigger (`to_tsvector('english', ...)`); GIN index `ix_chunks_text_search_tsv`; enables sparse leg of hybrid retrieval
 
 Managed by LlamaIndex `PGVectorStore`; V32 is the registration shim, V33 adds the tsvector column the store requires. Do not add this table to Alembic autogenerate targets.
+
+## review_chat_threads
+> Added by **V42** (Phase 7 G3.2). One thread per completed exam attempt; the post-exam hAITU review conversation is now server-held rather than replayed by the client.
+
+- `id` (UUID, PK)
+- `attempt_id` (UUID, NOT NULL, FK → `exam_sessions.id`, **UNIQUE** `uq_review_chat_threads_attempt_id`) — exactly one thread per attempt; the thread is created lazily on the first persisted turn, so an attempt whose review was never opened has no row
+- `created_at` (timestamptz, NOT NULL, default `now()`)
+
+## review_chat_messages
+> Added by **V42** (Phase 7 G3.2).
+
+- `id` (UUID, PK)
+- `thread_id` (UUID, NOT NULL, FK → `review_chat_threads.id` **ON DELETE CASCADE**; index `idx_review_chat_messages_thread_id`)
+- `sender_type` (VARCHAR(10), NOT NULL, CHECK `IN ('student','ai')` — `ck_review_chat_messages_sender_type`) — the DB-level twin of the `Literal["student","ai"]` constraint on `ReviewChatMessage.role`; there is no `system` value, by design (see BR-SEC note in `api_contracts.md`)
+- `is_seed` (BOOLEAN, NOT NULL, default false) — marks the client-side greeting/pattern-analysis seed bubble. Seed rows are excluded from both `GET /api/haitu/exam-review-chat/{attempt_id}` and the LLM history, so the model is never grounded in its own opening filler
+- `content` (TEXT, NOT NULL) — capped at 4000 chars at the API boundary, not by the column
+- `created_at` (timestamptz, NOT NULL, default `now()`) — messages are read `ORDER BY created_at ASC, id ASC` (the id tiebreak matters: student turn and AI reply can land in the same transaction timestamp)
 
 ---
 

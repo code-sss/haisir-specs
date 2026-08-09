@@ -222,6 +222,8 @@ graph LR
 
 **hAITU pattern analysis:** when the review screen loads, hAITU automatically analyses your mistakes and posts an opening message identifying the main pattern (e.g. "You consistently misidentified fractions greater than 1"). You can continue the conversation by typing follow-up questions.
 
+**Your review conversation is saved.** If you close the review screen and come back to the same attempt later, the chat reloads with everything you and hAITU said before — you don't start over. The opening pattern-analysis message is regenerated each visit rather than stored, so only your actual conversation is restored.
+
 ### Essay grading states
 
 | What you see | Meaning |

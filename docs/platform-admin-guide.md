@@ -295,6 +295,15 @@ graph TD
   - `Auto release` — AI score released to the student immediately after grading.
   - `Manual release` — score held until you review and confirm or override it.
 
+### Adding images to questions
+
+Questions and individual answer options can each carry an image. Click the image control in the question editor and pick a file.
+
+- **PNG, JPEG or WebP only, up to 5 MB.** The file type is checked from the file's actual contents, not its extension — renaming `something.exe` to `something.png` will be rejected.
+- The image is **uploaded to the server** and the question stores a reference to it. It is no longer embedded inside the exam itself, so exams save faster and large images no longer risk the exam being rejected on save.
+- **If an upload fails, the question keeps the image it already had** and an error is shown. Nothing is lost — just try again.
+- Students see question images automatically while taking the exam and on the review screen; no publish step is needed.
+
 ### Topic tagging (important for mastery)
 
 Every question **should** have a topic set via the **Topic** dropdown. Without a topic, the question's score is excluded from the student's per-topic mastery tracking.
