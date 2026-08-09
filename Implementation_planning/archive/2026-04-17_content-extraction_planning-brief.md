@@ -1,11 +1,32 @@
 # Planning Brief — Content Extraction Service (Phase 1d-pre)
 
-> **Status**: Decision pending — awaiting architectural answers from the team.
+> ## ⚠️ SUPERSEDED — archived 2026-08-09. Historical record only; do not plan from this.
+>
+> This is a **pre-`/plan` brief**, written 2026-04-17 and blocked at the time on the five scope
+> questions in §10. Those questions were answered, and the phase they fed shipped. The successor
+> artifacts are the authoritative record:
+>
+> - `archive/PLAN_phase1d-real_2026-06-05.md` / `archive/TASKS_phase1d-real_2026-06-05.md`
+> - `target/requirements/12_content_extraction.md` — the spec as built
+> - `decisions.md` — the reasoning actually adopted
+>
+> **§10's recommended defaults were not all taken.** Most importantly **Q1**: this brief recommended
+> *(a) synchronous extraction with a ~10-page cap*. What shipped is a **worker process draining a
+> Postgres queue** (`extraction_jobs`, `FOR UPDATE SKIP LOCKED`) — nearer the (c)/(d) options it
+> ranked below, but on Postgres rather than ARQ + Redis. Read §10 as options that *were* on the
+> table, never as a description of the system. Q2 (local disk under `data_dir`) and Q4 (admin picks
+> the type upfront) were adopted broadly as recommended.
+>
+> **Filing note:** this sat loose in `Implementation_planning/` from creation until 2026-08-09 — the
+> pass that archived the Phase 1d plan and tasks (`3f25c5e`) missed it. Its original header claimed
+> the file lived at `Implementation_planning/handoffs/…`, a directory that has never existed in this
+> repo; that line is removed rather than preserved, since it only ever pointed nowhere.
+
 > **Created**: 2026-04-17
 > **Author**: `/plan` skill (Claude Code, Opus 4.7)
+> **Status at time of writing**: Decision pending — awaiting architectural answers from the team.
 > **Working session**: Phase 0–2 of `/plan` complete; Phase 3 (decomposition) blocked on the 5 scope questions in §10.
 > **Output of**: 3 parallel context-gathering agents (target specs, backend ground truth, glm_ocr deep-dive + 2026 PDF-tooling web research) + 1 challenger agent.
-> **Context lives at**: `Implementation_planning/handoffs/2026-04-17_content-extraction-phase_planning-brief.md` (this file).
 
 ---
 
