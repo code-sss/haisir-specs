@@ -21,7 +21,8 @@ The `Implementation_planning/` directory contains the planning docs and a decisi
 | `TASKS.md` | Task checkboxes + "Ready now" queue — updated by `/implement` in each code repo |
 | `phases.md` | Rough phase guide — completed phases + next phase stub (long-term vision phasing is in `vision/phases.md`) |
 | `decisions.md` | Running decisions log — one dated entry per `/plan` cycle, newest first |
-| `archive/` | Historical decision records and archived plans — read for "why" behind past choices |
+| `constraints.md` | Implementation-reality constraints — things already coded, migrated or deployed that the target state must stay compatible with, or pay to diverge from. Distinct from the Critical Rules below, which are policy; these are facts on the ground. Update when `/update-target-state` surfaces a new constraint or a phase decision creates one |
+| `archive/` | Historical decision records, archived plans/tasks, and superseded planning briefs — read for "why" behind past choices |
 
 > The "why" behind spec choices is in `decisions.md` (recent) and `archive/phase0-review-decisions.md` / `archive/phase1-review-decisions.md` (historical).
 
