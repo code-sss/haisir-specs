@@ -332,12 +332,15 @@ deliberately appended after the text rows so neither gets worse.
 
 ---
 
-## Phase 7 — Gateway WAF Modernisation, CSP & Security Review Closeout (active — restored 2026-07-29)
+## Phase 7 — Gateway WAF Modernisation, CSP & Security Review Closeout ✓ (completed 2026-08-06)
 
 > Scoped 2026-07-27, archived unstarted the same day when Phase 6.5 took priority, **restored
-> 2026-07-29** once 6.5 closed. Now the active plan — see `PLAN.md` / `TASKS.md`, and `decisions.md`
-> (2026-07-29, "Phase 7 restored from archive") for what the reconciliation changed. Baseline:
-> backend `583511d`, frontend `3a57718`, deploy `8cb1dbe`.
+> 2026-07-29** once 6.5 closed. See `decisions.md` (2026-07-29, "Phase 7 restored from archive") for
+> what the reconciliation changed, and (2026-08-06) for the close-out record. Baseline:
+> backend `583511d`, frontend `3a57718`, deploy `8cb1dbe`. **Shipped at:** backend `00c2c73`,
+> frontend `705833d`, deploy `844e8f9` — released as **v2026.6** (staging 2026-08-07, prod
+> 2026-08-08). Plan and tasks archived to `archive/PLAN_Phase7-GatewayWAF-CSP_2026-08-06.md` /
+> `archive/TASKS_Phase7-GatewayWAF-CSP_2026-08-06.md`.
 
 > Root goal: the gateway WAF detects attacks precisely instead of being tuned into irrelevance;
 > the browser enforces a strict CSP; and every finding from the 2026-07-02 security review is
@@ -350,14 +353,14 @@ deliberately appended after the text rows so neither gets worse.
 
 | Goal | Concern | Repos | Outcome |
 |---|---|---|---|
-| **G1** — Gateway build modernised and self-maintained | Vendor `coraza-proxy-wasm`; spike the real Go/TinyGo ceiling; upgrade Coraza ≥3.5.0 and CRS ≥4.22.0; gateway builder stage to Minimus | deploy | |
-| **G2** — WAF verification (**HARD GATE**) | CVE-2026-21876 blocked; runtime regex-scoped `ctl:ruleRemoveTargetById` proven to fire; no detection regression | deploy | |
-| **G3** — Payload design fixed at the source | Prompt injection closed; chat transcripts persisted server-side instead of replayed; exam images by URL; `max_length` on free-text fields | backend, frontend, deploy | |
-| **G4** — Exclusions rewritten field-scoped or deleted | Retire the 38-ID block; restore anomaly threshold 5 on the authoring route; disambiguate route priorities | deploy, backend | |
-| **G5** — CSP enforced | Nonce CSP in the existing `proxy.ts`; working report collector; Report-Only soak including the OIDC round-trip; then enforce | frontend | |
-| **G6** — Auth and transport verification | BR-SEC-021 TLS verification to Keycloak; BR-SEC-020 JWT audience; internal TLS (M5); Keycloak realm policy (H3) | backend, deploy | |
-| **G7** — Residual review items | M2/B4 streaming size cap; M3 Jenkins params; M4 Tailscale ACLs; L3 header; documented acceptances; Phase 5.6 parked gaps; 2026-07-27 audit anomalies | deploy, backend, frontend | |
-| **G8** — Review gate and closeout (**HARD GATE**) | Two independent adversarial security-review passes; proxy-wasm upgrade runbook; specs reconciled with what shipped | specs | |
+| **G1** — Gateway build modernised and self-maintained | Vendor `coraza-proxy-wasm`; spike the real Go/TinyGo ceiling; upgrade Coraza ≥3.5.0 and CRS ≥4.22.0; gateway builder stage to Minimus | deploy | ✓ Vendored in `gateway-docker/`; the `git clone` + awk `plugin.go` rewrite is deleted. Coraza **v3.3.3 → v3.7.0**, CRS **v4.14.0 → v4.25.1 LTS**. Go 1.25 / TinyGo 0.39.0. Ten upstream-`0.6.0` divergences documented and **asserted at build time** (5 file patches, 5 version floors). Base images digest-pinned; builder on `reg.mini.dev/go` |
+| **G2** — WAF verification (**HARD GATE**) | CVE-2026-21876 blocked; runtime regex-scoped `ctl:ruleRemoveTargetById` proven to fire; no detection regression | deploy | ✓ Passed, but only after the test itself was fixed **three times** — the original CVE regression test could not fail. Harness runs against a real APISIX on the docker net (`worker_processes 1`, 3 GB cap for the WASM OOM) |
+| **G3** — Payload design fixed at the source | Prompt injection closed; chat transcripts persisted server-side instead of replayed; exam images by URL; `max_length` on free-text fields | backend, frontend, deploy | ✓ `ReviewChatMessage.role` → `Literal["student","ai"]`, closing a live injection hole that let a client add a `system` turn to an authenticated LLM call. V42 persists review chat; V43 migrates base64 `image_url` to files behind `POST /api/exams/images` + `GET /images/questions/{f}`. `max_length` 4000/1000 on free text |
+| **G4** — Exclusions rewritten field-scoped or deleted | Retire the 38-ID block; restore anomaly threshold 5 on the authoring route; disambiguate route priorities | deploy, backend | ✓ Blanket `ctl:ruleRemoveById` **38 → 1**. The survivor (`931130`) is structural, not residue: it targets a `TX` variable, so the `ARGS_POST` regex form that replaced the other 37 cannot apply. 41 field-scoped exclusions are now expressible at all — they were silently inert on v3.3.3 |
+| **G5** — CSP enforced | Nonce CSP in the existing `proxy.ts`; working report collector; Report-Only soak including the OIDC round-trip; then enforce | frontend | ✓ Enforced in prod, Report-Only kept in dev as the CI regression surface. Collector now **persists** reports (it discarded them, making the soak unable to report). All 27 routes dynamic (BR-CSP-010, CI-asserted). Two documented relaxations: `style-src-attr 'unsafe-inline'`, `'wasm-unsafe-eval'` (pdfjs) |
+| **G6** — Auth and transport verification | BR-SEC-021 TLS verification to Keycloak; BR-SEC-020 JWT audience; internal TLS (M5); Keycloak realm policy (H3) | backend, deploy | ✓ `OAUTH__KEYCLOAK__SSL_VERIFY` defaults **true** in compose (was `false` in prod and staging — a finding the July review missed). Realm policy hardened: 12-char, no-username/email, history 3, 30-attempt lockout, `sslRequired external`. **T6.3.4 closed as accepted risk** — no Postgres TLS, reasoning on record |
+| **G7** — Residual review items | M2/B4 streaming size cap; M3 Jenkins params; M4 Tailscale ACLs; L3 header; documented acceptances; Phase 5.6 parked gaps; 2026-07-27 audit anomalies | deploy, backend, frontend | ✓ `RequestBodySizeLimitMiddleware` (streamed, chunked-aware). Jenkins params validated + trigger access restricted. APISIX admin UI disabled and the Admin API closed on staging too. Every `SECURITY_REVIEW_2026-07-02.md` row closed or carrying a written acceptance — **four closed by deciding not to fix, each with reasoning on record** |
+| **G8** — Review gate and closeout (**HARD GATE**) | Two independent adversarial security-review passes; proxy-wasm upgrade runbook; specs reconciled with what shipped | specs | ✓ Pass 2 run **blind, on a different model**. 14 findings, 11 distinct, all fixed or explicitly accepted. **The dominant defect class was false assurance, not missing controls**: a CVE test that could not fail, a WAF gate wired into no pipeline, and a vendoring record that would have led a faithful re-vendor to silently restore the CVE |
 
 DAG spine: G1 → G2 (gate) → G3 → G4 → G5 → G6 → G7 → G8 (gate). G5/G6/G7 are mutually independent
 once G4 lands; G3 may start alongside G1 since it has no dependency on the WAF build; G4 must not
@@ -390,11 +393,89 @@ which were never inside the OpenBao migration boundary.
 
 ---
 
+## Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog (stub, 2026-08-09)
+
+> **Stub only — not yet planned.** Goals below are the intended shape; run `/plan` to produce the
+> goal tree in `PLAN.md` and the task checkboxes in `TASKS.md`, baselined against backend `00c2c73`,
+> frontend `705833d`, deploy `844e8f9`.
+>
+> Primary spec: `target/requirements/14_container_images.md` (written 2026-07-26, unchanged — it
+> already carries the full inventory, version targets and variant-tier policy, so no
+> `/update-target-state` pass is needed to start).
+
+> Root goal: every container image in the stack pulls from **Minimus** (`reg.mini.dev`) at an
+> explicit pinned version tag, and the deploy-layer failure modes that the v2026.6 prod window
+> exposed — all of them fail-open — are closed.
+
+**Why these two concerns share a phase.** They are the same layer. The Minimus migration is about
+what the runtime is built from and whether that is pinned; B5's residual is that the *container
+runtime itself* (rootless Docker / rootlesskit) is unpinned across hosts, which is what broke the
+v2026.6 deploy. Pinning images while leaving the runtime that executes them to drift would fix the
+visible half of one problem.
+
+| Goal | Concern | Repos | Outcome |
+|---|---|---|---|
+| **G1** — Application images | `haisir-backend/Dockerfile` and `haisir-frontend/Dockerfile`: builder **and** runtime stages to `reg.mini.dev` at pinned tags. Removes the current split where the runtime is `cgr.dev/chainguard/{python,node}:latest` and the builder falls back to Docker Hub `python:3.14-slim` / node — a split that exists *only* because Chainguard's free tier has no pinned tag | backend, frontend | |
+| **G2** — Infrastructure images | Postgres+pgvector, APISIX runtime, Keycloak, etcd. **Deletes the from-source pgvector compile** in `postgres-docker/` — Minimus ships a maintained standalone Postgres+pgvector image. Extends hardening to APISIX/Keycloak/etcd, which are plain Docker Hub / quay.io today with none of the non-root/minimal-surface properties | deploy | |
+| **G3** — Monitoring unblocked | Prometheus + Grafana, deferred outright in `decisions.md` 2026-06-18 because Chainguard gated them behind a paid plan. Now free at pinned tags | deploy | |
+| **G4** — Pinning discipline proven | No `:latest` anywhere; `-dev` variants confined to build stages and never shipped; the three components with **no** Minimus equivalent (CrowdSec, HF text-embeddings-inference, dockhand) explicitly recorded as staying put (BR-INFRA-006), not silently missed | deploy | |
+| **G5** — Deploy backlog closed | B1, B3, B4, B5-residual, B6 — see the backlog section below | deploy, backend | |
+
+**Already done, not in scope:** the gateway *builder* stage (`gateway-docker/Dockerfile:69` is on
+`reg.mini.dev/go@<digest>`). That was Phase 7's deliberate carve-out — running the base-image swap
+and the Coraza upgrade behind the same hard gate would have made a G2 failure unattributable
+between the two. The gateway *runtime* stage (`apache/apisix:3.17.0-ubuntu`) is in G2 here.
+
+**Implementation note carried from the spec:** Minimus publishes its own agent migration workflow
+(DISCOVER → SELECT TAG → INSPECT → CHECK FOR SHELL → RESOLVE PACKAGES → WRITE → VERIFY → ANALYZE) at
+`https://api.mini.dev/v1/skills/dockerfile`. Pull it fresh at implementation time — Minimus revises
+it independently of our spec, so a copy cached in this repo would be the stale one.
+
+**Sequencing note.** G5's **B6 is a decision before it is a task**, and it is the most urgent open
+security item on the system (Keycloak admin console reachable at `200` from the public internet).
+It does not depend on G1–G4 and should not wait behind them.
+
+**Also carried from Phase 7, not claimed as done there:**
+
+- A decision on frontend `92a4da2` — a CSP e2e-soak commit that **neither G8 review pass covered**;
+  both ran against the host range ending at `d6adec7`.
+- `question_id` is sent by the frontend on `POST /api/haitu/exam-review-chat` but is not declared on
+  `ExamReviewChatRequest`, so Pydantic drops it — the field is inert. Behaviour is still correct
+  (grounding covers every question in the attempt), but per-question grounding is not what happens.
+  Either declare it and narrow the grounding, or delete it from the payload.
+
+> **Resolved and no longer carried — two of the three close-out items:**
+>
+> 1. **The live end-to-end load of the rebuilt image-serving path.** Image serving and the V43
+>    base64→file migration were both exercised on the deployed stack during the v2026.6 prod window
+>    (2026-08-08), after the B5 route-push failure was fixed.
+> 2. **A real Jenkins run of the WAF gate.** `stage('WAF Functional Gate')`
+>    (`gateway-docker/Jenkinsfile:158`) invokes `common/scripts/tests/waf-harness.sh` with **no `when`
+>    guard**, deliberately placed *before* `Export Image` and `Push to Registry` so a non-filtering
+>    image cannot reach the registry. The v2026.6 gateway image running in prod is therefore itself
+>    the evidence: it could not have been built and pushed without the gate passing. The harness also
+>    carries the **CVE-2026-21876** multipart charset-bypass test (`waf-harness.sh:291–350`), which
+>    asserts the 403 is attributed to rule **922110** rather than accepting a collateral XSS match —
+>    so the CVE regression is gated in CI too. Scope note kept from the Jenkinsfile's own comment:
+>    the gate proves the WAF *runs and filters*, not **which** Coraza/CRS version it runs; the version
+>    floors are asserted at build time in the Dockerfile (`coraza-proxy-wasm/VENDORED.md`).
+
+---
+
 ## Backlog — surfaced during Phase 7 close-out, deliberately not folded into it
 
-> Both were found on 2026-08-07 while verifying the Phase 7 staging deploy, and neither is Phase 7
-> scope. Recorded here rather than retrofitted into a closed phase, so the phase record stays honest
-> about what it actually covered.
+> Found 2026-08-07/08 while verifying the Phase 7 staging and prod deploys. None is Phase 7 scope.
+> Recorded here rather than retrofitted into a closed phase, so the phase record stays honest about
+> what it actually covered.
+>
+> **B1, B3, B4, B5-residual and B6 are claimed by Phase 7.5 G5** (above). **B2 stays in the backlog**
+> — it is not deploy-blocking.
+>
+> Worth naming as a pattern rather than five separate tickets: **B4, B5 and B6 all fail open.**
+> B4 collapses every failure cause into one generic message by swallowing stderr; B5 assumed a host
+> address and silently allowed the wrong one; B6's `template-configs.sh` responds to an empty
+> `*_CIDR` by **dropping the ip-restriction plugin entirely** rather than refusing to template. Each
+> was found by accident, and none would appear in a config diff.
 
 ### B1 — Worker poller sessions sit `idle in transaction` (backend) — **the one worth fixing properly**
 

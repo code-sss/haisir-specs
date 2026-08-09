@@ -4,6 +4,75 @@
 
 ---
 
+## 2026-08-09 — Phase 7 archived; Phase 7.5 scoped (Minimus container images + deploy backlog)
+
+> Context: `/describe-current-state` after the v2026.6 prod deploy. Phase 7 was complete in
+> `progress.md` and `decisions.md` since 2026-08-06 but had never been closed out in the planning
+> docs — `phases.md` still read "active", its Outcome column was empty for all eight goals, and
+> `PLAN.md`/`TASKS.md` were still Phase 7. That is now done, and the `current/` snapshot has been
+> brought forward from 2026-07-29 to the shipped SHAs.
+
+- **Decision: the next phase is 7.5, not 8, and it pairs the Minimus migration with the deploy
+  backlog.** These read as unrelated — base images versus five ops tickets — but they are the same
+  layer. The migration is about what the runtime is built from and whether that is pinned; **B5's
+  residual is that the container runtime itself is unpinned across hosts**, which is what broke the
+  v2026.6 deploy: neither host sets `--port-driver`, so each follows its own rootlesskit version, and
+  the two rewrite the source address differently (`slirp4netns` → `10.0.2.2`, `builtin` → the bridge
+  gateway). Pinning every image while leaving the runtime that executes them to drift would fix the
+  visible half of one problem. Numbering it 7.5 rather than 8 keeps the original Phase 8 scope
+  (CrowdSec AppSec virtual patching) distinct — that is a detection concern, not an image concern.
+- **Decision: B6 is a decision before it is a task, and it does not queue behind G1–G4.** The
+  Keycloak admin console answers `200` from the public internet because `template-configs.sh`
+  responds to an empty `KEYCLOAK_ADMIN_ALLOWED_CIDR` by dropping the ip-restriction plugin rather
+  than refusing to template. The obvious fix is wrong: admin traffic arrives through cftunnel, so
+  `ip-restriction` evaluates the real client IP that `real-ip` extracts — setting the CIDR to the
+  workstation's Tailscale `/32` would lock everyone out of the IdP that authenticates every other
+  service. What must be settled first is **from where the console should be reachable at all**:
+  public-with-allowlist, or off the public gateway and reached over the tailnet. Recorded as an owner
+  decision precisely because it was correctly *not* made at 3am at the end of a deploy window.
+- **Observation worth carrying, not just five tickets: B4, B5 and B6 all fail open.** B4 collapses
+  every failure cause into one generic message by redirecting stderr to `/dev/null`; B5 assumed a
+  host address and silently permitted the wrong one; B6 silently drops a security plugin on a missing
+  variable. Each was found by accident, and **none would appear in a config diff.** This rhymes with
+  Phase 7 G8's finding that the dominant defect class was *false assurance, not missing controls* —
+  a CVE test that could not fail, a WAF gate wired into no pipeline. The same shape, one layer down.
+- **Decision: no `/update-target-state` pass before planning 7.5.**
+  `target/requirements/14_container_images.md` was written 2026-07-26 and still holds — full
+  inventory, version targets, variant-tier policy, and the three components with no Minimus
+  equivalent (CrowdSec, HF text-embeddings-inference, dockhand). Nothing in the Phase 7 window
+  invalidated it. The one thing deliberately *not* copied into the spec is Minimus's own agent
+  migration workflow: pull it fresh from `https://api.mini.dev/v1/skills/dockerfile` at
+  implementation time, since Minimus revises it independently and a cached copy would be the stale one.
+- **Correction to the Phase 7 record: two of the three carried items were already satisfied.**
+  Close-out listed three things as not claimed as done. Two are now closed, and both were closed by
+  *looking* rather than by doing more work — worth noting, since a carried item that was already
+  satisfied is its own small instance of the false-assurance problem G8 was about, pointed the other
+  way.
+  1. **The image-serving path.** Listed as carried because it had only static and unit-test
+     verification — the same basis on which G3.5 originally closed and shipped a broken feature. It
+     was exercised on the deployed stack during the v2026.6 prod window on 2026-08-08, along with
+     V43, after the B5 route-push failure was fixed.
+  2. **A real Jenkins run of the WAF gate.** `stage('WAF Functional Gate')` has **no `when` guard**
+     and is placed before `Export Image` and `Push to Registry`, so a non-filtering image cannot
+     reach the registry — the v2026.6 gateway image running in prod is itself proof the gate ran and
+     passed. The harness additionally carries the CVE-2026-21876 test and asserts attribution to rule
+     **922110** rather than accepting a collateral XSS match, so the CVE regression is gated in CI,
+     not merely tested locally. Scope preserved from the Jenkinsfile's own comment: the gate proves
+     the WAF runs and filters, **not** which Coraza/CRS version it runs — the version floors are a
+     separate build-time assertion in the Dockerfile.
+
+  **One item remains carried:** a decision on frontend `92a4da2` (now an ancestor of `705833d`, still
+  covered by neither G8 review pass).
+- **Recorded, not fixed: `question_id` is dead payload on `POST /api/haitu/exam-review-chat`.** The
+  frontend sends it (commit `3eef131`, "send question_id for server-side review-chat grounding") but
+  `ExamReviewChatRequest` never declared it and Pydantic drops unknown keys. Behaviour is correct —
+  grounding is built from every question in the attempt — so this is not a bug in what users see, but
+  the commit message describes something that does not happen. Either declare the field and narrow
+  the grounding to it, or delete it from the payload. Carried into 7.5 rather than fixed here,
+  because both directions are product calls about how targeted "explain this question" should be.
+
+---
+
 ## 2026-08-06 — Phase 7 close-out (Gateway WAF Modernisation, CSP & Security Review Closeout)
 
 > Context: G8 closing. G1–G7 shipped; this entry records the phase-level outcome and the decisions
