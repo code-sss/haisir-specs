@@ -419,7 +419,75 @@ visible half of one problem.
 | **G2** — Infrastructure images | Postgres+pgvector, APISIX runtime, Keycloak, etcd. **Deletes the from-source pgvector compile** in `postgres-docker/` — Minimus ships a maintained standalone Postgres+pgvector image. Extends hardening to APISIX/Keycloak/etcd, which are plain Docker Hub / quay.io today with none of the non-root/minimal-surface properties | deploy | |
 | **G3** — Monitoring unblocked | Prometheus + Grafana, deferred outright in `decisions.md` 2026-06-18 because Chainguard gated them behind a paid plan. Now free at pinned tags | deploy | |
 | **G4** — Pinning discipline proven | No `:latest` anywhere; `-dev` variants confined to build stages and never shipped; the three components with **no** Minimus equivalent (CrowdSec, HF text-embeddings-inference, dockhand) explicitly recorded as staying put (BR-INFRA-006), not silently missed | deploy | |
-| **G5** — Deploy backlog closed | B1, B3, B4, B5-residual, B6 — see the backlog section below | deploy, backend | |
+| **G5** — Deploy backlog closed | B1, B3, B4, B5-residual — see the backlog section below. **B6 moves to G6**, which fixes it at the mechanism rather than the value | deploy, backend | |
+| **G6** — Env files under release control | The three deploy config files (`{env}/.env`, `{env}/.env.config.sh`, `common/.env.config.common.sh`) become version-controlled and ship with the release instead of being hand-copied to each host. Host-topology values move to `secret/haisir/infra`; `ip-restriction` becomes deny-by-default (**absorbs B6**); the ~130 lines of remote image-tag reconciliation in `deploy.sh` and the entire parallel manual deploy path are deleted | deploy, specs | |
+
+### G6 — Env files under release control
+
+**Why it belongs here.** Every other goal in this phase is about a fail-open deploy-layer default.
+G6 is the same shape: three files that CI cannot see, reconciled by inference against whatever is
+already on the host. It also *contains* B6 — see below.
+
+**Scope guard, non-negotiable:** three files, by exact filename, across all three environments
+(`dev`, `staging`, `prod`). `haisir-deploy/{env}/.env`, `haisir-deploy/{env}/.env.config.sh`,
+`haisir-deploy/common/.env.config.common.sh`. No prefix or suffix variants, no glob or regex
+matching, no other file in those directories.
+
+`dev` is committed for reproducibility only — there is no dev CI deploy path, and dev has no
+host-topology values, so nothing moves to KV for it. Committing it closes the recurring
+"missing dev config var" failures recorded against T3.1, T3.4 and T3.6.
+
+| Subgoal | Concern |
+|---|---|
+| **G6.1** — Host topology to KV (staging, prod) | `TAILSCALE_IP`, `CLIENT_ADMIN_TAILSCALE_IP`, `COMPUTE_TAILSCALE_IP` and every value derived from them move to `secret/haisir/infra`, stored **fully derived**, not as base IPs — `env-setup.sh:128-157` sources both files *before* rendering OpenBao, so a base IP arriving late would leave `${TAILSCALE_IP}/32` evaluating to the literal `/32`. Nine keys per env: `KEYCLOAK_ADMIN_PORT_BINDING`, `BACKEND_DB_PORT_BINDING`, `TAILSCALE_ADMIN_CIDR`, `KEYCLOAK_ADMIN_ALLOWED_CIDR`, `APISIX_ADMIN_ALLOWED_CIDR`, `KC_HOSTNAME_ADMIN`, `EXTRACTION__OLLAMA_BASE_URL`, `EMBEDDING__OLLAMA_BASE_URL`, `HAITU__RERANK_BASE_URL`. All added to `deploy-required-keys.txt` (`envs=staging,prod`) so the existing per-key gate aborts on empty. **`template-configs.sh` must start sourcing `render-secrets-hook.sh`** — it is the only consumer of the CIDRs and the only provisioning script that does not |
+| **G6.2** — `ip-restriction` deny-by-default (**absorbs B6**) | `template-configs.sh:152,168-172` currently deletes the whole plugin when a `*_CIDR` resolves empty. Replace with a deny-all whitelist; never delete the plugin. **Exposure model decided 2026-08-09:** routes 13/14/15 stay on the gateway and deny everything; admin reaches Keycloak over the tailnet, which requires adding `KC_HOSTNAME_ADMIN` to `common/docker-compose.yml`. See the access-loss warning below |
+| **G6.3** — Files into git | `.gitignore` negations for the three names across all three envs; remove the two `.gitleaks.toml:156-157` allowlist entries that exempt `*.env.config.sh` from scanning; `# pragma: allowlist secret` on `dev/.env:13` (`PGADMIN_DEFAULT_PASSWORD` — local-only tool credential, deliberate). **Strip `REMOTE_HOST`, `REMOTE_USER` and `REMOTE_DEPLOY_DIR` from the committed files entirely** — see the credential-clobber finding below |
+| **G6.4** — CI writes them | Delete the five `--exclude` lines (`deploy-lib.sh:130-131`, `:139-141`) and the `prepare_remote()` backup/restore block (`:207-231`); add `--chmod=D700,F600`. **Must land in the same commit as G6.3** — the env rsync carries `--delete` (`:142`), and those excludes are currently the only thing protecting the remote copies from it |
+| **G6.5** — Delete the version reconciliation | `deploy.sh:356-485` (VERSION `sed` + tag resolution), `:169` (`ROLLBACK_VERSION`), `:177-182` (six `*_IMAGE_TAG_OVERRIDE` reads), `:238-258` (their display block), and `image_tags` / `rollback.previous_version` in `releases/manifest-template.yaml`. Keep `:535-574` — that compares `.env` against running containers, which is drift detection, not version arithmetic. Add a Validate-stage assertion that the manifest version equals `VERSION=` in the committed `{env}/.env` |
+| **G6.6** — Retire the manual deploy path | Delete `common/deploy-remote-common.sh`, `staging/deploy-remote.sh`, `prod/deploy-remote.sh`. It is a separately-written second implementation of the same sync that has already drifted from `deploy-lib.sh` (different excludes, different backup set, `${REMOTE_HOST}:` with no `user@`). Keeping it means applying every G6.4 change twice forever. Local deploys become `deploy.sh` with the three `REMOTE_*` vars exported. Check `common/scripts/tests/test-runner.sh`, which reads `REMOTE_HOST` from the env config and will need it from the environment instead |
+
+**Root cause of B6, traced through all three layers** (2026-08-09):
+
+1. `common/.env.config.common.sh:44` sets `KEYCLOAK_ADMIN_ALLOWED_CIDR="${KEYCLOAK_ADMIN_ALLOWED_CIDR:-127.0.0.1/32}"` — a fail-closed default that never fires, because common is sourced *first* and the env file *second*, so any env-level assignment wins. The `:-` guard is decorative.
+2. `prod/.env.config.sh:23` sets it to `""` explicitly.
+3. `template-configs.sh:152` flags empty → `:168-172` deletes `ip-restriction` from routes 13/14/15 → the Keycloak admin console is served to the public internet with no network restriction.
+
+Fixing (3) makes (1) and (2) harmless, which is why G6.2 fixes the mechanism and not the value. The
+change is a net deletion: at `:152`, substitute `127.0.0.1/32` instead of setting
+`strip_ip_restriction=true`; delete the `jq del` block at `:168-172`. An empty whitelist array fails
+`ip-restriction`'s schema, so `127.0.0.1/32` is the schema-valid way to express deny-all — and since
+`real-ip` resolves the client address from `cf-connecting-ip` in prod, no external client can ever
+present it.
+
+> **⚠ Access-loss risk — G6.2 must not land alone.** After the fix,
+> `https://haisir.in/admin/master/console/` returns 403 and the only remaining admin path is the
+> tailnet binding (`KEYCLOAK_ADMIN_PORT_BINDING`, host `:8180` → container `:8443`). But
+> `common/docker-compose.yml:442-443` sets `KC_HOSTNAME=${KC_HOSTNAME}` (= `https://haisir.in`) with
+> `KC_HOSTNAME_STRICT=true` and **no `KC_HOSTNAME_ADMIN`** — so Keycloak generates console URLs
+> against the public hostname and will bounce a tailnet request back to the address that is now
+> denied. Set `KC_HOSTNAME_ADMIN` to the tailnet origin and **verify an admin login over the tailnet
+> works** before the deny-all takes effect. This is precisely the "risks losing admin access to the
+> system that authenticates everything else" concern recorded against B6.
+
+Note `dev/.env.config.sh:54` sets `KEYCLOAK_ADMIN_ALLOWED_CIDR="0.0.0.0/0"` — a deliberate dev
+convenience that stays, but it means dev never exercises the deny-by-default path. G6.2's test has to
+run somewhere other than dev.
+
+**Credential clobber — introduced by the change itself, so it must land inside G6.3.** Today CI never
+sees these files, so `deploy.sh:193-200` takes its `elif [[ -z "${REMOTE_HOST:-}" ]]` branch and the
+Jenkins-injected `REMOTE_HOST`/`REMOTE_USER` credentials survive. Once the files are committed they
+exist in the Jenkins workspace, `load_env_config` sources them, and `staging/.env.config.sh:36` /
+`prod/.env.config.sh:34`'s `export REMOTE_HOST=...` **overwrites the credential**. All three
+`REMOTE_*` vars must therefore leave the committed files outright — not become `${VAR:-default}`,
+which is the same decorative-`:-` pattern that made `common/.env.config.common.sh:44`'s fail-closed
+CIDR default useless.
+
+They are safe to remove: every consumer is deploy-client-side (`deploy.sh`, `deploy-lib.sh`,
+`deploy-remote-common.sh`, `common/scripts/tests/test-runner.sh`). Nothing running on the staging or
+prod host reads them, even though `common/.env.config.common.sh` is rsynced there and sourced on the
+remote. CI supplies `REMOTE_HOST` and `REMOTE_USER` as Jenkins secret-text today; add
+`REMOTE_DEPLOY_DIR` as a third rather than relying on `deploy.sh:204`'s `~/haisir-deploy` fallback
+expanding correctly inside a quoted rsync target.
 
 **Already done, not in scope:** the gateway *builder* stage (`gateway-docker/Dockerfile:69` is on
 `reg.mini.dev/go@<digest>`). That was Phase 7's deliberate carve-out — running the base-image swap
@@ -468,8 +536,9 @@ It does not depend on G1–G4 and should not wait behind them.
 > Recorded here rather than retrofitted into a closed phase, so the phase record stays honest about
 > what it actually covered.
 >
-> **B1, B3, B4, B5-residual and B6 are claimed by Phase 7.5 G5** (above). **B2 stays in the backlog**
-> — it is not deploy-blocking.
+> **B1, B3, B4 and B5-residual are claimed by Phase 7.5 G5** (above). **B6 is claimed by G6.2**,
+> which fixes the fail-open mechanism in `template-configs.sh` rather than setting a CIDR value —
+> see the root-cause trace under G6. **B2 stays in the backlog** — it is not deploy-blocking.
 >
 > Worth naming as a pattern rather than five separate tickets: **B4, B5 and B6 all fail open.**
 > B4 collapses every failure cause into one generic message by swallowing stderr; B5 assumed a host
