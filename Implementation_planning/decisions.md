@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-08-10 — T1.1: Minimus Dockerfile migration workflow pulled
+
+> Fetched `https://api.mini.dev/v1/skills/dockerfile` (GET, HTTP 200, `text/markdown`) on
+> 2026-08-10. The document carries no explicit version/revision field and the response has
+> no `ETag`/`Last-Modified` header, so there is no vendor-issued revision identifier to record.
+> Content fingerprint as a stand-in: `sha256:728c7f196ec70fadc67fa8c083cef929d011fef1c07b51dfd4cd40404a5b6e3f`
+> (re-fetch and re-hash before relying on this at T7.1's ANALYZE step; a changed hash means
+> Minimus revised the workflow). Not cached in-repo per T1.1's instruction — Minimus revises
+> it independently of this spec.
+>
+> Workflow (8 steps, in order): DISCOVER (`images.minimus.io/?search=<keyword>`) → SELECT TAG
+> (match the source Dockerfile's existing version line first, even if EOL) → INSPECT (read
+> `User`/`WorkingDir`/`Entrypoint`/`Cmd`/`Env` from the version's `/specification` page) →
+> CHECK FOR A SHELL (`docker run --rm --entrypoint /bin/sh reg.mini.dev/<name>:<tag> -c 'echo ok'`
+> — production images are usually shell-less) → RESOLVE PACKAGES (apk lookups against
+> `reg.mini.dev/busybox:latest-dev`, package installs go in the `-dev` build stage only) →
+> WRITE (multi-stage: `-dev` build stage as root where needed, exec-form `CMD`/`ENTRYPOINT`
+> in the non-root production stage) → VERIFY (build, then run — read errors against the
+> documented Minimus signature table, e.g. `exec /bin/sh: no such file or directory`) →
+> ANALYZE (cite CVE counts from the image's `images.minimus.io` page).
+>
+> Two facts every G1/G2 task depends on: every image ships exactly two tag variants,
+> `{version}` (production, no shell/package manager) and `{version}-dev` (build stage only) —
+> no `:alpine`/`:slim`/`:debug` upstream-style tags exist; and the plain base is the default —
+> never silently substitute a `-hardened`/`-fips`/`-advanced` variant.
+
+---
+
 ## 2026-08-09 — Phase 7.5 planned (`/plan`): 87 tasks, four owner calls, two challenger rounds
 
 > Context: `/plan` run against the Phase 7.5 stub in `phases.md`, baselined at backend `00c2c73`,

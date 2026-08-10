@@ -18,7 +18,7 @@
 
 ## G1: Application images build and boot from pinned Minimus bases
 
-- [ ] T1.1 [specs]: Pull and record the current Minimus migration workflow
+- [x] T1.1 [specs]: Pull and record the current Minimus migration workflow
 - [ ] T1.2 [backend]: Backend Dockerfile to Minimus, both stages (depends on T1.1)
 - [ ] T1.3 [backend]: Backend runtime container boots on the Minimus base (depends on T1.2)
 - [ ] T1.4 [frontend]: Frontend Dockerfile to Minimus, both stages (depends on T1.1)
