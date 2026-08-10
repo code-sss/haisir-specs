@@ -395,9 +395,20 @@ which were never inside the OpenBao migration boundary.
 
 ## Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog (stub, 2026-08-09)
 
-> **Stub only — not yet planned.** Goals below are the intended shape; run `/plan` to produce the
-> goal tree in `PLAN.md` and the task checkboxes in `TASKS.md`, baselined against backend `00c2c73`,
-> frontend `705833d`, deploy `844e8f9`.
+> **Planned 2026-08-09 via `/plan`** — goal tree in `PLAN.md`, checkboxes in `TASKS.md`, baselined
+> against backend `00c2c73`, frontend `705833d`, deploy `844e8f9`. **87 tasks** (deploy 66, specs 13,
+> backend 6, frontend 2) across seven goals; two challenger rounds run. The goals below are the
+> shape the plan was built from and are unchanged, with three additions the planning cycle decided:
+> **G2 gains T2.9** (Go builder version parity — Phase 7 moved the digest but never checked the
+> version behind it against `go.mod`), **G3 grows** from a stand-up to alert rules + dashboards +
+> alert routing (T3.4–T3.6; no alert rule exists anywhere in the repo today — the paging *policy*
+> stays out, with the destination an owner input at implementation time), and **G7** is added for
+> the specs/close-out work. Full decision record: `decisions.md`, 2026-08-09 planning entry.
+>
+> Two findings from planning worth reading before implementing: `common/.env.config.common.sh:39`/
+> `:44`/`:48` would have made the G6.1 KV migration a no-op **while its own verification passed**,
+> and G6.3/G6.4 as originally split had a legal ordering that shipped the credential clobber the
+> stub warns about. Both are fixed in the plan (T6.1.6/T6.1.8, and T6.3.2 as a single task).
 >
 > Specs: `target/requirements/14_container_images.md` for G1–G4 (written 2026-07-26, unchanged — it
 > already carries the full inventory, version targets and variant-tier policy, so no

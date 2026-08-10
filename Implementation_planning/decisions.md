@@ -4,6 +4,76 @@
 
 ---
 
+## 2026-08-09 — Phase 7.5 planned (`/plan`): 87 tasks, four owner calls, two challenger rounds
+
+> Context: `/plan` run against the Phase 7.5 stub in `phases.md`, baselined at backend `00c2c73`,
+> frontend `705833d`, deploy `844e8f9`. Goal tree in `PLAN.md`, checkboxes in `TASKS.md`. Two
+> challenger rounds run as the skill requires; round 1 raised 20 issues, all applied; round 2
+> validated the dependency graph and corrected three file references and four defective tests.
+
+**Owner decisions taken at scoping, encoded rather than deferred:**
+
+- **Node stays on the 26 (current) line, not 24 LTS.** `haisir-frontend/Dockerfile:2` already builds
+  on `node:26-trixie-slim` and `package.json` declares no `engines`, so G1 becomes a pure registry
+  swap with no runtime-version delta — a build failure is attributable to the base image alone,
+  the same reason Phase 7 carved the gateway builder swap out from the Coraza upgrade. Node 26
+  enters LTS in Oct 2026, so this converges on LTS without a second migration. Resolves the open
+  call `14_container_images.md` handed to the planning cycle.
+- **Go builder parity is in scope, not deferred.** Phase 7 moved `gateway-docker/Dockerfile:69` to
+  `reg.mini.dev/go@${GO_BUILDER_DIGEST}` but never checked the Go version behind that digest against
+  the source. BR-INFRA-004 requires the builder track `go.mod`'s directive exactly. T2.9 resolves the
+  digest to its version and bumps digest, `GO_VERSION` and `go.mod` **together** — never the digest
+  alone, which is the failure mode the rule exists to name.
+- **Monitoring ships alert rules, dashboards and alert routing — but not paging policy.** Grafana
+  with no alerts is a dashboard nobody watches, so rules and dashboards belong here: they are config
+  that ships alongside the images. **No alert rule exists anywhere in the repo today**, so T3.4 is
+  net-new; `common/grafana/provisioning/dashboards/json/` holds exactly one dashboard. The line is
+  drawn at T3.6: it wires the alertmanager route and receiver, but **the destination, escalation and
+  quiet hours are an owner input supplied at implementation time, not a value the plan invents** —
+  the plumbing is engineering, who gets woken at 3am is not. The destination lands in
+  `secret/haisir/infra` under the BR-SEC-022 pattern and is gated by `deploy-required-keys.txt`, so
+  an unset destination aborts the render rather than silently dropping every alert. Recorded as a
+  phase boundary rather than a deferral: nothing downstream waits on the policy. *(Scope confirmed
+  2026-08-10 against a proposal to widen G3 to a full observability build-out; declined.)*
+- **`--port-driver=slirp4netns` on both hosts.** It is the value staging already behaves as (and
+  the `10.0.2.0/24` entry has been in `allow_admin` since before B5), so staging is unchanged and
+  only prod converges. **Both `allow_admin` entries stay** — the `172.19.0.1/32` line added
+  2026-08-08 becomes redundant rather than wrong, and removing a working allowlist entry to tidy
+  up is precisely how B5 happened (T7.7.1 removed `172.19.0.0/16`, and nothing noticed until a
+  deploy broke).
+- **Security-review independence is redefined as different *basis*, not different reviewer.** The
+  Phase 7 G8 failure is the specification: both passes ran against the same commit range, so
+  `92a4da2` fell through a gap neither reviewer knew existed — differing `Reviewer:` lines would
+  not have caught it. T7.6 now requires Pass A to review the **diff** and Pass B to review the
+  **end state** against BR-INFRA-001…007 and BR-SEC-011/022/023 from a fresh session without
+  reading the diff, each declaring its per-repo coverage range, with the union asserted to equal
+  the phase range. That last part is the falsifiable half.
+
+**Two planning findings that changed the plan's shape, both verified against `haisir-deploy` HEAD:**
+
+- **The KV migration would have been a no-op, and its own gate would have passed anyway.**
+  `common/.env.config.common.sh:39`/`:44`/`:48` still export all three admin CIDRs with
+  `${VAR:-127.0.0.1/32}` defaults, and `deploy.sh:591` sources that file **before**
+  `template-configs.sh` runs. So the KV value would never reach the template, `APISIX_ADMIN_ALLOWED_CIDR`
+  on prod would silently revert from B5's `172.19.0.1/32` to `127.0.0.1/32`, `setup.sh` would lose
+  the Admin API and routes would never be pushed — **the v2026.6 failure, reproduced by the fix for
+  it.** Worse, the planned verification (render byte-identical before and after) passes either way,
+  because it cannot distinguish "KV supplied it" from "a `:-` default supplied it". Now T6.1.6
+  (delete the three defaults) plus T6.1.8 (negative control: an unreadable KV must abort the render,
+  not reproduce the output). This is the third time the decorative-`:-` pattern has caused a real
+  failure in this codebase — it is the same shape as B6's inert fail-closed default.
+- **"Same commit" written as prose is not a constraint.** The G6.3/G6.4 split had a legal
+  topological order — commit the files, delete the rsync excludes, run CI — that never included the
+  `REMOTE_*` strip, shipping exactly the credential clobber the note warned about. They are one
+  task now (T6.3.2), so the graph enforces what the prose asserted.
+
+**Sequencing that matters:** G6.2's only ancestors are T6.1.1 → T6.1.3, neither of which touches an
+image. The Keycloak admin console answering `200` from the public internet is therefore reachable in
+three tasks and never queues behind G1–G4 — which was the explicit requirement carried from the
+2026-08-09 scoping entry below.
+
+---
+
 ## 2026-08-09 — Phase 7 archived; Phase 7.5 scoped (Minimus container images + deploy backlog)
 
 > Context: `/describe-current-state` after the v2026.6 prod deploy. Phase 7 was complete in
