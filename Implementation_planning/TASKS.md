@@ -19,7 +19,7 @@
 ## G1: Application images build and boot from pinned Minimus bases
 
 - [x] T1.1 [specs]: Pull and record the current Minimus migration workflow
-- [ ] T1.2 [backend]: Backend Dockerfile to Minimus, both stages (depends on T1.1)
+- [x] T1.2 [backend]: Backend Dockerfile to Minimus, both stages (depends on T1.1) (2026-08-10)
 - [ ] T1.3 [backend]: Backend runtime container boots on the Minimus base (depends on T1.2)
 - [ ] T1.4 [frontend]: Frontend Dockerfile to Minimus, both stages (depends on T1.1)
 - [ ] T1.5 [frontend]: Frontend runtime container boots on the Minimus base (depends on T1.4)
@@ -161,7 +161,20 @@
 
 Tasks with no pending dependencies — can be started immediately:
 
-- T1.1 [specs]: Pull and record the current Minimus migration workflow
+- T1.3 [backend]: Backend runtime container boots on the Minimus base
+- T1.4 [frontend]: Frontend Dockerfile to Minimus, both stages
+- T2.1 [deploy]: App Postgres to the standalone Minimus pgvector image
+- T2.5 [deploy]: APISIX runtime stage to Minimus
+- T2.6 [deploy]: Keycloak to one pinned Minimus tag across dev and prod
+- T2.7 [deploy]: etcd to Minimus
+- T3.1 [deploy]: Add the Prometheus + exporters compose services
+- T4.1 [deploy]: Pin OpenBao to a Minimus image
+- T4.2 [deploy]: Pin the serving-path `other/services` images
+- T4.3 [deploy]: Pin the internal registry to `distribution-registry`
+- T4.4 [deploy]: Pin SonarQube and its Postgres
+- T4.5 [deploy]: Pin nginx-proxy-manager
+- T4.6 [deploy]: Rebuild the Jenkins Docker-in-Docker layer on Minimus
+- T4.7 [deploy]: Opportunistic busybox swap for the init/util images
 - T5.1 [backend]: Release the extraction poller's transaction on an empty poll
 - T5.2 [backend]: Release the essay-grading poller's transaction on an empty poll
 - T5.4 [deploy]: Surface the real cause of a deploy-secret render failure
