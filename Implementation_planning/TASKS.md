@@ -89,7 +89,7 @@
 
 - [x] T6.1.1 [deploy]: `template-configs.sh` sources the render hook (2026-08-10)
 - [x] T6.1.2 [deploy]: Delete `template-configs.sh`'s cross-environment config fallback (depends on T6.1.1) (2026-08-10)
-- [ ] T6.1.3 [deploy]: Seed `KC_HOSTNAME_ADMIN` into KV for staging and prod (depends on T6.1.1)
+- [x] T6.1.3 [deploy]: Seed `KC_HOSTNAME_ADMIN` into KV for staging and prod (depends on T6.1.1) (2026-08-10)
 - [ ] T6.1.4 [deploy]: Seed the other eight infra keys, fully derived (depends on T6.1.3)
 - [ ] T6.1.5 [deploy]: Arm the per-key fail-closed gate for all nine (depends on T6.1.4)
 - [ ] T6.1.6 [deploy]: Delete the three decorative CIDR defaults from the common file (depends on T6.1.5)
@@ -181,4 +181,5 @@ Tasks with no pending dependencies — can be started immediately:
 - T5.8 [deploy]: Pin the rootless container runtime across hosts
 - T5.9 [specs]: Close the review-coverage gap on `92a4da2`
 - T5.10 [backend]: Declare `question_id` on `ExamReviewChatRequest`
-- T6.1.3 [deploy]: Seed `KC_HOSTNAME_ADMIN` into KV for staging and prod
+- T6.1.4 [deploy]: Seed the other eight infra keys, fully derived
+- T6.2.1 [deploy]: Add `KC_HOSTNAME_ADMIN` to the Keycloak service
