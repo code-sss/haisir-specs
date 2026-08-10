@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> **Last baselined: backend:`ad82740` frontend:`53f573b` deploy:`24dff53` (2026-08-10)** — read directly from each sibling repo's HEAD; deploy has an uncommitted change pending (`common/openbao/deploy-required-keys.txt`, arms the `KC_HOSTNAME_ADMIN` fail-closed gate) not yet reflected in this SHA.
+> **Last baselined: backend:`ad82740` frontend:`53f573b` deploy:`d36b9e1` (2026-08-10)** — read directly from each sibling repo's HEAD; deploy has uncommitted changes pending (`common/openbao/deploy-required-keys.txt` arms the `KC_HOSTNAME_ADMIN` fail-closed gate; T2.1's `common/docker-compose.yml` + `dev/docker-compose.yml` pgvector image swap) not yet reflected in this SHA.
 >
 > **Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog.** Scoped 2026-08-09 via `/plan`,
 > two challenger rounds. 87 tasks across four repos. Goal tree, per-task Build/Done-when/Test and
@@ -29,7 +29,7 @@
 
 ## G2: Infrastructure services run on pinned, hardened images
 
-- [ ] T2.1 [deploy]: App Postgres to the standalone Minimus pgvector image (depends on T1.1)
+- [x] T2.1 [deploy]: App Postgres to the standalone Minimus pgvector image (depends on T1.1) (2026-08-10) — three `image:` lines (`common/docker-compose.yml` db-init/db, `dev/docker-compose.yml` postgres) set to `reg.mini.dev/pgvector:${POSTGRES_IMAGE_TAG}` (version held in the existing `POSTGRES_IMAGE_TAG` variable, same `*_IMAGE_TAG` pattern as backend/frontend/keycloak; the value the `deploy.sh` drift loop compares the running container against). **Operator must set `POSTGRES_IMAGE_TAG=0.8.6-pg18`** in `staging/.env` and `prod/.env` (change the existing built-image-tag value) and **add** it to `dev/.env` (dev had no such var — it used a hardcoded `pgvector/pgvector:0.8.2-pg18-trixie`). **Plan's prescribed `:18` tag does not exist** on Minimus; SELECT TAG re-verification (which the plan itself requires) found the real scheme is `0.8.x-pg18`, so the variable value is `0.8.6-pg18`. INSPECT confirmed pgvector 0.8.6 (≥ 0.8.4, no downgrade), shell + `pg_isready`/`psql` present, image default user `0` dropping to `postgres` uid **999**. UID/ownership reconciliation (Chainguard `70` → Minimus `999`) deliberately left to T2.3, so T2.1 alone must not reach staging/prod. T2.1's test is dev-only (dev has no `user:` override; both old and new use uid 999 → no volume wipe). Runtime test not run here — dev stack is off-limits to start; operator to verify after setting the env var: `docker compose -f dev/docker-compose.yml up -d postgres && docker compose -f dev/docker-compose.yml exec postgres psql -U postgres -tAc "SELECT extversion FROM pg_extension WHERE extname='vector'"` (expect `0.8.6`).
 - [ ] T2.2 [deploy]: Delete the from-source pgvector build (depends on T2.1)
 - [ ] T2.3 [deploy]: Re-verify the Postgres data-directory ownership workaround (depends on T2.1)
 - [ ] T2.4 [deploy]: keycloak-db Postgres to Minimus (depends on T2.3)
@@ -163,7 +163,8 @@
 Tasks with no pending dependencies — can be started immediately:
 
 - T1.7 [deploy]: Boot the full application stack on the migrated bases
-- T2.1 [deploy]: App Postgres to the standalone Minimus pgvector image
+- T2.2 [deploy]: Delete the from-source pgvector build
+- T2.3 [deploy]: Re-verify the Postgres data-directory ownership workaround
 - T2.5 [deploy]: APISIX runtime stage to Minimus
 - T2.6 [deploy]: Keycloak to one pinned Minimus tag across dev and prod
 - T2.7 [deploy]: etcd to Minimus
