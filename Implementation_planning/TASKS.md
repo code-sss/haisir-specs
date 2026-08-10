@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> **Last baselined: backend:`00c2c73` frontend:`705833d` deploy:`844e8f9` (2026-08-09)** — read directly from each sibling repo's HEAD, all three working trees clean.
+> **Last baselined: backend:`00c2c73` frontend:`705833d` deploy:`7dffbb0` (2026-08-09)** — read directly from each sibling repo's HEAD, all three working trees clean.
 >
 > **Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog.** Scoped 2026-08-09 via `/plan`,
 > two challenger rounds. 87 tasks across four repos. Goal tree, per-task Build/Done-when/Test and
@@ -87,8 +87,8 @@
 
 ### G6.1: Host topology resolves from KV, fully derived
 
-- [ ] T6.1.1 [deploy]: `template-configs.sh` sources the render hook
-- [ ] T6.1.2 [deploy]: Delete `template-configs.sh`'s cross-environment config fallback (depends on T6.1.1)
+- [x] T6.1.1 [deploy]: `template-configs.sh` sources the render hook (2026-08-10)
+- [x] T6.1.2 [deploy]: Delete `template-configs.sh`'s cross-environment config fallback (depends on T6.1.1) (2026-08-10)
 - [ ] T6.1.3 [deploy]: Seed `KC_HOSTNAME_ADMIN` into KV for staging and prod (depends on T6.1.1)
 - [ ] T6.1.4 [deploy]: Seed the other eight infra keys, fully derived (depends on T6.1.3)
 - [ ] T6.1.5 [deploy]: Arm the per-key fail-closed gate for all nine (depends on T6.1.4)
@@ -169,4 +169,4 @@ Tasks with no pending dependencies — can be started immediately:
 - T5.8 [deploy]: Pin the rootless container runtime across hosts
 - T5.9 [specs]: Close the review-coverage gap on `92a4da2`
 - T5.10 [backend]: Declare `question_id` on `ExamReviewChatRequest`
-- T6.1.1 [deploy]: `template-configs.sh` sources the render hook
+- T6.1.3 [deploy]: Seed `KC_HOSTNAME_ADMIN` into KV for staging and prod
