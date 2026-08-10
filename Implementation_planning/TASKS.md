@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> **Last baselined: backend:`ad82740` frontend:`53f573b` deploy:`7dffbb0` (2026-08-10)** — read directly from each sibling repo's HEAD, all three working trees clean.
+> **Last baselined: backend:`ad82740` frontend:`53f573b` deploy:`24dff53` (2026-08-10)** — read directly from each sibling repo's HEAD; deploy has an uncommitted change pending (`common/openbao/deploy-required-keys.txt`, arms the `KC_HOSTNAME_ADMIN` fail-closed gate) not yet reflected in this SHA.
 >
 > **Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog.** Scoped 2026-08-09 via `/plan`,
 > two challenger rounds. 87 tasks across four repos. Goal tree, per-task Build/Done-when/Test and
@@ -89,7 +89,8 @@
 
 - [x] T6.1.1 [deploy]: `template-configs.sh` sources the render hook (2026-08-10)
 - [x] T6.1.2 [deploy]: Delete `template-configs.sh`'s cross-environment config fallback (depends on T6.1.1) (2026-08-10)
-- [x] T6.1.3 [deploy]: Seed `KC_HOSTNAME_ADMIN` into KV for staging and prod (depends on T6.1.1) (2026-08-10)
+- [x] T6.1.3 [deploy]: Seed `KC_HOSTNAME_ADMIN` into KV for staging and prod (depends on T6.1.1) (2026-08-10) — seeded on both envs (`secret/haisir/infra`), verified non-empty via `bao kv get` on each. `deploy-required-keys.txt` now arms `infra:KC_HOSTNAME_ADMIN:envs=staging,prod` so a future deploy fails closed if this key is ever missing.
+  - **Found + fixed while seeding (both envs)**: `admin-ops` OpenBao identity couldn't log in on either staging or prod (`invalid certificate or no client certificate supplied`). Cert/key/CA chain were all fine (pubkey hash matches the container's trusted CA, `openssl verify` OK, correct `clientAuth` EKU, key not passphrase-protected) — actual cause was that `auth/cert/certs/admin-ops` was simply never registered in OpenBao on either env (`bao read` returned "No value found"). Fixed on both by registering it (`bao write auth/cert/certs/admin-ops display_name=admin-ops policies=admin certificate=@... allowed_common_names=openbao-client-admin-ops ttl=3600`) using each env's bootstrap root token; `admin-ops` now logs in successfully on both and was used to seed the key on prod. Separately noted but NOT the cause: `reissue-ca-keyusage.sh` (2026-08-07) only patched the `apisix-certs` volume and left `openbao-certs-*`/`etcd-certs` on the pre-keyUsage CA cert ("Reconcile in a planned window" — still outstanding, harmless per the script's own same-key invariant, confirmed live).
 - [ ] T6.1.4 [deploy]: Seed the other eight infra keys, fully derived (depends on T6.1.3)
 - [ ] T6.1.5 [deploy]: Arm the per-key fail-closed gate for all nine (depends on T6.1.4)
 - [ ] T6.1.6 [deploy]: Delete the three decorative CIDR defaults from the common file (depends on T6.1.5)
