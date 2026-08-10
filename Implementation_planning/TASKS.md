@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> **Last baselined: backend:`00c2c73` frontend:`53f573b` deploy:`7dffbb0` (2026-08-09)** — read directly from each sibling repo's HEAD, all three working trees clean.
+> **Last baselined: backend:`ad82740` frontend:`53f573b` deploy:`7dffbb0` (2026-08-10)** — read directly from each sibling repo's HEAD, all three working trees clean.
 >
 > **Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog.** Scoped 2026-08-09 via `/plan`,
 > two challenger rounds. 87 tasks across four repos. Goal tree, per-task Build/Done-when/Test and
@@ -20,9 +20,9 @@
 
 - [x] T1.1 [specs]: Pull and record the current Minimus migration workflow
 - [x] T1.2 [backend]: Backend Dockerfile to Minimus, both stages (depends on T1.1) (2026-08-10)
-- [ ] T1.3 [backend]: Backend runtime container boots on the Minimus base (depends on T1.2)
+- [x] T1.3 [backend]: Backend runtime container boots on the Minimus base (depends on T1.2) (2026-08-10)
 - [x] T1.4 [frontend]: Frontend Dockerfile to Minimus, both stages (depends on T1.1) (2026-08-10)
-- [ ] T1.5 [frontend]: Frontend runtime container boots on the Minimus base (depends on T1.4)
+- [x] T1.5 [frontend]: Frontend runtime container boots on the Minimus base (depends on T1.4) (2026-08-10)
 - [ ] T1.6 [deploy]: Reconcile the hardcoded 65532 UID against the Minimus images (depends on T1.3, T1.5)
 - [ ] T1.7 [deploy]: Boot the full application stack on the migrated bases (depends on T1.6)
 - [ ] **G1: Application images build and boot from pinned Minimus bases** — E2E test
@@ -161,8 +161,7 @@
 
 Tasks with no pending dependencies — can be started immediately:
 
-- T1.3 [backend]: Backend runtime container boots on the Minimus base
-- T1.5 [frontend]: Frontend runtime container boots on the Minimus base (depends on T1.4)
+- T1.6 [deploy]: Reconcile the hardcoded 65532 UID against the Minimus images
 - T2.1 [deploy]: App Postgres to the standalone Minimus pgvector image
 - T2.5 [deploy]: APISIX runtime stage to Minimus
 - T2.6 [deploy]: Keycloak to one pinned Minimus tag across dev and prod
