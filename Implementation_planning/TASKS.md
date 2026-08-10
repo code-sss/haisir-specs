@@ -23,8 +23,8 @@
 - [x] T1.3 [backend]: Backend runtime container boots on the Minimus base (depends on T1.2) (2026-08-10)
 - [x] T1.4 [frontend]: Frontend Dockerfile to Minimus, both stages (depends on T1.1) (2026-08-10)
 - [x] T1.5 [frontend]: Frontend runtime container boots on the Minimus base (depends on T1.4) (2026-08-10)
-- [ ] T1.6 [deploy]: Reconcile the hardcoded 65532 UID against the Minimus images (depends on T1.3, T1.5)
-- [ ] T1.7 [deploy]: Boot the full application stack on the migrated bases (depends on T1.6)
+- [x] T1.6 [deploy]: Reconcile the hardcoded 65532 UID against the Minimus images (depends on T1.3, T1.5) (2026-08-10)
+- [ ] T1.7 [deploy]: Boot the full application stack on the migrated bases (depends on T1.6) — BLOCKED: no local environment runs `common/docker-compose.yml`'s backend/worker/frontend (needs OpenBao-rendered secrets + real DB); verify on the next staging deploy carrying T1.2-T1.6, via `docker compose -f common/docker-compose.yml up -d backend worker frontend && sleep 90 && [ "$(docker compose -f common/docker-compose.yml ps --format '{{.Name}} {{.Health}}' | grep -vc healthy)" = 0 ]`
 - [ ] **G1: Application images build and boot from pinned Minimus bases** — E2E test
 
 ## G2: Infrastructure services run on pinned, hardened images
@@ -161,7 +161,7 @@
 
 Tasks with no pending dependencies — can be started immediately:
 
-- T1.6 [deploy]: Reconcile the hardcoded 65532 UID against the Minimus images
+- T1.7 [deploy]: Boot the full application stack on the migrated bases
 - T2.1 [deploy]: App Postgres to the standalone Minimus pgvector image
 - T2.5 [deploy]: APISIX runtime stage to Minimus
 - T2.6 [deploy]: Keycloak to one pinned Minimus tag across dev and prod
