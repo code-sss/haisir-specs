@@ -4,6 +4,87 @@
 
 ---
 
+## 2026-08-10 — T5.9: Review-coverage gap on frontend `92a4da2` closed — verdict CLEAN
+
+> Context: T5.9 [specs]. The Phase 7 G8 security review (both passes,
+> `security/PHASE7_SECURITY_REVIEW_PASS{1,2}.md`) ran against the frontend range
+> `3a57718..d6adec7`. `92a4da2` ("test(csp): add production CSP enforcement e2e
+> soak", 2026-08-06) is `d6adec7`'s immediate child — the very next commit — so
+> it landed outside both passes' coverage. Verified now: `git merge-base
+> --is-ancestor 92a4da2 705833d` is true (it is an ancestor of the frontend
+> baseline), so this is a review-coverage gap, not a merge question. This entry
+> records the verdict the two passes would have returned had the range included
+> it. The review reads `haisir-frontend` code; the deliverable is this entry —
+> no frontend file changes, which is why the task is tagged `[specs]`.
+
+**Verdict: CLEAN — no security findings.** `92a4da2` is a test-only commit
+(142 insertions, two new files: `playwright.prod-csp.config.ts` and
+`tests/e2e/prod-csp/g5-csp-enforce.spec.ts`). It adds no production code, no
+runtime config, no build-time surface. The review's job was to confirm the test
+actually proves what it claims — the recurring Phase 7 defect class was *false
+assurance* (a check that could not fail, a gate wired to no pipeline), so that is
+the lens applied.
+
+The commit closes that defect class rather than repeating it, on three counts:
+
+- **The gate is wired into CI and ordered load-bearing.** `Jenkinsfile` runs a
+  dedicated `stage('CSP Enforcement Soak (prod build)')` (no `when` guard — runs
+  unconditionally) after `stage('Build Next.js')` (`pnpm build` produces `.next`)
+  and before `stage('Build Docker Image')` → `Push to Registry`. The soak's
+  `webServer` runs `pnpm start -p 3011`, which fails fast with "Could not find a
+  production build" if no build precedes it, so the ordering is enforced by the
+  server itself, not just by stage sequence. A non-enforcing CSP policy therefore
+  cannot be promoted to a registry image — the inverse of the `waf-harness.sh`
+  false-assurance defect (a real check wired to nothing), and the commit message
+  + Jenkinsfile comment name that parallel explicitly to guard against
+  regressing into it.
+
+- **The negative test exercises the real browser CSP path, not a bypass.** It
+  injects an unnonced `<script>window.__csp_negative_test_pwned =
+  true;</script>` by rewriting the real HTTP response body via
+  `page.route`/`route.fetch`/`route.fulfill` — deliberately NOT `page.evaluate`,
+  which runs through CDP `Runtime.evaluate` in a context Chromium does not gate
+  by the page CSP (a script created that way would execute regardless of policy
+  and the test would pass for the wrong reason). Rewriting the response body makes
+  the browser's real HTML parser insert the tag, indistinguishable from a genuine
+  reflected/stored XSS payload. This is the correct way to prove CSP `script-src`
+  actually blocks, and the commit documents the `page.evaluate` pitfall inline.
+
+- **The two assertions close each other's pass-for-the-wrong-reason gap.** The
+  load-bearing assertion is `expect(pwned).toBeUndefined()` (the script did not
+  execute); corroborating is `scriptReports.length > 0` (a real `/csp-report`
+  POST was collected). The report endpoint is genuine — `src/proxy.ts` carries
+  `report-uri /csp-report` in the shared directive string and lists `/csp-report`
+  in `PUBLIC_PATHS`, and `tests/e2e/helpers/csp.ts` parses the real POST body,
+  so the corroborating assertion is live, not dead weight. If CSP were
+  accidentally permissive/Report-Only in production the script would run and the
+  first assertion fails for the right reason; if response-body delivery broke
+  parsing such that the tag never reached the parser, no violation report would
+  fire and the second assertion fails for the right reason. Together they make a
+  green run attributable to enforcement, not to a silent skip.
+
+Two non-findings, noted and not blocking: (1) the first test asserts the
+`script-src` directive carries no `'unsafe-inline'` and a nonce is present, but
+does not assert `'strict-dynamic'` — the spec names nonce + strict-dynamic, but
+strict-dynamic governs whether scripts *loaded by* a nonced script need their
+own nonce (a functional concern), not whether an unnonced inline tag executes
+(the bypass the test exists to catch), so the omission does not weaken the test;
+(2) the helper's `violations` array (from the `securitypolicyviolation` page
+event) is dead in this prod soak — the test correctly ignores it and asserts on
+`reportEntries` instead, and the commit message records that `page.on(...)`
+firing is not a real Playwright Page event — so this is documented dead weight,
+not a silent failure.
+
+This entry satisfies T5.9's done-when (a `decisions.md` entry records the review
+verdict on `92a4da2` with a date) and its test (`grep -q '92a4da2'
+Implementation_planning/decisions.md` exits 0). T7.6's dependency on T5.9 is
+met by this verdict existing; T7.6's two fresh-session passes still must declare
+their own per-repo coverage ranges with the union asserted to equal the phase
+range, which is the property `92a4da2` slipping past two same-range passes proved
+was missing.
+
+---
+
 ## 2026-08-10 — T1.1: Minimus Dockerfile migration workflow pulled
 
 > Fetched `https://api.mini.dev/v1/skills/dockerfile` (GET, HTTP 200, `text/markdown`) on

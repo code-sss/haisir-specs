@@ -75,7 +75,7 @@
 - [ ] T5.6 [deploy]: Assert the installed certbot hook matches the repo (depends on T5.5)
 - [ ] T5.7 [deploy]: Assert the installed certbot hook is executable (depends on T5.6)
 - [ ] T5.8 [deploy]: Pin the rootless container runtime across hosts
-- [ ] T5.9 [specs]: Close the review-coverage gap on `92a4da2`
+- [x] T5.9 [specs]: Close the review-coverage gap on `92a4da2` (2026-08-10) — verdict CLEAN recorded in `decisions.md`; `92a4da2` is `d6adec7`'s immediate child (outside both G8 passes' range), an ancestor of `705833d` (coverage gap, not merge question). Test-only commit (CSP enforcement e2e soak); the gate is wired into CI before registry push, the negative test injects via response-body rewrite (not `page.evaluate`/CDP, which bypasses CSP), and the two assertions (script did not execute + real `/csp-report` POST collected) close each other's pass-for-the-wrong-reason gap. See `decisions.md` 2026-08-10 entry.
 - [ ] T5.10 [backend]: Declare `question_id` on `ExamReviewChatRequest`
 - [ ] T5.11 [backend]: Narrow exam-review grounding to the named question (depends on T5.10)
 - [ ] T5.12 [deploy]: Confirm the pollers hold no transaction on staging (depends on T5.3)
@@ -169,7 +169,6 @@ Tasks with no pending dependencies — can be started immediately:
 - T5.4 [deploy]: Surface the real cause of a deploy-secret render failure
 - T5.5 [deploy]: Bring `other/cert/` inside the deploy sync
 - T5.8 [deploy]: Pin the rootless container runtime across hosts
-- T5.9 [specs]: Close the review-coverage gap on `92a4da2`
 - T5.10 [backend]: Declare `question_id` on `ExamReviewChatRequest`
 - T6.1.4 [deploy]: Seed the other eight infra keys, fully derived
 - T6.2.1 [deploy]: Add `KC_HOSTNAME_ADMIN` to the Keycloak service
