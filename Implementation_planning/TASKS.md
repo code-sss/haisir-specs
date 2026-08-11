@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> **Last baselined: backend:`ad82740` frontend:`53f573b` deploy:`7692891` (2026-08-10)** — read directly from each sibling repo's HEAD. The deploy G2 changeset (T2.1–T2.9 Minimus image migration + T2.2 pgvector-build deletion + G2 exec-form healthchecks) is committed in `ba52d17`; G2's E2E (stack-goes-healthy) is deferred to the next staging deploy. T4.1's OpenBao image pin landed in `eb6516a`. T4.2–T4.9 (all of them, including T4.6's Jenkins DinD Minimus rebuild — serving-path/registry/SonarQube/npm/Jenkins image pins, busybox init swaps, BR-INFRA-006 digest pins, stale Jenkins/waf-harness references) landed in `77e7849`. T3.1, T5.4, T5.5, T6.2.1 (monitoring-profile compose services, `KC_HOSTNAME_ADMIN`, deploy-secret render diagnostics, `other/cert/` deploy sync) landed in `7692891`.
+> **Last baselined: backend:`19ee5d5` frontend:`53f573b` deploy:`eb6516a` (2026-08-11)** — read directly from each sibling repo's HEAD. backend:`19ee5d5` lands T5.1/T5.2 (poller idle-in-transaction rollback on empty poll) and T5.10/T5.11 (`question_id` on `ExamReviewChatRequest`, narrowed exam-review grounding). The deploy G2 changeset (T2.1–T2.9 Minimus image migration + T2.2 pgvector-build deletion + G2 exec-form healthchecks) is committed in `ba52d17`; G2's E2E (stack-goes-healthy) is deferred to the next staging deploy. T4.1's OpenBao image pin landed in `eb6516a`. T4.2–T4.9 (all of them, including T4.6's Jenkins DinD Minimus rebuild — serving-path/registry/SonarQube/npm/Jenkins image pins, busybox init swaps, BR-INFRA-006 digest pins, stale Jenkins/waf-harness references) are implemented and live-verified in the working tree, not yet committed — deploy SHA stays `eb6516a` until that commit lands.
 >
 > **Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog.** Scoped 2026-08-09 via `/plan`,
 > two challenger rounds. 87 tasks across four repos. Goal tree, per-task Build/Done-when/Test and
@@ -67,8 +67,8 @@
 
 ## G5: The v2026.6 backlog failure modes are closed
 
-- [ ] T5.1 [backend]: Release the extraction poller's transaction on an empty poll
-- [ ] T5.2 [backend]: Release the essay-grading poller's transaction on an empty poll
+- [x] T5.1 [backend]: Release the extraction poller's transaction on an empty poll (2026-08-11)
+- [x] T5.2 [backend]: Release the essay-grading poller's transaction on an empty poll (2026-08-11)
 - [ ] T5.3 [deploy]: Backstop the dynamic DB roles with an idle-transaction timeout (depends on T5.1, T5.2)
 - [x] T5.4 [deploy]: Surface the real cause of a deploy-secret render failure (2026-08-10) — `bao_deploy_token()` in `common/openbao/render-deploy-secrets.sh` redirected the `bao login` stderr to `/dev/null`, collapsing container-down/sealed-vault/missing-cert/unregistered-role/`docker: command not found`/wrong-socket into one generic message. Now captures stderr to a temp file and, only on empty-token failure, `cat`s it to the real stderr above the existing generic message — fail-closed `exit 1` behavior on the caller side (`render-deploy-secrets.sh:179`) unchanged, only the diagnostic improved. Verified against a nonexistent-container stand-in for openbao-down: the real Docker daemon error (`Error response from daemon: No such container: ...`) now surfaces before the generic message, script still exits 1 cleanly (confirmed the `set -euo pipefail` + command-substitution-inside-`if !` interaction doesn't swallow it). `shellcheck` clean.
 - [x] T5.5 [deploy]: Bring `other/cert/` inside the deploy sync (2026-08-10) — added a third rsync block to `sync_files_to_remote()` in `common/scripts/deploy-lib.sh`, transferring `other/cert/` → `${REMOTE_DIR}/other/cert/` with `--chmod=F755` on that invocation only (file is mode 644 in git; certbot execs it directly, so a content-correct but non-executable copy is still a broken hook). Did not add `--chmod` to the existing `common/`/`${env_name}/` rsyncs (they cover far more than this one path, and `full-setup.sh:268` invokes `setup.sh` directly — stripping the exec bit there breaks the next deploy). Added in `deploy-lib.sh`, not `deploy-remote-common.sh` (T6.6.1 deletes that file). `shellcheck` clean.
@@ -76,8 +76,8 @@
 - [ ] T5.7 [deploy]: Assert the installed certbot hook is executable (depends on T5.6)
 - [ ] T5.8 [deploy]: Pin the rootless container runtime across hosts
 - [x] T5.9 [specs]: Close the review-coverage gap on `92a4da2` (2026-08-10) — verdict CLEAN recorded in `decisions.md`; `92a4da2` is `d6adec7`'s immediate child (outside both G8 passes' range), an ancestor of `705833d` (coverage gap, not merge question). Test-only commit (CSP enforcement e2e soak); the gate is wired into CI before registry push, the negative test injects via response-body rewrite (not `page.evaluate`/CDP, which bypasses CSP), and the two assertions (script did not execute + real `/csp-report` POST collected) close each other's pass-for-the-wrong-reason gap. See `decisions.md` 2026-08-10 entry.
-- [ ] T5.10 [backend]: Declare `question_id` on `ExamReviewChatRequest`
-- [ ] T5.11 [backend]: Narrow exam-review grounding to the named question (depends on T5.10)
+- [x] T5.10 [backend]: Declare `question_id` on `ExamReviewChatRequest` (2026-08-11)
+- [x] T5.11 [backend]: Narrow exam-review grounding to the named question (depends on T5.10) (2026-08-11) — filtered client-side in the existing route-file helper `_build_review_grounding` (no new service/repository method; `get_by_session_id` still called with only `attempt_id`, filtering happens post-fetch). A `question_id` matching no session question in the attempt resolves to empty grounding, not a fallback to the whole attempt.
 - [ ] T5.12 [deploy]: Confirm the pollers hold no transaction on staging (depends on T5.3)
 - [ ] **G5: The v2026.6 backlog failure modes are closed** — E2E test
 
@@ -165,10 +165,8 @@ Tasks with no pending dependencies — can be started immediately:
 - T1.7 [deploy]: Boot the full application stack on the migrated bases
 - T3.2 [deploy]: Add the Grafana compose service
 - T3.4 [deploy]: Write the alert rules
-- T5.1 [backend]: Release the extraction poller's transaction on an empty poll
-- T5.2 [backend]: Release the essay-grading poller's transaction on an empty poll
+- T5.3 [deploy]: Backstop the dynamic DB roles with an idle-transaction timeout
 - T5.6 [deploy]: Assert the installed certbot hook matches the repo
 - T5.8 [deploy]: Pin the rootless container runtime across hosts
-- T5.10 [backend]: Declare `question_id` on `ExamReviewChatRequest`
 - T6.1.4 [deploy]: Seed the other eight infra keys, fully derived
 - T6.2.2 [deploy]: Live gate: prove tailnet admin login works on staging
