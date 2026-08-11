@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> **Last baselined: backend:`ad82740` frontend:`53f573b` deploy:`ba52d17` (2026-08-10)** — read directly from each sibling repo's HEAD. The deploy G2 changeset (T2.1–T2.9 Minimus image migration + T2.2 pgvector-build deletion + G2 exec-form healthchecks) is committed in `ba52d17`; G2's E2E (stack-goes-healthy) is deferred to the next staging deploy.
+> **Last baselined: backend:`ad82740` frontend:`53f573b` deploy:`ba52d17` (2026-08-10)** — read directly from each sibling repo's HEAD. The deploy G2 changeset (T2.1–T2.9 Minimus image migration + T2.2 pgvector-build deletion + G2 exec-form healthchecks) is committed in `ba52d17`; G2's E2E (stack-goes-healthy) is deferred to the next staging deploy. T4.1's OpenBao image pin is implemented in the working tree, not yet committed — deploy SHA stays `ba52d17` until that commit lands.
 >
 > **Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog.** Scoped 2026-08-09 via `/plan`,
 > two challenger rounds. 87 tasks across four repos. Goal tree, per-task Build/Done-when/Test and
@@ -52,7 +52,7 @@
 
 ## G4: No unpinned image can reach a host
 
-- [ ] T4.1 [deploy]: Pin OpenBao to a Minimus image (depends on T1.1)
+- [x] T4.1 [deploy]: Pin OpenBao to a Minimus image (depends on T1.1) (2026-08-10) — all 6 `${OPENBAO_IMAGE:-ghcr.io/openbao/openbao:2.6.0}` image lines (5× `common/docker-compose.yml` vault-agent sidecars + 1× `common/openbao/docker-compose.openbao.yml` server) → `reg.mini.dev/openbao:${OPENBAO_IMAGE_TAG:-2.6.1}` — registry+name hardcoded, only the version in a var, matching the `POSTGRES_IMAGE_TAG`/`KEYCLOAK_IMAGE_TAG`/`ETCD_IMAGE_TAG` convention rather than the old single full-string `OPENBAO_IMAGE` var (which was used nowhere else in the repo — no drift-loop or manifest-override reference to break). Added `OPENBAO_IMAGE_TAG=2.6.1` to `other/env_templates/.env.template`. **Deliberately NOT wired into `deploy.sh`'s drift-detection loop / `image_tags:` manifest override** (owner call): that mechanism only covers `common/docker-compose.yml` services in the `SERVICES`-driven redeploy model (backend/frontend/gateway/keycloak/etcd/postgres); the OpenBao stack (`common/openbao/docker-compose.openbao.yml`, 6 containers) is a separate operator-run lifecycle that `deploy.sh` only health-gates on (`env-setup.sh`'s `check_openbao_ready`), never brings up or redeploys — adding drift detection there would be a new mechanism, not a copy of an existing one. **Operator must add `OPENBAO_IMAGE_TAG=2.6.1`** to `staging/.env` and `prod/.env` (dev doesn't run the openbao stack via `.env`-templated vars the same way — confirm per `common/openbao/README.md`). INSPECT confirmed `reg.mini.dev/openbao:2.6.1` pulls anonymously, has a shell (`/bin/sh`, Alpine-style busybox/ash) so every existing `CMD-SHELL` healthcheck and the server's inline seal-key `sh -c` script survive unchanged — no exec-form rewrite needed (unlike Keycloak in T2.8). Runs as root by default, same as compose assumes today (no `user:` override on any of these services) — no UID reconciliation needed. No `-hardened` variant exists (`2.6.1-hardened`/`2.6-hardened` both 404) → plain tag per BR-INFRA-003. 2.6.1 satisfies the ≥2.6.0 floor for CVE-2025-54996 (BR-SEC-016). `yamllint` and `docker compose config --quiet` both pass on both compose files (the latter's only error, `KC_DB_USERNAME` missing, is a pre-existing unrelated hard-requirement gate, not caused by this change). Runtime test (`docker compose -f common/openbao/docker-compose.openbao.yml up -d && bao status | grep 'Sealed *false'`) deferred to the next staging deploy — local workstation has no mTLS client certs for the OpenBao stack (`common/openbao/certs/` doesn't exist locally; populated at deploy time from the host cert source), same limitation as T2.1/T2.3/T2.4/T2.6/T2.7's deferred runtime tests.
 - [ ] T4.2 [deploy]: Pin the serving-path `other/services` images (depends on T1.1)
 - [ ] T4.3 [deploy]: Pin the internal registry to `distribution-registry` (depends on T1.1)
 - [ ] T4.4 [deploy]: Pin SonarQube and its Postgres (depends on T1.1)
@@ -164,13 +164,13 @@ Tasks with no pending dependencies — can be started immediately:
 
 - T1.7 [deploy]: Boot the full application stack on the migrated bases
 - T3.1 [deploy]: Add the Prometheus + exporters compose services
-- T4.1 [deploy]: Pin OpenBao to a Minimus image
 - T4.2 [deploy]: Pin the serving-path `other/services` images
 - T4.3 [deploy]: Pin the internal registry to `distribution-registry`
 - T4.4 [deploy]: Pin SonarQube and its Postgres
 - T4.5 [deploy]: Pin nginx-proxy-manager
 - T4.6 [deploy]: Rebuild the Jenkins Docker-in-Docker layer on Minimus
 - T4.7 [deploy]: Opportunistic busybox swap for the init/util images
+- T4.9 [deploy]: Rename image references outside the Dockerfiles
 - T5.1 [backend]: Release the extraction poller's transaction on an empty poll
 - T5.2 [backend]: Release the essay-grading poller's transaction on an empty poll
 - T5.4 [deploy]: Surface the real cause of a deploy-secret render failure
