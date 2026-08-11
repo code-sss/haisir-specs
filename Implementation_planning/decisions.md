@@ -4,6 +4,101 @@
 
 ---
 
+## 2026-08-11 — New-OpenBao-identity bring-up now surfaces automatically in release manifests
+
+> Context: same-day follow-up to B8 (below). Owner: "document it properly that these steps need to run
+> when deploying to staging/prod... when we create release manifest, we ensure this is passed."
+
+- `.claude/skills/release-manifest/SKILL.md`'s `pre_checks` detection now flags any **new** file under
+  `common/openbao/policies/*.hcl` or `common/openbao/agent/*-agent.hcl` — a new OpenBao machine
+  identity — and emits the exact 3-step bring-up sequence (regenerate certs with the identity
+  included, `bootstrap.sh configure`, seed its KV path) into the generated manifest. Generic detection,
+  not grafana-specific — covers any future identity the same way.
+- Verified live: `git diff 7692891..HEAD --name-status -- common/openbao/policies/ common/openbao/agent/`
+  correctly finds both `grafana.hcl` files added in B8's commit.
+- `.github/instructions/release-manifest.instructions.md` (the canonical CLAUDE.md-referenced release-
+  manifest reference) documents `pre_checks` as a manifest field for the first time — it existed in the
+  generation skill already but was completely absent from this reference doc's Flags Table.
+- Why `pre_checks` and not `deploy-required-keys.txt`: the latter can only fail-close a deploy *after*
+  an identity's cert already exists on that host — the very first rollout onto a new environment has
+  nothing to fail closed against yet. `pre_checks` is the surfacing mechanism for exactly that gap,
+  shown to the operator before deploy rather than silently producing an unhealthy sidecar.
+
+---
+
+## 2026-08-11 — B8 fixed: grafana added as an 8th OpenBao machine identity
+
+> Context: follow-up to T3.2 in the same session. `/review-deploy` flagged `GRAFANA_ADMIN_PASSWORD` as
+> a plain compose env var (MEDIUM) alongside anonymous Grafana auth (also MEDIUM, fixed immediately —
+> `[auth.anonymous] enabled = false`, one-line toggle, no shared-mechanism risk). B8's fix was
+> initially scoped but deferred as backlog (see prior entry below) because it touches the shared
+> fail-closed deploy gate. Owner pushed back: "this is not secure leaving plain password in .env and
+> anonymous access... go ahead and implement the full B8 fix now."
+
+- Added `grafana` as an 8th OpenBao machine identity, mirroring `db`'s single-secret pattern exactly:
+  `policies/grafana.hcl`, `agent/grafana-agent.hcl` + `agent/templates/grafana-admin-password.ctmpl`,
+  new `vault-agent-grafana` compose service, `openbao-certs-grafana`/`openbao-secrets-grafana`
+  volumes. `grafana.ini` now reads the password via its native `$__file{/etc/secrets/
+  grafana_admin_password}` provider — no env var, nothing in `docker inspect`/`docker exec ... env`.
+  `GRAFANA_ADMIN_PASSWORD` removed from `.env.template` entirely.
+- Updated `bootstrap.sh`, `generate-certs-openbao.sh`, and `render-deploy-secrets.sh`'s resolved-paths
+  loop to include `grafana`. `README.md`'s identity table, secret-layout table, and bring-up example
+  updated to match.
+- **Deliberately excluded from `deploy-required-keys.txt`**: that gate runs on every deploy regardless
+  of profile; Grafana is opt-in (`--profile monitoring`), not always-on like `db`/`keycloak`, so an
+  unconditional requirement there would fail-close every deploy before any environment seeds the key.
+  The `vault-agent-grafana` healthcheck + `grafana`'s `depends_on: condition: service_healthy` already
+  gives equivalent fail-closed behavior, correctly scoped to the monitoring profile only.
+- **Operator action required** before `--profile monitoring` can start anywhere: re-run
+  `generate-certs-openbao.sh` with `grafana` in `OPENBAO_CLIENT_IDENTITIES`, re-run
+  `bootstrap.sh configure`, seed `secret/haisir/grafana GRAFANA_ADMIN_PASSWORD=...`. Full detail in
+  `phases.md`'s B8 entry.
+- Full validation: `shellcheck`/`bash -n` clean on all three shell scripts; `yamllint` clean (no new
+  warnings on `docker-compose.yml`); `docker compose --profile monitoring config --services` lists
+  both `vault-agent-grafana` and `grafana`; `grafana-agent.hcl` parses (verified live — progresses past
+  config parsing to a missing-cert error, not a syntax error, since certs don't exist yet locally);
+  `grafana.hcl` policy structurally diffed identical to the proven `keycloak.hcl` pattern.
+
+---
+
+## 2026-08-11 — T3.2/T3.4: Grafana added, alert rules written; deferred to B7 (alerting) / B8 (secret delivery)
+
+> Context: T3.2 [deploy] (Add the Grafana compose service) and T3.4 [deploy] (Write the alert rules),
+> implemented together (both depend only on the already-done T3.1).
+
+- **T3.2**: `grafana` service added to `common/docker-compose.yml`'s `monitoring` profile at
+  `reg.mini.dev/grafana:13.1.3` (owner-chosen over the initially-verified `13.0`) — live-verified via
+  `docker pull` + `docker inspect`/`docker run` (uid 1000, shell present, `/opt/grafana/run.sh`
+  entrypoint, `3000/tcp` exposed, identical to `13.0`) after `curl` to
+  `auth.mini.dev`/`reg.mini.dev` failed from the assistant's sandbox (network-blocked, consistent with
+  the Tailscale-gated registry pattern already noted for other Minimus pulls); `docker pull` itself
+  worked, so no operator hand-off was needed for this tag verification. `GF_SECURITY_ADMIN_PASSWORD`
+  sourced from a new required `GRAFANA_ADMIN_PASSWORD` env var — no baked-in default admin password.
+  **Found and fixed while wiring this up**: `common/grafana/provisioning/datasources/datasources.yaml`
+  pointed at `http://apisix-prometheus:9090`, a hostname that has never matched the actual compose
+  service name (`prometheus`) — the datasource has been broken since the file was written, before T3.1
+  even existed. Corrected to `http://prometheus:9090`.
+- **T3.4**: `common/prometheus/rules/haisir.rules.yml` added (`TargetDown`, `ApisixHighErrorRate`,
+  `PostgresIdleInTransaction`, `DiskSpaceLow`), referenced via a new `rule_files` entry in
+  `prometheus.yml`. Also added, as necessary corollaries with no data otherwise: an `alerting:`
+  stanza pointing Prometheus at `alertmanager:9093` (previously absent — alertmanager was running but
+  received nothing), and scrape jobs for `node-exporter`/`postgres-exporter` (deployed by T3.1 but
+  never added as scrape targets).
+- **Deferred, not delivered**: T3.4's four other named failure modes — backend/worker/frontend/keycloak
+  "service down" and certificate-expiry-within-21-days — have no metric source anywhere in the stack
+  (no `/metrics` on those four apps, no cert-expiry exporter). Recorded as backlog item **B7** in
+  `phases.md` rather than either inventing a rule against a metric that will never populate, or
+  unilaterally adding a new `blackbox_exporter` service beyond T3.4's stated scope.
+- **Follow-up, same session**: `GRAFANA_ADMIN_PASSWORD` ships as a plain `.env` var (operator-supplied,
+  matching T3.1's `POSTGRES_EXPORTER_DSN`/`NGINX_EXPORTER_SCRAPE_URI` precedent), not OpenBao-delivered.
+  The correct fix — a new `grafana` OpenBao machine identity mirroring `db`'s Vault Agent pattern —
+  touches `render-deploy-secrets.sh`'s resolved-paths loop and `deploy-required-keys.txt`, both shared
+  fail-closed gates for every deploy, not just Grafana's; too large and too risky to fold into T3.2 or
+  invent a new task ID for outside `/plan`. Recorded as backlog item **B8** in `phases.md`, full file
+  list already scoped and ready to implement as its own task in a future `/plan` pass.
+
+---
+
 ## 2026-08-10 — T5.9: Review-coverage gap on frontend `92a4da2` closed — verdict CLEAN
 
 > Context: T5.9 [specs]. The Phase 7 G8 security review (both passes,

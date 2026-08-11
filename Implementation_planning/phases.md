@@ -735,3 +735,102 @@ Three pieces of work once decided: pick the exposure model, set the CIDR (or dro
 the public gateway), and change the empty-variable behaviour from "disable the restriction" to "fail
 the templating" — the current default silently weakens security on a missing value, the same fail-open
 shape as B4's swallowed stderr and B5's `10.0.2.0/24` assumption.
+
+### B7 — No app-level "service down" or certificate-expiry alerting (deploy)
+
+**Found 2026-08-11 while implementing T3.4 (write the alert rules).** T3.4 named six failure modes to
+cover: service down (backend, worker, frontend, apisix, keycloak, db), certificate expiry inside 21
+days, Postgres idle-in-transaction, disk space, and APISIX 5xx rate. Only apisix and db (via
+`postgres-exporter`) are actually observable today — `up{job=...}` has no target to evaluate against
+for backend, worker, frontend or keycloak, because none of the four expose a Prometheus `/metrics`
+endpoint, and no exporter in the stack produces certificate-expiry data at all.
+
+**Why not fixed in T3.4:** writing an alert rule against a metric no exporter ever produces would pass
+`promtool check rules` (syntax only) but never fire — same fail-open shape B4/B5/B6 already named in
+this backlog, just for a monitoring gap instead of a deploy one. T3.4 is `[deploy]` scope; instrumenting
+FastAPI/Node apps to expose `/metrics` is `[backend]`/`[frontend]` work in different repos, so folding
+it into T3.4 would have meant either silently under-delivering four of six failure modes, or
+unilaterally adding a new exporter service beyond what was asked.
+
+**Fix direction:** add a `blackbox_exporter` service (one new `reg.mini.dev` image, same `monitoring`
+profile as the rest of T3.1/T3.2) probing each service's existing HTTP health endpoint —
+`probe_success` covers "is it up" for backend/worker/frontend/keycloak in one shot, and the same probe's
+`probe_ssl_earliest_cert_expiry` metric covers certificate expiry for free, closing both gaps with one
+exporter rather than instrumenting four apps across two repos. Needs a probe-target decision per
+service (health path, TLS vs plaintext) before it's a task-sized unit of work — that's why this is a
+backlog item and not folded into T3.4 directly.
+
+**Rules file:** `common/prometheus/rules/haisir.rules.yml` has a comment at the `TargetDown` rule
+pointing back here so the gap stays visible in the file itself, not just in this doc.
+
+### B8 — `GRAFANA_ADMIN_PASSWORD` is a plain `.env` var, not OpenBao-delivered (deploy) — FIXED 2026-08-11
+
+**Found 2026-08-11 while implementing T3.2 (add the Grafana compose service).** T3.2 wires
+`GF_SECURITY_ADMIN_PASSWORD` from `${GRAFANA_ADMIN_PASSWORD}` in `common/docker-compose.yml`'s
+`environment:` block — a plain compose env var is readable in full by anyone with `docker inspect`/
+`docker exec ... env` access to the host, the exact class of exposure BR-SEC-011 exists to close for
+every other service in the stack (backend/worker/db/keycloak all deliver their passwords via a
+Vault Agent sidecar rendering a file, never through `environment:`).
+
+**Why not fixed in T3.2:** the correct fix is not a Grafana-only change — it means adding `grafana` as
+an 8th OpenBao machine identity (README.md's "Machine identities" table), which touches the shared
+fail-closed deploy gate directly: `common/openbao/render-deploy-secrets.sh`'s resolved-paths loop
+(`for path in db keycloak gateway infra shared keycloak-clients`) and
+`common/openbao/deploy-required-keys.txt` both gate every deploy, staging and prod alike, not just
+Grafana's. Getting the new path name wrong there doesn't just leave Grafana with a bad password — it
+can block every deploy. That is materially bigger and riskier than "add a compose service," and not
+something to fold into T3.2 or invent a new task ID for outside `/plan`.
+
+**Fixed 2026-08-11, owner-requested (implemented the same day it was scoped, after "go ahead and
+implement the full B8 fix now").** Mirrored `db`'s pattern exactly
+(`common/openbao/agent/db-agent.hcl` → `POSTGRES_PASSWORD_FILE`): `grafana` added as an 8th OpenBao
+machine identity — `policies/grafana.hcl` (read-only on `secret/data/haisir/grafana`), a new
+`vault-agent-grafana` sidecar (`agent/grafana-agent.hcl` + `agent/templates/
+grafana-admin-password.ctmpl`), `openbao-certs-grafana`/`openbao-secrets-grafana` volumes, `grafana`'s
+compose service now `depends_on: vault-agent-grafana: condition: service_healthy` and reads the
+password via `grafana.ini`'s native `$__file{/etc/secrets/grafana_admin_password}` provider —
+`GF_SECURITY_ADMIN_PASSWORD` env var removed entirely, `GRAFANA_ADMIN_PASSWORD` removed from
+`.env.template`. `bootstrap.sh`, `generate-certs-openbao.sh` and `render-deploy-secrets.sh`'s
+resolved-paths loop all updated to include `grafana`; `README.md`'s identity table, secret-layout
+table and bring-up example updated to match.
+
+**Deliberately NOT added to `deploy-required-keys.txt`.** That file's `check_required_keys` gate runs
+on *every* deploy regardless of which compose profile is starting — unlike `KC_DB_PASSWORD`/
+`POSTGRES_PASSWORD` (always-on core services, required from an environment's very first boot),
+Grafana is opt-in (`--profile monitoring`). Adding an unconditional requirement there would fail-close
+every deploy — including ones that never touch monitoring — the moment this merged, before any
+environment has seeded `secret/haisir/grafana`. The `vault-agent-grafana` healthcheck
+(`test -s /secrets/grafana_admin_password`) plus `grafana`'s `depends_on: condition: service_healthy`
+already gives the same fail-closed guarantee, correctly scoped to only the monitoring profile.
+
+**Operator action required before the monitoring profile can start on any environment:**
+1. Re-run cert generation with `grafana` included:
+   `OPENBAO_CLIENT_IDENTITIES="... keycloak grafana admin-ops" bash common/scripts/certs/generate-certs-openbao.sh <env-dir>`
+2. Re-run `bootstrap.sh configure` to register the new policy + cert-auth role.
+3. Seed `secret/haisir/grafana GRAFANA_ADMIN_PASSWORD=...` (stdin-safe, per README's seeding
+   convention — never via argv).
+Until all three happen, `vault-agent-grafana` never reports healthy and `grafana` never starts —
+fails closed, doesn't silently run with an empty/default password.
+
+**This is now enforced at the release-manifest level, not left to memory** (2026-08-11, same-day
+follow-up): `/release-manifest`'s `pre_checks` detection (`.claude/skills/release-manifest/SKILL.md`)
+now flags any **new** file under `common/openbao/policies/*.hcl` or `common/openbao/agent/*-agent.hcl`
+— i.e. any new OpenBao machine identity, not just `grafana` — and emits the three-step bring-up
+reminder above into the generated manifest automatically. Verified live against this exact change:
+`git diff 7692891..HEAD --name-status -- common/openbao/policies/ common/openbao/agent/` correctly
+finds both new files. `.github/instructions/release-manifest.instructions.md` documents `pre_checks`
+as a manifest field for the first time (it previously wasn't mentioned there at all).
+
+**Interim, accepted as-is (not a violation):** `GRAFANA_ADMIN_PASSWORD` stays a plain,
+operator-supplied `.env` var for now — same treatment T3.1 already gave `POSTGRES_EXPORTER_DSN` and
+`NGINX_EXPORTER_SCRAPE_URI`, a documented gap rather than a silent one.
+
+**Related, but NOT deferred:** T3.2 also shipped `common/grafana/config/grafana.ini` with
+`[auth.anonymous] enabled = true` / `org_role = Viewer` live for the first time (the setting predates
+T3.1/T3.2 but was dormant until the `grafana` service existed to read it) — flagged in review as
+MEDIUM, and unlike the password-delivery mechanism above, this one was cheap and safe to fix
+immediately rather than defer: `enabled = false`, fixed 2026-08-11, same commit as this entry's
+write-up. The distinction that matters: a one-line config toggle with no shared-mechanism blast
+radius gets fixed now; a change that touches the deploy-wide fail-closed gate gets scoped and
+tracked instead. Owner feedback: security-relevant defaults (auth, exposure) on a new service should
+be surfaced before implementation, not shipped first and caught in review.
