@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> **Last baselined: backend:`ad82740` frontend:`53f573b` deploy:`eb6516a` (2026-08-10)** — read directly from each sibling repo's HEAD. The deploy G2 changeset (T2.1–T2.9 Minimus image migration + T2.2 pgvector-build deletion + G2 exec-form healthchecks) is committed in `ba52d17`; G2's E2E (stack-goes-healthy) is deferred to the next staging deploy. T4.1's OpenBao image pin landed in `eb6516a`. T4.2–T4.9 (all of them, including T4.6's Jenkins DinD Minimus rebuild — serving-path/registry/SonarQube/npm/Jenkins image pins, busybox init swaps, BR-INFRA-006 digest pins, stale Jenkins/waf-harness references) are implemented and live-verified in the working tree, not yet committed — deploy SHA stays `eb6516a` until that commit lands.
+> **Last baselined: backend:`ad82740` frontend:`53f573b` deploy:`eb6516a` (2026-08-10)** — read directly from each sibling repo's HEAD. The deploy G2 changeset (T2.1–T2.9 Minimus image migration + T2.2 pgvector-build deletion + G2 exec-form healthchecks) is committed in `ba52d17`; G2's E2E (stack-goes-healthy) is deferred to the next staging deploy. T4.1's OpenBao image pin landed in `eb6516a`. T4.2–T4.9 (all of them, including T4.6's Jenkins DinD Minimus rebuild — serving-path/registry/SonarQube/npm/Jenkins image pins, busybox init swaps, BR-INFRA-006 digest pins, stale Jenkins/waf-harness references) are implemented and live-verified in the working tree, not yet committed — deploy SHA stays `eb6516a` until that commit lands. **T3.1, T5.4, T5.5, T6.2.1 are also implemented in the working tree, not yet committed** (same session) — deploy SHA stays as above until that commit lands.
 >
 > **Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog.** Scoped 2026-08-09 via `/plan`,
 > two challenger rounds. 87 tasks across four repos. Goal tree, per-task Build/Done-when/Test and
@@ -42,7 +42,7 @@
 
 ## G3: Monitoring is live and alerts fire
 
-- [ ] T3.1 [deploy]: Add the Prometheus + exporters compose services (depends on T1.1)
+- [x] T3.1 [deploy]: Add the Prometheus + exporters compose services (depends on T1.1) (2026-08-10) — added `prometheus`, `alertmanager`, `node-exporter`, `postgres-exporter`, `nginx-prometheus-exporter` to `common/docker-compose.yml` behind a `monitoring` profile (not started by a plain `up`), plus two local (non-external) data volumes. **Plan's "3.11 line" guess was stale** — live registry query (anonymous bearer token against `auth.mini.dev`, `docker manifest inspect` for confirmation) found current stable tags: `prometheus:3.13.2`, `alertmanager:0.33.1`, `node-exporter:1.12.1`, `postgres-exporter:0.20.1`, `nginx-prometheus-exporter:1.5.1`. **Repo-name gotcha**: `reg.mini.dev/alertmanager`, `/node-exporter`, `/postgres-exporter` all resolve (200) but are empty — the real repos are prefixed `prometheus-alertmanager`, `prometheus-node-exporter`, `prometheus-postgres-exporter`; found by testing after the bare names returned zero tags rather than a 404. All five image:tag pairs pulled and `docker inspect`'d live (User/Entrypoint/ExposedPorts), not guessed. Mounts the existing `common/prometheus/prometheus.yml` read-only. `node-exporter` gets the standard host-visibility mounts (`/proc`, `/sys`, `/` ro) + matching `--path.*` flags — without them it only ever sees the container's own filesystem. **Deliberately left unwired**: `postgres-exporter`'s `DATA_SOURCE_NAME` is a bare required var (operator-supplied DSN) — no OpenBao dynamic-credential wiring, that's bigger than T3.1's stated scope; `alertmanager` has no config mount yet (`alertmanager.yml` is T3.6's job, runs on image-default config until then); `nginx-prometheus-exporter`'s `--nginx.scrape-uri` defaults to APISIX's status endpoint, but enabling that endpoint on APISIX itself is not part of T3.1. New `*_IMAGE_TAG` vars + `POSTGRES_EXPORTER_DSN` placeholder documented in `other/env_templates/.env.template`. Validated: `docker compose --env-file staging/.env config --quiet` clean (0 project-caused errors); `--profile monitoring config --services` lists all 18 services (13 existing + 5 new) vs 13 on the default profile; `yamllint` clean on new lines. Runtime test (`curl :9090/-/ready`) not run — no local environment boots `common/docker-compose.yml` (needs OpenBao-rendered secrets), same limitation as every G1/G2 task; deferred to the next staging deploy.
 - [ ] T3.2 [deploy]: Add the Grafana compose service (depends on T3.1)
 - [ ] T3.3 [deploy]: Turn the skipped Prometheus test into a live gate (depends on T3.2)
 - [ ] T3.4 [deploy]: Write the alert rules (depends on T3.1)
@@ -70,8 +70,8 @@
 - [ ] T5.1 [backend]: Release the extraction poller's transaction on an empty poll
 - [ ] T5.2 [backend]: Release the essay-grading poller's transaction on an empty poll
 - [ ] T5.3 [deploy]: Backstop the dynamic DB roles with an idle-transaction timeout (depends on T5.1, T5.2)
-- [ ] T5.4 [deploy]: Surface the real cause of a deploy-secret render failure
-- [ ] T5.5 [deploy]: Bring `other/cert/` inside the deploy sync
+- [x] T5.4 [deploy]: Surface the real cause of a deploy-secret render failure (2026-08-10) — `bao_deploy_token()` in `common/openbao/render-deploy-secrets.sh` redirected the `bao login` stderr to `/dev/null`, collapsing container-down/sealed-vault/missing-cert/unregistered-role/`docker: command not found`/wrong-socket into one generic message. Now captures stderr to a temp file and, only on empty-token failure, `cat`s it to the real stderr above the existing generic message — fail-closed `exit 1` behavior on the caller side (`render-deploy-secrets.sh:179`) unchanged, only the diagnostic improved. Verified against a nonexistent-container stand-in for openbao-down: the real Docker daemon error (`Error response from daemon: No such container: ...`) now surfaces before the generic message, script still exits 1 cleanly (confirmed the `set -euo pipefail` + command-substitution-inside-`if !` interaction doesn't swallow it). `shellcheck` clean.
+- [x] T5.5 [deploy]: Bring `other/cert/` inside the deploy sync (2026-08-10) — added a third rsync block to `sync_files_to_remote()` in `common/scripts/deploy-lib.sh`, transferring `other/cert/` → `${REMOTE_DIR}/other/cert/` with `--chmod=F755` on that invocation only (file is mode 644 in git; certbot execs it directly, so a content-correct but non-executable copy is still a broken hook). Did not add `--chmod` to the existing `common/`/`${env_name}/` rsyncs (they cover far more than this one path, and `full-setup.sh:268` invokes `setup.sh` directly — stripping the exec bit there breaks the next deploy). Added in `deploy-lib.sh`, not `deploy-remote-common.sh` (T6.6.1 deletes that file). `shellcheck` clean.
 - [ ] T5.6 [deploy]: Assert the installed certbot hook matches the repo (depends on T5.5)
 - [ ] T5.7 [deploy]: Assert the installed certbot hook is executable (depends on T5.6)
 - [ ] T5.8 [deploy]: Pin the rootless container runtime across hosts
@@ -101,7 +101,7 @@
 
 ### G6.2: `ip-restriction` denies by default and is always present
 
-- [ ] T6.2.1 [deploy]: Add `KC_HOSTNAME_ADMIN` to the Keycloak service (depends on T6.1.3)
+- [x] T6.2.1 [deploy]: Add `KC_HOSTNAME_ADMIN` to the Keycloak service (depends on T6.1.3) (2026-08-10) — added `KC_HOSTNAME_ADMIN=${KC_HOSTNAME_ADMIN}` to the keycloak service environment in `common/docker-compose.yml`, adjacent to `KC_HOSTNAME`/`KC_HOSTNAME_STRICT`. Value comes from the `secret/haisir/infra` KV key T6.1.3 already seeded on staging and prod — `render-deploy-secrets.sh` emits it automatically, no `.env` edit needed on those two envs. Verified live: `docker compose --env-file staging/.env config` (with an override value) renders `KC_HOSTNAME_ADMIN` distinct from `KC_HOSTNAME` in the keycloak service block, matching the task's own `yq` test. Dev has no render-wrapper pipeline for this compose file — if dev ever runs `common/docker-compose.yml`'s keycloak service, it needs `KC_HOSTNAME_ADMIN` added to `dev/.env` separately (out of scope here, not currently a gap since dev doesn't run this path).
 - [ ] T6.2.2 [deploy]: Live gate: prove tailnet admin login works on staging (depends on T6.2.1)
 - [ ] T6.2.3 [deploy]: Replace plugin-stripping with a deny-all whitelist (depends on T6.2.2)
 - [ ] T6.2.4 [deploy]: Regression test that fails if fail-open returns (depends on T6.2.3)
@@ -163,12 +163,12 @@
 Tasks with no pending dependencies — can be started immediately:
 
 - T1.7 [deploy]: Boot the full application stack on the migrated bases
-- T3.1 [deploy]: Add the Prometheus + exporters compose services
+- T3.2 [deploy]: Add the Grafana compose service
+- T3.4 [deploy]: Write the alert rules
 - T5.1 [backend]: Release the extraction poller's transaction on an empty poll
 - T5.2 [backend]: Release the essay-grading poller's transaction on an empty poll
-- T5.4 [deploy]: Surface the real cause of a deploy-secret render failure
-- T5.5 [deploy]: Bring `other/cert/` inside the deploy sync
+- T5.6 [deploy]: Assert the installed certbot hook matches the repo
 - T5.8 [deploy]: Pin the rootless container runtime across hosts
 - T5.10 [backend]: Declare `question_id` on `ExamReviewChatRequest`
 - T6.1.4 [deploy]: Seed the other eight infra keys, fully derived
-- T6.2.1 [deploy]: Add `KC_HOSTNAME_ADMIN` to the Keycloak service
+- T6.2.2 [deploy]: Live gate: prove tailnet admin login works on staging
