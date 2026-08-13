@@ -378,6 +378,12 @@ task that implements it; none is re-litigated downstream.
 - **Test**: `sleep 1200; [ "$(psql -tAc "SELECT count(*) FROM pg_stat_activity WHERE state='idle in transaction'")" = 0 ]` exits 0.
 - **Depends on**: T5.3 [deploy].
 
+##### T5.13 [deploy] — Fix the certbot hook assertion to survive root ownership and non-`755` modes
+- **Build**: T5.12's live run against prod found T5.6/T5.7's assertion is wrong on two counts, not the host. (1) The installed hook is `-rwx------ root root`; the deploy user has no passwordless sudo, so `assert_certbot_hook_matches()`'s plain `sha256sum` returns *Permission denied*, comes back as an empty hash, and the function's `-z` branch reports "Certbot hook not found at …" — a message that misdirects to a missing file when the file is present and merely unreadable. Read it with `sudo sha256sum` / `sudo stat` instead of a bare user-context read. (2) T5.7 demands mode exactly `755`; the installed copy is `700`, which is functionally correct (root runs certbot, root execs the hook) — loosen the check to "owner-executable" (`stat -c '%a'` first digit is `7`) rather than an exact match.
+- **Done when**: `assert_certbot_hook_matches()` correctly reports match/mismatch against a root-owned, mode-`700` hook without a false "not found", and accepts any owner-executable mode.
+- **Test**: Against a real root-owned `700` copy identical in content to the repo's: the deploy's Step 2b passes. Against a deliberately drifted copy (content changed, still root-owned `700`): Step 2b fails citing a hash mismatch, not "not found".
+- **Depends on**: T5.6 [deploy], T5.7 [deploy].
+
 ---
 
 ## G6 — Env config is version-controlled and fails closed
@@ -544,6 +550,12 @@ task that implements it; none is re-litigated downstream.
 - **Done when**: an admin session is established on the prod console after a grant, and the console returns to 403 after the revoke.
 - **Test**: `keycloak-admin-access.sh grant && [ "$(curl -o /dev/null -sw '%{http_code}' https://haisir.in/admin/master/console/)" = 200 ] && keycloak-admin-access.sh revoke && [ "$(curl -o /dev/null -sw '%{http_code}' https://haisir.in/admin/master/console/)" = 403 ]` exits 0.
 - **Depends on**: T6.2.6 [deploy].
+
+##### T6.2.8 [deploy] — Fix `config.yaml`'s inaccurate `allow_admin` default comment
+- **Build**: `common/apisix_conf/config.yaml:94`'s comment claims `{{TAILSCALE_ADMIN_CIDR}}` "defaults to `127.0.0.1/32` when unset" — no such default exists. T6.2.3's deny-all guard lives in `template-configs.sh` and is gated on `.json` output; `config.yaml` is YAML and never enters that branch. Found while implementing T6.2.3, filed here 2026-08-13. Not a live exposure today — `TAILSCALE_ADMIN_CIDR` and `APISIX_ADMIN_ALLOWED_CIDR` are both seeded in `secret/haisir/infra` and gated `envs=staging,prod` in `deploy-required-keys.txt`, so a missing/empty value on those envs already fails the render closed at the gate, before this comment's claim would ever be tested. The gap is narrower than that: an env outside the gate, or a value that resolves to blanks-only rather than empty, has no fallback the comment promises. Fix the comment to state the true behavior, or extend the deny-all guard to also cover `.yaml`/`.yml` output — owner call on which.
+- **Done when**: `config.yaml`'s comment accurately describes what happens when `TAILSCALE_ADMIN_CIDR` is unset (either because the guard now covers it, or because the comment says there is no default and points at the gate as the real backstop).
+- **Test**: manual read — the comment and the code agree once this lands; no automated assertion, this is a documentation-accuracy fix.
+- **Depends on**: T6.2.3 [deploy].
 
 ---
 
@@ -723,7 +735,7 @@ task that implements it; none is re-litigated downstream.
 - **Build**: Run the two-independent-pass gate over the full Phase 7.5 commit range across all three code repos, per the independence procedure above: **Pass A reviews the diff; Pass B reviews the end state against BR-INFRA-001…007 and BR-SEC-011/022/023 from a fresh session without reading the diff.** Write each to `security/SECURITY_REVIEW_<date>_PHASE7.5_<reviewer>.md`, each carrying a `Reviewer:` line, a `Basis:` line (`diff` or `end-state`) and a `Covered:` line naming the exact per-repo commit range it read. The blast radius is every service in the stack including the database and the identity provider, plus a change that moves admin exposure and a change that commits config files to git. Every code-side task that could introduce a finding must be an ancestor of this task, or it reviews a tree that does not match what ships.
 - **Done when**: the union of the two passes' declared `Covered:` ranges equals the full phase commit range in all three repos, with no gap.
 - **Test**: `[ "$(grep -h '^Basis:' security/SECURITY_REVIEW_*PHASE7.5*.md | sort -u | wc -l)" = 2 ]` exits 0 — two passes on different bases, which is what `92a4da2` slipping past two same-range passes proved is the property that matters.
-- **Depends on**: T7.2 [specs], T7.4 [specs], T7.5 [specs], T3.6 [deploy], T5.3 [deploy], T5.4 [deploy], T5.6 [deploy], T5.7 [deploy], T5.8 [deploy], T5.9 [specs], T5.11 [backend], T5.12 [deploy], T6.5.4 [deploy].
+- **Depends on**: T7.2 [specs], T7.4 [specs], T7.5 [specs], T3.6 [deploy], T5.3 [deploy], T5.4 [deploy], T5.6 [deploy], T5.7 [deploy], T5.8 [deploy], T5.9 [specs], T5.11 [backend], T5.12 [deploy], T5.13 [deploy], T6.5.4 [deploy].
 
 ##### T7.7 [specs] — Fill the Phase 7.5 Outcome column
 - **Build**: Fill the Phase 7.5 Outcome column in `Implementation_planning/phases.md` with the delivered state and the two review verdicts from T7.6.
