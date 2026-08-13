@@ -35,7 +35,7 @@
 ### Scope locks (encoded decisions — do not re-open)
 
 - **Node stays on the 26 (current) line.** `haisir-frontend/Dockerfile:2` already builds on `node:26-trixie-slim` and `package.json` declares no `engines`, so G1 is a pure registry swap with no runtime-version delta and a G1 build failure is attributable to the base image alone. Resolves the "24-LTS vs 26-current" open call in `14_container_images.md`.
-- **Keycloak admin exposure model.** Gateway routes 13/14/15 stay published and deny everything. Admin reaches Keycloak over the tailnet via `KEYCLOAK_ADMIN_PORT_BINDING`. This is what makes `KC_HOSTNAME_ADMIN` load-bearing.
+- **Keycloak admin exposure model. ⟲ REVERSED 2026-08-13 — see T6.2.0.** ~~Gateway routes 13/14/15 stay published and deny everything. Admin reaches Keycloak over the tailnet via `KEYCLOAK_ADMIN_PORT_BINDING`. This is what makes `KC_HOSTNAME_ADMIN` load-bearing.~~ The tailnet-only model **does not work and has been abandoned.** `KC_HOSTNAME_ADMIN` governs only the admin console's own base URLs; the console's `authServerUrl` follows `KC_HOSTNAME`, so the OIDC login redirect still lands on the public hostname and route 14 regardless. It is also server-global, not master-scoped, which is how setting it broke the staging console outright on 2026-08-12. **Current model: routes 13/14/15 stay published on the public hostname and are restricted by `KEYCLOAK_ADMIN_ALLOWED_CIDR` holding the operator's PUBLIC IP CIDR** — the model that worked before v2026.7. `KC_HOSTNAME_ADMIN` is removed from the compose file and from the required-keys gate.
 - **G6.2 does not queue behind G1–G4.** The Keycloak admin console answers `200` from the public internet today. It is the most urgent open security item on the system and has no dependency on any image work. Its only ancestors are `T6.1.1`, `T6.1.2` and `T6.1.3` — none of which touch an image.
 - **G6 scope guard, non-negotiable, applies to every G6 task**: three files by exact filename — `{env}/.env`, `{env}/.env.config.sh`, `common/.env.config.common.sh` — across `dev`, `staging` and `prod`. Seven paths total. No other file, no prefix/suffix variants, no glob or regex matching. `.gitignore` negations, rsync excludes, gitleaks edits, KV migrations **and every test command** are each enumerated by exact path.
 - **The gateway *builder* stage is already done** (`gateway-docker/Dockerfile:69` on `reg.mini.dev/go@${GO_BUILDER_DIGEST}`, Phase 7's carve-out). The gateway *runtime* stage is in G2.
@@ -383,7 +383,7 @@ task that implements it; none is re-litigated downstream.
 ## G6 — Env config is version-controlled and fails closed
 
 **Goal**: The three deploy config files ship with the release instead of being hand-copied to each host, host topology comes from `secret/haisir/infra` fully derived, `ip-restriction` denies by default, and the remote copy is never authoritative.
-**Goal test**: Delete all three env-config files off the staging host, run a CI deploy from a clean workspace, and the deploy completes with the three files present at mode `600` matching the committed copies byte for byte, while `curl -o /dev/null -w '%{http_code}' https://<staging-host>/admin/master/console/` returns `403` and an admin login over the tailnet still succeeds.
+**Goal test**: Delete all three env-config files off the staging host, run a CI deploy from a clean workspace, and the deploy completes with the three files present at mode `600` matching the committed copies byte for byte, while `curl -o /dev/null -w '%{http_code}' https://<staging-host>/admin/master/console/` returns `403` from a non-whitelisted address and `200` from a whitelisted one.
 **Repos**: [deploy] [specs]
 
 > **SCOPE GUARD — applies to every task in G6 without exception.** Three files by exact filename, across `dev`, `staging` and `prod`: `dev/.env`, `staging/.env`, `prod/.env`, `dev/.env.config.sh`, `staging/.env.config.sh`, `prod/.env.config.sh`, `common/.env.config.common.sh`. Seven paths. No prefix or suffix variants, no glob or regex matching, no other file in those directories. Every `.gitignore` negation, rsync exclude, gitleaks entry, KV migration **and every `grep`/`git grep` pathspec in a test command below** is enumerated by exact path.
@@ -393,6 +393,8 @@ task that implements it; none is re-litigated downstream.
 ### G6.1 — Host topology resolves from KV, fully derived
 
 **Subgoal**: Nine host-topology values resolve from `secret/haisir/infra` for staging and prod — eight moved out of the env-config files, plus `KC_HOSTNAME_ADMIN`, which is net-new and appears in none of the seven files today — stored as final values, with a fail-closed gate on each.
+
+> **⟲ Amended 2026-08-13 (T6.2.0): eight, not nine.** `KC_HOSTNAME_ADMIN` was seeded (T6.1.3) and gated (T6.1.5) for a consumer — G6.2's tailnet admin model — that has since been abandoned as unworkable. Its gate entry is removed from `deploy-required-keys.txt`; a stale KV value may remain on staging and is inert. The other eight are unaffected. T6.1.3/T6.1.4/T6.1.5 stay checked off as the historical record of what was seeded.
 **Subgoal test**: On staging with the eight keys removed from both files and the three decorative `:-` CIDR defaults removed from the common file, `bash common/scripts/template-configs.sh` renders every `*_CIDR` and `*_BASE_URL` placeholder to the same value it produced before the move; with `secret/haisir/infra` unreadable, the render aborts non-zero before writing any file.
 **Repos**: [deploy]
 
@@ -408,7 +410,7 @@ task that implements it; none is re-litigated downstream.
 - **Test**: `(cd "$(mktemp -d)" && bash /path/to/haisir-deploy/common/scripts/template-configs.sh)` exits non-zero.
 - **Depends on**: T6.1.1 [deploy].
 
-##### T6.1.3 [deploy] — Seed `KC_HOSTNAME_ADMIN` into KV for staging and prod
+##### T6.1.3 [deploy] — Seed `KC_HOSTNAME_ADMIN` into KV for staging and prod — ⟲ **SUPERSEDED 2026-08-13 by T6.2.0** (done, kept as record; the key it seeded now has no consumer)
 - **Build**: Write the single key `KC_HOSTNAME_ADMIN` into `secret/haisir/infra` for staging and prod, holding its **final** value — the tailnet origin, not the public one. This key is **net-new**: `grep` across all seven in-scope paths at `844e8f9` finds it in none of them, so nothing is being moved and no config file is edited here. It is split out from the other eight because G6.2 — the most urgent open security item on the system — needs only this one, and must not queue behind an eight-key migration across two environments. No new path, policy or machine identity: `secret/haisir/infra` exists and the `deploy` policy already grants read on it.
 - **Done when**: `bao kv get -format=json secret/haisir/infra` returns a non-empty `KC_HOSTNAME_ADMIN` on both staging and prod.
 - **Test**: `[ -n "$(bao kv get -field=KC_HOSTNAME_ADMIN secret/haisir/infra)" ]` exits 0 on each of staging and prod.
@@ -454,31 +456,69 @@ task that implements it; none is re-litigated downstream.
 
 ### G6.2 — `ip-restriction` denies by default and is always present
 
-**Subgoal**: An empty, missing or unrendered `*_CIDR` reduces admin reach to zero instead of publishing the route, and admin access to Keycloak survives the change over the tailnet. (BR-SEC-023; absorbs B6.)
-**Subgoal test**: Render routes 13/14/15 with every `*_CIDR` unset; each rendered file contains `.plugins["ip-restriction"].whitelist == ["127.0.0.1/32"]`, and after applying on staging an admin login over the tailnet succeeds while the public console URL returns 403.
+**Subgoal**: An empty, missing or unrendered `*_CIDR` reduces admin reach to zero instead of publishing the route, and the operator retains admin access to Keycloak over the public hostname from a whitelisted IP. (BR-SEC-023; absorbs B6.)
+**Subgoal test**: Render routes 13/14/15 with every `*_CIDR` unset; each rendered file contains `.plugins["ip-restriction"].whitelist == ["127.0.0.1/32"]`. After applying on staging, `https://<staging-host>/admin/master/console/` returns 403, returns 200 after `keycloak-admin-access.sh grant`, and returns 403 again after `revoke` — while `https://<staging-host>/realms/haisir-realm-staging/.well-known/openid-configuration` returns 200 throughout.
 **Repos**: [deploy]
 
-> **⚠ ACCESS-LOSS RISK — this subgoal must not land out of order.** After the fix, `https://haisir.in/admin/master/console/` returns 403 and the only remaining admin path is the tailnet binding (`KEYCLOAK_ADMIN_PORT_BINDING`, host `:8180` → container `:8443`). `common/docker-compose.yml:442-443` sets `KC_HOSTNAME=${KC_HOSTNAME}` (the public origin) with `KC_HOSTNAME_STRICT=true` and **no `KC_HOSTNAME_ADMIN`**, so Keycloak generates console URLs against the public hostname and bounces a tailnet request back to the address the deny-all now rejects. T6.2.1 and the live T6.2.2 gate both precede T6.2.3.
+> **⟲ SCOPE REVERSAL 2026-08-13 — the tailnet admin model is abandoned. Read this before touching any G6.2 task.**
+>
+> T6.2.1/T6.2.1a/T6.2.1b/T6.2.2 tried to make admin access work over the Tailscale tailnet, via `KC_HOSTNAME_ADMIN` + `KEYCLOAK_ADMIN_PORT_BINDING`. **It cannot work, and it broke things.** Two measured findings, both from the 2026-08-12 gate run:
+> 1. `KC_HOSTNAME_ADMIN` does **not** move the admin console's `authServerUrl` — that follows `KC_HOSTNAME`. The console shell loads over the tailnet, then keycloak-js initialises against the **public** origin to authenticate, hitting route 14, which the deny-all is designed to 403. The tailnet path was never end-to-end.
+> 2. `KC_HOSTNAME_ADMIN` is **server-global, not master-scoped**. Pointing it at the tailnet broke the *public* admin console too — proven by natural experiment against prod, which has never had the variable.
+>
+> `phases.md` recorded the right answer during the v2026.6 window and this plan overrode it: a tailnet `/32` can never match what `ip-restriction` evaluates, because `real-ip` extracts the client address from `cf-connecting-ip`. The corollary the plan missed is that the *converse* also holds — the whitelist has to hold the operator's **public** IP, and once it does, the public path is the working admin path and no tailnet plumbing is needed at all.
+>
+> **The replacement model** (owner call, 2026-08-13): routes 13/14/15 stay published on the public hostname and ship **deny-all**. **No operator CIDR is stored in the deployment at all** — `KEYCLOAK_ADMIN_ALLOWED_CIDR` is *deleted* from KV and from the required-keys gate, not merely set to a safe value (T6.2.0a), so on staging and prod there is nothing that can resolve empty, drift, or fail open. The deny-all comes from T6.2.3's guard in `template-configs.sh`. When an operator needs the console they grant their own public IP directly to the running APISIX with `keycloak-admin-access.sh` (T6.2.0b) and revoke when done; a deploy **preserves** a live grant rather than revoking it mid-session (T6.2.0c). `KC_HOSTNAME_ADMIN` is deleted from compose, from the gate, and from KV. Strictly tighter than the pre-v2026.7 model, which kept a standing allowlist in config.
+>
+> **The one thing this model gives up**: grants no longer self-expire. Nothing but `revoke` closes one. That is the deliberate trade for "a deploy must never revoke access mid-session" — see T6.2.0c.
+>
+> **Why this is not an access-loss risk the way the old plan was.** Routes 13/14/15 match `/admin/*`, `/realms/master/*` and `/resources/*` gated by `^/resources/[^/]+/admin/`. App login is route 01, `/realms/haisir-realm-{{APP_ENV}}/*` (realm name at `common/keycloak/01-realm.json:2`). **Zero path overlap — an admin CIDR change is structurally incapable of affecting normal user authentication.** The only lockout risk left is a wrong CIDR value, recoverable by re-seeding KV and re-pushing routes, provided `APISIX_ADMIN_ALLOWED_CIDR` still admits the Admin API (verify before T6.2.6).
+>
+> **Superseded tasks below are kept, not deleted** — repo convention is to preserve incident history.
 
 > **Ancestry check**: G6.2's only ancestors are T6.1.1 → T6.1.3. Neither touches an image, a Dockerfile or a compose `image:` line, so no G1–G4 task is upstream of this subgoal, directly or transitively.
 
-##### T6.2.1 [deploy] — Add `KC_HOSTNAME_ADMIN` to the Keycloak service
-- **Build**: Add `KC_HOSTNAME_ADMIN=${KC_HOSTNAME_ADMIN}` to the keycloak service environment block in `common/docker-compose.yml`, adjacent to `:442-443`'s `KC_HOSTNAME`/`KC_HOSTNAME_STRICT`. The value comes from T6.1.3's KV key — the tailnet origin, not the public one. Without this, Keycloak's console redirects a tailnet request to the public hostname.
-- **Done when**: `docker compose config` for the keycloak service shows a non-empty `KC_HOSTNAME_ADMIN` distinct from `KC_HOSTNAME`.
-- **Test**: `docker compose -f common/docker-compose.yml config | yq -e '.services.keycloak.environment.KC_HOSTNAME_ADMIN != .services.keycloak.environment.KC_HOSTNAME'` exits 0.
-- **Depends on**: T6.1.3 [deploy].
+##### T6.2.0 [deploy] — Revert `KC_HOSTNAME_ADMIN` and the tailnet admin model
+- **Build**: Three deletions, no replacement. (1) Delete the `KC_HOSTNAME_ADMIN=${KC_HOSTNAME_ADMIN}` line from the keycloak service in `common/docker-compose.yml` — **delete the line, do not merely clear the KV value**: an unset `${KC_HOSTNAME_ADMIN}` expands to an empty string, which Keycloak reads as set-and-invalid rather than absent. (2) Delete the `infra:KC_HOSTNAME_ADMIN:envs=staging,prod` entry and its comment from `common/openbao/deploy-required-keys.txt`, otherwise every staging/prod deploy fails closed on a key with no consumer. (3) Correct `.github/instructions/keycloak.instructions.md`, which tells the reader to set `KEYCLOAK_ADMIN_ALLOWED_CIDR` to a Tailscale CIDR — wrong for any Cloudflare-fronted env and the origin of this whole detour. `KEYCLOAK_ADMIN_PORT_BINDING` is **kept**: it predates this attempt and `deploy.sh:960` runs `setup-keycloak.sh` against it every deploy.
+- **Done when**: no tracked file in `haisir-deploy` references `KC_HOSTNAME_ADMIN` except as historical commentary, and `KEYCLOAK_ADMIN_PORT_BINDING` is untouched.
+- **Test**: `! grep -rn 'KC_HOSTNAME_ADMIN=' common/ && grep -q 'KEYCLOAK_ADMIN_PORT_BINDING' common/docker-compose.yml` exits 0.
+- **Depends on**: none — this is a pure revert and unblocks the rest of G6.2.
 
-##### T6.2.2 [deploy] — Live gate: prove tailnet admin login works on staging
-- **Build**: On staging, with `KC_HOSTNAME_ADMIN` deployed and the deny-all **not yet applied**, log into the Keycloak admin console over the tailnet at `https://<staging-tailnet-ip>:8180/admin/master/console/` and confirm the console loads and authenticates without redirecting to the public hostname. This is a live gate, not a code change; it must run on staging because `dev/.env.config.sh:54`'s `0.0.0.0/0` means dev never exercises this path. Nothing in T6.2.3 onward starts until this passes.
-- **Done when**: an admin session is established on the staging Keycloak console reached over the tailnet binding.
-- **Test**: `curl -sk -o /dev/null -w '%{url_effective} %{http_code}' -L https://<staging-tailnet-ip>:8180/admin/master/console/ | grep -q '<staging-tailnet-ip>.* 200'` exits 0.
-- **Depends on**: T6.2.1 [deploy].
+##### T6.2.0a [deploy] — Delete `KEYCLOAK_ADMIN_ALLOWED_CIDR` (and `KC_HOSTNAME_ADMIN`) from KV and the gate
+- **Build**: Owner call 2026-08-13 — **remove the variable rather than set it**, so there is no stored allowlist to resolve empty, drift, or fail open. (1) Delete the `infra:KEYCLOAK_ADMIN_ALLOWED_CIDR:envs=staging,prod` line from `common/openbao/deploy-required-keys.txt` (done in-repo). (2) Delete **both** `KEYCLOAK_ADMIN_ALLOWED_CIDR` and the stale `KC_HOSTNAME_ADMIN` from `secret/haisir/infra` on staging and prod — live KV, operator action. With the key unset everywhere, `template-configs.sh` renders routes 13/14/15 to the deny-all default (`127.0.0.1/32`) from T6.2.3's guard alone. `dev/.env.config.sh:54` keeps its explicit `0.0.0.0/0` and is the only env where the variable exists.
+- **Why this is also the prod deploy unblocker**: T6.1.5 armed the gate on this key and `check_required_keys()` (`render-deploy-secrets.sh:84-106`) rejects a **seeded-but-empty** value — jq `@sh` renders `""` as exactly `''`. Prod's KV holds `""` (T6.1.9), so **prod's next deploy currently aborts at render time**. Removing the gate entry and the key clears it. Note this changes nothing live on its own: prod's routes are v2026.6-rendered in etcd until T6.2.6 re-pushes them.
+- **Ordering**: delete the gate entry *before* deleting the KV keys, or the deploy fails closed on a key that is gone. Both are safe on their own.
+- **Done when**: neither key exists under `secret/haisir/infra` on staging or prod, and `render-deploy-secrets.sh` exits 0 on both.
+- **Test**: `[ -z "$(bao kv get -format=json secret/haisir/infra | jq -r '.data.data | keys[] | select(. == "KEYCLOAK_ADMIN_ALLOWED_CIDR" or . == "KC_HOSTNAME_ADMIN")')" ] && APP_ENV=prod bash common/openbao/render-deploy-secrets.sh >/dev/null` exits 0.
+- **Depends on**: T6.2.0 [deploy].
+
+##### T6.2.0c [deploy] — A deploy must not revoke a live admin grant
+- **Build**: In `common/scripts/create_route_config.sh`, before the whole-route `PUT`, read the live route from the Admin API; if it already carries `plugins["ip-restriction"].whitelist`, carry that value into the payload. Scoped to that one field — WAF directives, rate limits and upstream still come from the repo, so this preserves an *access decision*, not arbitrary drift. A route with no live whitelist (new host, or the plugin stripped by the pre-T6.2.3 bug) has nothing to preserve and gets the template's deny-all, which is what closes the exposure on first push.
+- **Preservation must be BOUNDED — found by challenger review 2026-08-13, and it was a real hole.** The first cut carried the live value forward unconditionally, which laundered *any* whitelist into permanence: a `0.0.0.0/0` pasted from dev, a fat-fingered `curl`, or a leaked admin key would be re-published by every subsequent deploy and never expire. Demonstrated empirically against a mock Admin API — the deploy re-published `0.0.0.0/0` over the template's deny-all and logged it as a normal "preserving" line. Fix: refuse to preserve any entry broader than `MAX_PRESERVE_PREFIX` (`/24`), fall back to the template's deny-all, and say so loudly. Refusing an illegitimate grant is a deliberate exception to "a deploy never revokes" — the rule protects an operator's own narrow grant, not an unbounded one. `keycloak-admin-access.sh`'s `MIN_GRANT_PREFIX` must stay `>=` this value or the script could issue a grant the next deploy then refuses.
+- **Consequence to document loudly**: grants no longer self-expire. The earlier design leaned on "the next deploy reverts it"; owner call is that a deploy must never revoke access mid-session, so `revoke` is now the *only* thing that closes a grant. `keycloak-admin-access.sh` and the instructions file both say so explicitly.
+- **Done when**: a route push preserves a narrow grant, refuses a broad one, and applies deny-all to a route that has none.
+- **Test**: `common/scripts/tests/route-whitelist-preservation-check.sh` — six cases against a mock Admin API on loopback, offline. Verified it fails when `MAX_PRESERVE_PREFIX` is weakened.
+- **Depends on**: T6.2.0 [deploy].
+
+##### T6.2.0b [deploy] — Grant/revoke script for on-demand admin access
+- **Build**: `common/scripts/keycloak-admin-access.sh` with `status` / `grant [CIDR]` / `revoke`, writing the whitelist on routes `keycloak-admin`, `keycloak-master-realm` and `keycloak-admin-resources` directly through the APISIX Admin API. Sub-path `PATCH /apisix/admin/routes/{id}/plugins/ip-restriction/whitelist` so the route's WAF directives, rate limits and upstream are left untouched — a whole-route `PUT` would mean reconstructing all of that by hand. `grant` with no argument detects the caller's **public** IP; it refuses `0.0.0.0/0`. `revoke` resets to `[127.0.0.1/32]`, never an empty array (fails the plugin's schema). Grants are intentionally **not** persisted — the next deploy re-templates from the repo and reverts them, so a forgotten grant cannot outlive a deploy. Resolve `APISIX_ADMIN_KEY` through the same fail-closed OpenBao hook `setup.sh:115-121` uses. Document the runbook in `.github/instructions/keycloak.instructions.md`.
+- **Done when**: the script grants, reports and revokes against a live APISIX, and the runbook is in the instructions file.
+- **Test**: `bash common/scripts/keycloak-admin-access.sh status` lists all three routes as `deny-all` on a freshly deployed host; `grant 203.0.113.4/32` then `status` shows them granted; `revoke` then `status` returns all three to `deny-all`.
+- **Depends on**: T6.2.0 [deploy].
+
+##### ~~T6.2.1 [deploy] — Add `KC_HOSTNAME_ADMIN` to the Keycloak service~~ — ⟲ **SUPERSEDED by T6.2.0** (shipped, then reverted; kept as record)
+- **Build**: ~~Add `KC_HOSTNAME_ADMIN=${KC_HOSTNAME_ADMIN}` to the keycloak service environment block in `common/docker-compose.yml`.~~ Shipped in v2026.7 and broke the staging admin console. Its test — `KC_HOSTNAME_ADMIN != KC_HOSTNAME` — is satisfied by any wrong value, which is exactly how a dead address passed. **Lesson carried forward to T6.2.5/T6.2.6**: a `*_HOSTNAME_*`/`*_URL` assertion must compare against the live `docker port` mapping, never against another variable.
+
+##### ~~T6.2.1a / T6.2.1b / T6.2.2~~ — ⟲ **SUPERSEDED by T6.2.0** (kept as record; see TASKS.md for the full incident notes)
+- T6.2.1a re-seeded `KC_HOSTNAME_ADMIN` to restore the staging console. Its two operational findings survive the reversal and are still true: `rotate-secret.sh`'s `[restart-container]` argument does **not** apply to compose-env values (`Config.Env` is fixed at create time — a **recreate** is required), and `{env}/.env.runtime` does not exist between deploys and must be regenerated the way `build_compose_cmd` does (`deploy-lib.sh:244-252`).
+- T6.2.1b asked for a Tailscale ACL opening `tcp:8180`. **No longer required.** Optional break-glass only, for running `setup-keycloak.sh` by hand from an operator box; it is not an admin-console path (`KC_HOSTNAME_STRICT=true` rejects browser use).
+- T6.2.2 ran 2026-08-12 and **failed**, producing the two measurements that killed the tailnet model.
 
 ##### T6.2.3 [deploy] — Replace plugin-stripping with a deny-all whitelist
 - **Build**: Net deletion in `common/scripts/template-configs.sh`. At `:152`, substitute `127.0.0.1/32` into `value` instead of setting `strip_ip_restriction=true`. Delete the `jq del(.plugins["ip-restriction"])` block at `:168-172` in full, including its "no restriction — drop the whole plugin" comment. An empty whitelist array fails `ip-restriction`'s own schema, so `127.0.0.1/32` is the schema-valid expression of deny-all — and because `real-ip` resolves the client address from `cf-connecting-ip` in prod, no external client can ever present it. The plugin is now present regardless of how the variable resolves, which also makes `prod/.env.config.sh:23`'s explicit `""` harmless: the mechanism no longer depends on the value.
 - **Done when**: `template-configs.sh` contains no `strip_ip_restriction` variable and no `jq del` call.
 - **Test**: `! grep -qE 'strip_ip_restriction|del\(\.plugins' common/scripts/template-configs.sh` exits 0.
-- **Depends on**: T6.2.2 [deploy].
+- **Depends on**: T6.2.0 [deploy]. *(Was T6.2.2 — the tailnet gate it waited on is withdrawn. The `authServerUrl` question logged against this task on 2026-08-12 is **moot**: route 14 stays reachable from a granted address, so the login redirect resolves normally. Amended: the default must also cover the **unset** case, not just empty, so the guard moves ahead of the `[ -v ]` check.)*
 
 ##### T6.2.4 [deploy] — Regression test that fails if fail-open returns
 - **Build**: Add a test to `common/scripts/tests/` that renders routes `13-keycloak-admin.json`, `14-keycloak-master-realm.json` and `15-keycloak-admin-resources.json` with `KEYCLOAK_ADMIN_ALLOWED_CIDR` unset and asserts the whitelist equals `["127.0.0.1/32"]` — assert the *presence and value*, not the absence of the key. This is the regression the whole subgoal exists to prevent; the original defect produced three cheerful `INFO: ip-restriction disabled` lines and nothing else.
@@ -487,21 +527,22 @@ task that implements it; none is re-litigated downstream.
 - **Depends on**: T6.2.3 [deploy].
 
 ##### T6.2.5 [deploy] — Apply the deny-all on staging
-- **Build**: Re-template and push routes 13/14/15 on staging.
-- **Done when**: the staging public Keycloak console path returns 403.
-- **Test**: `[ "$(curl -o /dev/null -sw '%{http_code}' https://<staging-host>/admin/master/console/)" = 403 ]` exits 0.
-- **Depends on**: T6.2.4 [deploy].
+- **Build**: Re-template and push routes 13/14/15 on staging: `deploy.sh --steps apisix_routes` (→ `setup.sh --routes-only`). No version bump and no image pull. Then run T6.2.0b's script end-to-end on staging — `status` → `grant` → console loads → `revoke` — because staging is where a mistake is cheap.
+- **Done when**: the staging public Keycloak console path returns 403 by default, 200 after `grant`, 403 again after `revoke`, and app login is unaffected throughout.
+- **Test**: `[ "$(curl -o /dev/null -sw '%{http_code}' https://<staging-host>/admin/master/console/)" = 403 ]` and `[ "$(curl -o /dev/null -sw '%{http_code}' https://<staging-host>/realms/haisir-realm-staging/.well-known/openid-configuration)" = 200 ]` both exit 0.
+- **Depends on**: T6.2.4 [deploy], T6.2.0b [deploy].
 
-##### T6.2.6 [deploy] — Apply the deny-all on prod
-- **Build**: Re-template and push routes 13/14/15 on prod. B6's confirmed public reachability was `GET https://haisir.in/admin/master/console/ → 200` and `GET https://haisir.in/realms/master/.well-known/openid-configuration → 200`.
-- **Done when**: the prod public Keycloak console path returns 403.
-- **Test**: `[ "$(curl -o /dev/null -sw '%{http_code}' https://haisir.in/admin/master/console/)" = 403 ]` exits 0 (was `200`).
+##### T6.2.6 [deploy] — Apply the deny-all on prod — 🚫 **[PROD-GATED]**
+> **Deferred by owner call 2026-08-13**: no prod deploy until every non-prod-gated task in this phase is done. This task and T6.2.7 are what the prod window is *for*, not blockers on reaching it. Accepted consequence: prod's admin console stays publicly reachable until then.
+- **Build**: Re-template and push routes 13/14/15 on prod, same `--steps apisix_routes` path. B6's confirmed public reachability was `GET https://haisir.in/admin/master/console/ → 200` and `GET https://haisir.in/realms/master/.well-known/openid-configuration → 200`. **Before running: confirm `APISIX_ADMIN_ALLOWED_CIDR` on prod still admits the Admin API** (B5's `172.19.0.1/32`, not `127.0.0.1/32`) — if `setup.sh` cannot reach the Admin API, routes are never pushed and there is no way to grant access back. This is the v2026.6 failure mode and PLAN.md's T6.1.6 note flags exactly it.
+- **Done when**: the prod public Keycloak console path returns 403 and prod's app login is unaffected.
+- **Test**: `[ "$(curl -o /dev/null -sw '%{http_code}' https://haisir.in/admin/master/console/)" = 403 ]` exits 0 (was `200`), and `[ "$(curl -o /dev/null -sw '%{http_code}' https://haisir.in/realms/haisir-realm-prod/.well-known/openid-configuration)" = 200 ]` exits 0.
 - **Depends on**: T6.2.5 [deploy].
 
-##### T6.2.7 [deploy] — Re-verify tailnet admin login on prod after the deny-all
-- **Build**: Immediately after T6.2.6, re-run the T6.2.2 gate against prod: log into the Keycloak admin console over the prod tailnet binding. Split from T6.2.6 deliberately — "public is denied" and "admin still has a way in" fail independently, and the second one failing is a lockout, so it needs its own explicit pass/fail rather than riding on the 403 check.
-- **Done when**: an admin session is established on the prod Keycloak console reached over the tailnet binding.
-- **Test**: `curl -sk -o /dev/null -w '%{url_effective} %{http_code}' -L https://<prod-tailnet-ip>:8180/admin/master/console/ | grep -q '<prod-tailnet-ip>.* 200'` exits 0.
+##### T6.2.7 [deploy] — Prove admin access can still be granted on prod after the deny-all — 🚫 **[PROD-GATED]**
+- **Build**: Immediately after T6.2.6, run `keycloak-admin-access.sh grant` on prod, log into the admin console over the public hostname, then `revoke`. Split from T6.2.6 deliberately — "public is denied" and "admin still has a way in" fail independently, and the second one failing is a lockout, so it needs its own explicit pass/fail rather than riding on the 403 check.
+- **Done when**: an admin session is established on the prod console after a grant, and the console returns to 403 after the revoke.
+- **Test**: `keycloak-admin-access.sh grant && [ "$(curl -o /dev/null -sw '%{http_code}' https://haisir.in/admin/master/console/)" = 200 ] && keycloak-admin-access.sh revoke && [ "$(curl -o /dev/null -sw '%{http_code}' https://haisir.in/admin/master/console/)" = 403 ]` exits 0.
 - **Depends on**: T6.2.6 [deploy].
 
 ---
@@ -667,9 +708,9 @@ task that implements it; none is re-litigated downstream.
 - **Depends on**: T6.6.3 [deploy], T6.5.4 [deploy].
 
 ##### T7.4 [specs] — Record the committed paths and KV keys in the layout section
-- **Build**: Add the seven committed deploy-config paths and the nine `secret/haisir/infra` topology keys to the KV layout section of `target/requirements/13_secrets_management.md`, enumerated by exact name in both cases.
-- **Done when**: the KV layout section lists all seven paths and all nine key names.
-- **Test**: `[ "$(grep -cE 'KEYCLOAK_ADMIN_PORT_BINDING|BACKEND_DB_PORT_BINDING|TAILSCALE_ADMIN_CIDR|KEYCLOAK_ADMIN_ALLOWED_CIDR|APISIX_ADMIN_ALLOWED_CIDR|KC_HOSTNAME_ADMIN|EXTRACTION__OLLAMA_BASE_URL|EMBEDDING__OLLAMA_BASE_URL|HAITU__RERANK_BASE_URL' target/requirements/13_secrets_management.md)" -ge 9 ]` exits 0.
+- **Build**: Add the seven committed deploy-config paths and the **eight** `secret/haisir/infra` topology keys to the KV layout section of `target/requirements/13_secrets_management.md`, enumerated by exact name in both cases. (Nine at plan time; `KC_HOSTNAME_ADMIN` was reverted by T6.2.0 and must not be listed.) Record that `KEYCLOAK_ADMIN_ALLOWED_CIDR` is **absent from KV entirely** on staging and prod (T6.2.0a) — not "set to a safe value". `127.0.0.1/32` is `template-configs.sh`'s fallback when the key is missing, not a value the variable holds. Do not write that the variable "holds" anything on those envs; dev is the only place it exists.
+- **Done when**: the KV layout section lists all seven paths and all eight key names.
+- **Test**: `[ "$(grep -cE 'KEYCLOAK_ADMIN_PORT_BINDING|BACKEND_DB_PORT_BINDING|TAILSCALE_ADMIN_CIDR|KEYCLOAK_ADMIN_ALLOWED_CIDR|APISIX_ADMIN_ALLOWED_CIDR|EXTRACTION__OLLAMA_BASE_URL|EMBEDDING__OLLAMA_BASE_URL|HAITU__RERANK_BASE_URL' target/requirements/13_secrets_management.md)" -ge 8 ]` exits 0 && `! grep -q KC_HOSTNAME_ADMIN target/requirements/13_secrets_management.md`.
 - **Depends on**: T7.3 [specs].
 
 ##### T7.5 [specs] — Retire the render-hook follow-up item
@@ -691,7 +732,7 @@ task that implements it; none is re-litigated downstream.
 - **Depends on**: T7.6 [specs].
 
 ##### T7.8 [specs] — Record the phase close-out decisions
-- **Build**: Add a `decisions.md` close-out entry covering the four encoded calls: Node 26, the Keycloak tailnet admin exposure model, the deny-by-default `ip-restriction` mechanism, and the rootlesskit/`--port-driver` pin.
+- **Build**: Add a `decisions.md` close-out entry covering the four encoded calls: Node 26, the Keycloak admin exposure model (**deny-all + on-demand grant** — including the tailnet model that was tried and reversed, per the 2026-08-13 entry), the deny-by-default `ip-restriction` mechanism, and the rootlesskit/`--port-driver` pin.
 - **Done when**: `decisions.md` has a Phase 7.5 close-out entry naming all four decisions.
 - **Test**: `grep -A20 'Phase 7.5 close-out' Implementation_planning/decisions.md | grep -qE 'port-driver'` exits 0.
 - **Depends on**: T7.6 [specs].
@@ -703,9 +744,9 @@ task that implements it; none is re-litigated downstream.
 - **Depends on**: T7.6 [specs].
 
 ##### T7.10 [specs] — Add the new load-bearing constraints
-- **Build**: Add to `Implementation_planning/constraints.md` whatever this phase made load-bearing: the seven committed config paths, the `reg.mini.dev` pin requirement, `KC_HOSTNAME_ADMIN` as the tailnet admin origin, and the rootlesskit/`--port-driver` pin.
+- **Build**: Add to `Implementation_planning/constraints.md` whatever this phase made load-bearing: the seven committed config paths, the `reg.mini.dev` pin requirement, **the Keycloak admin deny-all + on-demand-grant model (`keycloak-admin-access.sh`; no standing CIDR in the deployment, and `KC_HOSTNAME_ADMIN` must not be reintroduced)**, and the rootlesskit/`--port-driver` pin.
 - **Done when**: `constraints.md` records all four as constraints.
-- **Test**: `[ "$(grep -cE 'reg\.mini\.dev|KC_HOSTNAME_ADMIN|port-driver|\.env\.config\.common\.sh' Implementation_planning/constraints.md)" -ge 4 ]` exits 0.
+- **Test**: `[ "$(grep -cE 'reg\.mini\.dev|keycloak-admin-access|port-driver|\.env\.config\.common\.sh' Implementation_planning/constraints.md)" -ge 4 ]` exits 0.
 - **Depends on**: T7.6 [specs].
 
 ##### T7.11 [specs] — Re-snapshot `current/`
@@ -722,8 +763,10 @@ task that implements it; none is re-litigated downstream.
 T6.1.1 → T6.1.2 ──────────────────────────────────────────────────────┐
    └→ T6.1.3 → T6.1.4 → T6.1.5 → T6.1.6 → T6.1.7 → T6.1.8 → T6.1.9 ───┤
         │                                                  └→ T6.3.1 ─┤
-        └→ T6.2.1 → T6.2.2 → T6.2.3 → T6.2.4 → T6.2.5 → T6.2.6 → T6.2.7
-             (LIVE GATE: tailnet admin login, staging)                │
+        └→ T6.2.0 → T6.2.0a ─┬→ T6.2.3 → T6.2.4 →─┬→ T6.2.5 ⋮ T6.2.6 → T6.2.7
+           (revert)  (KV del) ├→ T6.2.0b (grant) ──┤  (staging) ⋮  🚫 PROD-GATED
+                              └→ T6.2.0c (preserve)┘            ⋮  (deferred — owner
+           T6.2.1/.1a/.1b/.2 SUPERSEDED — tailnet withdrawn     ⋮   call 2026-08-13)  │
                                                                       ▼
                                      ONE COMMIT: T6.3.2 (.gitignore + REMOTE_* strip
                                                  + gitleaks + rsync excludes + prepare_remote)
@@ -765,6 +808,7 @@ Fully independent of G6: all of G1–G4. Fully independent of G1–G4: all of G6
 ## Ground-truth notes for whoever implements
 
 - `deploy.sh` and `deploy-lib.sh` live at `common/scripts/`, not the repo root. Every `[deploy]` path in G6 is `common/scripts/deploy.sh` / `common/scripts/deploy-lib.sh`.
+- ⟲ **2026-08-13**: `KC_HOSTNAME_ADMIN` is gone — reverted by T6.2.0, and the topology key count is **eight**, not nine. The note below is retained as the record of what was true when the plan was written.
 - Verified at `844e8f9`: `KC_HOSTNAME_ADMIN` appears in **none** of the seven in-scope paths — it is net-new, not a migration. The other eight keys are all present (`KEYCLOAK_ADMIN_PORT_BINDING` in four files, `BACKEND_DB_PORT_BINDING` and the three `*_BASE_URL` keys in `{staging,prod}/.env`, the three `*_CIDR` keys in `{staging,prod}/.env.config.sh` **and** `common/.env.config.common.sh`).
 - Verified at `844e8f9`: `gateway-docker/Dockerfile:157` is `FROM apache/apisix@${APISIX_DIGEST}`, not `apache/apisix:3.17.0-ubuntu`; the digest ARG is at `:54` and `gateway-docker/Jenkinsfile:104`/`:109` read and pull by it.
 - Verified at `844e8f9`: app DB credentials are dynamic OpenBao leases from `common/openbao/bootstrap.sh:265`; there is no app-DB init SQL and no static `haisir_worker` role.

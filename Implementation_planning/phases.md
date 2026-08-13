@@ -454,8 +454,8 @@ host-topology values, so nothing moves to KV for it. Committing it closes the re
 
 | Subgoal | Concern |
 |---|---|
-| **G6.1** — Host topology to KV (staging, prod) — **BR-SEC-022** | `TAILSCALE_IP`, `CLIENT_ADMIN_TAILSCALE_IP`, `COMPUTE_TAILSCALE_IP` and every value derived from them move to `secret/haisir/infra`, stored **fully derived**, not as base IPs — `env-setup.sh:128-157` sources both files *before* rendering OpenBao, so a base IP arriving late would leave `${TAILSCALE_IP}/32` evaluating to the literal `/32`. Nine keys per env: `KEYCLOAK_ADMIN_PORT_BINDING`, `BACKEND_DB_PORT_BINDING`, `TAILSCALE_ADMIN_CIDR`, `KEYCLOAK_ADMIN_ALLOWED_CIDR`, `APISIX_ADMIN_ALLOWED_CIDR`, `KC_HOSTNAME_ADMIN`, `EXTRACTION__OLLAMA_BASE_URL`, `EMBEDDING__OLLAMA_BASE_URL`, `HAITU__RERANK_BASE_URL`. All added to `deploy-required-keys.txt` (`envs=staging,prod`) so the existing per-key gate aborts on empty. **`template-configs.sh` must start sourcing `render-secrets-hook.sh`** — it is the only consumer of the CIDRs and the only provisioning script that does not |
-| **G6.2** — `ip-restriction` deny-by-default (**BR-SEC-023**; **absorbs B6**) | `template-configs.sh:152,168-172` currently deletes the whole plugin when a `*_CIDR` resolves empty. Replace with a deny-all whitelist; never delete the plugin. **Exposure model decided 2026-08-09:** routes 13/14/15 stay on the gateway and deny everything; admin reaches Keycloak over the tailnet, which requires adding `KC_HOSTNAME_ADMIN` to `common/docker-compose.yml`. See the access-loss warning below |
+| **G6.1** — Host topology to KV (staging, prod) — **BR-SEC-022** | `TAILSCALE_IP`, `CLIENT_ADMIN_TAILSCALE_IP`, `COMPUTE_TAILSCALE_IP` and every value derived from them move to `secret/haisir/infra`, stored **fully derived**, not as base IPs — `env-setup.sh:128-157` sources both files *before* rendering OpenBao, so a base IP arriving late would leave `${TAILSCALE_IP}/32` evaluating to the literal `/32`. Nine keys per env: `KEYCLOAK_ADMIN_PORT_BINDING`, `BACKEND_DB_PORT_BINDING`, `TAILSCALE_ADMIN_CIDR`, `KEYCLOAK_ADMIN_ALLOWED_CIDR`, `APISIX_ADMIN_ALLOWED_CIDR`, ~~`KC_HOSTNAME_ADMIN`~~ (**removed 2026-08-13, now eight** — see G6.2's reversal), `EXTRACTION__OLLAMA_BASE_URL`, `EMBEDDING__OLLAMA_BASE_URL`, `HAITU__RERANK_BASE_URL`. All added to `deploy-required-keys.txt` (`envs=staging,prod`) so the existing per-key gate aborts on empty. **`template-configs.sh` must start sourcing `render-secrets-hook.sh`** — it is the only consumer of the CIDRs and the only provisioning script that does not |
+| **G6.2** — `ip-restriction` deny-by-default (**BR-SEC-023**; **absorbs B6**) | `template-configs.sh:152,168-172` currently deletes the whole plugin when a `*_CIDR` resolves empty. Replace with a deny-all whitelist; never delete the plugin. ⟲ **Exposure model REVERSED 2026-08-13** (decided 2026-08-09, tried, measured, withdrawn): ~~admin reaches Keycloak over the tailnet via `KC_HOSTNAME_ADMIN`~~ — that variable does not move the console's `authServerUrl` and is server-global, so the tailnet path never authenticated and setting it broke the public staging console. **Current model:** routes 13/14/15 stay on the gateway and ship deny-all with **no operator CIDR stored anywhere**; access is granted ad hoc to the running APISIX via `common/scripts/keycloak-admin-access.sh` and reverts on the next deploy. See `decisions.md` 2026-08-13 |
 | **G6.3** — Files into git — **BR-SEC-022** (+ the BR-SEC-011 pgadmin exception) | `.gitignore` negations for the three names across all three envs; remove the two `.gitleaks.toml:156-157` allowlist entries that exempt `*.env.config.sh` from scanning; `# pragma: allowlist secret` on `dev/.env:13` (`PGADMIN_DEFAULT_PASSWORD` — local-only tool credential, deliberate). **Strip `REMOTE_HOST`, `REMOTE_USER` and `REMOTE_DEPLOY_DIR` from the committed files entirely** — see the credential-clobber finding below |
 | **G6.4** — CI writes them — **BR-SEC-022** | Delete the five `--exclude` lines (`deploy-lib.sh:130-131`, `:139-141`) and the `prepare_remote()` backup/restore block (`:207-231`); add `--chmod=D700,F600`. **Must land in the same commit as G6.3** — the env rsync carries `--delete` (`:142`), and those excludes are currently the only thing protecting the remote copies from it |
 | **G6.5** — Delete the version reconciliation | `deploy.sh:356-485` (VERSION `sed` + tag resolution), `:169` (`ROLLBACK_VERSION`), `:177-182` (six `*_IMAGE_TAG_OVERRIDE` reads), `:238-258` (their display block), and `image_tags` / `rollback.previous_version` in `releases/manifest-template.yaml`. Keep `:535-574` — that compares `.env` against running containers, which is drift detection, not version arithmetic. Add a Validate-stage assertion that the manifest version equals `VERSION=` in the committed `{env}/.env` |
@@ -474,7 +474,20 @@ change is a net deletion: at `:152`, substitute `127.0.0.1/32` instead of settin
 `real-ip` resolves the client address from `cf-connecting-ip` in prod, no external client can ever
 present it.
 
-> **⚠ Access-loss risk — G6.2 must not land alone.** After the fix,
+> **⟲ SUPERSEDED 2026-08-13 — the paragraph below was acted on, and was wrong.** Setting
+> `KC_HOSTNAME_ADMIN` to the tailnet origin shipped in v2026.7 and broke the staging admin console
+> outright, because the variable is **server-global, not master-scoped**. Worse, it would not have
+> worked even so: it governs the console's own base URLs but **not** its `authServerUrl`, which
+> follows `KC_HOSTNAME` — so the browser is always sent back to the public origin to authenticate.
+> There was never an end-to-end tailnet path to gate on. Kept below as the record of the reasoning
+> that produced the detour.
+>
+> **The actual resolution**: deny-all with no stored CIDR, plus an on-demand grant against the
+> running APISIX (`common/scripts/keycloak-admin-access.sh`). The access-loss concern is real but
+> much narrower than it looked — routes 13/14/15 have **zero path overlap** with route 01
+> (`/realms/haisir-realm-{{APP_ENV}}/*`), so normal user authentication cannot be affected at all.
+>
+> ~~**⚠ Access-loss risk — G6.2 must not land alone.** After the fix,
 > `https://haisir.in/admin/master/console/` returns 403 and the only remaining admin path is the
 > tailnet binding (`KEYCLOAK_ADMIN_PORT_BINDING`, host `:8180` → container `:8443`). But
 > `common/docker-compose.yml:442-443` sets `KC_HOSTNAME=${KC_HOSTNAME}` (= `https://haisir.in`) with
@@ -482,7 +495,7 @@ present it.
 > against the public hostname and will bounce a tailnet request back to the address that is now
 > denied. Set `KC_HOSTNAME_ADMIN` to the tailnet origin and **verify an admin login over the tailnet
 > works** before the deny-all takes effect. This is precisely the "risks losing admin access to the
-> system that authenticates everything else" concern recorded against B6.
+> system that authenticates everything else" concern recorded against B6.~~
 
 Note `dev/.env.config.sh:54` sets `KEYCLOAK_ADMIN_ALLOWED_CIDR="0.0.0.0/0"` — a deliberate dev
 convenience that stays, but it means dev never exercises the deny-by-default path. G6.2's test has to

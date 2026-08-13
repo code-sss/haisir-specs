@@ -4,6 +4,119 @@
 
 ---
 
+## 2026-08-13 — G6.2 scope reversal: tailnet-only Keycloak admin abandoned; deny-all + on-demand grant instead
+
+> Context: G6.2's exposure model, decided 2026-08-09, was implemented across T6.1.3/T6.1.5/T6.2.1 and
+> shipped in v2026.7. It broke the staging admin console and its own gate (T6.2.2) failed on
+> 2026-08-12. Owner: "abandon tailnet-only access, fix the CIDR whitelist instead… we dont need to
+> expose any cidr in the deployment for allowlist. we can add explicitly whenever required directly
+> to apisix."
+
+**What was decided 2026-08-09 and is now withdrawn:** routes 13/14/15 deny everything publicly, and
+the admin reaches Keycloak over the Tailscale tailnet via `KEYCLOAK_ADMIN_PORT_BINDING`, made to work
+by setting `KC_HOSTNAME_ADMIN` to the tailnet origin.
+
+**Why it cannot work — two measurements, not inferences, both from the 2026-08-12 gate run:**
+
+1. **`KC_HOSTNAME_ADMIN` does not move the admin console's `authServerUrl`.** The console shell served
+   over the tailnet carried `"authServerUrl": "https://staging.haisir.in"` alongside
+   `"adminBaseUrl": "https://<tailnet-ip>:8443"`. keycloak-js initialises against `authServerUrl`, so
+   the browser is sent to the **public** origin to authenticate — hitting route 14, exactly what the
+   deny-all is designed to 403. The tailnet path was never end-to-end; there was nothing to gate on.
+2. **`KC_HOSTNAME_ADMIN` is server-global, not master-scoped.** Setting it broke the *public* admin
+   console too. Proven by natural experiment rather than reasoning: prod has never had the variable
+   and served a working `"adminBaseUrl": "https://haisir.in"`; staging, with it set, served a dead
+   address. Blast radius stopped at the admin console — the app realm was untouched — but only by
+   luck of which URLs the console happens to use.
+
+**What we should have noticed earlier.** `phases.md` recorded the right analysis during the v2026.6
+window: a tailnet `/32` can never match what `ip-restriction` evaluates, because `real-ip` extracts
+the client address from `cf-connecting-ip`. The plan took that as an argument *for* moving admin off
+the public gateway. The corollary it missed is that the same fact makes the public path the **only**
+workable one — and once the whitelist holds a public address, no tailnet plumbing is needed at all.
+A correct observation was used to justify the opposite of what it implied.
+
+**The replacement model (owner call, tighter than the pre-v2026.7 one):**
+
+- Routes 13/14/15 stay published on the public hostname and ship **deny-all**.
+- **No operator CIDR is stored anywhere in the deployment.** `KEYCLOAK_ADMIN_ALLOWED_CIDR` is
+  **deleted** — from `secret/haisir/infra` on both envs and from `deploy-required-keys.txt` — not
+  merely set to a safe value. Owner call: removing the variable removes the root of the problem,
+  because a key that does not exist cannot resolve empty, drift, or be re-seeded wrong by a future
+  task. The deny-all comes from `template-configs.sh`'s guard instead. `dev/.env.config.sh` keeps
+  its explicit `0.0.0.0/0` and is the only environment where the variable exists at all. Stricter
+  than what existed before v2026.6, which kept a live CIDR in config.
+- Access is granted ad hoc with `common/scripts/keycloak-admin-access.sh grant`, writing straight to
+  the running APISIX via a sub-path `PATCH` on the route's `ip-restriction.whitelist` (so WAF
+  directives, rate limits and upstream are untouched).
+- **A deploy preserves a live grant rather than revoking it** (`create_route_config.sh` carries the
+  live whitelist across its route `PUT`). Owner call: a deploy must never revoke an operator's access
+  mid-session. **The trade is explicit and worth restating — grants no longer self-expire.** An
+  earlier draft of this design leaned on "the next deploy reverts it" as the safety net; that net is
+  gone by choice, so `revoke` is now the only thing that closes a grant, and `status` is the check
+  for forgotten ones. Both the script and the runbook say so in as many words.
+- **Preservation is bounded, and that bound was added because a challenger review caught its absence.**
+  The first implementation carried the live whitelist forward unconditionally. A Sonnet challenger run
+  stood up a mock Admin API, gave it a live `0.0.0.0/0`, and showed the deploy silently re-publishing
+  it over the template's deny-all — logged as an ordinary "preserving" line. Unbounded preservation
+  makes *any* bad whitelist permanent and self-reinforcing: it survives every deploy forever. The
+  accepted trade was "a narrow operator grant doesn't self-expire", which is a much smaller claim than
+  what the code actually did. Now `create_route_config.sh` refuses any entry broader than
+  `MAX_PRESERVE_PREFIX` (`/24`), falls back to the template's deny-all, and warns. Refusing to launder
+  an illegitimate grant is a deliberate exception to "a deploy never revokes". `keycloak-admin-access.sh`
+  carries a matching `MIN_GRANT_PREFIX` so it can never issue a grant the next deploy would reject.
+  **Lesson**: "preserve what's live" is a fail-open primitive wearing a fail-safe name — every
+  preservation path needs an explicit bound on what it is willing to preserve.
+- `KC_HOSTNAME_ADMIN` is deleted from `common/docker-compose.yml` and from
+  `deploy-required-keys.txt`. **The compose line had to be deleted, not merely left with an empty KV
+  value**: `${KC_HOSTNAME_ADMIN}` unset expands to an empty string, which Keycloak reads as
+  set-and-invalid rather than absent.
+- `KEYCLOAK_ADMIN_PORT_BINDING` is **kept** — it predates this attempt and `deploy.sh:960` runs
+  `setup-keycloak.sh` against it every deploy. It was never a browser path (`KC_HOSTNAME_STRICT`).
+
+**Why this is safe in a way the old plan was not.** Routes 13/14/15 match `/admin/*`,
+`/realms/master/*` and `/resources/*` gated by `^/resources/[^/]+/admin/`. App login is route 01,
+`/realms/haisir-realm-{{APP_ENV}}/*`. **Zero path overlap — an admin whitelist change is structurally
+incapable of affecting normal user authentication.** The residual risk is a wrong CIDR locking the
+operator out of the console, recoverable via the Admin API provided `APISIX_ADMIN_ALLOWED_CIDR` still
+admits it (checked explicitly before the prod rollout).
+
+**Two live findings surfaced by the audit, neither previously recorded:**
+
+- **Prod's next deploy already aborts.** T6.1.5 armed the manifest gate on
+  `KEYCLOAK_ADMIN_ALLOWED_CIDR`, and `check_required_keys()` rejects a *seeded-but-empty* value —
+  jq `@sh` renders `""` as exactly `''`. Prod's KV holds `""`, seeded that way by T6.1.9 as
+  "behaviour-preserving". It is not: it is a deploy blocker. Deleting the key **and** its gate entry
+  both closes the exposure and unblocks prod, which is why it is the first task on the board. Order
+  matters: gate entry out first, KV key second — reversed, the deploy fails closed on a key that is
+  already gone.
+- **B6's fail-open was already partly unreachable.** With the gate armed, an empty value aborts at
+  render time before templating runs. The paths that remained live were a comma/blanks-only value
+  (non-empty, so it passes the gate, but expands to zero CIDRs), stale `.templated/` artifacts, and
+  any environment outside the gate's `envs=staging,prod` scoping. The fix is still worth landing as
+  defence-in-depth, but it stopped being the thing protecting prod on 2026-08-11.
+
+**Rollout is staged, and prod is deliberately last.** Owner call the same day: no prod deploy until
+every non-prod-gated task in the phase is complete. T6.2.6/T6.2.7 are marked `[PROD-GATED]` — they are
+what the prod window is for, not blockers on reaching it. The accepted consequence, recorded so it is
+never rediscovered as a surprise: **prod's Keycloak admin console stays publicly reachable until that
+window opens.** The narrow early-close option, if it is ever wanted, is `deploy.sh --steps
+apisix_routes` on prod alone — routes only, no image bump, no version change.
+
+**Superseded tasks are kept, not deleted** (T6.2.1, T6.2.1a, T6.2.1b, T6.2.2), per this repo's
+convention of preserving incident history. Two of T6.2.1a's operational findings survive the reversal
+and remain true independently of it: `rotate-secret.sh`'s `[restart-container]` argument does not work
+for compose-env values (a **recreate** is required, since `Config.Env` is fixed at create time), and
+`{env}/.env.runtime` does not exist between deploys and must be regenerated the way `build_compose_cmd`
+does.
+
+**Process note worth keeping.** T6.2.1's test asserted `KC_HOSTNAME_ADMIN != KC_HOSTNAME` — a
+condition any wrong value satisfies. That is how a dead address (`:8443`, the container port, never
+published on the host) passed its own gate and shipped. A `*_HOSTNAME_*`/`*_URL` assertion must
+compare against the live `docker port` mapping, never against another variable.
+
+---
+
 ## 2026-08-11 — New-OpenBao-identity bring-up now surfaces automatically in release manifests
 
 > Context: same-day follow-up to B8 (below). Owner: "document it properly that these steps need to run
