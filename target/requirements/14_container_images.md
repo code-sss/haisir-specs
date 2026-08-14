@@ -2,7 +2,7 @@
 
 > **Target state scope:** replace Chainguard (`cgr.dev/chainguard/*`) and assorted unhardened Docker Hub / quay.io / ghcr.io images with Minimus hardened images (`reg.mini.dev/*`) across every Dockerfile and compose service in `haisir-backend`, `haisir-frontend`, and `haisir-deploy`. Cross-cutting infrastructure hardening; not tied to a persona phase.
 >
-> **Status note (2026-07-26):** spec only — no implementation. Explicitly sequenced as the next candidate phase **after** Phase 6 closes (`Implementation_planning/phases.md`); do not start `/plan` on this while Phase 6 is in flight.
+> **Status note (2026-08-14):** migration **complete and shipped to staging** (T4.11, 2026-08-13; 17/17 containers on `reg.mini.dev/*` or `registry.haisir.in/*`). The inventory table below records the tag actually delivered and running on staging for each component, not a suggestion. The Minimus migration workflow used (T1.1, pulled 2026-08-10 from `https://api.mini.dev/v1/skills/dockerfile`) carries no vendor-issued revision field — content fingerprint `sha256:728c7f196ec70fadc67fa8c083cef929d011fef1c07b51dfd4cd40404a5b6e3f` (see `decisions.md`, 2026-08-10). The Node 24-LTS-vs-26 open call resolved to **26**. The three BR-INFRA-006 no-match components were re-checked at DISCOVER time on **2026-08-10** (still no Minimus image) and pinned to a specific version + digest. CVE reduction per component (Minimus workflow step 8, ANALYZE) is recorded separately under T7.2.
 
 ---
 
@@ -50,41 +50,43 @@ Three components have no Minimus equivalent as of this writing (2026-07-26) and 
 
 ## Image inventory
 
-Suggested version = current stable release as of 2026-07-26 — re-verify against Minimus's SELECT TAG step (supported, non-EOL lines) when this phase is actually planned, since upstream will have moved on by then.
+Delivered version = the tag pinned in the shipped Dockerfile/compose and, for `*_IMAGE_TAG`-driven services, the value set in `other/env_templates/.env.template` and running on staging as of the 2026-08-12 v2026.7 deploy + the 2026-08-13 T4.11 runtime recreation (17/17 containers pinned). `*_IMAGE_TAG`-driven rows show the env-var value; the compose line is `reg.mini.dev/<image>:${<VAR>}`.
 
-| Component | Current image(s) | Target Minimus image | Suggested version | Notes |
+| Component | Current image(s) | Target Minimus image | Delivered version | Notes |
 |---|---|---|---|---|
-| Postgres + pgvector (app DB) | Custom Wolfi build: `cgr.dev/chainguard/wolfi-base:latest` (builder) → `cgr.dev/chainguard/postgres:latest` (rolling tag; built as Postgres 18.4 + pgvector 0.8.4 per the Dockerfile's `POSTGRES_VERSION`/`PGVECTOR_VERSION` ARGs, compiled from source) | `reg.mini.dev/pgvector` | `18` (Postgres 18.4, pgvector 0.8.5) | Standalone image — **removes the custom multi-stage build entirely**, including the `:latest` rolling-tag risk. Also replaces dev's `pgvector/pgvector:0.8.2-pg18-trixie` (Docker Hub, a separate older pin). |
-| Postgres (keycloak-db) | `cgr.dev/chainguard/postgres:latest` | `reg.mini.dev/postgres` (or `-hardened` if listed) | `18` | No pgvector needed here — plain Postgres. |
-| Postgres (SonarQube DB, `other/services/sonarqube`) | `postgres:18-alpine` (Docker Hub) | `reg.mini.dev/postgres` | `18` | |
-| APISIX | `apache/apisix:3.17.0-ubuntu` (Docker Hub) | `reg.mini.dev/apache-apisix` | `3.17` | Was never on Chainguard's free tier; already at current upstream release. |
-| Go (gateway builder stage) | `golang:1.23-bookworm` (Docker Hub) | `reg.mini.dev/go:<ver>-dev` | Match `go.mod` / `GO_VERSION` ARG (upstream latest: `1.26`) | See BR-INFRA-004 — bump `go.mod`/`GO_VERSION` and the image tag together. |
-| Keycloak | `quay.io/keycloak/keycloak:${KEYCLOAK_IMAGE_TAG}` (prod), `keycloak/keycloak:26.6` (dev, Docker Hub) | `reg.mini.dev/keycloak` | `26.7` | |
-| Python (backend) | Builder `python:3.14-slim` (Docker Hub) → runtime `cgr.dev/chainguard/python:latest` | `reg.mini.dev/python:3.14-dev` (builder) → `reg.mini.dev/python:3.14` (runtime) | `3.14` (3.14.6) | Both stages now pin the same version — closes the Chainguard `latest`-only gap directly. |
-| Node (frontend) | Builder `node:26-trixie-slim` (Docker Hub) → runtime `cgr.dev/chainguard/node:latest` | `reg.mini.dev/node:<ver>-dev` (builder) → `reg.mini.dev/node:<ver>` (runtime) | `26` (current), or `24` (Active LTS) — **open call for whoever plans this phase**, not a Minimus question | Same fix as Python. |
-| Prometheus + exporters | Deferred (blocked on Chainguard licensing) | `reg.mini.dev/prometheus`, `-alertmanager`, `-node-exporter`, `-postgres-exporter`, `nginx-prometheus-exporter` | `3.11` | Unblocks the deferred monitoring stack decision (`decisions.md`, 2026-06-18). |
-| Grafana | Deferred (`grafana/grafana-oss`, AGPL, was the fallback option) | `reg.mini.dev/grafana` | `13.0` | Same — unblocks it, and avoids the AGPL fallback. |
-| etcd | `quay.io/coreos/etcd:${ETCD_IMAGE_TAG}` / `v3.6.11` (dev) | `reg.mini.dev/etcd` | `3.6.6` (verify against Minimus's own etcd line at plan time) | |
-| OpenBao | `${OPENBAO_IMAGE:-ghcr.io/openbao/openbao:2.6.0}` | `reg.mini.dev/openbao` | `2.6.1` | |
-| nginx-proxy-manager | `jc21/nginx-proxy-manager:2.15.1` (Docker Hub) | `reg.mini.dev/nginx-proxy-manager` | Latest supported line at plan time | |
-| Jenkins | `jenkins/jenkins:lts` + custom Docker-in-Docker layer | `reg.mini.dev/jenkins` + `reg.mini.dev/jenkins-agent` | Latest LTS line | The Docker-CLI-in-Jenkins layer needs the `-dev` package-resolution workflow (Minimus step 5) re-run at migration time — flagged as a real implementation detail, not a blocker. |
-| SonarQube | `sonarqube:community` (Docker Hub) | `reg.mini.dev/sonarqube` | Latest | |
-| Ollama | `ollama/ollama:latest` (×4 service defs) | `reg.mini.dev/ollama` | Pin instead of `latest` | |
-| cloudflared | `cloudflare/cloudflared:latest` | `reg.mini.dev/cloudflared` | Pin instead of `latest` | |
-| Generic init/util (`alpine:latest` / `busybox:stable`) | `alpine:latest` (multiple compose services: `common/docker-compose.yml`, `common/openbao/docker-compose.openbao.yml`); `busybox:stable` (`other/services/sonarqube/docker-compose.yml`) | `reg.mini.dev/busybox` | — | Opportunistic per BR-INFRA-007, not required. The `busybox:stable` case is already the same tool, just an unhardened registry — this one's a pure registry swap with no image-family change. |
-| Docker registry | `registry:3` (`other/services/registry/docker-compose.yml`) | `reg.mini.dev/distribution-registry` | Latest supported line at plan time | Hosts hAIsir's own pushed images (`haisir-backend`, `haisir-frontend`, `haisir-postgres`, `haisir-gateway`) — verify push/pull auth config carries over (Minimus's registry image is the upstream `distribution/registry` project, same API). |
+| Postgres + pgvector (app DB) | Custom Wolfi build: `cgr.dev/chainguard/wolfi-base:latest` (builder) → `cgr.dev/chainguard/postgres:latest` (rolling tag; built as Postgres 18.4 + pgvector 0.8.4 per the Dockerfile's `POSTGRES_VERSION`/`PGVECTOR_VERSION` ARGs, compiled from source) | `reg.mini.dev/pgvector` | `0.8.6-pg18` (`POSTGRES_IMAGE_TAG`) | Standalone image — **removes the custom multi-stage build entirely** (T2.2), including the `:latest` rolling-tag risk. pgvector 0.8.6 (≥ 0.8.4, no downgrade). The plan's prescribed `:18` tag does not exist on Minimus; SELECT TAG re-verification found the real scheme is `0.8.x-pg18`. Also replaces dev's `pgvector/pgvector:0.8.2-pg18-trixie` (Docker Hub, a separate older pin). UID reconciliation (Chainguard `70` → Minimus `999`) in T2.3. |
+| Postgres (keycloak-db) | `cgr.dev/chainguard/postgres:latest` | `reg.mini.dev/postgres` | `18` (`KEYCLOAK_POSTGRES_IMAGE_TAG`) | No pgvector needed here — plain Postgres. No `-hardened` variant exists → plain base per BR-INFRA-003. UID 999 (T2.4). |
+| Postgres (SonarQube DB, `other/services/sonarqube`) | `postgres:18-alpine` (Docker Hub) | `reg.mini.dev/postgres` | `18` | Same tag as keycloak-db (T4.4). |
+| APISIX | `apache/apisix:3.17.0-ubuntu` (Docker Hub) | `reg.mini.dev/apache-apisix` | `3.17.0` (`APISIX_VERSION` ARG) | Was never on Chainguard's free tier. Tag-pinned via the ARG (moved off the old `@digest` pin in T2.5). Runtime healthcheck rewritten to exec form in T2.8. |
+| Go (gateway builder stage) | `golang:1.23-bookworm` (Docker Hub) | `reg.mini.dev/go` (builder, `-dev` variant via digest) | `go1.25.12` — pinned by digest `sha256:8ebfe4ddacc2401022c8813d6fc6e66cc784c8deec28011d261f6d9e03ed2826` (`GO_BUILDER_DIGEST`); `GO_VERSION=1.25`, `go.mod` declares `go 1.25.0` | See BR-INFRA-004 — T2.9 verified parity holds: digest resolves to go1.25.12, `GO_VERSION` and `go.mod` all on the 1.25 line. No bump taken (the task forbids bumping the digest alone). |
+| Keycloak | `quay.io/keycloak/keycloak:${KEYCLOAK_IMAGE_TAG}` (prod), `keycloak/keycloak:26.6` (dev, Docker Hub) | `reg.mini.dev/keycloak` | `26.7.1` (`KEYCLOAK_IMAGE_TAG`) | Runtime image is JRE-only (busybox shell, no `nc`/`curl`/`wget`/`/dev/tcp`); healthcheck rewritten to exec-form `/proc/net/tcp` grep in T2.8. Default uid 1000 (matches existing `user: "1000"`). |
+| Python (backend) | Builder `python:3.14-slim` (Docker Hub) → runtime `cgr.dev/chainguard/python:latest` | `reg.mini.dev/python:3.14-dev` (builder) → `reg.mini.dev/python:3.14` (runtime) | `3.14` (both stages, T1.2) | Both stages now pin the same version — closes the Chainguard `latest`-only gap directly. |
+| Node (frontend) | Builder `node:26-trixie-slim` (Docker Hub) → runtime `cgr.dev/chainguard/node:latest` | `reg.mini.dev/node:26-dev` (builder) → `reg.mini.dev/node:26` (runtime) | `26` (both stages, T1.4) | Same fix as Python. **The Node 24-LTS-vs-26 open call resolved to 26** (current line, matching the builder's pre-migration `node:26-trixie-slim`). |
+| Prometheus + exporters | Deferred (blocked on Chainguard licensing) | `reg.mini.dev/prometheus`, `reg.mini.dev/prometheus-alertmanager`, `reg.mini.dev/prometheus-node-exporter`, `reg.mini.dev/prometheus-postgres-exporter`, `reg.mini.dev/nginx-prometheus-exporter` | `prometheus:3.13.2`, `prometheus-alertmanager:0.33.1`, `prometheus-node-exporter:1.12.1`, `prometheus-postgres-exporter:0.20.1`, `nginx-prometheus-exporter:1.5.1` (T3.1) | Unblocks the deferred monitoring stack decision (`decisions.md`, 2026-06-18). All five behind the `monitoring` profile (opt-in, not started by `deploy.sh`). Note the `prometheus-*` repo-name prefix the bare names lack. |
+| Grafana | Deferred (`grafana/grafana-oss`, AGPL, was the fallback option) | `reg.mini.dev/grafana` | `13.1.3` (`GRAFANA_IMAGE_TAG`, T3.2) | Same — unblocks it, and avoids the AGPL fallback. Owner-chosen 13.1 over the initially-verified 13.0. |
+| etcd | `quay.io/coreos/etcd:${ETCD_IMAGE_TAG}` / `v3.6.11` (dev) | `reg.mini.dev/etcd` | `3.7.1` (`ETCD_IMAGE_TAG`, T2.7) | Upgrade over dev's 3.6.11 (within the no-downgrade rule). Minimus tags carry no `v` prefix. Healthcheck already exec-form `etcdctl`. |
+| OpenBao | `${OPENBAO_IMAGE:-ghcr.io/openbao/openbao:2.6.0}` | `reg.mini.dev/openbao` | `2.6.1` (`OPENBAO_IMAGE_TAG`, T4.1) | 2.6.1 satisfies the ≥2.6.0 floor for CVE-2025-54996 (BR-SEC-016). Deliberately NOT wired into `deploy.sh`'s drift loop (separate operator-run lifecycle). **T4.11 correction**: runs as uid 0 by default, which crash-loops under rootless Docker writing the seal key — pinned to `user: "100:1000"` in production. |
+| nginx-proxy-manager | `jc21/nginx-proxy-manager:2.15.1` (Docker Hub) | `reg.mini.dev/nginx-proxy-manager` | `2.15.1` (T4.5) | Registry move only, version unchanged (already at an explicit tag). |
+| Jenkins | `jenkins/jenkins:lts` + custom Docker-in-Docker layer | `reg.mini.dev/jenkins` (the `-dev` tag is the final image — a CI toolbox, not a served app) | `2.568.2-dev` (T4.6) | The Docker-CLI-in-Jenkins layer ran the `-dev` package-resolution workflow (Minimus step 5) at migration time. No separate `jenkins-agent` image exists — the compose builds one monolithic controller. |
+| SonarQube | `sonarqube:community` (Docker Hub) | `reg.mini.dev/sonarqube` | `26.8.0.126808` (T4.4) | |
+| Ollama | `ollama/ollama:latest` (×4 service defs) | `reg.mini.dev/ollama` | `0.32.7` (T4.2) | Single tag across all four service defs. |
+| cloudflared | `cloudflare/cloudflared:latest` | `reg.mini.dev/cloudflared` | `2026.7.3` (T4.2) | |
+| Generic init/util (`alpine:latest` / `busybox:stable`) | `alpine:latest` (multiple compose services: `common/docker-compose.yml`, `common/openbao/docker-compose.openbao.yml`); `busybox:stable` (`other/services/sonarqube/docker-compose.yml`) | `reg.mini.dev/busybox` | `1.38.0` (T4.7) | Opportunistic per BR-INFRA-007. The `busybox:stable` case is already the same tool, just an unhardened registry — this one's a pure registry swap with no image-family change. Replaced `etcd-init`, `openbao-init`, `sonarqube-init`. |
+| Docker registry | `registry:3` (`other/services/registry/docker-compose.yml`) | `reg.mini.dev/distribution-registry` | `3.1.1` (T4.3) | Hosts hAIsir's own pushed images (`haisir-backend`, `haisir-frontend`, `haisir-gateway`) — same upstream `distribution/registry` project/API; `REGISTRY_AUTH*`/htpasswd config carried over. (`haisir-postgres` build was deleted in T2.2.) |
 
-### No Minimus match — stay on current registry (BR-INFRA-006)
+### No Minimus match — stay on current registry, digest-pinned (BR-INFRA-006)
 
-| Component | Current image | Notes |
+Re-checked at DISCOVER time on **2026-08-10** (T4.8): still no Minimus image for any of the three. Each is now pinned to a specific version **and** digest (was `:latest` for dockhand). Re-check again at each future touch in case Minimus adds coverage.
+
+| Component | Delivered image | Notes |
 |---|---|---|
-| CrowdSec | `crowdsecurity/crowdsec:v1.7.8` (`other/services/crowdsec/docker-compose.yml`) | No Minimus image found at discovery time (2026-07-26). |
-| HuggingFace text-embeddings-inference | `ghcr.io/huggingface/text-embeddings-inference:cpu-1.9` (`other/services/embedding/docker-compose.yml`) | No Minimus image found at discovery time. |
-| dockhand | `fnsys/dockhand:latest` (`other/services/dockhand/docker-compose.yml`) | No Minimus image found at discovery time (2026-07-26) — confirmed via DISCOVER, not left unverified. |
+| CrowdSec | `crowdsecurity/crowdsec:v1.7.8@sha256:2f527c9bb8b367120eb08b82890aa912ce96bfa1ada93dda0721700e4b4e0dde` (`other/services/crowdsec/docker-compose.yml`) | No Minimus image at discovery time (2026-07-26) or re-check (2026-08-10). |
+| HuggingFace text-embeddings-inference (reranker) | `ghcr.io/huggingface/text-embeddings-inference:cpu-1.9@sha256:ad950d30878eceb72aaf32024d26fa2b1d04a75304fa0b4776b49aa1941fea07` (`other/services/embedding/docker-compose.yml`) | No Minimus image at discovery time or re-check. |
+| dockhand | `fnsys/dockhand:v1.0.41@sha256:de6c7d4bb30d7563a94991f15915c58067ebad29acfbc365fe6ce0c5785b4386` (`other/services/dockhand/docker-compose.yml`) | No Minimus image at discovery time or re-check. Moved off the rolling `:latest` onto `v1.0.41` (verified live to currently resolve to the same digest as `latest`, so this is an accurate pin of what was running, not a downgrade). |
 
 ### Explicitly excluded (BR-INFRA-005)
 
-`pgadmin4` (`dpage/pgadmin4:latest`, `dev/docker-compose.yml`, dev-only convenience tool) — out of scope.
+`pgadmin4` (`dpage/pgadmin4:latest`, `dev/docker-compose.yml`, dev-only convenience tool) — out of scope. The compose line carries the trailing annotation `# BR-INFRA-005: dev-only, never ships`, which the T4.10 image-pin CI gate treats as a per-line escape hatch (the one documented exception).
 
 ### Explicitly excluded — archived/superseded configs
 
@@ -103,13 +105,13 @@ These aren't blockers, but an implementer should budget for them rather than dis
 
 ---
 
-## Definition of done (for whoever plans/implements this phase)
+## Definition of done — closure status (T7.1, 2026-08-14)
 
-- Every `FROM` line and every compose `image:` in the inventory table above resolves to `reg.mini.dev/*`, pinned to a specific version (no `:latest`), except the documented no-match/excluded/archived exceptions.
-- Each migrated service builds clean and passes the Minimus VERIFY step (build + run, logs checked per the error-signature table in the Minimus skill) — not just a successful `docker build`.
-- CVE reduction is reported per component using the published counts on each image's `images.minimus.io` page (Minimus workflow step 8, ANALYZE) — not asserted without a source.
-- No plaintext `:latest` tag remains anywhere in the migrated Dockerfiles/compose files without an explicit, documented reason (the non-versioned Minimus bases — `static`, `glibc-dynamic`, `busybox` — are the only expected exceptions, per the Minimus tag convention itself).
-- Given the blast radius (touches every service in the stack, including the database and identity provider), this phase should get the same two-independent-security-review-pass gate that `13_secrets_management.md`'s Phase 5.6 used before merge — not a new rule, just flagging the precedent applies here too.
+- ✅ Every `FROM` line and every compose `image:` in the inventory table above resolves to `reg.mini.dev/*`, pinned to a specific version (no `:latest`), except the documented no-match/excluded/archived exceptions. Statically gated by T4.10 (`check-image-pins.sh` in CI) and runtime-verified on staging by T4.11 (17/17 containers pinned).
+- ✅ Each migrated service builds clean and passes the Minimus VERIFY step (build + run, logs checked per the error-signature table in the Minimus skill) — not just a successful `docker build`. Per-component VERIFY landed with each T1.x/T2.x/T3.x/T4.x task.
+- ⏳ CVE reduction is reported per component using the published counts on each image's `images.minimus.io` page (Minimus workflow step 8, ANALYZE) — not asserted without a source. **Deferred to T7.2.**
+- ✅ No plaintext `:latest` tag remains anywhere in the migrated Dockerfiles/compose files without an explicit, documented reason (the non-versioned Minimus bases — `static`, `glibc-dynamic`, `busybox` — are the only expected exceptions, per the Minimus tag convention itself). The one tracked exception, `dev/docker-compose.yml`'s `dpage/pgadmin4:latest`, is annotated `# BR-INFRA-005: dev-only, never ships`.
+- ⏳ Given the blast radius (touches every service in the stack, including the database and identity provider), this phase should get the same two-independent-security-review-pass gate that `13_secrets_management.md`'s Phase 5.6 used before merge — not a new rule, just flagging the precedent applies here too. **Deferred to T7.6.**
 
 ---
 
@@ -121,8 +123,8 @@ Minimus images pull **anonymously**, without `docker login`, at the same `FROM` 
 
 ## Out of scope / follow-up
 
-- Per-image build verification (Minimus workflow steps 4–7: shell-presence check, package resolution, actual Dockerfile rewrite, build+run smoke test) is implementation work, not spec work — deferred to whichever phase picks this up.
-- The Node 24-LTS-vs-26-current version call (inventory table) is a product/eng decision independent of the Minimus migration itself — flagged for the planning cycle, not resolved here.
+- Per-image build verification (Minimus workflow steps 4–7: shell-presence check, package resolution, actual Dockerfile rewrite, build+run smoke test) was the implementation work of Phase 7.5's T1.x/T2.x/T3.x/T4.x tasks — now delivered.
+- The Node 24-LTS-vs-26-current version call (inventory table) resolved to **26** at implementation time (T1.4) — the current line, matching the builder's pre-migration `node:26-trixie-slim`.
 - FIPS/advanced variant adoption is deferred pending a documented compliance driver (BR-INFRA-003) — revisit if one appears.
 - **Docker Hardened Images (DHI)**, Docker's own competing hardened-image line, surfaced during research as an adjacent option but wasn't evaluated in depth — Minimus was the explicit, named choice for this migration, not a default arrived at by elimination.
 - **Air-gapped/self-hosted registry mirroring.** Minimus supports syncing its images into a private registry (relevant if `haisir-deploy`'s own `distribution-registry`/Docker registry service — see inventory table — is ever used to mirror rather than just host `haisir-*` images). Not evaluated; no current requirement for it.
