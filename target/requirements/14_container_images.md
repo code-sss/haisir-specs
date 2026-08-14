@@ -94,6 +94,43 @@ Re-checked at DISCOVER time on **2026-08-10** (T4.8): still no Minimus image for
 
 ---
 
+## CVE reduction per component (T7.2)
+
+Before/after CVE counts per migrated Minimus image, sourced from each image's `images.minimus.io` risk-reduction page (Minimus workflow step 8, ANALYZE). Counts are unique CVEs; "Minimus" is the `reg.mini.dev/*` image, "Public" is the upstream image the page compares against. Pages prepared **2026-08-14** — re-pull before relying on these at a future touch, since Minimus rebuilds daily and counts drift. The three BR-INFRA-006 no-match components have no Minimus page and no row here (they are digest-pinned on their own registries, not migrated).
+
+> **Caveat on the "before" column.** The "Public" image is whatever upstream the Minimus page chooses to compare against — in most cases the Docker Hub `:latest` of the same project. It is **not always the exact image hAIsir ran before the migration**: e.g. the keycloak-db and SonarQube DB rows previously ran Chainguard (`cgr.dev/chainguard/postgres:latest`), not Docker Hub `library/postgres:latest`; APISIX previously ran `apache/apisix:3.17.0-ubuntu`, not `:latest`. The count is the published reduction the Minimus page advertises for that image family, cited as published — not a measured delta of hAIsir's specific prior pin. Where the page's comparison image *does* match the prior pin (pgvector → `pgvector/pgvector:0.8.6-pg18`, distribution-registry → `registry:3.1.1`), the "before" is exact.
+
+| Minimus image (delivered tag) | Minimus CVEs | Public CVEs | Reduction | Public image compared | Source |
+|---|---|---|---|---|---|
+| `reg.mini.dev/pgvector:0.8.6-pg18` | 0 | 154 | 100% | `pgvector/pgvector:0.8.6-pg18` | https://images.minimus.io/images/pgvector/risk-reduction |
+| `reg.mini.dev/postgres:18` (keycloak-db + SonarQube DB) | 0 | 144 | 100% | `library/postgres:latest` | https://images.minimus.io/images/postgres/risk-reduction |
+| `reg.mini.dev/apache-apisix:3.17.0` | 0 | 49 | 100% | `apache/apisix:latest` | https://images.minimus.io/images/apache-apisix/risk-reduction |
+| `reg.mini.dev/go@sha256:8ebfe4dd…` (gateway builder, go1.25.12) | 1 | 218 | 99% | `library/golang:latest` | https://images.minimus.io/images/go/risk-reduction |
+| `reg.mini.dev/keycloak:26.7.1` | 2 | 47 | 95% | `keycloak/keycloak:latest` | https://images.minimus.io/images/keycloak/risk-reduction |
+| `reg.mini.dev/python:3.14` (backend, both stages) | 1 | 426 | 99% | `library/python:latest` | https://images.minimus.io/images/python/risk-reduction |
+| `reg.mini.dev/node:26` (frontend, both stages) | 0 | 415 | 100% | `library/node:latest` | https://images.minimus.io/images/node/risk-reduction |
+| `reg.mini.dev/prometheus:3.13.2` | 0 | 6 | 100% | `prom/prometheus:latest` | https://images.minimus.io/images/prometheus/risk-reduction |
+| `reg.mini.dev/prometheus-alertmanager:0.33.1` | 0 | 25 | 100% | `prom/alertmanager:latest` | https://images.minimus.io/images/prometheus-alertmanager/risk-reduction |
+| `reg.mini.dev/prometheus-node-exporter:1.12.1` | 0 | 4 | 100% | `prom/node-exporter:latest` | https://images.minimus.io/images/prometheus-node-exporter/risk-reduction |
+| `reg.mini.dev/prometheus-postgres-exporter:0.20.1` | 0 | 8 | 100% | `prometheuscommunity/postgres-exporter:latest` | https://images.minimus.io/images/prometheus-postgres-exporter/risk-reduction |
+| `reg.mini.dev/nginx-prometheus-exporter:1.5.1` | 0 | 65 | 100% | `nginx/nginx-prometheus-exporter:1.5.1` | https://images.minimus.io/images/nginx-prometheus-exporter/risk-reduction |
+| `reg.mini.dev/grafana:13.1.3` | 0 | 26 | 100% | `grafana/grafana:latest` | https://images.minimus.io/images/grafana/risk-reduction |
+| `reg.mini.dev/etcd:3.7.1` | 0 | 4 | 100% | `rapidfort/etcd-ib:latest` | https://images.minimus.io/images/etcd/risk-reduction |
+| `reg.mini.dev/openbao:2.6.1` | 0 | 7 | 100% | `openbao/openbao:latest` | https://images.minimus.io/images/openbao/risk-reduction |
+| `reg.mini.dev/nginx-proxy-manager:2.15.1` | 2 | 405 | 99% | `jc21/nginx-proxy-manager:latest` | https://images.minimus.io/images/nginx-proxy-manager/risk-reduction |
+| `reg.mini.dev/jenkins:2.568.2-dev` | 4 | 209 | 98% | `jenkins/jenkins:latest` | https://images.minimus.io/images/jenkins/risk-reduction |
+| `reg.mini.dev/sonarqube:26.8.0.126808` | 2 | 131 | 98% | `library/sonarqube:latest` | https://images.minimus.io/images/sonarqube/risk-reduction |
+| `reg.mini.dev/ollama:0.32.7` | 0 | 133 | 100% | `ollama/ollama:latest` | https://images.minimus.io/images/ollama/risk-reduction |
+| `reg.mini.dev/cloudflared:2026.7.3` | 0 | 18 | 100% | `cloudflare/cloudflared:latest` | https://images.minimus.io/images/cloudflared/risk-reduction |
+| `reg.mini.dev/busybox:1.38.0` (init/util) | 0 | 3 | 100% | `library/busybox:latest` | https://images.minimus.io/images/busybox/risk-reduction |
+| `reg.mini.dev/distribution-registry:3.1.1` | 0 | 43 | 100% | `library/registry:3.1.1` | https://images.minimus.io/images/distribution-registry/risk-reduction |
+
+**Aggregate:** across the 22 migrated images, the published public-image CVE load was **2,540** (sum of the "Public" column); the Minimus images carry **12** total (1 go + 2 keycloak + 1 python + 2 nginx-proxy-manager + 4 jenkins + 2 sonarqube). 16 of 22 images report a 100% reduction (0 residual); the other 6 carry residual CVEs in the application package itself (`keycloak`, `jenkins-plugin-manager`, `sonarqube`, `nginx-proxy-manager-2`) or a shared toolchain package (`binutils` in go, `python-3.14-base` in python/nginx-proxy-manager) — i.e. residuals are upstream-application or shared-package CVEs that no base-image swap can remove, not Minimus-build regressions.
+
+**Residual CVEs worth tracking** (the 12, named so a future bump can verify they close): go `CVE-2026-4647` (binutils, medium); keycloak `CVE-2026-54513` + `CVE-2026-54512` (high, keycloak package); python `CVE-2025-15367` (medium, python-3.14-base); nginx-proxy-manager `CVE-2025-15367` (medium, python-3.14-base) + `CVE-2024-51999` (unknown, nginx-proxy-manager-2); jenkins `CVE-2026-54513` + `CVE-2026-54512` (high) + `GHSA-72hv-8253-57qq` + `CVE-2025-48924` (medium); sonarqube `CVE-2026-5598` (high) + `CVE-2024-41909` (medium).
+
+---
+
 ## Migration risks / operational considerations
 
 These aren't blockers, but an implementer should budget for them rather than discover them mid-build:
@@ -109,7 +146,7 @@ These aren't blockers, but an implementer should budget for them rather than dis
 
 - ✅ Every `FROM` line and every compose `image:` in the inventory table above resolves to `reg.mini.dev/*`, pinned to a specific version (no `:latest`), except the documented no-match/excluded/archived exceptions. Statically gated by T4.10 (`check-image-pins.sh` in CI) and runtime-verified on staging by T4.11 (17/17 containers pinned).
 - ✅ Each migrated service builds clean and passes the Minimus VERIFY step (build + run, logs checked per the error-signature table in the Minimus skill) — not just a successful `docker build`. Per-component VERIFY landed with each T1.x/T2.x/T3.x/T4.x task.
-- ⏳ CVE reduction is reported per component using the published counts on each image's `images.minimus.io` page (Minimus workflow step 8, ANALYZE) — not asserted without a source. **Deferred to T7.2.**
+- ✅ CVE reduction is reported per component using the published counts on each image's `images.minimus.io` page (Minimus workflow step 8, ANALYZE) — not asserted without a source. Delivered in T7.2: a 22-row before/after table, each row cited to its risk-reduction page (see "CVE reduction per component" above).
 - ✅ No plaintext `:latest` tag remains anywhere in the migrated Dockerfiles/compose files without an explicit, documented reason (the non-versioned Minimus bases — `static`, `glibc-dynamic`, `busybox` — are the only expected exceptions, per the Minimus tag convention itself). The one tracked exception, `dev/docker-compose.yml`'s `dpage/pgadmin4:latest`, is annotated `# BR-INFRA-005: dev-only, never ships`.
 - ⏳ Given the blast radius (touches every service in the stack, including the database and identity provider), this phase should get the same two-independent-security-review-pass gate that `13_secrets_management.md`'s Phase 5.6 used before merge — not a new rule, just flagging the precedent applies here too. **Deferred to T7.6.**
 
