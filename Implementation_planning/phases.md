@@ -847,3 +847,30 @@ write-up. The distinction that matters: a one-line config toggle with no shared-
 radius gets fixed now; a change that touches the deploy-wide fail-closed gate gets scoped and
 tracked instead. Owner feedback: security-relevant defaults (auth, exposure) on a new service should
 be surfaced before implementation, not shipped first and caught in review.
+
+### B9 — Jenkins `yamllint` does not cover `releases/`, so no release manifest is ever linted (deploy)
+
+**Found 2026-08-14 while reviewing the Slack switch.** `Jenkinsfile`'s `YAML Lint` stage runs
+`yamllint` over `common/ dev/ staging/ prod/ other/services/` — **`releases/` is absent**. Every
+release manifest in this repo has therefore shipped without CI ever parsing it. Separately, nothing
+in the pipeline reads `common/openbao/deploy-required-keys.txt` at all: `gitleaks` scans it as text,
+but no stage validates its entry syntax or the `envs=` allowlist, so an arming mistake — the thing
+that can make *every* staging and prod deploy abort — is invisible to CI.
+
+Both files were changed in `5a255e9` and `9c4dbac`, and a green build on those commits proved
+nothing about either. They were validated by hand instead (`yamllint` clean, `--dry-run` exit 0 on
+both envs, arming checked with the real `manifest_entries` parser), so the coverage exists — it just
+is not in the pipeline, which means it depends on someone remembering.
+
+**This is the same defect class Phase 7's G8 review named as dominant: false assurance.** A green
+CI run that structurally cannot fail on the files under change is worse than no check, because it
+reads as a pass.
+
+**Fix, roughly one line plus one stage.** Add `releases/` to the `yamllint` invocation. Optionally
+add a manifest-schema check (`yq` for required keys: `version`, `services`, `steps`, `rollback`) and
+a `deploy-required-keys.txt` syntax check — the parser (`common/openbao/manifest.sh`) already exists
+and could be run against all three `APP_ENV`s in CI to assert it emits without error.
+
+**Deliberately not folded into Phase 7.5** — the phase's remaining work is a staging deploy and a
+prod window, and widening CI scope mid-window risks turning a lint failure into a deploy blocker at
+exactly the wrong moment. Do it at the start of the next phase, not now.

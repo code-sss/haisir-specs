@@ -192,7 +192,11 @@
 
 ## Ready now
 
-### ▶ START HERE (next session, 2026-08-13)
+### ▶ G6.2 sequence (2026-08-13) — SUPERSEDED, see "RESUME HERE (2026-08-15)" below
+
+> Kept for its live-state notes and the grant-script gotcha, which are still accurate. Its
+> step list is finished through step 4; step 5 (the prod window) survives as step 5 of the
+> current plan. **If you are starting a fresh session, scroll to RESUME HERE first.**
 
 **⟲ G6.2 was re-scoped on 2026-08-13. Ignore any tailnet instructions you find below or in
 older notes — the tailnet admin model is abandoned. Read the G6.2 reversal note above first.**
@@ -248,6 +252,55 @@ older notes — the tailnet admin model is abandoned. Read the G6.2 reversal not
    the Admin API (`172.19.0.1/32`, not `127.0.0.1/32`) — if `setup.sh` can't reach it, routes
    never get pushed and there is no way back in — then push routes, then grant→console→revoke.
    Prod **is** public-fronted (unlike staging), so `grant`'s auto-detect is correct there.
+
+---
+
+### ▶▶ RESUME HERE (2026-08-15) — supersedes the five steps above
+
+The list above is the **G6.2 sequence and it is finished through step 4**; only its step 5 (the
+prod window) is still live, and it is now step 5 of the list below too. Read this block first.
+
+**Repo state, so a cold session does not re-derive it:** `haisir-deploy` **`9c4dbac`**,
+`haisir-specs` **`0ce5179`**, both trees clean. `haisir-backend` `46570b7` / `haisir-frontend`
+`6512e83` — unchanged since the v2026.7 build point, Jenkins-only commits, nothing to rebuild.
+CI green on `9c4dbac`. Two untracked files in `haisir-specs` are deliberate, not residue:
+`Phase_7.5_Goal_Tree.md` (duplicates PLAN.md content; tracking it is an open owner call) and
+`prod_deploy_msg.txt` (stale scratch from an earlier session).
+
+**The five-step plan for the rest of Phase 7.5. Steps 1–2 are DONE.**
+
+1. ~~Seed the alert-delivery secret on staging and prod.~~ **Done 2026-08-14.** Delivery switched
+   from SMTP email to a Slack incoming webhook mid-flight (five keys → one `ALERT_SLACK_WEBHOOK`;
+   `decisions.md` 2026-08-14). Owner seeded it manually on both hosts. Two confirmations are
+   still uncaptured and are folded into step 3 — see the G3 row.
+2. ~~Commit both repos; CI.~~ **Done** — `9c4dbac` / `0ce5179`, Jenkins green.
+3. **◀ NEXT: deploy staging** with `releases/v2026.7/manifest.yaml --env staging`. Not
+   ceremony — nine commits have landed since staging last deployed (2026-08-12) and staging has
+   never run with the `ALERT_*` gate armed. This is the "don't let prod be the first host to run
+   this tree" step, and it closes **four** loose ends at once:
+   (a) the two seeding confirmations — render resolves the key, and the ~7 pre-existing keys at
+   `secret/haisir/infra` survived the write (a `put` instead of a `patch` would have removed
+   them); both surface as a clean pre-flight abort if wrong, which is the gate working;
+   (b) **G2's pgvector residual** — `SELECT extversion FROM pg_extension WHERE extname='vector'`,
+   `ALTER EXTENSION vector UPDATE` if below 0.8.6 (manifest post_deploy G);
+   (c) **G6.1's staging half** (manifest post_deploy D);
+   (d) **the Slack egress test** — outbound HTTPS to `hooks.slack.com` **from inside the
+   alertmanager container**. New dependency, untested anywhere, and the only part of the Slack
+   switch no repo-side check can cover.
+4. **Close G3 on staging**: `docker compose --profile monitoring up -d`, confirm targets up
+   (the `apisix` job is the one proving T3.3's export-server fix), stop `node-exporter`, wait past
+   `TargetDown`'s `for: 2m`, confirm the alert fires **and the Slack message actually arrives**.
+   Substitute a real scrape target for the plan's nonexistent `BackendDown`. **This is the last
+   goal in the phase closable without a prod window.**
+5. **Prod window.** Same manifest, `--env prod`. Four abort-or-lock-out gates first (certbot
+   sudoers, Admin API reachability *before* the route push, keycloak-db `PG_VERSION`, fresh
+   backups), then post_deploy A–G. Unblocks T6.2.6 → T6.2.7 → T6.3.2, and with it the remaining
+   ~20 leaf tasks: G6.3 → G6.4 → G6.5/G6.6 → T7.3 → T7.4/T7.5 → T7.6 → T7.7–T7.11.
+
+> **The prod-deploy freeze above is now effectively discharged.** The 2026-08-13 owner call was
+> "no prod deploy until every non-prod-gated task is complete". After step 4 that bar is met —
+> everything still open is either prod-gated or downstream of a prod-gated task. Re-confirm with
+> the owner before opening the window; do not treat this note as the confirmation.
 
 **Why no tailnet step:** `KC_HOSTNAME_ADMIN` never moved the console's `authServerUrl`, so
 the browser was always sent back to the public origin to authenticate. Opening `:8180` in the
