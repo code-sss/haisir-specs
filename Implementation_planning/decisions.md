@@ -4,6 +4,63 @@
 
 ---
 
+## 2026-08-14 — T3.6 alert delivery: SMTP email → Slack incoming webhook
+
+> Context: T3.6 shipped on 2026-08-12 wiring Alertmanager to email, with five `ALERT_SMTP_*` /
+> `ALERT_EMAIL_TO` values deliberately left unseeded and their `deploy-required-keys.txt` entries
+> commented out, because the SMTP values were not available (owner call 2026-08-12). On 2026-08-14
+> the gate was armed in preparation for seeding; before any value was written, the owner switched
+> the destination to Slack. **Nothing had been seeded on either host**, so this is a clean pivot,
+> not a migration — there are no orphaned SMTP keys in KV on staging or prod.
+
+**Decision.** Alerts are delivered to a Slack channel via a single **incoming webhook**, not by
+email. One secret, `ALERT_SLACK_WEBHOOK`, replaces the five SMTP values. It lives at
+`secret/haisir/infra` under BR-SEC-022 like every other host-specific value, armed
+`envs=staging,prod` (dev does not run the monitoring profile).
+
+**Why.** Three reasons, in order of weight:
+
+1. **Smaller secret surface.** One credential instead of five, and no SMTP relay to depend on,
+   authenticate against, or keep reachable. The five-value form also had five ways to be
+   half-seeded; the gate rejects a seeded-but-empty value exactly as it rejects a missing one, so
+   each additional key was an additional way to brick both environments.
+2. **The escalation design is unchanged.** T3.6's route tree keys on the `severity` label from
+   T3.4 and was never coupled to the transport: `critical` → `haisir-critical` (repeat 1h),
+   `warning` → `haisir-warning` (repeat 12h), top-level receiver deliberately set to
+   `haisir-warning` so an unmatched severity still reaches a human. Only the receiver *bodies*
+   changed, `email_configs` → `slack_configs`. PLAN.md's T3.6 Build already said "the
+   webhook/SMTP/integration URL arrives as a secret" — the plan anticipated this and needed no
+   amendment.
+3. **Fail-closed behaviour is preserved, and was re-verified rather than assumed.** The email form
+   relied on Alertmanager's SMTP parser rejecting an unrendered `{{ALERT_SMTP_HOST}}` with
+   "missing port in address". The Slack form relies on `slack_configs.api_url` being URL-validated
+   at config load. Confirmed live 2026-08-14 against
+   `reg.mini.dev/prometheus-alertmanager:0.33.1`: `amtool check-config` on the unrendered template
+   exits 1 with `FAILED: unsupported scheme "" for URL`, and exits 0 on a rendered copy
+   ("SUCCESS … 2 receivers"). An unseeded webhook therefore crash-loops Alertmanager rather than
+   starting a receiver that silently drops every alert.
+
+**What this newly requires, and has not been tested.** Email left the host over SMTP; Slack needs
+**outbound HTTPS to `hooks.slack.com` from the alertmanager container** on both hosts. This is a
+genuinely new dependency, it is unverified on staging and prod, and if either host is
+egress-restricted the failure mode is alerts silently never arriving — precisely the fail-open G3
+exists to close. It must be checked from inside the container, not from the host shell, and it is
+now part of G3's closure criteria.
+
+**Rejected: a Slack app + bot token.** More moving parts (token storage, scopes, workspace app
+lifecycle) for no gain over an incoming webhook when the requirement is "post to one channel". The
+webhook is channel-bound at creation, which is also why one webhook serves both severity tiers —
+they differ in how insistently they repeat, not in where they land.
+
+**Follow-on defect found and fixed in review.** The narrowed prometheus volume mount (T3.6's own
+fix, keeping the rendered credential out of a container with no business reading it) survived the
+switch, but the comment *justifying* it still said "carries the SMTP password". A control standing
+on a false justification invites a future reader to revert it, so the comment is now phrased by
+role ("the alert delivery credential") rather than by mechanism, with an explicit
+do-not-widen-this-back note.
+
+---
+
 ## 2026-08-13 — G6.2 scope reversal: tailnet-only Keycloak admin abandoned; deny-all + on-demand grant instead
 
 > Context: G6.2's exposure model, decided 2026-08-09, was implemented across T6.1.3/T6.1.5/T6.2.1 and
