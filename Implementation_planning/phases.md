@@ -599,7 +599,7 @@ is a defence-in-depth backstop, not the fix. Restarting the worker only resets t
 **Do not fix blind** — the loops are `FOR UPDATE SKIP LOCKED` claim-and-process, so transaction
 boundaries carry the claim semantics. Changing them needs its own tests.
 
-### B2 — Postgres collation version mismatch (ops)
+### B2 — Postgres collation version mismatch (ops) — **RECURRING, not one-time. Reopened 2026-08-15**
 
 Both environments were created under glibc collation **2.42**; the OS now provides **2.43**. That
 makes text sort order potentially wrong in indexes built under the old version — 30 `text`/`varchar`
@@ -611,6 +611,41 @@ indexes in each environment.
 - **prod: FIXED 2026-08-07** — same procedure, run by the operator (stopping a prod container is outside
   what the assistant is permitted to do). `datcollversion` 2.42 → 2.43, 0 invalid indexes, worker back
   healthy, `/` and `/api/auth/csrf` both 200.
+
+> **RECURRED on staging 2026-08-15, reintroduced by the v2026.7 Minimus migration.** Moving onto
+> `reg.mini.dev` base images moved glibc again, 2.43 → **2.44**, and every database went back into
+> mismatch. **This is the correction that matters: B2 is not a defect that gets fixed, it is a
+> standing consequence of changing a base image.** Any release that moves a Postgres base image
+> reintroduces it, silently, with a healthy container and a warning nobody reads. It belongs in
+> `post_deploy` on every such manifest, not in a backlog list of closed items.
+>
+> **The 2026-08-07 fix was also under-scoped, in a way only the second occurrence revealed.** It
+> treated one database per host. The 2026-08-15 readings found the miss: on the app cluster
+> `template1` and `postgres` were still at **2.42** — untouched by that fix and a full two versions
+> behind — and the entire **keycloak-db cluster** (`haisir_keycloak_db`, `template1`, `postgres`) was
+> at 2.42 as well, never considered at all. `template1` is the one that compounds: a stale template
+> means every database created from it inherits the old collation version, so the defect reproduces
+> itself into anything provisioned later.
+>
+> **staging: FIXED AGAIN 2026-08-15** — all four rows on both clusters now read 2.44.
+> `REINDEX DATABASE CONCURRENTLY` then `REFRESH COLLATION VERSION` on the two user databases
+> (`haisir_app_db`, `haisir_keycloak_db`); bare `REFRESH` on `template1` and `postgres` in each
+> cluster, no reindex — they hold only system catalogs, whose text columns are the `name` type, which
+> is always C collation and therefore immune to glibc changes. `CONCURRENTLY` avoids the
+> ACCESS EXCLUSIVE locks plain `REINDEX DATABASE` takes per index, so nothing had to be stopped —
+> an improvement on the 2026-08-07 procedure, which stopped the worker for ~40 s. `template0` reads
+> NULL and is correct untouched: it is frozen and unconnectable by design.
+>
+> **prod: OUTSTANDING.** Prod runs the same migration and will show the same mismatch on both
+> clusters the moment v2026.7 lands. Prod's `keycloak-db` was on unpinned `chainguard/postgres:latest`
+> and has never been pinned, so expect a baseline at or below 2.42 — on the cluster holding real user
+> records. Read `SELECT datname, datcollversion FROM pg_database` on **both** prod clusters *before*
+> the deploy, so the reindex is planned rather than discovered mid-window.
+>
+> Worth naming, because it is the argument for the pinning work in this phase: the keycloak cluster's
+> 2.42 baseline predates v2026.7 entirely. An **unpinned** `:latest` had been rolling new glibc under
+> a live data directory for months. The migration did not cause this; pinning is what finally made it
+> visible.
 
   > Observed on the restart: `idle in transaction` was back at **2** within a minute. B1 reproduces
   > immediately — restarting the worker only resets the clock, it does not avoid the problem.
@@ -874,3 +909,46 @@ and could be run against all three `APP_ENV`s in CI to assert it emits without e
 **Deliberately not folded into Phase 7.5** — the phase's remaining work is a staging deploy and a
 prod window, and widening CI scope mid-window risks turning a lint failure into a deploy blocker at
 exactly the wrong moment. Do it at the start of the next phase, not now.
+
+### B10 — The route-push fallback installs a grant, not a deny-all, and both the manifest and the code say otherwise (deploy / security)
+
+**Found 2026-08-15 during the G6.1 staging verification.** `create_route_config.sh` preserves a live
+`ip-restriction` whitelist across a route push. When the Admin API read *fails* (transport error, not
+a 404), it falls back to the template — and logs `applying the template's whitelist`. The release
+manifest's `post_deploy` item C describes that same fallback as *"applies the template's **deny-all**
+rather than failing quietly"*, and the code's own comment at `create_route_config.sh:207` repeats the
+phrase for the too-broad-to-preserve branch.
+
+**Both are wrong wherever `KEYCLOAK_ADMIN_ALLOWED_CIDR` resolves to a real address.** The template is
+not a deny-all; it renders whatever that key holds in KV. On staging it renders `100.100.87.31/32` —
+a live `/32` grant. So the documented safe fallback actually *installs standing access*.
+
+Staging blast radius is nil: that address is Tailscale-only and unreachable from the internet. **Prod
+is the concern** — it is public-fronted through cftunnel, so if prod's KV value is a routable
+address, a transport blip during Step 8 would silently publish a standing public grant to the
+Keycloak admin console while the runbook states the failure mode is closed. Nothing would look wrong:
+the deploy reports success and the warning reads as reassurance.
+
+Note this is *only* the failure path. The normal path is correct and was observed working on
+2026-08-15 (live `127.0.0.1/32` preserved over the template on all three keycloak-admin routes).
+
+**Fix:** decide which behaviour is intended, then make text and code agree. Failing closed on an
+unreadable Admin API is the safer default — an operator who loses a grant can re-issue it with
+`keycloak-admin-access.sh grant`, whereas nobody notices an unintended one. **Prod-window action
+regardless:** read what prod's `KEYCLOAK_ADMIN_ALLOWED_CIDR` resolves to *before* Step 8, so the
+fallback's actual effect is known rather than assumed.
+
+### B11 — `copy-datadir.sh`'s verification step self-skips against a running backend (deploy)
+
+**Found 2026-08-15 in the staging deploy log.** Step 11 printed
+`💡 Backend container not running - data is in volume ready to be mounted` while
+`haisir-backend-staging` was `Up 2 days (healthy)`. The copy and the `chown 1000:1000` both succeeded;
+what did not happen is the **verification** — the 42-entry ownership check the 2026-08-12 run
+performed was silently skipped, because the probe looks for a container it cannot find (almost
+certainly a name missing the `-<env>` suffix, the same class of bug as the `haisir-backend-datadir-staging`
+decoy-volume error already recorded against that manifest's `pre_checks`).
+
+Low severity on staging, and the datadir work itself is fine. It matters on prod because that step's
+*only* verification is this probe: pre_check 10 calls prod "its second execution ever" and leans on
+the check to confirm the UID 65532 → 1000 move landed. A verification that cannot fail is the same
+false-assurance class as B9. One-line fix; do it before the prod window.
