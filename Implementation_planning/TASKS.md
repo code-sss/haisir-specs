@@ -267,9 +267,12 @@ prod window) is still live, and it is now step 5 of the list below too. Read thi
 **Repo state, so a cold session does not re-derive it:** `haisir-deploy` **`9c4dbac`**,
 `haisir-specs` **`0ce5179`**, both trees clean. `haisir-backend` `46570b7` / `haisir-frontend`
 `6512e83` — unchanged since the v2026.7 build point, Jenkins-only commits, nothing to rebuild.
-CI green on `9c4dbac`. Two untracked files in `haisir-specs` are deliberate, not residue:
-`Phase_7.5_Goal_Tree.md` (duplicates PLAN.md content; tracking it is an open owner call) and
-`prod_deploy_msg.txt` (stale scratch from an earlier session).
+CI green on `9c4dbac`. **`haisir-deploy` is at `3511267` as of the prod window** (`docs/v2026.7-prod-window`,
+not merged). Untracked files in `haisir-specs`, none of them residue:
+`Implementation_planning/prod-window-2026-08-16-findings.md` (**the one that matters — read it
+first, see step 5**), `log.txt` (the full prod deploy log, 1334 lines; delete once the findings are
+folded), `Phase_7.5_Goal_Tree.md` (duplicates PLAN.md content; tracking it is an open owner call)
+and `prod_deploy_msg.txt` (stale scratch from an earlier session).
 
 **The five-step plan for the rest of Phase 7.5. Steps 1–2 are DONE.**
 
@@ -329,21 +332,42 @@ CI green on `9c4dbac`. Two untracked files in `haisir-specs` are deliberate, not
    `TargetDown`'s `for: 2m`, confirm the alert fires **and the Slack message actually arrives**.
    Substitute a real scrape target for the plan's nonexistent `BackendDown`. **This is the last
    goal in the phase closable without a prod window.**
-5. **◀ IN PROGRESS 2026-08-16 — prod window APPROVED and deploy running.** All pre-deploy gates
-   cleared; **full results are recorded in `haisir-deploy` `releases/v2026.7/PROD_WINDOW.md`, on
-   branch `docs/v2026.7-prod-window` (`36bdd6c`, NOT merged to main)** — read that first, it has the
-   collation baseline needed for post_deploy H, the certbot hash match, and the finding that
-   `KEYCLOAK_ADMIN_ALLOWED_CIDR` is empty on prod so B10's risk there is nil (the template renders
-   deny-all). ⚠ **Key gotcha recorded there:** every pre-deploy command run on prod executed
-   **v2026.6 code** (`common/` is only rsynced at Step 2), which produced three false alarms —
-   trust prod pre-deploy checks that read *state*, not ones that exercise *logic*.
-   What remains once the deploy exits 0: **post_deploy A→B** (403 from outside while realm endpoints
-   stay 200; then grant → console → **revoke**), then **G** (pgvector) and **H** (collation, four
-   databases across two clusters, reindex before refresh). `bootstrap.sh db-engine` is already done
-   (first-time enable on prod). Original text: same manifest, `--env prod`. Four abort-or-lock-out gates first (certbot
-   sudoers, Admin API reachability *before* the route push, keycloak-db `PG_VERSION`, fresh
-   backups), then post_deploy A–G. Unblocks T6.2.6 → T6.2.7 → T6.3.2, and with it the remaining
-   ~20 leaf tasks: G6.3 → G6.4 → G6.5/G6.6 → T7.3 → T7.4/T7.5 → T7.6 → T7.7–T7.11.
+5. ~~**Deploy prod.**~~ **DONE 2026-08-16 — v2026.7 IS LIVE ON PROD.** Deploy exited 0 in 373s,
+   13 containers healthy, 27/27 routes + 4/4 plugin configs pushed. **T6.2.6 and T6.2.7 are both
+   closed** (403 from outside; grant → browser login to the prod console → revoke → 403 returns),
+   which unblocks **T6.3.2** and the ~20 leaf tasks behind it.
+
+   ### ▶▶▶ COLD SESSION: READ `prod-window-2026-08-16-findings.md` FIRST
+   That file (this directory) is the full outcome + eight new findings, and it is a **holding pen**:
+   its first job tomorrow is to be folded into `phases.md` as **B12–B18** and into the TASKS.md
+   entries it names, then deleted. Do not start anything else before that fold — the findings are
+   only in one uncommitted file until it happens.
+
+   **Three gates passed live for the first time ever:** G5 clause 2 (certbot hook hash — G5 can now
+   close), B5 (`allow_admin` — the Admin API was reachable, so routes actually pushed, unlike
+   v2026.6), and B6 (admin console deny-all now live on prod).
+
+   **The window cost three failed deploy attempts before the successful one.** All three causes are
+   filed: a missing sudoers grant reported as a missing file (**B15**), and prod's `.env` silently
+   missing all three `*_IMAGE_TAG` lines while Step 3 logged SUCCESS for writing them (**B14**,
+   with the unanswered question of how they went missing in **B17**).
+
+   **Still open on prod, in priority order:** post_deploy **H** (collation — six databases across
+   two clusters, prod readings captured in the findings file, reindex **before** refresh),
+   **G** (pgvector), **E** (integration suite — `13-test-prometheus.sh`'s first real execution
+   anywhere), **D** (G6.1's prod half), **F** (delete the 2026-08-08 rollback artifacts; **keep**
+   the CA backups). Separately, the **OpenBao stack is still on `2.6.0` on prod** — the T4.11
+   cutover ran on staging only, and it needs a window of its own, not a tail-end task.
+
+   ⚠ **Two gotchas worth carrying forward.** (1) Every pre-deploy command run on prod executes
+   **v2026.6 code** (`common/` is only rsynced at Step 2) — trust prod pre-deploy checks that read
+   *state*, not ones that exercise *logic*. (2) **`curl` against the public hostname always 403s**
+   on user-agent before reaching `ip-restriction`, so every curl-based post_deploy check in the
+   manifest is unpassable as written (**B18**) — verify those in a browser.
+
+   Prior record: `haisir-deploy` `releases/v2026.7/PROD_WINDOW.md`, branch
+   `docs/v2026.7-prod-window` (`36bdd6c`, NOT merged to main) — pre-deploy baselines only; tonight's
+   outcome is in the findings file, not there.
 
 > **The prod-deploy freeze above is now effectively discharged.** The 2026-08-13 owner call was
 > "no prod deploy until every non-prod-gated task is complete". After step 4 that bar is met —
@@ -360,7 +384,7 @@ the blocker it was recorded as. (The `3080` changes in that same `tailscale.json
 
 Tasks with no pending dependencies — can be started immediately:
 
-- **T6.2.6 / T6.2.7 [deploy]: Apply the deny-all on prod, then prove admin access still works** — 🚫 **[PROD-GATED]**, dependency-unblocked (T6.2.5 done) but deliberately deferred by owner call until the prod window opens; not actionable now.
+- ~~**T6.2.6 / T6.2.7 [deploy]: Apply the deny-all on prod, then prove admin access still works**~~ — ✅ **BOTH DONE 2026-08-16** in the prod window; evidence in `prod-window-2026-08-16-findings.md` §1. Note T6.2.7 passed only via a manual Admin API PATCH: `keycloak-admin-access.sh` cannot grant an IPv6 address at all (**B12**), so the task is closed but the tool it depends on is not fixed. **T6.3.2 is now unblocked.**
 - **T7.1 [specs]: Record the delivered image inventory** — dependency-unblocked now that T4.11 is done (2026-08-13, see task entry above). Lives in `haisir-specs`, not this repo — not actionable from a `haisir-deploy` workspace.
 
 Recently closed out of this queue (evidence on each task's own entry, not repeated here):

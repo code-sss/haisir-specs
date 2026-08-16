@@ -21,6 +21,13 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 
 ## Current State
 
+> **▶ 2026-08-16 — v2026.7 IS LIVE ON PROD.** The Phase 7.5 prod window ran and exited 0 (373s,
+> 13 containers healthy, 27/27 routes pushed). **T6.2.6 + T6.2.7 closed**, which unblocks T6.3.2 and
+> the ~20 leaf tasks behind it; G5 can close. **Start here:**
+> `Implementation_planning/prod-window-2026-08-16-findings.md` — the window outcome plus eight new
+> findings (B12–B18), still an unfolded holding pen. Then `TASKS.md` step 5 under "RESUME HERE".
+> Phase 7.5 is still open; the sections below describe Phase 7 and earlier.
+
 **Phase 7 — Gateway WAF Modernisation, CSP & Security Review Closeout — COMPLETE (2026-08-06).** All eight goals (G1–G8) closed. Full decision record in `decisions.md` (2026-08-06); task-level evidence in `TASKS.md`.
 
 - **WAF.** Coraza **v3.3.3 → v3.7.0**, OWASP CRS **v4.14.0 → v4.25.1 LTS** — clearing CVE-2026-21876 (CVSS 9.3, multipart charset bypass). The exclusion treadmill is closed: blanket `ctl:ruleRemoveById` went from **38 rule IDs to 1**, and that survivor (`931130`) is a structural exception, not residue — it targets a `TX` variable, so the `ARGS_POST` regex form that replaced the other 37 cannot apply. 41 runtime field-scoped exclusions are now expressible at all, which they were not on v3.3.3: regex collection keys landed in Coraza v3.5.0, so every prior attempt parsed as a literal variable name and silently matched nothing. That version gap — not an engine defect — was the mechanical root cause of the whole treadmill.
