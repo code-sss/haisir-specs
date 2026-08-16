@@ -920,7 +920,7 @@ rather than failing quietly"*, and the code's own comment at `create_route_confi
 phrase for the too-broad-to-preserve branch.
 
 **Both are wrong wherever `KEYCLOAK_ADMIN_ALLOWED_CIDR` resolves to a real address.** The template is
-not a deny-all; it renders whatever that key holds in KV. On staging it renders `100.100.87.31/32` —
+not a deny-all; it renders whatever that key holds in KV. On staging it renders `<staging-admin-cidr>` —
 a live `/32` grant. So the documented safe fallback actually *installs standing access*.
 
 Staging blast radius is nil: that address is Tailscale-only and unreachable from the internet. **Prod
