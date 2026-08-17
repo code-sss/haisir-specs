@@ -1117,3 +1117,43 @@ following the runbook literally sees failures that are not there — or, worse, 
 
 **Fix:** rewrite the public-endpoint checks to send a browser user-agent, or state explicitly that
 they must be run in a browser. Host-local checks against `127.0.0.1:9180` are unaffected.
+
+### B19 — CrowdSec's TLS cert is a gitignored, host-local file the deploy never provisions (deploy / security) — surfaced 2026-08-17
+
+`other/services/crowdsec/docker-compose.yml` mounts `./tls:/etc/crowdsec/tls:ro`, and
+`config.yaml.local` points `api.server.tls.cert_file`/`key_file` at it unconditionally
+(T6.3.3, `d55f05a`, "harden internal TLS verification"). The cert/key are gitignored by
+design (`other/services/crowdsec/tls/` in `.gitignore`) and generated per-host —
+`other/services/crowdsec/README.md`'s own "TLS Setup" section calls this **"One-time
+setup on each host running CrowdSec (staging, prod)"** and warns `docker compose up -d`
+**will fail to start CrowdSec if the cert isn't there first.**
+
+Surfaced during T4.11's staging recreate (2026-08-13): crowdsec's compose has these
+"unrelated, not-yet-provisioned TLS mounts from a July commit predating this phase" —
+recorded there only as a note, not tracked. No `haisir-deploy` script runs the three-step
+setup (`generate-certs-crowdsec.sh` → copy into `tls/` → restart) anywhere — not
+`deploy.sh`, not `full-setup.sh`, not any `pre_checks`/`post_deploy` manifest item. It is
+a README-only manual step, invisible to anything that checks deploy completeness.
+
+**Open question this repo can't answer without live host access**: did prod's crowdsec
+ever get this one-time setup? If not, prod's crowdsec — still on its pre-Minimus image
+per T4.12, i.e. not recreated since T6.3.3 landed — is likely still serving plaintext
+LAPI, while `common/apisix_conf/config.yaml`'s `crowdsec_lapi_scheme: "https"` +
+`ssl_verify: true` (also from T6.3.3) may already assume otherwise on that host.
+
+**T4.12 deliberately does not resolve this** — owner call 2026-08-17: recreate prod's
+crowdsec the same lower-risk way T4.11 did on staging, a single-line image-tag-only edit
+on the live host rather than a full compose sync or an scp of the cert, so T4.12 never
+hits the "fails to start without the cert" path at all. That sidesteps the immediate
+recreation risk but leaves the underlying question open — whether prod's crowdsec is
+actually TLS-verified end to end is still unknown after T4.12 closes.
+
+**Fix, deferred to a future phase, not T4.12**: either (a) fold the three-step TLS setup
+into a `pre_checks`/host-provisioning step so a missing cert aborts the deploy with a
+named error instead of crowdsec silently failing to start, or (b) at minimum, add an
+explicit check that verifies `other/services/crowdsec/tls/{crowdsec.crt,crowdsec.key}`
+exist on the host and that the LAPI is actually serving TLS (README's own verify step:
+`docker exec crowdsec curl -sk --cacert .../crowdsec.crt https://localhost:8080/...`
+expects `401`, not a connection error) before ever recreating that container for real.
+Same class of gap as B15 (the certbot sudoers grant) — host provisioning that lives only
+in a README, not in anything that runs.
