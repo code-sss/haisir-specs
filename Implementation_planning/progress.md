@@ -21,12 +21,21 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 
 ## Current State
 
-> **▶ 2026-08-16 — v2026.7 IS LIVE ON PROD.** The Phase 7.5 prod window ran and exited 0 (373s,
-> 13 containers healthy, 27/27 routes pushed). **T6.2.6 + T6.2.7 closed**, which unblocks T6.3.2 and
-> the ~20 leaf tasks behind it; G5 can close. **Start here:**
-> `Implementation_planning/prod-window-2026-08-16-findings.md` — the window outcome plus eight new
-> findings (B12–B18), still an unfolded holding pen. Then `TASKS.md` step 5 under "RESUME HERE".
-> Phase 7.5 is still open; the sections below describe Phase 7 and earlier.
+> **▶ 2026-08-17 — prod window folded; the phase's single gate is open.** v2026.7 has been live on
+> prod since 2026-08-16 (exit 0, 373s, 13 containers healthy, 27/27 routes pushed). The window's
+> findings file has been **folded into `phases.md` as B12–B18 and deleted** — B12 (the recovery tool
+> cannot grant an IPv6 client) is the one with a security consequence; B14/B15 are what cost three
+> failed deploy attempts, both report-success-while-failing bugs. **Closed off the back of it:**
+> T6.2.6, T6.2.7, **G6.2** and **G5**, plus backlog **B5** and **B6**.
+>
+> **Start here — `TASKS.md`, "Tasks with no pending dependencies".** Two fronts, neither blocked:
+> **T6.3.2** in `haisir-deploy` (the neck — ~20 sequential leaf tasks sit behind it, and it lands as
+> one all-or-nothing commit), and the four read-only prod post-deploy checks **H → G → E → D** (no
+> deploy needed; **H, the collation reindex across six databases, is the priority** and D is what
+> closes G6.1). **No ready task remains in this repo** — T7.1/T7.2 were already done 2026-08-14, and
+> the specs tail T7.3–T7.11 all sit behind the deploy chain.
+>
+> Phase 7.5 is still open. The sections below describe Phase 7 and earlier.
 
 **Phase 7 — Gateway WAF Modernisation, CSP & Security Review Closeout — COMPLETE (2026-08-06).** All eight goals (G1–G8) closed. Full decision record in `decisions.md` (2026-08-06); task-level evidence in `TASKS.md`.
 

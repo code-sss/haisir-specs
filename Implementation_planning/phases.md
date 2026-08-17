@@ -573,6 +573,14 @@ It does not depend on G1–G4 and should not wait behind them.
 > address and silently allowed the wrong one; B6's `template-configs.sh` responds to an empty
 > `*_CIDR` by **dropping the ip-restriction plugin entirely** rather than refusing to template. Each
 > was found by accident, and none would appear in a config diff.
+>
+> **Later additions, same list.** B7–B9 were surfaced by Phase 7.5's own G3 monitoring work;
+> B10–B11 by the 2026-08-15 staging deploy; **B12–B18 by the 2026-08-16 v2026.7 prod window**
+> (folded in from `prod-window-2026-08-16-findings.md`, now deleted). ✅ **B5 and B6 are closed**
+> — both by that prod window, evidence on their own entries. Of the prod-window batch, **B12 is the
+> one with a security consequence** (the only tool for recovering Keycloak admin access cannot grant
+> an IPv6 client), and **B14/B15 are what cost three failed deploy attempts** — both are
+> report-success-while-failing bugs, the same fail-open pattern this list keeps naming.
 
 ### B1 — Worker poller sessions sit `idle in transaction` (backend) — **the one worth fixing properly**
 
@@ -636,11 +644,27 @@ indexes in each environment.
 > an improvement on the 2026-08-07 procedure, which stopped the worker for ~40 s. `template0` reads
 > NULL and is correct untouched: it is frozen and unconnectable by design.
 >
-> **prod: OUTSTANDING.** Prod runs the same migration and will show the same mismatch on both
-> clusters the moment v2026.7 lands. Prod's `keycloak-db` was on unpinned `chainguard/postgres:latest`
-> and has never been pinned, so expect a baseline at or below 2.42 — on the cluster holding real user
-> records. Read `SELECT datname, datcollversion FROM pg_database` on **both** prod clusters *before*
-> the deploy, so the reindex is planned rather than discovered mid-window.
+> **prod: READINGS CAPTURED 2026-08-16, FIX STILL OUTSTANDING.** v2026.7 landed and the prod OS is
+> now at **2.44**. Six databases across two clusters need work — worse than staging, exactly as
+> predicted:
+>
+> | cluster | database | at | action |
+> |---|---|---|---|
+> | `haisir-db-prod` | `haisir_app_db` | 2.43 | `REINDEX CONCURRENTLY` → `REFRESH` |
+> | `haisir-db-prod` | `postgres`, `template1` | 2.42 | bare `REFRESH` |
+> | `keycloak-db-prod` | `haisir_keycloak_db` | 2.42 | `REINDEX CONCURRENTLY` → `REFRESH` |
+> | `keycloak-db-prod` | `postgres`, `template1` | 2.42 | bare `REFRESH` |
+> | both | `template0` | NULL | correct untouched |
+>
+> `haisir_keycloak_db` two glibc generations behind on the cluster holding real user records is the
+> worst reading either environment has produced. Reindex **before** refresh — refreshing first
+> silences the warning and leaves every index built under the old collation. This is `post_deploy`
+> item **H** on the v2026.7 manifest and is the highest-priority prod item outstanding.
+>
+> *Original text, kept for its prediction:* prod runs the same migration and will show the same
+> mismatch on both clusters the moment v2026.7 lands. Prod's `keycloak-db` was on unpinned
+> `chainguard/postgres:latest` and has never been pinned, so expect a baseline at or below 2.42 — on
+> the cluster holding real user records.
 >
 > Worth naming, because it is the argument for the pinning work in this phase: the keycloak cluster's
 > 2.42 baseline predates v2026.7 entirely. An **unpinned** `:latest` had been rolling new glibc under
@@ -742,6 +766,13 @@ override becomes redundant on its next deploy but is harmless. Residual worth na
 allowlist was simply the first thing to depend on it. Pinning the rootless Docker/rootlesskit version
 across hosts is the real remedy and is not done.
 
+> ✅ **CLOSED 2026-08-16 — confirmed fixed live on prod, the first real test of the template fix.**
+> The v2026.7 prod deploy's `setup.sh` reached the Admin API and pushed **27 routes, 4 plugin configs
+> and the global rules with 0 failures**. The v2026.6 silent-no-push did not recur. The residual this
+> entry named — pinning the runtime layer — was also closed inside Phase 7.5 by T5.8: both hosts now
+> report Docker 29.7.1 / rootlesskit 3.0.2 with `--port-driver=slirp4netns` pinned in a systemd
+> drop-in, verified in the live process argv (G5 clause 3).
+
 ### B6 — Keycloak admin routes run with no IP allowlist (security, pre-existing)
 
 Surfaced incidentally while re-templating prod on 2026-08-08:
@@ -783,6 +814,18 @@ Three pieces of work once decided: pick the exposure model, set the CIDR (or dro
 the public gateway), and change the empty-variable behaviour from "disable the restriction" to "fail
 the templating" — the current default silently weakens security on a missing value, the same fail-open
 shape as B4's swallowed stderr and B5's `10.0.2.0/24` assumption.
+
+> ✅ **CLOSED 2026-08-16 on prod** by Phase 7.5 G6.2 (BR-SEC-023), all three pieces delivered. The
+> exposure model chosen was public-with-deny-all: routes 13/14/15 stay on the gateway with
+> `ip-restriction` always present and `127.0.0.1/32` as the schema-valid deny-all, admin access
+> granted and revoked on demand. Staging landed 2026-08-13 (T6.2.5); prod landed in the v2026.7
+> window — routes pushed with the deny-all, console returns **403 from outside**, realm endpoints
+> stay reachable, and the grant → browser login → revoke → 403 round trip was proven live (T6.2.6 /
+> T6.2.7). The public exposure this entry recorded is closed.
+>
+> ⚠ **One dependency did not survive contact**: the grant half worked only via a manual Admin API
+> `PATCH`, because `keycloak-admin-access.sh` cannot grant an IPv6 client at all — filed as **B12**.
+> B6 is closed; the tool the recovery path depends on is not.
 
 ### B7 — No app-level "service down" or certificate-expiry alerting (deploy)
 
@@ -938,6 +981,13 @@ unreadable Admin API is the safer default — an operator who loses a grant can 
 regardless:** read what prod's `KEYCLOAK_ADMIN_ALLOWED_CIDR` resolves to *before* Step 8, so the
 fallback's actual effect is known rather than assumed.
 
+> **Prod leg answered 2026-08-16, no code change yet.** The prod-window action above was carried out:
+> the rendered whitelist read `127.0.0.1/32`, **not** a routable address, so the fallback could not
+> have installed a standing public grant on prod. The risk this entry raised did not materialise.
+> The text/code mismatch it tracks — manifest and `create_route_config.sh:207` both calling the
+> template a "deny-all" when it renders whatever KV holds — **is still open** and is what needs
+> fixing; the safe prod reading is a fact about today's KV value, not a property of the code.
+
 ### B11 — `copy-datadir.sh`'s verification step self-skips against a running backend (deploy)
 
 **Found 2026-08-15 in the staging deploy log.** Step 11 printed
@@ -952,3 +1002,118 @@ Low severity on staging, and the datadir work itself is fine. It matters on prod
 *only* verification is this probe: pre_check 10 calls prod "its second execution ever" and leans on
 the check to confirm the UID 65532 → 1000 move landed. A verification that cannot fail is the same
 false-assurance class as B9. One-line fix; do it before the prod window.
+
+> **REPRODUCED ON PROD 2026-08-16 — second occurrence, so the probe is definitively broken, not
+> flaky.** Log line 1292 printed "Backend container not running" while `haisir-backend-prod` was
+> `Up 2 minutes (healthy)`, identical to the staging occurrence. The copy and chown both succeeded;
+> only the verification was absent, and prod's ownership was confirmed by hand instead. The one-line
+> fix was **not** done before the window, so pre_check 10 leaned on a check that could not fail —
+> which is the B9 class this entry already named. Still open.
+
+### B12 — `keycloak-admin-access.sh` cannot grant an IPv6 address at all (security / deploy)
+
+**Found 2026-08-16 in the v2026.7 prod window — the real bug of the night.**
+`keycloak-admin-access.sh:149` validates the CIDR against an IPv4-only regex and hard-rejects
+anything else. There is **no argument** that grants an IPv6 client.
+
+Prod is public-fronted through cftunnel, `real-ip` extracts the true client address from
+`cf-connecting-ip`, and a client on an IPv6-capable connection arrives as IPv6. `ip-restriction`
+then compares an IPv6 address against an IPv4-only whitelist and denies — the console 403s no
+matter what the operator grants. That is exactly what happened during the window.
+
+**Consequence:** the release manifest's `post_deploy` item B ("prove admin access can still be
+granted") is **unprovable through the supported path** on any IPv6-reachable public host. It fails
+in the safe direction — an IPv6 client not in the whitelist is correctly denied — but it means the
+only tool for recovering admin access does not work when it is most needed. T6.2.7 passed only via
+a manual sub-path `PATCH` at the Admin API mirroring the script's own `set_whitelist`; `revoke` has
+no validation and reset all three routes correctly.
+
+**Fix:** accept IPv6 in the validator with its own minimum-prefix floor (`MIN_GRANT_PREFIX` is an
+IPv4 concept; `/64` is the sane IPv6 equivalent of a single customer allocation, `/128` for a stable
+address). Verify `lua-resty-ipmatcher` handles the mixed-family whitelist — it should, but that
+needs a live check, not an assumption.
+
+### B13 — bare `grant` detects the wrong machine's address (deploy)
+
+The script must run **on the target host** (the Admin API is loopback-only), so the no-arg path's
+`curl https://api.ipify.org` (`:137`) returns the **host's** egress address, never the operator's.
+The no-arg form is wrong by construction on any host, not just prod.
+
+`releases/v2026.7/manifest.yaml` `post_deploy` B asserts the opposite — "On prod, grant's auto-detect
+of the caller's public IP via api.ipify.org is CORRECT". It is not. Fix the script (drop the
+auto-detect, or make it fail loudly when `$PWD` is a deploy environment directory) and fix the
+manifest text.
+
+### B14 — `deploy.sh` Step 3 reports success while writing nothing (deploy)
+
+**Cost two of the three failed prod deploy attempts on 2026-08-16.** Both the manifest-override and
+auto-bump paths write image tags with `sed -i 's|^VAR=.*|VAR=…|'` (`deploy.sh:457`). `sed` **silently
+no-ops when the line does not exist** and exits 0, so the step logs
+`[SUCCESS] GATEWAY_IMAGE_TAG set to v2026.7` having changed nothing. The failure surfaces two steps
+later as an opaque `invalid reference format` on `registry.haisir.in/haisir-gateway:`.
+
+Same class as pre_check 4's "deploy.sh will NEVER write them", but worse, because this one *claims*
+it did.
+
+**Fix:** append the line when absent, or assert the line exists and abort with a message naming the
+variable. The auto-bump path's `does not match … — skipping` message should also distinguish "tag is
+pinned" from "variable is absent" — they print identically today, and the second is a hard error
+dressed as a routine skip.
+
+### B15 — the certbot sudoers grant is undocumented host provisioning (deploy)
+
+**Cost the third failed prod deploy attempt on 2026-08-16.** Step 2b reads the installed hook under
+`sudo`, so the deploy user needs passwordless sudo for `sha256sum` and `stat` on
+`/etc/letsencrypt/renewal-hooks/deploy/haisir-sync-certs.sh`. That grant exists only as prose in one
+release manifest's pre_check 1. It is not in `docs/DOCKER_INSTALL_GUIDE.md`, not in
+`verify-setup.sh`, not anywhere a host rebuild would pick it up — so a rebuilt prod host reproduces
+that abort exactly.
+
+Compounding it: the error text is misleading. A missing sudo grant and a missing file both produce
+an empty read, and the branch at `deploy-lib.sh:194` reports both as **"Certbot hook not found"**.
+The hook was present and correct; the message sent the operator looking for a missing file. The
+`2>/dev/null` on that remote command is what discards the real reason.
+
+**Fix:** document the grant as required provisioning next to the rootlesskit pin, and split the two
+failure modes in `assert_certbot_hook_matches` — probe existence and readability separately so the
+message names the actual cause.
+
+### B16 — release manifest v2026.7 carries three wrong facts (specs)
+
+All three in `releases/v2026.7/manifest.yaml`:
+
+1. **`post_deploy` A's realm URL is wrong.** It says
+   `https://haisir.in/realms/haisir-realm/.well-known/openid-configuration`. Route
+   `01-keycloak-realms.json` is `uri: /realms/haisir-realm-{{APP_ENV}}/*`, so prod's realm is
+   `haisir-realm-prod`. The documented URL matches no route, falls through to catch-all and returns
+   403 — which reads as "the deploy broke app login" when nothing is wrong.
+2. **The rollback note's frontend tag is wrong for prod.** It says restoring `VERSION=2026.6`
+   returns frontend to `v2026.6-${APP_ENV}`. Prod's frontend actually runs the bare `v2026.7` tag
+   (see B17). Following the rollback note as written would pull an image that does not exist.
+3. **`post_deploy` B's ipify claim** — see B13.
+
+### B17 — the frontend image tag convention differs between environments and is documented nowhere (deploy)
+
+`haisir-frontend/Jenkinsfile:5` defaults to `v<VERSION>-staging`, and the manifest describes the
+pattern as `v${VERSION}-${APP_ENV}` — but **prod runs the bare `v2026.7`** (2026-08-16 deploy log
+line 1008: `registry.haisir.in/haisir-frontend:v2026.7 Pulled`). Backend and gateway are bare on
+both. So the env-suffix applies to staging's frontend only, and nothing in the repo says so.
+
+**Open question worth answering before the next window:** how did prod's `.env` lose
+`BACKEND_IMAGE_TAG`, `FRONTEND_IMAGE_TAG` and `GATEWAY_IMAGE_TAG` in the first place? All three
+lines were simply absent (Step 3 read them as empty), yet prod had been running v2026.6 from those
+same variables. If something removes them it will happen again — and B14 guarantees the next
+occurrence is equally opaque.
+
+### B18 — every curl-based post_deploy check returns a false 403 (specs / verification)
+
+`curl` against the public hostname is rejected on user-agent before it ever reaches
+`ip-restriction` — confirmed 2026-08-16 on `/realms/haisir-realm-prod/.well-known/openid-configuration`,
+which returned **403 to curl and valid JSON in a browser**.
+
+This is not a bug in the WAF; it is a bug in **every manifest check written as a curl one-liner**,
+including `post_deploy` A's "must stay 200". Those checks cannot pass as written, so an operator
+following the runbook literally sees failures that are not there — or, worse, learns to ignore them.
+
+**Fix:** rewrite the public-endpoint checks to send a browser user-agent, or state explicitly that
+they must be run in a browser. Host-local checks against `127.0.0.1:9180` are unaffected.
