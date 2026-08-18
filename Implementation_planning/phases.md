@@ -644,7 +644,17 @@ indexes in each environment.
 > an improvement on the 2026-08-07 procedure, which stopped the worker for ~40 s. `template0` reads
 > NULL and is correct untouched: it is frozen and unconnectable by design.
 >
-> **prod: READINGS CAPTURED 2026-08-16, FIX STILL OUTSTANDING.** v2026.7 landed and the prod OS is
+> **prod: FIXED 2026-08-17.** All six rows across both clusters now read **2.44**, 0 invalid indexes
+> on either cluster. Procedure as on staging: `REINDEX DATABASE CONCURRENTLY` then
+> `ALTER DATABASE … REFRESH COLLATION VERSION` on the two user databases (`haisir_app_db` 2.43 → 2.44,
+> `haisir_keycloak_db` 2.42 → 2.44), bare `REFRESH` on `template1` and `postgres` in each cluster
+> (2.42 → 2.44), `template0` left NULL. Nothing stopped — `CONCURRENTLY` took no ACCESS EXCLUSIVE
+> locks, and the B1 pre-flight found **0** `idle in transaction` sessions, confirming v2026.7's
+> T5.1/T5.2 poller-rollback fix live on prod (B1 is what stalled the first staging reindex attempt).
+> `post_deploy` item **H** on the v2026.7 manifest is closed. **B2 itself stays open** — it recurs on
+> every release that moves a Postgres base image.
+>
+> *Readings as captured 2026-08-16, kept for the record:* v2026.7 landed and the prod OS is
 > now at **2.44**. Six databases across two clusters need work — worse than staging, exactly as
 > predicted:
 >
@@ -1157,3 +1167,148 @@ exist on the host and that the LAPI is actually serving TLS (README's own verify
 expects `401`, not a connection error) before ever recreating that container for real.
 Same class of gap as B15 (the certbot sudoers grant) — host provisioning that lives only
 in a README, not in anything that runs.
+
+### B20 — `13-test-prometheus.sh` can never execute its assertions, on any host (deploy / verification) — surfaced 2026-08-17
+
+`config.sh` gates both metrics URLs on `LOCAL_TESTS`:
+
+```
+if [ "$LOCAL_TESTS" = "true" ]; then
+    DEFAULT_PROMETHEUS_URL="http://localhost:9090"
+    DEFAULT_APISIX_METRICS_URL="http://localhost:9091"
+else
+    DEFAULT_PROMETHEUS_URL=""
+    DEFAULT_APISIX_METRICS_URL=""
+fi
+```
+
+(identical branches for staging and prod). The reasoning in its own comment is correct — both
+endpoints bind `127.0.0.1` on the host per T3.3, so they only resolve when the suite runs on the
+server itself.
+
+**But `test-runner.sh`'s file glob makes that gate unsatisfiable for this file.** With
+`LOCAL_TESTS=true` the runner selects `*-local.sh` only; otherwise it selects `*-test-*.sh`
+**excluding** `*-local.sh`. `13-test-prometheus.sh` is not a `-local.sh` file, so it runs
+**only** in the `LOCAL_TESTS=false` phase — where both URLs are empty by construction. The script
+hits its guard at line 19, prints `Prometheus/metrics endpoints not configured for <env>`,
+skips, and **exits 0**.
+
+**This is not environment-specific.** The staging observation recorded on the v2026.7 manifest —
+"self-skips on staging, not configured for this environment" — was read as a staging gap that prod
+would close. It is not: prod produces the identical skip, for a reason that has nothing to do with
+which environment is targeted. Same class as **B11** — a verification that self-skips and reads as
+a pass.
+
+**Consequence:** manifest `post_deploy` **E**'s claim that prod is `13-test-prometheus.sh`'s "first
+real execution anywhere" and "the gate proving T3.3's export-server fix" **cannot hold** — the gate
+is structurally incapable of firing. **T3.3's metrics-bind fix (APISIX's Prometheus export server
+moved off container-loopback to `0.0.0.0`) is therefore unverified on every host**, staging and prod
+alike, and has been since it landed in `5f817be`. Adds a fourth item to **B16**'s wrong-manifest-facts
+list.
+
+**Fix direction:** rename to `13-test-prometheus-local.sh` so the runner scp's it to the host and
+runs it there, where `localhost:9091` resolves. That is the smaller change and matches how
+`14-test-tech-stack-detection-local.sh` and `17-test-real-ip-forwarding-local.sh` already work; the
+`LOCAL_TESTS` branches in `config.sh` then become reachable as written and need no edit. Note the
+rename also moves the file into the phase that requires `REMOTE_HOST`, which is the correct
+dependency. Until then, verify by hand on the host (`curl -s -o /dev/null -w '%{http_code}'
+http://localhost:9091/apisix/prometheus/metrics` = 200, plus the five `apisix_*` metric families
+PROM-3..7 grep for).
+
+**Confirmed live on prod 2026-08-17, and it is worse than "exits 0".** `config.sh:263-268`'s `skip()`
+increments **both** `TOTAL` and `PASSED` — its own comment reads `# Skipped counts as passed` — so
+`print_summary`'s `[[ PASSED -eq TOTAL ]]` succeeds and the runner's results table renders the row as
+**`Prometheus Metrics  1/1 ✓`**, in green, indistinguishable from a category that actually ran. That
+is why this survived unnoticed across every suite run on both hosts: the failure mode is not a
+visible skip, it is a fabricated pass. Worth weighing whether `skip()` should stop counting toward
+`PASSED` at all — it currently makes *any* self-skipping test report green, which is the same
+mechanism behind **B11**.
+
+**T3.3 IS VERIFIED — by hand, 2026-08-17, on prod.** Run on the prod host:
+`curl -s -o /dev/null -w '%{http_code}' http://localhost:9091/apisix/prometheus/metrics` → **200**,
+and the five `apisix_*` metric families PROM-3..7 grep for match **651** lines. The export server is
+confirmed off container-loopback and reachable from a sibling container. **This is the first
+verification of T3.3's fix on any host**, and it closes the substantive gap; B20 remains open for
+the test-harness defect that was supposed to provide it.
+
+### B21 — placeholder discovery reports two permanent phantom warnings on every render (deploy / verification) — surfaced 2026-08-17
+
+`template-configs.sh`'s placeholder-discovery pass scans `common/apisix_conf/config.yaml` as flat
+text, comments included, so it picks up `{{PLACEHOLDER}}` and `{{X}}` out of the file's own prose at
+lines 38-39 and 57-59 — where they appear as *documentation* of the quoting rule
+("any `{{PLACEHOLDER}}` value MUST be double-quoted… unquoted `{{X}}` gets rewritten to flow style"),
+not as substitution targets. Every render on every environment therefore ends with:
+
+```
+WARNING: Placeholder {{PLACEHOLDER}} found but no environment variable PLACEHOLDER is set
+WARNING: Placeholder {{X}} found but no environment variable X is set
+```
+
+**No security impact** — unresolved *secret* placeholders take the hard-fail path at
+`template-configs.sh:364`, not this soft warning, so nothing sensitive can hide behind these. The
+cost is that the two phantoms are permanent, appear on the happy path, and train an operator to
+scroll past exactly the warning class that would flag a genuinely unresolved value. Observed on the
+prod render 2026-08-17 alongside one *real* warning (`{{TEST_USER_PASSWORD}}`, correct and
+by-design — `deploy-required-keys.txt:42` scopes that key `envs=dev,staging`, so prod is expected to
+leave it unset), which is precisely the discrimination the noise makes harder.
+
+**Fix direction:** strip comment lines before the discovery scan, or exclude a placeholder whose name
+matches a documented-example allowlist. Renaming the two in the comment text (e.g. to `EXAMPLE_KEY`
+without braces) is smaller still and needs no code change.
+
+### B22 — routes deleted from the repo are never pruned from the gateway (deploy) — surfaced 2026-08-17
+
+`setup.sh` / `create_route_config.sh` push every route file in `common/routes/.templated/$APP_ENV/`
+but never delete a route the repo no longer produces. There is no reconciliation step and no
+`DELETE` call anywhere in the route path — the live route table is append/update-only, so removing a
+file from the repo has **no effect on any host that already has it**.
+
+**Found on prod during T4.12's post-deploy item D (2026-08-17).** Diffing the rendered URI set
+against the live Admin API returned exactly one `>` line and zero `<` lines — the push itself is
+complete, the delta is pure residue:
+
+```
+/api/mock-exams/*/static     (route id: api-mock-exams-static, priority 15)
+```
+
+`common/routes/12-api-mock-exams-static.json` was deleted from the repo on **2026-03-20** in
+`6ef04f3` ("refactor(exam): cleanup for old exam"), which renamed `12-api-mock-exams-static.json` →
+`12-api-exams-static.json` and dropped the original. The live route's `update_time` decodes to
+**2026-03-12**, eight days before that commit — it has been frozen and unreachable-by-any-repo-change
+for ~5 months, across every deploy since, including v2026.6 and v2026.7.
+
+**Severity: moderate, not critical — it carries `plugin_config_id: "secured-api"`**, and
+plugin_configs *are* pushed fresh on every deploy, so authentication, OIDC and the security headers
+on this route are current, not frozen. What is frozen is its two **inline** plugins,
+`coraza-filter` and `limit-count`: per the route-level-overrides-plugin_config semantics, an inline
+plugin **replaces** the same-named plugin from the plugin_config rather than stacking with it, so
+this route's Coraza configuration is March 2026's and is missing every WAF exclusion added since
+(exam-review-chat/topic-doubt, the csrf-token 942440 site-wide fix, topic-content OCR/LaTeX).
+Practical exploitability is low — the backend no longer serves `/api/mock-exams/`, so the upstream
+should 404 — but the route is a live, authenticated-but-stale surface that no repo change can reach,
+patch, or remove.
+
+**The systemic defect is the finding, not this one route.** Any route file deleted in any future
+refactor leaves the same permanent residue on every host it already reached, silently, while the
+deploy reports success. Nothing in `deploy.sh`, `setup.sh`, the manifest `post_deploy` blocks, or
+`/review-deploy` compares the live route set against the rendered one — the check that found this
+was written ad hoc for item D.
+
+**staging: CONFIRMED PRESENT 2026-08-17 — this is a both-hosts defect, not a prod artifact.**
+`jq -e '.list | length'` returned **28** (so the Admin API answered properly) and
+`/api/mock-exams/*/static` is in the live URI set. The orphan therefore survived on *both* hosts
+across every deploy since 2026-03-20, which rules out any prod-specific explanation and confirms the
+missing prune step as the cause.
+
+*First staging attempt was a false negative worth recording as its own lesson:* it returned
+`jq: error … Cannot iterate over null` (no `APISIX_ADMIN_KEY` in that shell, so the Admin API
+returned an error body), and the `|| echo "not present on staging"` fallback then fired on empty
+grep input — printing a clean-looking absence for a check that never ran. Same
+self-skipping-verification shape as **B11** and **B20**, this time introduced by the ad-hoc
+verification command itself. Any `| grep X || echo absent` check needs a separate assertion that the
+input was non-empty (`jq -e '.list | length'` here) before its negative result means anything.
+
+**Fix direction:** add a prune step to the route push — enumerate live route ids, diff against the
+rendered set, `DELETE` the orphans (with an explicit allowlist if any host-managed route is ever
+expected to exist outside the repo). Pair it with a `post_deploy` assertion that the two sets are
+identical, which is a one-line `diff` and would have caught this in March.
