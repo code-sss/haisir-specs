@@ -632,7 +632,43 @@ task that implements it; none is re-litigated downstream.
 - **Build**: In the same deploy run, confirm nothing on the host was preserved across the wipe — the remote content must equal the committed content exactly, with no host-only line surviving.
 - **Done when**: each of the three remote files hashes identically to its committed counterpart.
 - **Test**: `[ "$(ssh <staging> "sha256sum ~/haisir-deploy/staging/.env" | cut -d' ' -f1)" = "$(sha256sum staging/.env | cut -d' ' -f1)" ]` exits 0.
-- **Depends on**: T6.4.2 [deploy].
+- **Depends on**: T6.4.2 [deploy], **T6.5.1 [deploy]** (added 2026-08-18 — see below).
+
+> **⚠ DEPENDENCY CORRECTED 2026-08-18 after the first live run: this task also depends on T6.5.1,
+> and T6.5.1's stated dependency on *this* task is wrong.** The run returned 2 of 3 matching —
+> `.env.config.sh` and `common/.env.config.common.sh` byte-identical (so the sync path is correct and
+> no host-only line survived the wipe), `staging/.env` differing. The cause is not residue: it is
+> `deploy.sh` **Step 3** ("Update VERSION and image tags in remote staging/.env"), whose
+> `sed -i` calls at `:400,464,498` rewrite the host copy immediately *after* Step 2 syncs it. That is
+> the exact block T6.5.1 deletes, so this test cannot pass until T6.5.1 lands — while T6.5.1 was
+> written as waiting on this test. **Correct order: T6.5.1, then re-check this on the next deploy**
+> (no second wipe — T6.4.2 established bootstrap-from-empty independently).
+>
+> **A first reading of this said the committed `.env` was stale in five values and needed operator
+> edits before T6.5.1. That was wrong, and the correction matters more than the claim did.** It was
+> inferred from log lines like `Setting GATEWAY_IMAGE_TAG=v2026.7 (manifest override)` — but the
+> deleted code's override path carried **no comparison**: it `sed`'d unconditionally whether or not
+> the value already matched, so that line only ever proved an override *existed*. T6.5.1's new
+> assertion (below) compares all seven keys against the committed file and **exits 0 on the real
+> v2026.7 manifest** — nothing was stale, no `.env` edit was ever needed.
+>
+> **Which also gives the better explanation of the `.env` hash difference.** The deleted block wrote
+> *literal* tags over what the committed file stores as unexpanded refs — the old code has an
+> explicit comment about tags held as `v${VERSION}-${APP_ENV}`. Same meaning, different bytes. So the
+> divergence was never a wrong value on the host; it was the rewrite flattening a template. With the
+> rewrite gone the two copies should be byte-identical, and **T6.4.3 should pass on the next deploy
+> with no `.env` edit and no second wipe.**
+>
+> *General lesson, since this is the second time in two days the same trap fired:* a log line that
+> reports an action is not evidence about the state that preceded it, unless the code took a branch
+> to decide. B22's own false negative was the same shape.
+>
+> **Owner call this forces, and it belongs in `decisions.md` before T6.5.1 is built:** with Step 3
+> deleted, a release bump becomes an edit to a committed `.env`, and the manifest's `image_tags:`
+> block stops actuating anything and becomes documentation. Either accept that — it is BR-SEC-022's
+> actual premise, the release artifact as source of truth — or have the release process *generate*
+> the committed `.env` from the manifest so the two cannot drift. T6.5.3 already deletes `image_tags`
+> from the manifest template, which points at accepting it, but that was never stated as a decision.
 
 ---
 
@@ -648,7 +684,54 @@ task that implements it; none is re-litigated downstream.
 - **Build**: Delete from `common/scripts/deploy.sh` the remote `sed -i 's/^VERSION=.*/VERSION=${VERSION}/'` at `:374` **together with its enclosing three-service guard at `:367-380`** (`_has_backend`/`_has_frontend`/`_has_gateway` and the `else` log line), and the **entire** tag-reconciliation block at `:394-485` — the SSH `grep` of the remote `.env`, `_old_env_vals`/`_old_version`/`_old_tags`, the `DEPLOY_TAG_VARS`/`DEPLOY_TAG_OVERRIDES`/`TAG_TO_COMPOSE_SVC` maps and their upsert loop. (Draft v1 said `:396-420`; the block actually runs to `:485`.) **Keep `:535-574`** — that compares `.env` against running containers, which is drift detection, not version arithmetic, and it stays useful once the file is authoritative. Its `postgres:POSTGRES_IMAGE_TAG:haisir-db-${ENV}` entry stays too (see T2.2).
 - **Done when**: `deploy.sh` performs no remote write to `${REMOTE_DIR}/${ENV}/.env`.
 - **Test**: `bash -n common/scripts/deploy.sh && ! grep -q "sed -i 's/\^VERSION=" common/scripts/deploy.sh` exits 0.
-- **Depends on**: T6.4.3 [deploy].
+- **Depends on**: ~~T6.4.3 [deploy]~~ — **inverted 2026-08-18, this precedes T6.4.3**; see the note on T6.4.3.
+
+✅ **DONE 2026-08-18** (owner call, mid-session: *"it must not override anymore in deploy — it is the
+responsibility of the developer/operator/devops to do before committing/releasing"*). Step 3 deleted
+in full: the `VERSION` `sed` and its three-service guard, and the entire tag-reconciliation block
+(`_old_env_vals`/`_old_version`/`_old_tags`, the three maps, the upsert loop). Step 3c drift
+detection kept, as specified. `deploy.sh` now performs **no write of any kind** to the remote `.env`;
+the only remaining remote `.env` reference is the pre-existing `.env.runtime` cleanup trap, which is
+a different, rendered file. Verified: `bash -n` clean, ShellCheck clean at the repo's
+`--severity=warning` bar, `--dry-run` against the real v2026.7 manifest exits 0, and no identifier
+from the deleted block survives anywhere in the file.
+
+**An interim fail-closed assertion was added and then REPLACED the same day, by owner call.** The
+first version aborted when the manifest and the committed `.env` disagreed. Overruled: *"whatever the
+version is defined in .env file must be source of truth even if devops misses it and forgot to update
+it. its his responsibility."* It is now a **warning, not a gate** — the plan prints the `.env`
+version labelled authoritative, and when the two differ prints the manifest's claim beside it. The
+deploy proceeds on `.env`. What survives is the half that mattered: the log never announces a version
+that was not deployed, which is the B11/B20/B22 shape.
+
+**T6.5.4 is therefore more load-bearing, not less.** With no deploy-side gate, a forgotten `.env` bump
+means the deploy pulls and recreates on the old image and reports success; a warning inside a
+1300-line log is not a gate. T6.5.4's Validate-stage check, which fails the build before `deploy.sh`
+is invoked, is. It is now an *equality report*, never a repair — nothing may rewrite `.env`.
+
+**Scope grew beyond the written task, by owner decision — `services:` is now a map.** Full rationale
+in `decisions.md` (2026-08-18). `recreate: true` runs `--force-recreate`; the default `false` is
+today's behaviour.
+
+**⚠ The justification first written here was wrong and is corrected in `decisions.md`.** It claimed
+plain `up -d` misses a removed environment variable or a rotated `.env` secret, and that Keycloak
+had to be recreated by hand on 2026-08-13 as a result. Compose *does* see both — they change its
+config hash — and the 2026-08-13 event is recorded in TASKS.md as an automatic `Recreate` confirmed
+in the deploy log. **The real gap is narrower:** compose hashes a mount path, not the bytes behind
+it, so the *content* of a bind-mounted or volume-delivered file read once at startup is invisible to
+it. `deploy.sh` Step 8's hand-rolled "rewrite the APISIX config volume, then restart APISIX" is the
+existing proof that this gap is real; `recreate: true` is its general form. Flat-list manifests are rejected rather than read as "no
+flags"; `v2026.7`'s was converted in place because the prod window still runs it. `worker`'s auto-add
+moved above `display_plan`, fixing a pre-existing mismatch where the plan under-reported by one
+service.
+
+**Test**: `common/scripts/tests/manifest-services-map-check.sh` (new, wired into the Jenkinsfile
+Static Security stage) — 11 assertions over every yq expression `deploy.sh` uses, the recreate
+default, dashed service names, `!!seq`/`!!map`/`!!null` detection, and that no committed manifest
+still carries `image_tags`. It also encodes a trap it found: **the `yq` snap cannot read files under
+`/tmp`** (private mount namespace — exits 0, prints nothing), so fixture-based YAML tests written to
+a `mktemp -d` silently compare empty against empty. Fixtures live in the repo, and the test probes
+that yq can actually read one before trusting any result.
 
 ##### T6.5.2 [deploy] — Delete the override reads and every consumer of them
 - **Build**: Delete, in one change: the six `*_IMAGE_TAG_OVERRIDE=$(yaml_read '.image_tags.…')` reads at `deploy.sh:177-182`; the `ROLLBACK_VERSION`/`ROLLBACK_NOTES` reads at `:169-170`; the image-tags display block at `:238-261` **and its `_auto_bumped` loop at `:262-274`**, which reads three of the same vars outside the display block proper; the rollback display at `:299-301`; and **the manifest-override auto-extend block at `:488-520` in full** (`_override_to_compose`, `_override_vals` and their loop) — a second, separate block that reads all six vars at `:499-504` and that draft v1 deleted nothing from. With `set -u` in force and the reads gone, leaving either `:266` or `:499` behind aborts every deploy. With the committed `.env` authoritative, per-service manifest overrides have nothing to override.
@@ -667,6 +750,38 @@ task that implements it; none is re-litigated downstream.
 - **Done when**: the Validate stage fails when the two values differ.
 - **Test**: With `staging/.env` set to `VERSION=2026.5` and the manifest to `version: "2026.7"`, the Validate stage exits non-zero before the Deploy stage runs.
 - **Depends on**: T6.5.3 [deploy].
+
+✅ **DONE 2026-08-18.** `common/scripts/tests/manifest-env-version-check.sh <manifest> <env>...`,
+called from `Jenkinsfile.deploy`'s `stage('Validate')`. Runs before any file reaches any host **and
+before the prod approval gate**, so a mismatch cannot burn an approval on something knowable at
+minute one. Env list follows `TARGET`: `staging`, or `staging prod` for `staging-and-prod`.
+
+**Written as a script rather than inline in the Jenkinsfile.** Inline was the obvious reading of
+"add an assertion to stage('Validate')", but it buries shell inside Groovy string interpolation where
+it is neither ShellCheck-able nor runnable locally — which is how a gate quietly stops working. The
+Jenkinsfile calls one line; the logic is testable.
+
+**It compares and never repairs**, and it reads **exactly one line** of each `.env` — the `VERSION=`
+assignment — printing nothing else, per CLAUDE.md's rule on these files.
+
+**Test deviation, stated plainly:** the literal test asks for `staging/.env` to be set to
+`VERSION=2026.5`. That was NOT done — editing a real `.env` to prove a check works is exactly the
+thing CLAUDE.md forbids, and it would leave a live environment file wrong if the run died midway.
+The same comparison is exercised against **fixture env directories** instead, which is strictly
+more coverage: four fail-closed paths (mismatch, `.env` missing, no `VERSION=` line, unreadable
+manifest version) plus the positive case, all in `manifest-contract-check.sh` (renamed from
+`manifest-services-map-check.sh`; 17 assertions, wired into the Jenkinsfile Static Security stage).
+It also asserts the real v2026.7 manifest matches both committed `staging/.env` and `prod/.env` —
+which it does today, so the prod window is not blocked by this gate.
+
+**Deliberate limit, worth stating because it is the remaining hole in BR-SEC-022's story:** this
+checks `VERSION` only. `GATEWAY_IMAGE_TAG` does not follow `VERSION`, and since T6.5.3 deleted
+`image_tags:` there is nothing in the manifest left to compare any tag against. A forgotten
+`GATEWAY_IMAGE_TAG` bump therefore still ships the old gateway silently. Two things narrow it:
+the mismatch message names the risk explicitly, and `/release-manifest` must now report every
+changed tag as an `.env` edit the operator owes. **That residual is closed by process, not code** —
+if it ever needs closing by code, the shape is a manifest field naming which tags a release expects
+to have changed, checked the same way.
 
 ---
 

@@ -1312,3 +1312,57 @@ input was non-empty (`jq -e '.list | length'` here) before its negative result m
 rendered set, `DELETE` the orphans (with an explicit allowlist if any host-managed route is ever
 expected to exist outside the repo). Pair it with a `post_deploy` assertion that the two sets are
 identical, which is a one-line `diff` and would have caught this in March.
+
+✅ **FIXED 2026-08-18, `haisir-deploy` `5fec4b7`** (owner call 2026-08-17: fix it, alongside T6.4.2).
+**Proven live on staging the same day**, inside the T6.4.2 deploy window (v2026.7 → staging via CI,
+150s, exit 0, 13/13 healthy). Step 8, log lines 1245–1248: `Summary: 27 succeeded, 0 failed` →
+`Pruning orphan route (no longer in the repo): api-mock-exams-static` → `✓ Deleted route` →
+`Route reconciliation: 27 rendered, 1 pruned`. Exactly one deletion, exactly the expected id,
+matching the 28-live-vs-27-rendered measurement taken 2026-08-17. **Staging is clean; prod still
+carries its own copy and clears at its next route push** — no prod action is needed, the fix is in
+the pusher, not in a manifest step.
+
+**Unplanned bonus: this closes B10's ambiguity even though it does not close B10.**
+`create_route_config.sh`'s whitelist-preservation read treats "curl succeeded, body is a 401/403"
+identically to "nothing live to preserve" — both yield an empty `live_wl` and both are silent, which
+is exactly B10's complaint that a failed Admin API read reads as reassurance in the log. The prune
+runs *after* the PUTs so it cannot prevent that, but it makes it **loud**: an unauthenticated list
+GET fails the `jq -er` guard and aborts the deploy instead of exiting 0. Read in reverse, a
+`N rendered, M pruned` line is now positive evidence that the Admin API was readable and
+authenticated on that run — which is how the 2026-08-18 run's silent preservation reads were
+confirmed to be genuine no-ops rather than masked auth failures. B10's silent branch still exists
+and still wants fixing; it just can no longer hide behind a green deploy.
+**A second residue path was found while fixing it, and it is the worse of the two.**
+`.templated/$APP_ENV/` is host-local — `deploy-lib.sh:131,141` `--exclude` it from both rsyncs, and
+`template-configs.sh` only ever `mkdir -p`'d it. So a render produced by a source file that has
+since been deleted from the repo **survives on the host and keeps getting pushed on every deploy**.
+That is strictly worse than the filed defect: the filed one leaves a frozen route, this one keeps a
+deleted route actively current. (It is also why prod's orphan reads `update_time` 2026-03-12 rather
+than a recent date — the templated dir must have been cleared at some point on both hosts, or the
+route would have been re-pushed continuously. Nothing in the repo does that clearing, so it was
+incidental, not by design.)
+
+Both halves fixed:
+- `template-configs.sh` clears `*.json` from the routes and plugin_configs templated dirs before
+  rendering, so the templated set can only shrink with the repo.
+- `create_route_config.sh` reconciles after a complete, fully successful push: enumerate live ids,
+  diff against the rendered set, `DELETE` the orphans. Skipped for `--dry-run` and `-f <file>`
+  (a single-file push knows nothing about the full set, so it must not prune against it). Dev's
+  `dev/routes/` ids are added to the keep-set when `APP_ENV=dev` — the HMR route is hand-loaded and
+  never templated, so it would otherwise be pruned on every dev run. That is the "explicit
+  allowlist" this entry asked for; it is derived from the repo rather than hand-maintained.
+- **Fails closed on an unreadable or empty route list** rather than reporting zero orphans. This is
+  the B11/B20/B22 lesson applied to the fix itself: an unauthenticated Admin API and a clean gateway
+  produce the same "no orphans" answer, and the ad-hoc check that found B22 got a false negative in
+  exactly that way on its first staging attempt.
+- Test: `common/scripts/tests/route-prune-check.sh`, offline against a mock Admin API on loopback
+  (same pattern as `route-whitelist-preservation-check.sh`), wired into the Jenkinsfile's
+  **Static Security Checks** stage — that stage's own header comment records that a `*-check.sh`
+  which is not wired explicitly never runs in CI at all. Four cases: orphan pruned / rendered routes
+  untouched, matching sets delete nothing, and the two blind-check aborts.
+
+**The paired `post_deploy` diff was deliberately NOT added.** The prune makes the two sets identical
+by construction and aborts the deploy if it cannot verify that, so a manifest-side diff would assert
+a property the same code path just enforced, using the same query and the same credential — it would
+fail only when the prune had already failed loudly. Worth adding if the assertion ever needs to come
+from something other than the pusher. Recorded here rather than left as an unexplained omission.

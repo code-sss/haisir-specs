@@ -4,6 +4,90 @@
 
 ---
 
+## 2026-08-18 — The committed `.env` is the source of truth; the manifest describes what moves, not what version
+
+> Context: T6.4.3's first live check (staging, 2026-08-18) returned 2 of 3 files matching. The two
+> nothing rewrites were byte-identical; `staging/.env` differed because `deploy.sh` Step 3 rewrote
+> `VERSION` and four image tags into the host copy right after Step 2 synced it. That made the deploy
+> a writer of the file it had just declared authoritative, and made T6.4.3 unpassable by construction.
+
+- **Decision: `deploy.sh` no longer writes the remote `.env`, at all.** Step 3 is deleted — the
+  `VERSION` `sed`, its three-service guard, and the whole tag-reconciliation block. Step 3c drift
+  detection stays; it is a read. (T6.5.1)
+
+- **Decision: the committed `{env}/.env` is the single source of truth for `VERSION` and every
+  `*_IMAGE_TAG`, and keeping it current is the developer/operator/devops's job before committing and
+  cutting the release.** Owner's words: *"whatever the version is defined in .env file must be source
+  of truth even if devops misses it and forgot to update it. its his responsibility."*
+
+- **Decision: a manifest that disagrees with `.env` does NOT abort the deploy.** An earlier draft
+  asserted equality and exited 1; that was explicitly overruled. The deploy proceeds using `.env`.
+  **But it must not report a version it did not deploy** — the plan prints the `.env` value labelled
+  authoritative and, when the two differ, prints the manifest's claim beside it with a warning. This
+  is the B11/B20/B22 lesson applied: output that reads like a result while describing something that
+  did not happen is the failure mode this project keeps rediscovering.
+
+- **Decision: `image_tags:` is removed from the manifest entirely** (T6.5.2/T6.5.3), not kept as
+  documentation. With `.env` authoritative it actuated nothing, and its own template text —
+  *"deploy.sh upserts each specified key as `*_IMAGE_TAG=` in the remote `.env`"* — had become false.
+  A field that looks like an actuator and is not is worse than no field.
+
+- **Decision: `services:` becomes a MAP of compose service name → per-service flags**, replacing the
+  flat list. Shape chosen by the owner:
+  ```yaml
+  services:
+    backend:
+      recreate: true
+    worker:
+  ```
+  Any compose service may be named, not just backend/frontend/apisix. The first flag is `recreate:`
+  (default `false`), which runs `--force-recreate`.
+
+  **⚠ CORRECTED 2026-08-18, same day, before any use.** The first version of this entry justified the
+  flag by claiming plain `up -d` misses changes "fixed at container-creation time — a removed
+  environment variable, a rotated secret already in `.env`" and that Keycloak therefore had to be
+  recreated by hand on 2026-08-13. **That is wrong on both counts.** `up -d` recreates whenever
+  compose detects a change, and compose *does* see a removed environment variable and any `.env`
+  value interpolated into the compose file — they change its config hash. The 2026-08-13 Keycloak
+  event is recorded in this very file's G6.2 notes as `keycloak-staging` getting a **`Recreate`
+  confirmed in the deploy log**, automatically. The example was reached for from memory and not
+  re-read.
+
+  **The real, narrower case:** compose hashes a mount *path*, not the bytes behind it, so it cannot
+  see the **content** of a bind-mounted or volume-delivered file that a process reads once at
+  startup. APISIX's `config.yaml` is the standing example — `deploy.sh` Step 8 rewrites the config
+  volume and restarts APISIX by hand rather than trusting `up -d`, which is the existing evidence
+  that this gap is real. A vault-agent-rendered file under `/secrets` is the same shape. Plus the
+  ordinary operational use: forcing a clean container. The flag is still worth having; the original
+  justification for it was not.
+
+- **Decision: the flat-list form is rejected, not silently accepted.** Accepting it would make a
+  manifest asking for a recreate look identical to one that is not. `releases/v2026.7/manifest.yaml`
+  was converted in place — same eight services, same order, no flags — because the prod window still
+  has to run it. Older manifests stay readable as history and are no longer runnable.
+
+- **Decision: `nodeps` was considered and NOT added.** `--no-deps` stays unconditional. No manifest
+  has ever needed dependency resolution, and the two cases that would have — the vault-agent sidecars
+  and the Postgres init containers — already have dedicated steps (5c, 5d) with their own
+  abort-on-failure gates, which compose's own ordering would bypass rather than reinforce.
+
+- **Consequence, accepted: the release process now has a manual step it cannot verify for you.** If
+  `.env` is not updated, the deploy pulls and recreates on the old image and reports success. Two
+  things narrow it rather than close it: `/release-manifest` must now name every changed tag in its
+  step-6 summary as an `.env` edit the operator owes, and **T6.5.4 is still required** — the Jenkins
+  Validate-stage equality check, which fails the build before `deploy.sh` is invoked. The deploy-side
+  warning is a last line of defence, not a substitute for it.
+
+- **Correction recorded, because it nearly caused a wrong instruction.** The claim that the committed
+  `.env` was stale in five values came from reading log lines like `Setting GATEWAY_IMAGE_TAG=v2026.7
+  (manifest override)`. The deleted code's override path carried no comparison — it `sed`'d
+  unconditionally — so that line only proved an override existed. All seven keys already matched.
+  The `.env` hash difference was the rewrite flattening unexpanded `v${VERSION}-${APP_ENV}` refs into
+  literals: same meaning, different bytes. **A log line reporting an action is not evidence about the
+  state that preceded it, unless the code branched to decide.**
+
+---
+
 ## 2026-08-14 — T3.6 alert delivery: SMTP email → Slack incoming webhook
 
 > Context: T3.6 shipped on 2026-08-12 wiring Alertmanager to email, with five `ALERT_SMTP_*` /
