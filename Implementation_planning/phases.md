@@ -1068,7 +1068,7 @@ following the runbook literally sees failures that are not there — or, worse, 
 **Fix:** rewrite the public-endpoint checks to send a browser user-agent, or state explicitly that
 they must be run in a browser. Host-local checks against `127.0.0.1:9180` are unaffected.
 
-### B19 — CrowdSec's TLS cert is a gitignored, host-local file the deploy never provisions (deploy / security) — surfaced 2026-08-17
+### B19 — CrowdSec's TLS cert is a gitignored, host-local file the deploy never provisions (deploy / security) — surfaced 2026-08-17, closed 2026-08-19 (staging + prod + CI)
 
 `other/services/crowdsec/docker-compose.yml` mounts `./tls:/etc/crowdsec/tls:ro`, and
 `config.yaml.local` points `api.server.tls.cert_file`/`key_file` at it unconditionally
@@ -1085,28 +1085,67 @@ setup (`generate-certs-crowdsec.sh` → copy into `tls/` → restart) anywhere �
 `deploy.sh`, not `full-setup.sh`, not any `pre_checks`/`post_deploy` manifest item. It is
 a README-only manual step, invisible to anything that checks deploy completeness.
 
-**Open question this repo can't answer without live host access**: did prod's crowdsec
-ever get this one-time setup? If not, prod's crowdsec — still on its pre-Minimus image
-per T4.12, i.e. not recreated since T6.3.3 landed — is likely still serving plaintext
-LAPI, while `common/apisix_conf/config.yaml`'s `crowdsec_lapi_scheme: "https"` +
-`ssl_verify: true` (also from T6.3.3) may already assume otherwise on that host.
+T4.12 (owner call 2026-08-17) deliberately did **not** resolve this — it recreated prod's
+crowdsec as a single-line image-tag-only edit to avoid the "fails to start without the
+cert" path, leaving end-to-end TLS verification an open question. That question is now
+answered: **B19 closed 2026-08-19 on staging, prod, and CI** (picked up without a new
+`/plan`, per owner call). The fix landed in three layers:
 
-**T4.12 deliberately does not resolve this** — owner call 2026-08-17: recreate prod's
-crowdsec the same lower-risk way T4.11 did on staging, a single-line image-tag-only edit
-on the live host rather than a full compose sync or an scp of the cert, so T4.12 never
-hits the "fails to start without the cert" path at all. That sidesteps the immediate
-recreation risk but leaves the underlying question open — whether prod's crowdsec is
-actually TLS-verified end to end is still unknown after T4.12 closes.
+1. **Cert provisioning (the B19 gap itself).** `common/scripts/certs/generate-certs-crowdsec.sh`
+   now does both halves in one script: after generating the cert into
+   `$HOME/certs/$DOMAIN/` it **installs** `crowdsec.crt` + `crowdsec.key` into
+   `other/services/crowdsec/tls/` (idempotent — copies only if missing or newer),
+   collapsing the README's 3 manual steps (generate → mkdir+cp → restart) into "run one
+   script, then restart"; and a new `--verify` mode is a pre-flight that aborts exit 1
+   with a **named error** if the cert/key are absent from `tls/` — the "silent crash-loop"
+   failure mode is now loud before any recreate. `--verify` is repo-relative and needs no
+   env/CA, so it can run on any host. `bash -n`/`shellcheck` clean; `--verify` self-tested
+   both paths (absent → exit 1 + named error; present → exit 0).
 
-**Fix, deferred to a future phase, not T4.12**: either (a) fold the three-step TLS setup
-into a `pre_checks`/host-provisioning step so a missing cert aborts the deploy with a
-named error instead of crowdsec silently failing to start, or (b) at minimum, add an
-explicit check that verifies `other/services/crowdsec/tls/{crowdsec.crt,crowdsec.key}`
-exist on the host and that the LAPI is actually serving TLS (README's own verify step:
-`docker exec crowdsec curl -sk --cacert .../crowdsec.crt https://localhost:8080/...`
-expects `401`, not a connection error) before ever recreating that container for real.
-Same class of gap as B15 (the certbot sudoers grant) — host provisioning that lives only
-in a README, not in anything that runs.
+2. **Crash-loop (a second T6.3.3 gap the live run exposed).** `config.yaml.local` enabled
+   `api.server.tls` but never reconfigured the in-container watcher agent's client, so it
+   dialed `http://0.0.0.0:8080` (from the entrypoint-generated `local_api_credentials.yaml`)
+   at the now-TLS LAPI and fatal-exited ("client sent an HTTP request to an HTTPS server" →
+   restart loop). Repo fix: `config.yaml.local` now sets `api.client.insecure_skip_verify: true`
+   (the internal CA is not mounted in the crowdsec container; real verification stays on
+   the APISIX bouncer side). Live fix per host: `local_api_credentials.yaml` `url:` rewritten
+   to `https://localhost:8080` in the `crowdsec_crowdsec-config` volume (idempotent in-place
+   sed, no secret printed). After recreate: healthy, 0 restarts.
+
+3. **Bouncer never pulled (a third T6.3.3 gap).** `common/apisix_conf/config.yaml` has
+   `crowdsec_lapi_scheme: "https"` + `ssl_verify: true`, but APISIX's
+   `lua_ssl_trusted_certificate` (`ca-bundle.pem`, built by `deploy.sh` Step 5b = OS roots +
+   internal CA) was **stale** — missing the Haisir Root CA, so `ssl_verify` rejected the
+   Haisir-CA-signed LAPI cert and the bouncer silently pulled nothing (last pull weeks
+   old). Live fix per host: rebuilt `ca-bundle.pem` on the `haisir-apisix-certs` volume with
+   the Step 5b `cat` (OS roots + `ca.pem`) and restarted APISIX. The `deploy.sh` Step 5b code
+   is correct; the staleness means a full `deploy.sh` run had not happened on the host since
+   the CA was created — see "Follow-ups" below.
+
+**Verification (all three hosts: staging, prod, CI).** LAPI serves TLS: host
+`curl -sk https://localhost:3050/v1/decisions/stream` → 401/403 (TLS handshake OK, no
+bouncer key on the curl) and `http://` → 400 (plaintext rejected); CI verified the same
+day (2026-08-19) with `https=403`/`http=400`, `restarts=0`, image now pinned by sha.
+Bouncer end-to-end (staging + prod only — CI has no bouncer by design):
+`apisix-bouncer` pulling `GET /v1/decisions/stream?startup=true ... 200` over TLS, no
+handshake errors, `cscli bouncers list` showing a fresh `Last API pull`. The crowdsec image
+has no `curl`, so the old README verify (`docker exec crowdsec curl --cacert crowdsec.crt`)
+was wrong twice over — no curl in the image, and the leaf cert as `--cacert` won't
+chain-verify a CA-signed cert; `other/services/crowdsec/README.md` "TLS Setup" is rewritten
+to the full repeatable 8-step flow (cert → verify → start → rewrite client URL → restart →
+host curl → rebuild APISIX bundle → bouncer pull check). The IPs in `cscli bouncers list`
+and the LAPI access log are the **bouncers'** Docker-network IPs (APISIX containers) and the
+test curl — not client IPs being checked; real-client-IP matching happens in the APISIX
+bouncer plugin per-request via the `real-ip` plugin reading `CF-Connecting-IP`, exactly as
+the README's "crowdsec-bouncer must be in plugin configs, not global rules" note requires.
+
+**Follow-ups (not blocking, tracked separately).**
+- A `ca-bundle.pem` written on staging 2026-08-19 01:16 lacked the internal CA despite
+  `deploy.sh` Step 5b being correct — something other than Step 5b may overwrite it. Watch
+  for this on the next full `deploy.sh` run; if it recurs, the overwriter needs finding.
+- Rotation of the bouncer LAPI key and the watcher agent password — both entered a debug
+  session transcript during diagnosis (see `feedback-ask-before-reading-creds`). Runbook to
+  be written when the owner is ready; it touches secrets, so each read is pre-approved.
 
 ### B20 — `13-test-prometheus.sh` can never execute its assertions, on any host (deploy / verification) — surfaced 2026-08-17
 
