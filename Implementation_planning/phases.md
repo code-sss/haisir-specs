@@ -944,6 +944,15 @@ false-assurance class as B9. One-line fix; do it before the prod window.
 > fix was **not** done before the window, so pre_check 10 leaned on a check that could not fail —
 > which is the B9 class this entry already named. Still open.
 
+> **REPRODUCED AGAIN ON BOTH HOSTS 2026-08-19 — third/fourth occurrence, same v2026.7 manifest
+> re-run on staging then prod.** Identical self-skip on both: `haisir-backend-staging` `Up 5 days
+> (healthy)` and `haisir-backend-prod` `Up About a minute (healthy)` at the time Step 11 printed
+> "Backend container not running". Ownership confirmed by hand on both hosts this time too —
+> `docker run --rm -v haisir-backend-datadir:/d --entrypoint find reg.mini.dev/busybox:1.38.0 /d
+> ! -user 1000 -print` returned empty on staging and prod, i.e. zero non-1000-owned entries — so the
+> underlying copy/chown remains correct, only the check still cannot fail. Still open; the one-line
+> fix from the 2026-08-15 entry is still not done after three deploys.
+
 ### B12 — `keycloak-admin-access.sh` cannot grant an IPv6 address at all (security / deploy)
 
 **Found 2026-08-16 in the v2026.7 prod window — the real bug of the night.**
@@ -1368,6 +1377,20 @@ a credential and needs an owner call: `GRAFANA_ADMIN_PASSWORD` got a KV path + v
 `$__file{}` delivery (B... — see the G6 spec's B8 precedent) so it never becomes an env var, but
 postgres_exporter 0.20.1 has no file-based DSN option at all. Nearest equivalent: a dedicated
 `secret/haisir/monitoring` KV path plus a `deploy-required-keys.txt` entry (`envs=staging,prod`).
+
+> **CORRECTION 2026-08-19, live-verified — `POSTGRES_EXPORTER_DSN` claim was wrong.** Recreating
+> `postgres-exporter` on staging by explicit name (bypassing the `monitoring` profile gate, same as
+> `alertmanager`/`nginx-prometheus-exporter` already do) with `--env-file .env.runtime` — the
+> OpenBao-merged file `render-deploy-secrets.sh` produces — delivered a working DSN: the container's
+> own log shows `Established new database connection fingerprint=db:5432` immediately after
+> recreate, both before and after. So `POSTGRES_EXPORTER_DSN` **is** already in OpenBao and **is**
+> delivered correctly by the existing `render-deploy-secrets.sh` mechanism when a caller renders
+> `.env.runtime` before starting the service — it was never actually missing, only unreachable via
+> `deploy.sh`'s own path (which never starts this service at all, so never renders the file either).
+> `NGINX_EXPORTER_SCRAPE_URI` is still genuinely unset and still not a credential; that half of this
+> entry stands. The "owner call" / dedicated-KV-path fix this entry proposes for the DSN is therefore
+> unnecessary — the delivery mechanism it asks for already exists, the only gap is that nothing in
+> `deploy.sh` invokes it for this service.
 
 ### B26 — Cloudflare tunnel token delivered via container `environment:` and CLI arg, contradicting the project's own file-based delivery pattern (deploy / security) — surfaced 2026-08-18
 
