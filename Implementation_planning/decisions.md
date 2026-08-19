@@ -4,6 +4,101 @@
 
 ---
 
+## 2026-08-18 — Phase 7.5 close-out (Minimus Container Images + Phase 7 Deploy Backlog)
+
+> Context: G1–G6 shipped and fully verified on staging and prod. This entry records the phase-level
+> outcome and the four decisions taken across the phase that a future spec or deploy change must stay
+> consistent with. Per-task decisions are logged in their own entries above and in `TASKS.md`; this is
+> the summary an outside reader should start from.
+>
+> **Correction, same day:** this entry originally read "G6 shipped on staging with its prod half
+> deliberately deferred," sourced from `Phase_7.5_Goal_Tree.md` — a 2026-08-13 snapshot that was
+> stale at the time this entry was written. `TASKS.md`'s own T6.2.6/T6.2.7 rows show the prod deny-all
+> closed 2026-08-16, three days after that snapshot, in the same v2026.7 prod window as G5. Corrected
+> below; see `phases.md`'s T7.7 Outcome column for the same fix.
+
+**Outcome against the root goal.** Every container image in the stack now pulls from `reg.mini.dev`
+at an explicit pinned tag (`check-image-pins.sh`, 0 violations on both hosts), and the three
+deploy-layer fail-open defect classes the v2026.6 prod window exposed — swallowed stderr (B4), a
+wrong-host-address assumption (B5), and an unallowlisted admin surface (B6) — are all closed. G6's
+env-files-under-release-control work shipped in full on **both staging and prod**: G6.2's deny-all
+(T6.2.6/T6.2.7) closed 2026-08-16, and G6.3–G6.6 (the seven committed paths, mode-600 delivery,
+version-reconciliation deletion, single deploy path) closed 2026-08-17/18.
+
+- **Decision: the rootless Docker/rootlesskit runtime is pinned across every host, closing B5's
+  residual.** B5 broke the v2026.6 prod deploy because neither host pinned `--port-driver`, so each
+  followed its own rootlesskit version's default source-address rewrite (`slirp4netns` vs `builtin`)
+  — staging was correct by accident, prod was not. All three hosts (dev, staging, prod) now pin Docker
+  `29.7.1`, rootlesskit `3.0.2`, and `--port-driver=slirp4netns` in a systemd drop-in, live-verified in
+  the running process argv rather than only in config. `allow_admin` deliberately keeps both
+  `10.0.2.0/24` and `172.19.0.1/32` as defense-in-depth against a future unpinned regression.
+- **Decision: frontend Node base resolves to `26`, not 24-LTS.** The open call at plan time (T1.4)
+  resolved to Minimus's `reg.mini.dev/node:26` for both builder and runtime stages — recorded in
+  `target/requirements/14_container_images.md` (T7.1) as the delivered version, not merely suggested.
+- **Decision: Keycloak admin access is deny-all + on-demand grant, not a standing CIDR anywhere in
+  the deployment.** The originally-planned tailnet-only model (`KC_HOSTNAME_ADMIN`) was tried,
+  shipped in v2026.7, and reversed within days — see the 2026-08-13 entry above for the two measured
+  reasons it could not work (the console's `authServerUrl` never follows the admin hostname, and the
+  variable is server-global, not master-scoped). The replacement, now shipped on staging and prod:
+  routes 13/14/15 stay on the public gateway with a deny-all `ip-restriction`, no operator CIDR is
+  stored anywhere (`KEYCLOAK_ADMIN_ALLOWED_CIDR` deleted from KV and from `deploy-required-keys.txt`
+  on staging/prod — only `dev/.env.config.sh`'s explicit `0.0.0.0/0` keeps the variable at all), and
+  access is granted ad hoc via `keycloak-admin-access.sh grant`/`revoke` directly against the running
+  APISIX. A deploy preserves a live grant rather than revoking it — grants no longer self-expire, so
+  `revoke` is the only thing that closes one. `KC_HOSTNAME_ADMIN` must not be reintroduced (see
+  `constraints.md`, added T7.10).
+- **Decision: `ip-restriction` is deny-by-default at the mechanism, not the value (BR-SEC-023).**
+  `template-configs.sh` previously deleted the whole `ip-restriction` plugin when a `*_CIDR` resolved
+  empty — the root cause of B6 (Keycloak admin reachable from the public internet with no allowlist
+  at all). The fix substitutes `127.0.0.1/32` (schema-valid deny-all) instead of stripping the plugin,
+  so an absent or misconfigured CIDR variable can never again produce "no restriction" as its failure
+  mode. This is the general fix; the Keycloak-specific consequence is the grant/revoke model above.
+
+**T7.6's two independent review passes, and what they cost.** Pass A (diff basis, Opus 5) and Pass B
+(end-state basis, Sonnet 5, cold-start and embargoed from the diff, from Pass A, and from
+TASKS/PLAN/phases/decisions) covered the full phase commit range across all three code repos with no
+gap between their declared ranges. Records: `security/SECURITY_REVIEW_2026-08-18_PHASE7.5_pass-a-diff.md`,
+`..._pass-b-endstate.md`.
+
+- **Independence earned its keep again**, the same property Phase 7's G8 was designed to fix after
+  `92a4da2` slipped past two same-range passes. Pass B found the phase's most serious open defect —
+  unvalidated service names reaching a remote shell via `deploy.sh`'s `remote_exec()` (command
+  injection, filed **B23**) — which Pass A's diff-only read did not surface. Pass A independently
+  found and got fixed, same day, the non-interactive prod-confirmation gap (`-t 0` skipping the
+  confirmation prompt whenever stdin isn't a TTY) that Pass B also flagged from the end state.
+- **Two findings were fixed the day they were filed**: the `-t 0` prod-confirmation gap (both
+  `bootstrap-host.sh` and `deploy.sh`, with a `--yes` escape hatch for Jenkins's own gated CI path),
+  and `bootstrap-host.sh` reporting "completed successfully" after a failed test run or an
+  unresponsive endpoint. One was resolved by owner confirmation rather than a code change (the
+  monitoring-exporter DSN is in no committed file, downgrading Pass A's HIGH to the still-open
+  provenance question filed as **B25**), and one by correcting a stale README rather than the code
+  (Pass B's OpenBao-never-started claim — staging and prod both run live OpenBao).
+- **Decision: every other still-open finding from both passes is filed as backlog, not left living
+  only inside the review documents.** B24–B37 (`phases.md`, added 2026-08-18, T7.9) — Jenkins's
+  read-write Docker socket, the cftunnel token in container env/argv, unenforced OpenBao root-token
+  revocation, the alertmanager config mode/uid mismatch, and nine more, down to two accepted,
+  no-action items recorded for completeness (APISIX metrics network exposure, Keycloak's OpenBao
+  identity over-read). **B23 (command injection) is the one to prioritize next phase** — it is the
+  only HIGH-severity finding from either pass still fully open.
+
+**Owed, and deliberately not claimed as done.** Deploy-repo commits landed 2026-08-17/18 (the G6.3–G6.6
+chain, the B22 route-prune fix, and this review's own `-t 0` fix) have been verified on staging but not
+yet run against prod — prod's last deploy was the 2026-08-16 v2026.7 window, before those commits
+existed. No spec or code work blocks the next prod deploy from picking them up; it just hasn't
+happened yet. The 27 pre-OpenBao-migration secrets Pass B found in git history (**B30**) were
+deliberately not rotated this phase, to avoid touching staging/prod outside a release window — an
+accepted risk carried to the next release, not a closed finding.
+
+**Update, same day.** Two of this section's items closed before the phase record was finalized:
+**B23** (command injection in `remote_exec`) is fixed — `haisir-deploy` branch
+`fix/b23-service-name-validation`, commit `4a6af82`, deliberately left unmerged to `main` for the
+owner to land themselves. **T5.3's prod-side operator step** (`bootstrap.sh db-engine` against prod
+OpenBao, never previously run there) is also done and live-verified the same way T5.12 verified
+staging — see `TASKS.md` T5.3. Neither blocks the next prod deploy any longer; B23 merging is the
+only remaining step, and that's explicitly the owner's to do.
+
+---
+
 ## 2026-08-18 — The committed `.env` is the source of truth; the manifest describes what moves, not what version
 
 > Context: T6.4.3's first live check (staging, 2026-08-18) returned 2 of 3 files matching. The two

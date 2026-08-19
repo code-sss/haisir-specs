@@ -159,3 +159,39 @@
 **What:** Coraza is **v3.7.0**, CRS **v4.25.1 LTS**. Blanket `ctl:ruleRemoveById` is down from 38 rule IDs to 1, and that survivor (`931130`) is structural — it targets a `TX` variable, so the `ARGS_POST` regex form cannot apply to it.
 **Why it exists:** Phase 7 G1/G4. The root cause of the old exclusion treadmill was a version gap, not an engine defect: regex collection keys in `ctl:ruleRemoveTargetById` landed in Coraza **v3.5.0**, and the shipped build was **v3.3.3** — so every field-scoped exclusion parsed as a literal variable name and silently matched nothing.
 **Impact on target state:** New exclusions must be **field-scoped** (`ctl:ruleRemoveTargetById` with a regex key, or `SecRuleUpdateTargetByTag <tag> "!ARGS_POST:/field/"`); a blanket whole-request removal now needs a written structural justification. More importantly, the durable lesson is upstream of the WAF: **`tx.total_arg_length` is 65535 and rule 920390 is unexcluded**, so a spec that puts unbounded free text or a replayed transcript in a request body has a hard ceiling no tuning can clear. Cap free-text fields at the schema (`max_length`) and keep transcripts server-side.
+
+---
+
+# Constraints added 2026-08-18 (Phase 7.5 close-out, T7.10)
+
+---
+
+## deploy — seven exact deploy-config paths are committed and version-controlled; no other host config is
+
+**What:** Exactly seven files, by exact filename, are committed to `haisir-deploy` and ship with the release artifact: `dev/.env`, `staging/.env`, `prod/.env`, `dev/.env.config.sh`, `staging/.env.config.sh`, `prod/.env.config.sh`, `common/.env.config.common.sh`. No glob or prefix/suffix variant is in scope. Every deploy fully re-syncs `common/` and `${env}/` from the release, so a host-local edit to any of these seven cannot persist past the next deploy — the committed copy is the sole source of truth (BR-SEC-022). The three `REMOTE_*` variables (`REMOTE_HOST`, `REMOTE_USER`, `REMOTE_DEPLOY_DIR`) are barred from all seven files entirely — they come from Jenkins credentials / the local operator's shell only, never from a committed config file.
+**Why it exists:** Phase 7.5 G6 (2026-08-18) — closed the recurring "missing config var" failure class and the credential-clobber risk a naive commit would have introduced (a committed `REMOTE_HOST` would silently overwrite the Jenkins-injected credential once these files entered the Jenkins workspace).
+**Impact on target state:** Any spec touching deploy configuration must name one of these seven files, not a new one, and must not propose storing `REMOTE_*` in a committed file. A spec that needs a new per-environment value adds it to one of the seven or to `secret/haisir/infra` (see the KV-layout section of `target/requirements/13_secrets_management.md`), not to a new host-local file.
+
+---
+
+## deploy — every container image must resolve to `reg.mini.dev` (or the `${DOCKER_REGISTRY}` var) at an explicit pinned tag
+
+**What:** All application and infrastructure images pull from Minimus (`reg.mini.dev`), never Docker Hub, quay.io, or ghcr.io directly, at an explicit version tag — no `:latest` outside the documented dev-only `pgadmin4` exception (BR-INFRA-005). `check-image-pins.sh` is a CI gate that fails a build introducing an unpinned or non-Minimus reference; it is self-tested (`--self-test`) and wired into Jenkins.
+**Why it exists:** Phase 7.5 G1–G4 (2026-08-10 through 2026-08-17) — the prior split (Chainguard `:latest` runtime + Docker Hub builder fallback) existed only because Chainguard's free tier had no pinned tag, and was the source of drift risk across environments.
+**Impact on target state:** Any spec that introduces a new service or swaps a base image must select a `reg.mini.dev` image at a pinned tag, verified live against the registry (tags drift — e.g. the plan's guessed `pgvector:18` tag did not exist; the real scheme was `0.8.x-pg18`) rather than assumed from a naming convention. A component with no Minimus equivalent must be recorded under BR-INFRA-006 with a full digest pin, not silently left on its prior source.
+
+---
+
+## security — Keycloak admin access is deny-all + on-demand grant; no standing CIDR anywhere in the deployment
+
+**What:** Routes 13/14/15 (the Keycloak admin console, on the public gateway) ship a deny-all `ip-restriction` whitelist (`127.0.0.1/32`) by default, on both staging and prod. No operator CIDR is stored in `secret/haisir/infra`, in any committed config file, or in `deploy-required-keys.txt` for either environment — `KEYCLOAK_ADMIN_ALLOWED_CIDR` was deleted from all of them, not merely set to a safe value. Access is granted ad hoc against the live APISIX with `common/scripts/keycloak-admin-access.sh grant <cidr>` (revoked with `revoke`), and a deploy preserves a live grant across its route push rather than reverting it — grants no longer self-expire, so `revoke` is the only thing that closes one. `dev/.env.config.sh` is the sole exception, keeping an explicit `0.0.0.0/0` for local convenience.
+**Why it exists:** Phase 7.5 G6.2 / BR-SEC-023 (2026-08-13, superseding a 2026-08-09 tailnet-only design that was tried, shipped, and reversed within days — `KC_HOSTNAME_ADMIN` never moved the console's `authServerUrl` and is server-global, so it broke the public console without ever providing a working tailnet path).
+**Impact on target state:** **`KC_HOSTNAME_ADMIN` must not be reintroduced anywhere in `common/docker-compose.yml` or the env config files** — it is server-global and will break the public admin console the moment it is set, regardless of intent. Any spec proposing a different Keycloak admin exposure model must explain how it avoids that failure mode, and must preserve the deploy-does-not-revoke-a-live-grant property `create_route_config.sh` implements today.
+
+---
+
+## deploy — the rootless container runtime is pinned identically across dev, staging, and prod
+
+**What:** All three hosts run Docker `29.7.1`, rootlesskit `3.0.2`, and `--port-driver=slirp4netns`, set in a systemd user-service drop-in (`~/.config/systemd/user/docker.service.d/override.conf`, as `Environment="DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns"` — not a CLI flag string, so a grep for the literal flag spelling finds nothing). `slirp4netns` itself (`1.3.4`) is pinned by a separate checksum-verified download, since it is not bundled in Docker's static release tarballs. `docs/DOCKER_INSTALL_GUIDE.md` documents this as required provisioning on every host, not an optional troubleshooting step.
+**Why it exists:** Backlog **B5** (`phases.md`) — the v2026.6 prod deploy broke because neither host pinned `--port-driver`, so each followed its own rootlesskit version's default source-address rewrite (`slirp4netns` → `10.0.2.2`, `builtin` → the bridge gateway); staging behaved correctly only by accident of which rootlesskit version it happened to have.
+**Impact on target state:** Any spec or runbook that assumes a host's rootless-Docker source address for an allowlist (`allow_admin` and similar) must budget for **both** legs `common/apisix_conf/config.yaml` already carries (`10.0.2.0/24` and `172.19.0.1/32`) as defense-in-depth, and any new host provisioning step must apply this pin — it is not implied by installing Docker rootless alone.

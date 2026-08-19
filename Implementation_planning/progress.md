@@ -52,8 +52,15 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 
 **Phase 7 closed out in the planning docs 2026-08-09:** `phases.md` marked ✓ with the Outcome column filled per goal; `PLAN.md`/`TASKS.md` archived to `archive/PLAN_Phase7-GatewayWAF-CSP_2026-08-06.md` / `archive/TASKS_Phase7-GatewayWAF-CSP_2026-08-06.md`; `current/` snapshot refreshed. **Next: Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog** (stub in `phases.md`, spec `target/requirements/14_container_images.md`, not yet planned).
 
-> **Snapshot baseline (current): haisir-backend `00c2c73`, haisir-frontend `705833d`, haisir-deploy `844e8f9` — captured 2026-08-09** (`current/snapshot_shas.md`). All three working trees clean; the Phase 7 close-out SHAs (`9d9ea6b` / `d6adec7` / `5aa8524`) are ancestors of these, and the G8 working-tree changes that were uncommitted at close-out have all landed.
-> Next session: `git diff 00c2c73..HEAD` in haisir-backend, `git diff 705833d..HEAD` in haisir-frontend, `git diff 844e8f9..HEAD` in haisir-deploy.
+> **Snapshot baseline (current): haisir-backend `46570b7`, haisir-frontend `6512e83`, haisir-deploy `530fc95` — captured 2026-08-18** (`current/snapshot_shas.md`, refreshed for Phase 7.5 close-out, T7.11). All three working trees clean; the Phase 7.5 baseline SHAs (`00c2c73` / `705833d` / `844e8f9`) are ancestors of these.
+> Next session: `git diff 46570b7..HEAD` in haisir-backend, `git diff 6512e83..HEAD` in haisir-frontend, `git diff 530fc95..HEAD` in haisir-deploy.
+
+**Also complete (2026-08-18 — current-state snapshot refresh, Phase 7.5 range).** Captured incrementally across all three repos (`00c2c73..46570b7`, `705833d..6512e83`, `844e8f9..530fc95`) into `current/schema.md`, `current/api_contracts.md`, `current/ui_flows.md`. Phase 7.5 was deploy/infra-focused (Minimus container images, secrets management, monitoring); application-level surface barely moved:
+
+- **Schema.** No change. No migration landed this phase.
+- **API.** One contract change: `POST /api/haitu/exam-review-chat`'s `ExamReviewChatRequest` gains `question_id: UUID | None` (T5.10), and `_build_review_grounding` narrows to that session question when present (T5.11) — resolving the inert-field discrepancy this file carried since Phase 7's close-out (frontend had been sending it since commit `3eef131`; the backend silently dropped it). A `question_id` matching no session question in the attempt now yields empty grounding, not a fallback to the whole attempt.
+- **UI.** No change. The frontend range (`705833d..6512e83`) carries no application code — only the Minimus Dockerfile migration and a `nanoid` CVE version pin.
+- **Docs.** No `/docs/*-guide.md` updates — nothing in this phase's delta is user-visible.
 
 **Also complete (2026-08-09 — current-state snapshot refresh, Phase 7 range).** Captured incrementally across all three repos (`583511d..00c2c73`, `3a57718..705833d`, `b16ad82..844e8f9`) into `current/schema.md`, `current/api_contracts.md`, `current/ui_flows.md`:
 
@@ -62,7 +69,7 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 - **UI.** Exam authoring uploads images to the server and stores a reference — the `FileReader.readAsDataURL` path is deleted; a failed upload leaves the existing image untouched, and the handler reads `questionRef.current` so edits during the upload window aren't clobbered by a stale closure. Post-exam review preloads the persisted thread (best-effort; skipped once the user has sent a message this mount, so a slow GET can't render history *below* a fresh exchange). CSP is enforced in production via a per-request `proxy.ts` nonce with `'strict-dynamic'`, all 27 routes dynamic (BR-CSP-010, CI-asserted), and the `csp-report` collector now persists reports instead of discarding them.
 - **Docs.** `docs/platform-admin-guide.md` §9 gains "Adding images to questions"; `docs/student-guide.md` §6 records that the review conversation is saved and restored. `parent-guide.md` unchanged — no user-visible delta.
 
-> ⚠️ **One discrepancy recorded rather than papered over.** The frontend sends `question_id` on `POST /api/haitu/exam-review-chat` (`student-api.ts:611`, commit `3eef131`, "send question_id for server-side review-chat grounding"), but `ExamReviewChatRequest` does not declare it and Pydantic drops unknown keys — the field is **inert**. Behaviour is still correct, because grounding covers every question in the attempt, but per-question grounding is not what happens. Carried into Phase 7.5.
+> ✅ **Resolved 2026-08-11 (Phase 7.5 T5.10/T5.11), no longer carried.** ~~The frontend sends `question_id`... but `ExamReviewChatRequest` does not declare it and Pydantic drops unknown keys — the field is inert~~ — `question_id` is now declared on `ExamReviewChatRequest` and `_build_review_grounding` narrows to the matching session question when present (empty grounding, not a fallback, if it matches none). See `current/api_contracts.md`.
 
 > Snapshot baseline (superseded 2026-06-10): haisir-backend `9fcf14d` (essay AI grading backend complete, 2026-06-09), haisir-frontend `d0e9242` (grading_pending UI state + auto-grade checkbox, 2026-06-09), haisir-deploy `4261909` (GRADING env vars wired into worker service, 2026-06-09).
 
