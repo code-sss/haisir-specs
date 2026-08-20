@@ -245,6 +245,25 @@ The platform admin board content manager is fully implemented end-to-end. The Ad
 
 **Also complete (2026-07-29 — deploy WAF fixes committed + release manifest):** the 5 pending WAF/route files (`common/plugin_configs/0{1,2,3,4}-secured-*.json`, `common/routes/03-api-csrf.json`) committed in `haisir-deploy` at `89bc78f` (`fix(apisix): waf exclusions for csrf cookie, parent content, OCR body`). Release manifest `releases/v2026.5.2/manifest.yaml` added at `bc77132`, bundling Phase 6 + Phase 6.5 (no release was cut between them): `db_migration: true` (V41), `apisix_routes`/`apisix_plugins`/`apisix_full_setup: true`; rollback notes call out V41's `image` enum value (cannot be removed by Postgres, harmless if left after a downgrade) and recommend rolling back backend/worker images to v2026.5.1 before running `alembic downgrade` so old code doesn't have to serve `image`-type rows it doesn't understand. All three `current/*.md` baselines and `current/snapshot_shas.md` now read backend `583511d`, frontend `3a57718`, deploy `bc77132` — nothing pending commit anywhere.
 
+**Also complete (2026-08-19/20 — full security re-scan, owner-requested, not a phase gate):**
+`security/SECURITY_REVIEW_2026-08-19_FULL_RESCAN.md` — single-pass full-surface audit at
+`haisir-deploy 3064480`, `haisir-backend 46570b7`, `haisir-frontend 6512e83`, covering all three
+repos, all four environments (dev/staging/prod/CI) and every `other/services/*` stack, plus
+rootless-Docker host posture. It re-verified every finding left open by the five prior reviews in
+`security/` and scanned the surfaces those reviews recorded as *not covered*. **Nothing regressed** —
+the 2026-07-02 baseline and the Phase 7.5 fixes were re-confirmed directly against source. **Four
+findings fixed 2026-08-20** (uncommitted at time of writing, in three repos): two HIGH Jenkins
+build-parameter command injections in `haisir-frontend/Jenkinsfile` and
+`Jenkinsfile.integration-dast` — the same class M3 closed on 2026-08-04 in the two Jenkinsfiles that
+*were* reviewed; `docker system prune --volumes` on the shared CI daemon
+(`haisir-backend/Jenkinsfile`); and `node-exporter`'s `pid: host` + `/:/rootfs:ro` exposure, now
+guarded by `dev-isolation-check.sh` checks 7 and 8. **Eleven new findings filed as B38–B48** in
+`phases.md`; **B24 re-scoped** (the socket-proxy fix is withdrawn — it cannot constrain a consumer
+that needs `POST`) and **B27 cleared**. Decisions in `decisions.md` (2026-08-19); two runtime facts
+added to `constraints.md`. **These are the candidate scope for the next security phase** — the
+review's Part 5 gives a suggested order, and its Part 6 lists six questions that each need one
+command on a live host and cannot be answered from a checkout.
+
 ## Completed Phases
 
 ### Phase 6.5 — Content Viewing & Publish ✓

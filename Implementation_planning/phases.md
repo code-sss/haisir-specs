@@ -591,7 +591,7 @@ It does not depend on G1–G4 and should not wait behind them.
 > 2026-08-16 on prod. **B2 stays in the backlog** — it is not deploy-blocking, and recurs on every
 > release that moves a Postgres base image.
 >
-> **B23–B39 added 2026-08-18 (T7.9)**, filing the still-open findings from T7.6's two independent
+> **B23–B37 added 2026-08-18 (T7.9)**, filing the still-open findings from T7.6's two independent
 > Phase 7.5 security review passes (`security/SECURITY_REVIEW_2026-08-18_PHASE7.5_pass-a-diff.md`,
 > `security/SECURITY_REVIEW_2026-08-18_PHASE7.5_pass-b-endstate.md`). Findings already fixed or
 > resolved the same day (Pass A F1/F2, Pass B F3/F5) are not filed — see each review's own
@@ -1397,6 +1397,34 @@ load are cached.
 build/push/pull verbs Jenkins actually needs) or move to build isolation that doesn't need host Docker
 access (kaniko / buildah-in-userns / sysbox).
 
+> **RE-SCOPED 2026-08-20 — the recommended fix is withdrawn, the finding stays open.**
+> (`security/SECURITY_REVIEW_2026-08-19_FULL_RESCAN.md`, "B-F2: correcting this review's own recommendation".)
+> Pass B's fix line — front the socket with a scoped proxy such as `tecnativa/docker-socket-proxy` — **does not
+> work for this consumer.** Every Docker verb across all five pipelines was enumerated (`build` x4, `run` x6,
+> `rm` x6, `cp` x4, `tag`/`save`/`push`/`login` x3 each, `volume create`/`volume rm`, `stop`, `inspect`, `pull`,
+> `rmi`, four prune variants, `compose config`). Supporting that needs at minimum
+> `POST=1 CONTAINERS=1 IMAGES=1 BUILD=1 VOLUMES=1` — and `POST=1` plus `CONTAINERS=1` permits
+> `POST /containers/create`, whose body accepts `HostConfig.Privileged: true` and `Binds: ["/:/host"]`. The proxy
+> would be a control in name only. It **is** the right fix for B29's CrowdSec half, which needs no POST at all
+> (`CONTAINERS=1`, read container list + logs) — the two must not be planned as one change.
+>
+> **What would actually work**, both needing a live host to validate and neither shippable from a repo checkout:
+> (1) a second dedicated rootless daemon for CI builds under a different host user, leaving the registry /
+> SonarQube / `jenkins_home` daemon out of reach — the correct answer, and a *host* change with no codified host
+> baseline in this repo to carry it (see B48); or (2) rootless BuildKit for build+push plus a scoped proxy for the
+> remaining container lifecycle, touching all three build pipelines. Plain DinD is **not** an option: it requires
+> `privileged: true` on the outer container, which this project's own `other/security-audit.sh` `DOCKER-01`
+> correctly flags CRITICAL.
+>
+> **Severity context changed on 2026-08-20.** B24 is a blast-radius multiplier, not an entry point — something
+> else must first give execution on the agent. The three unvalidated free-text build parameters that did exactly
+> that (B38, B39) were fixed that day, moving B24 from "reachable by anyone who can trigger a build" to
+> "reachable by anyone who already has the agent." **The highest-value remaining control is therefore job access
+> control, and it is already half-built**: `other/services/jenkins/Dockerfile:151` installs `matrix-auth`, and
+> `Jenkinsfile.deploy:33-35` already says Anonymous/Authenticated Users must not hold `Job/Build`. That is Jenkins
+> runtime config, so no repo audit can confirm it was applied — **confirm it across all five jobs** before
+> treating B24 as merely accepted.
+
 ### B25 — Monitoring-profile exporter variables have no delivery mechanism this phase left standing (deploy) — surfaced 2026-08-18
 
 **Found 2026-08-18, T7.6 Pass A F3** (filed HIGH as a possible plaintext-credential-in-git, downgraded
@@ -1454,6 +1482,13 @@ image's default uid — under rootless Docker that uid does not map to the deplo
 expected to fail to read and Alertmanager would crash-loop on config load. Same shape as the OpenBao
 `user: "100:1000"` fix and the `db-init`/`keycloak-db-init` volume-ownership gap Step 5d closed. Not
 confirmed live — the `monitoring` profile has never been started on staging or prod.
+
+> **CLEARED 2026-08-19** (verified during the full re-scan, `security/SECURITY_REVIEW_2026-08-19_FULL_RESCAN.md`,
+> Part 1). `common/docker-compose.yml` now carries an `alertmanager-init` one-shot (busybox, `user: root`)
+> that copies the rendered file from the templated bind into the `haisir-alertmanager-conf` named volume,
+> then `chown 1000:1000` + `chmod 600`; `alertmanager` mounts the volume and gates on
+> `service_completed_successfully`. The 600 mode is preserved and the uid now matches — the fix chose
+> the `user:`-parity branch below, not the 640 loosening. No further action.
 
 **Fix:** decide deliberately between loosening to 640 with a matching gid, or pinning `user:` on the
 alertmanager service to match the render's owner. **Do not fix by `chmod 644`** — the file contains
@@ -1603,3 +1638,259 @@ level even though the per-identity-per-path model it actually describes is satis
 
 **Disposition:** no action beyond what's already decided — recorded here only so the still-open T7.6
 finding has a backlog pointer rather than living solely inside the review document.
+
+---
+
+## Backlog — surfaced by the 2026-08-19 full security re-scan
+
+> Source: `security/SECURITY_REVIEW_2026-08-19_FULL_RESCAN.md` — a single-pass full-surface audit at
+> `haisir-deploy 3064480`, `haisir-backend 46570b7`, `haisir-frontend 6512e83`. It had two jobs:
+> re-verify every finding left open by the five prior reviews in `security/`, and scan the surfaces
+> those reviews recorded as *not covered* — notably `Jenkinsfile.integration-dast` (named in both
+> Phase 7.5 passes' "not covered" lists), `haisir-frontend/Jenkinsfile` (never in any pass's scope),
+> `other/services/{sonarqube,embedding,npm,registry,jenkins,cftunnel}`, the OpenBao agent templates,
+> and rootless-Docker host posture.
+>
+> **Nothing regressed.** The 2026-07-02 baseline is genuinely closed and the Phase 7.5 fixes hold —
+> re-confirmed directly: `verify_aud: True`, Keycloak password policy + `sslRequired: external`, the
+> streaming body cap, CRS 4.25.1 LTS on Coraza 3.7.0, WAF exclusions converted to field-scoped
+> `ctl:ruleRemoveTargetById`, prompt injection closed by a `Literal`, `SSL_VERIFY` gone from prod and
+> staging, vault-agent secret volumes genuinely `tmpfs`, and B23 fixed with a CI regression test.
+>
+> **Four findings were fixed on 2026-08-19/20 and are NOT filed here** — see that review's two
+> "Post-review resolutions" tables: N1 + N2 (Jenkins build-parameter command injection, the two HIGHs,
+> filed below as B38/B39 only because their *guard* work is incomplete — read those entries), N5
+> (`docker system prune --volumes` on the shared CI daemon), and N3 (`node-exporter` host-root +
+> host-PID exposure, fixed and CI-guarded by `dev-isolation-check.sh` checks 7 and 8).
+>
+> **Existing entries updated by this pass:** B27 **CLEARED**; B24 **RE-SCOPED** (proxy fix withdrawn).
+> B10, B13, B20, B26, B28, B29, B30, B31, B32, B33, B34, B35, B36 were each re-verified as still open
+> and unchanged — that re-verification is Part 1 of the review document, not repeated here.
+
+### B38 — No CI guard stops a Jenkinsfile build parameter from reaching a shell unvalidated (deploy / CI) — surfaced 2026-08-19
+
+**Found 2026-08-19, full re-scan N1/N2 (both HIGH).** `haisir-frontend/Jenkinsfile` interpolated two
+unvalidated free-text parameters (`TAG`, `NEXT_PUBLIC_BACKEND_URL`) into `sh """..."""` blocks, and
+`Jenkinsfile.integration-dast` did the same with `STAGING_URL` across eleven sites. Groovy substitutes
+a GString into the script text *before* bash parses it, so a value containing a quote is live shell
+syntax on an agent that mounts the host Docker socket read-write (B24) and holds `prod-ssh-key`, with
+`tag:ci → tag:prod:22` in the Tailscale ACL.
+
+**Both were fixed 2026-08-20** (regex gates + `withEnv` + single-quoted `sh`; the DAST job also gained
+a gate rejecting the prod hostname, enforcing a warning its own parameter description already carried
+but never checked). **What is still open is the guard.** This is the *same defect class* M3 closed on
+2026-08-04 in `Jenkinsfile.deploy` and `haisir-backend/Jenkinsfile` — recorded then as "CONFIRMED
+FIXED, both halves" — which simply missed the two Jenkinsfiles nobody had read. Nothing prevents a
+third recurrence: `check-image-pins.sh` does not scan Jenkinsfiles, and no check asserts that a
+declared `parameters { string(...) }` is validated before use.
+
+**Fix:** add an offline CI check (Static Security Checks stage) asserting that every `string(name: X)`
+parameter in every tracked `Jenkinsfile*` across all three repos is matched by an `==~` gate, and that
+no `params.` appears inside an `sh` body. Verify it fires against an injected violation.
+
+### B39 — `haisir-frontend/Jenkinsfile` was outside every prior security review's scope (specs / process) — surfaced 2026-08-19
+
+**Found 2026-08-19, full re-scan (method observation, not a code defect).** Five security reviews and
+two independent Phase 7.5 passes never read `haisir-frontend/Jenkinsfile`, and both Phase 7.5 passes
+explicitly listed `Jenkinsfile.integration-dast` as out of scope — pass B even predicted the finding
+("if it accepts free-text build parameters the way `Jenkinsfile.deploy`'s `SERVICES` does, the same
+class of finding may recur there"). It did. Both HIGHs this re-scan produced were in those two files.
+
+**Fix:** make CI surfaces first-class review scope. Whatever review checklist the next security phase
+uses should name every tracked `Jenkinsfile*` in all three repos explicitly, and a pass should not be
+able to close with a file in its own "not covered" list that it also flagged as likely-vulnerable.
+
+### B40 — The CI image installs six tools over the network with no integrity verification (deploy / supply chain) — surfaced 2026-08-19
+
+**Found 2026-08-19, full re-scan N4 (MEDIUM).** `other/services/jenkins/Dockerfile` pins `yq` by version
+**and** SHA256 with a verified `sha256sum -c` (`:150-158`) — and nothing else. Trivy (`:55-59`), Gitleaks
+(`:64-68`), Hadolint (`:109-112`) and SonarScanner CLI (`:136-140`) are version-pinned tarballs/binaries
+with **no checksum**; `uv` is `wget -qO- https://astral.sh/uv/install.sh | ... sh` (`:93`) — unpinned,
+unverified, piped to a shell; semgrep / schemathesis / pip-audit / yamllint / checkov are `pip install`
+with no version pin and no hashes (`:75, 82, 88, 116, 122`); Jenkins plugins are unpinned (`:151`). Two
+more in the same class: `haisir-frontend/Jenkinsfile:39` pipes the nvm installer to bash then
+`nvm install --lts` (unpinned Node), and `haisir-backend/Jenkinsfile:101,119` pulls
+`pgvector/pgvector:pg18` — a Docker Hub image by mutable tag, against BR-INFRA-001/002.
+
+This is the one place in the platform where supply-chain discipline is absent, and it is the
+highest-value target: the resulting image holds `prod-ssh-key` and the RW Docker socket. The frontend
+and backend repos apply `--ignore-scripts`, pnpm `minimumReleaseAge`, `--frozen-lockfile` and
+`uv sync --frozen`; none of that protects the pipeline that runs them.
+
+**Fix, cheapest first:** add `sha256sum -c` to the four release downloads (the `yq` block is already
+the template — four copies of three lines); replace the `uv` installer pipe with a pinned release
+tarball + checksum; pin every `pip install` to `==<version>` and every plugin to `<name>:<version>`;
+move `pgvector` to `reg.mini.dev` or add a digest. Consider extending `check-image-pins.sh` to scan
+`Jenkinsfile*`, which it currently does not.
+
+### B41 — Four static security checks exist in `common/scripts/tests/` and are wired into no pipeline (deploy / CI) — surfaced 2026-08-19
+
+**Found 2026-08-19, full re-scan N6 (MEDIUM).** `Jenkinsfile:118-124`'s own comment names this failure
+mode — "Anything under `tests/` named `*-check.sh` / `*-scan.sh` / `audit-*.sh` is static and has to be
+wired explicitly, or it never runs in CI at all (which is how the four below sat unexecuted until
+2026-08-13)." Four more are in that state now. Every `Jenkinsfile*`, `.sh` and `.md` was grepped for
+each name; the only hits are prose in `common/openbao/*.md`:
+`certbot-hook-assertion-check.sh` (runs **offline** — its own header says "No live host, no OpenBao" —
+so it belongs in the Static Security Checks stage today), `docker-inspect-exposure-check.sh`,
+`backend-admin-no-drift-check.sh`, `templated-config-hash-verify.sh`. `test-runner.sh` discovers
+`*-test-*.sh`, so it cannot pick any of them up either.
+
+`docker-inspect-exposure-check.sh` is the pointed one: it asserts no Class B password value is reachable
+via `docker inspect Config.Env` — precisely the guard for **B26** (the Cloudflare tunnel token delivered
+through `environment:`) — and it has never run. It would not catch B26 as written either, since its
+container list covers `db`/`keycloak-db`/`keycloak` only.
+
+**Fix:** wire `certbot-hook-assertion-check.sh` into the Static Security Checks stage; wire the three
+live-stack checks into `bootstrap-host.sh`'s `run_tests` or `Jenkinsfile.deploy`'s post-deploy path;
+extend `docker-inspect-exposure-check.sh` to cover `cloudflared-tunnel`. **Then add the meta-check** —
+fail CI if any `tests/*-check.sh` / `*-scan.sh` / `audit-*.sh` is referenced by no Jenkinsfile. This is
+the third time this exact gap has been found; the durable fix is the one that finds the fourth.
+
+### B42 — The Cloudflare Tunnel connector shares `haisir-net` with the database, OpenBao and etcd, and its ingress map lives only in the Cloudflare dashboard (deploy / security) — surfaced 2026-08-19
+
+**Found 2026-08-19, full re-scan N7 (MEDIUM).** `other/services/cftunnel/docker-compose.yml:9-11` joins
+`cloudflared` to both `cloudflare-tunnel-net` and `haisir-net`. `haisir-net` is one flat bridge carrying
+`db`, `keycloak`, `keycloak-db`, `etcd`, `apisix` (including admin `9180`), `openbao`, `crowdsec`, all
+six `vault-agent-*` and every exporter. Two consequences. (1) The service's own README's security claims
+are false for the deployed config — it states "Isolated network for cloudflared container / No other
+services attached" and "Controlled access to APISIX only". (2) This is a **token-based** tunnel
+(`--token ${TUNNEL_TOKEN}`), so public-hostname → origin mapping is stored in Cloudflare's Zero Trust
+dashboard, not in this repo, and there is no local `config.yml` bounding what the connector may reach.
+The platform's entire public exposure surface is defined by unversioned, unreviewable dashboard state
+sitting in front of a flat network — a misconfiguration there publishes `db:5432`, `openbao:8200` or
+`apisix:9180` straight to the internet, **bypassing APISIX, Coraza and CrowdSec entirely**, since those
+only sit on the `9443` path. Every other control in this stack is codified and CI-gated; this one is a
+checkbox in someone else's web UI.
+
+**Fix:** give the tunnel its own bridge shared with **APISIX alone** and drop `haisir-net` from the
+cftunnel service. Migrate from a token-run tunnel to a locally-mounted `config.yml` with an explicit
+`ingress:` block terminating in `- service: http_status:404`, so the ingress map becomes committed,
+reviewable and diffable. Correct the README's network claims either way. Note this interacts with
+**B26** — both touch the same compose file, plan them together.
+
+### B43 — NPM trusts `X-Real-IP` from the entire Tailscale CGNAT range, which staging's Keycloak-admin IP allowlist sits behind (deploy / security) — surfaced 2026-08-19, PLAUSIBLE
+
+**Found 2026-08-19, full re-scan N8 (MEDIUM, mechanism confirmed in config, live behaviour unverified).**
+`other/services/npm/nginx-custom.conf:8` sets `set_real_ip_from 100.64.0.0/10` — the whole CGNAT
+allocation — with no `real_ip_header` directive, and **nginx's default for that directive is
+`X-Real-IP`**. So NPM rewrites `$remote_addr` from a client-supplied header for any peer on the tailnet,
+then forwards it as `proxy_set_header X-Real-IP $remote_addr`. Staging sets
+`REAL_IP_SOURCE="http_x_real_ip"` and `NPM_NETWORK_SUBNET="172.20.0.0/16"`, and
+`common/routes/{13-keycloak-admin,14-keycloak-master-realm,15-keycloak-admin-resources}.json` list that
+subnet in `real-ip.trusted_addresses`, then evaluate `ip-restriction` against the rewritten address.
+Net: on staging the `/32` allowlist that `keycloak-admin-access.sh` exists to manage — with its
+`MIN_GRANT_PREFIX=24` bound and "THIS GRANT DOES NOT EXPIRE" banner — is satisfiable by any tailnet node
+sending `X-Real-IP: <allowed-ip>`. Rate limiting and CrowdSec keying on those routes fall the same way.
+Prod is **not** affected: `REAL_IP_SOURCE="http_cf_connecting_ip"`, Cloudflare strips client-supplied
+`CF-Connecting-IP`, and the only trusted peer is `cloudflared` (prod retains a weaker residual — any
+container on `haisir-net`, including `cloudflared` per B42, is inside the trusted subnet and can set the
+header directly against APISIX; needs an already-compromised container, so defense-in-depth only).
+
+**Verify first, one command,** from a tailnet device *not* in the whitelist —
+`curl -sS -o /dev/null -w '%{http_code}\n' -H 'X-Real-IP: <an-allowed-ip>' https://<staging-host>/admin/master/console/`
+— 403 means the chain does not hold, 200/302 means it does.
+**Fix:** narrow `set_real_ip_from` to the specific upstream addresses that legitimately front NPM, and
+set `real_ip_header` explicitly rather than inheriting the default.
+
+### B44 — Backend still defaults `X-XSS-Protection: 1; mode=block` (backend) — surfaced 2026-08-19
+
+**Found 2026-08-19, full re-scan N9 (LOW).** `haisir-backend/src/shared/config.py:153` is
+`x_xss_protection: str = Field(default="1; mode=block")`, and `src/auth/security_middleware.py:51-53`
+emits it on every response the backend originates. **L3 in the 2026-07-02 review named both repos** —
+"haisir-backend `security_middleware.py` / config, haisir-deploy `response-rewrite`" — and was closed
+2026-08-04 on the strength of the four APISIX plugin configs setting `"0"`. The backend half was never
+changed. In practice `response-rewrite` overwrites it on routes carrying the header set, so browsers
+see `0` today; but the code and `target/requirements/15_security_headers.md`'s header-ownership table
+now disagree, and the deprecated value returns on any route that loses its rewrite — exactly the
+collision the T7.4.2 two-tier scoping was designed around.
+
+**Fix:** one character — `Field(default="0")`. Consider dropping the header entirely; CSP replaced it.
+
+### B45 — NPM's own security headers repeat the deprecated `X-XSS-Protection`, and may not survive to the response (deploy) — surfaced 2026-08-19
+
+**Found 2026-08-19, full re-scan N10 (LOW).** `other/services/npm/nginx-custom.conf` sets
+`add_header X-XSS-Protection "1; mode=block" always` — the same deprecated value as B44, in the reverse
+proxy fronting the Jenkins, SonarQube and registry admin UIs. Its `set_real_ip_from` line is also dead
+config as written (see B43). Separately: nginx `add_header` in an outer block is **replaced**, not
+merged, by any `add_header` in a matching `location`, so all four headers here silently vanish on any
+proxy host that sets its own.
+
+**Fix:** `X-XSS-Protection "0"`, and verify with `curl -I` against one proxied admin host that the
+headers actually reach the response.
+
+### B46 — dev compose publishes the APISIX Admin API, its dashboard, pgAdmin and Postgres on `0.0.0.0` (deploy) — surfaced 2026-08-19
+
+**Found 2026-08-19, full re-scan N11 (LOW).** `dev/docker-compose.yml:16-17, 40-41, 68-69, 118-120`
+publish `5432`, `5050` (pgAdmin, with `PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED=False`), `8180`, `9080`
+and `9180` (Admin API + embedded dashboard, `enable_admin_ui: true`) with no `127.0.0.1:` prefix —
+unlike `9091` two lines below, which has one. With dev's `allow_admin` covering the whole docker subnet
+and `KEYCLOAK_ADMIN_ALLOWED_CIDR="0.0.0.0/0"`, anyone on the developer machine's LAN reaches the APISIX
+admin dashboard and an unauthenticated pgAdmin. The tailnet is not the exposure — no ACL rule names
+`tag:dev1` as a destination — the machine's Wi-Fi/LAN is. `dev-isolation-check.sh` check 3 asserts these
+ports never appear *outside* `dev/`; it does not care what interface they bind to inside it.
+
+**Fix:** prefix all five with `127.0.0.1:`. Everything that consumes them is local, so it costs nothing.
+
+### B47 — `other/security-audit.sh` encodes the `docker.sock:ro` misconception as a LOW finding (deploy) — surfaced 2026-08-19
+
+**Found 2026-08-19, full re-scan N12 (LOW).** `other/security-audit.sh:838-840` rates
+`DOCKER-02` (socket mounted read-write) HIGH — correct, and it would flag B24 on any CI-host run — but
+rates `DOCKER-03` (socket mounted read-only, "the dockhand pattern — review intent") **LOW**. `:ro`
+restricts filesystem operations on the socket *file*, not what the Docker Engine API accepts over it; a
+`:ro`-mounted socket still grants create/exec/bind-mount on any container. Rating it LOW turns a real
+privilege boundary into a reassuring line item — the same misconception `other/services/dockhand/README.md`
+carries ("Read-only Docker socket — Reduces attack surface"), now baked into the tool the team uses to
+check itself. Directly weakens **B29**.
+
+**Fix:** raise `DOCKER-03` to HIGH with text naming what `:ro` does and does not do, and correct
+dockhand's README. Worth doing precisely because it is what the team reads next time.
+
+### B48 — There is no codified host baseline, and the rootless-Docker posture has never been verified (deploy / security) — surfaced 2026-08-19
+
+**Found 2026-08-19, full re-scan Part 3.** Nothing in this repo establishes host state:
+`bootstrap-host.sh` does certs → `full-setup` → verify → tests and provisions no host configuration;
+`other/create_vm.sh` is a libvirt helper; `other/security-audit.sh` *detects* drift but establishes
+nothing. Under rootless Docker that is where nearly all remaining hardening lives, and none of it can be
+confirmed from a checkout. Five concrete items:
+
+1. **AppArmor does not apply to these containers, and nothing records it.** Rootful Docker applies
+   `docker-default` to every container; rootless **cannot** — loading a profile needs real root. So the
+   stack has seccomp ✓ / AppArmor ✗, where a rootful equivalent would have both. This is the largest
+   security *regression* from choosing rootless and it is written down nowhere. `security-audit.sh:901`'s
+   `AA-01` checks whether AppArmor exists on the *host*, which reads PASS on Ubuntu 24.04 while zero
+   containers are confined — a check measuring the wrong thing. Minimum action: record it as an accepted
+   consequence in `target/requirements/14_container_images.md`. Better: load a profile once at host
+   bootstrap as root and reference it per-service with `security_opt: ["apparmor=..."]` (rootless *can*
+   reference an already-loaded profile), starting with `apisix`, `frontend`, `cloudflared`.
+2. **Verify cgroup delegation, or every resource limit in the compose files is a silent no-op.**
+   `common/docker-compose.yml` sets `mem_limit`/`cpus`/`pids_limit` on essentially every service; under
+   rootless these apply only with cgroup v2 delegation enabled for the user slice. Check
+   `/etc/systemd/system/user@.service.d/delegate.conf` and
+   `docker inspect <c> --format '{{.HostConfig.Memory}} {{.HostConfig.PidsLimit}}'` — `0 0` means roughly
+   40 committed directives have never applied.
+3. **Verify the rootful daemon is masked and lingering is enabled.** `systemctl is-enabled docker.service
+   docker.socket` (want masked/disabled) and `loginctl show-user "$USER" --property=Linger`. A startable
+   root daemon on the same host voids the containment the T6.3.4 no-DB-TLS acceptance rests on.
+4. **`read_only: true` is available on nine more services** — `apisix`, `keycloak`, `prometheus`,
+   `alertmanager`, `grafana`, the three exporters and all six `vault-agent-*`. The exporters and
+   vault-agents are the easy wins (they write only to their tmpfs render destination). `apisix` and
+   `keycloak` genuinely need writable runtime dirs; leave them. `checkov` (already in pre-commit) has a
+   check for this.
+5. **Confirm CrowdSec can actually read the host logs it is configured to parse.** `acquis.yaml` declares
+   `/var/log/host/{auth,syslog,kern}.log` for the `crowdsecurity/linux` and `sshd` collections; those
+   files are typically `0640 root:adm`, and under rootless the container's uids map through the deploy
+   user's subuid range, so host-root-owned files may be unreadable. If so those sources are silently
+   reading nothing and the SSH brute-force detection this stack advertises is inert, with no error.
+   Check: `docker exec crowdsec sh -c 'head -1 /var/log/host/auth.log'` and
+   `docker exec crowdsec cscli metrics | grep -A5 Acquisition`.
+6. **Confirm the RootlessKit port driver preserves source IPs.** `builtin` (the default) does not;
+   `slirp4netns` does. Decides whether APISIX's `limit-count`/`limit-conn` keys and CrowdSec bans see
+   real clients or one shared bucket on any published port. Prod is largely insulated (cloudflared
+   reaches APISIX container-to-container and `CF-Connecting-IP` carries the truth); staging, where NPM
+   fronts APISIX, is the case to check. Note T5.8 already pinned this across all three hosts — this is a
+   re-confirmation against the security property, not new work.
+
+**Fix:** stand up a codified host baseline that `bootstrap-host.sh` (or a sibling) applies and
+`security-audit.sh` verifies, carrying items 1–3 and 6. Items 4 and 5 are independent and can ship
+alone. **B24's real fix (option 1, a second rootless daemon for CI) has nowhere to live until this
+exists** — that dependency is the main argument for doing it.

@@ -4,6 +4,92 @@
 
 ---
 
+## 2026-08-19 — Full security re-scan (all three repos, all environments)
+
+> Context: owner-requested full re-audit, not a phase gate. Two jobs — re-verify every finding left
+> open by the five prior reviews in `security/`, and scan for new issues including the surfaces those
+> reviews explicitly recorded as *not covered*. Output:
+> `security/SECURITY_REVIEW_2026-08-19_FULL_RESCAN.md`, audited at `haisir-deploy 3064480`,
+> `haisir-backend 46570b7`, `haisir-frontend 6512e83`. New findings are filed as **B38–B48** in
+> `phases.md`; **B24 is re-scoped and B27 cleared** there. Four findings were fixed on 2026-08-19/20
+> and are not filed as backlog.
+
+**Outcome.** The 2026-07-02 baseline is genuinely closed and the Phase 7.5 fixes hold. Re-confirmed
+directly against source rather than carried forward from these planning docs: `verify_aud: True`
+against the expected audience, Keycloak password policy + `sslRequired: external`, the pure-ASGI
+streaming body cap, CRS 4.25.1 LTS on Coraza 3.7.0 (CVE-2026-21876 closed), WAF exclusions converted
+from whole-request `ctl:ruleRemoveById` to field-scoped `ctl:ruleRemoveTargetById`, prompt injection
+closed by `Literal["student","ai"]`, the image proxy's filename regex, `OAUTH__KEYCLOAK__SSL_VERIFY`
+absent from prod and staging, vault-agent secret volumes genuinely `driver_opts: type: tmpfs`, and
+B23 fixed with a CI regression test. **Nothing regressed.** Nine prior findings remain open, all
+pre-existing.
+
+- **Decision: CI surfaces are in scope for security review, and the gap that hid them is itself a
+  finding (B39).** Both HIGHs this pass produced were Jenkins build-parameter command injection —
+  the *same defect class* M3 closed on 2026-08-04 and recorded as "CONFIRMED FIXED, both halves."
+  The two halves were `Jenkinsfile.deploy` and `haisir-backend/Jenkinsfile`. There is a third
+  Jenkinsfile with parameters (`haisir-frontend/Jenkinsfile`, never in any review's scope) and a
+  fourth (`Jenkinsfile.integration-dast`, named in *both* Phase 7.5 passes' "not covered" lists —
+  pass B even predicted the finding there). Both were vulnerable. A review must not be able to close
+  with a file in its own not-covered list that it also flagged as likely-vulnerable.
+
+- **Decision: the socket-proxy fix for B24 is withdrawn, and the finding stays open rather than being
+  closed by something that does not work.** Enumerating every Docker verb across all five pipelines
+  showed Jenkins needs `POST` for `build`/`run`/`push`, so a `docker-socket-proxy` would need
+  `POST=1 CONTAINERS=1` — which permits `POST /containers/create` with `Privileged: true` and
+  `Binds: ["/:/host"]`. The proxy would be a control in name only. It **is** correct for B29's
+  CrowdSec half (no POST at all), so the two must not be planned as one change. The real options are
+  a second dedicated rootless daemon for CI (a *host* change — see B48) or rootless BuildKit; plain
+  DinD is excluded because `privileged: true` trips this project's own `DOCKER-01` at CRITICAL.
+  **Recording a withdrawn recommendation is the point** — this review also had to withdraw its own
+  §3.5 echo of it, the same way the 2026-07-02 review's nonce-CSP-at-the-gateway recommendation was
+  recorded as wrong rather than quietly dropped.
+
+- **Decision: B24's severity is contextual, and closing B38 changed it.** B24 is a blast-radius
+  multiplier, not an entry point — something else must first give execution on the agent. Until
+  2026-08-20 three unvalidated free-text build parameters did exactly that. With those closed, B24
+  moves from "reachable by anyone who can trigger a build" to "reachable by anyone who already has
+  the agent," which makes **job access control the highest-value remaining control** — and it is
+  already half-built (`matrix-auth` installed, `Jenkinsfile.deploy:33-35` already states the rule).
+  It is Jenkins runtime config, so no repo audit can confirm it was ever applied. Confirm before
+  treating B24 as accepted.
+
+- **Decision: N5's fix keeps the disk reclamation the original change was for.** `docker system prune
+  -a -f --volumes` in `haisir-backend/Jenkinsfile`'s cleanup deletes every volume no *running*
+  container holds, on a daemon shared with the private registry, SonarQube and `jenkins_home` — one
+  backend build fired while either was down would have destroyed `registry-data` or
+  `sonarqube-db-data`, silently (`|| true`) and irreversibly. A straight revert to
+  `image prune --filter until=24h` would have re-broken what the in-place comment says that change
+  fixed (it prunes only *dangling* images, reclaimed 0B). Resolution: `docker image prune -a -f
+  --filter "until=24h"` plus `container prune`, keeping `builder prune -a -f`. `-a` gets the
+  tagged-but-unreferenced images the comment wanted, and Docker refuses to remove an image any
+  container references, so the co-tenant services are safe either way.
+
+- **Decision: `node-exporter`'s host-root and host-PID mounts are removed, not documented as
+  accepted.** `pid: host` + `/:/rootfs:ro` are the upstream README default and are materially worse
+  under rootless Docker, where the container uid maps into the deploy user's subuid range — the same
+  user that owns every mode-600 secret file, including
+  `common/openbao/.bootstrap-out/<env>/server-init.json`, the OpenBao root token whose revocation is
+  still the unverified manual step of B28. Neither was load-bearing (`--collector.processes` is not
+  enabled; the root bind only fed the filesystem collector, now disabled). Fixed and guarded by
+  `dev-isolation-check.sh` checks 7 and 8, verified to fire against an injected probe rather than
+  merely to pass. **The `monitoring` profile has never started on staging or prod, which is why this
+  was free now and would not have been later** — same reasoning as B25 and B27.
+
+- **Decision: the review stays in `security/` and was deliberately not published as a hosted
+  artifact.** Owner call 2026-08-20, after the tradeoff was laid out: the file contains no secrets and
+  no Tailscale CGNAT host IPs (scanned against the repo's own pre-commit standards before asking),
+  but it is a map of unfixed weaknesses in a live system, and a hosted URL is a weaker boundary than a
+  private repo. Convention already points the same way — the five prior reviews all live in
+  `security/`.
+
+**Carried into the next security phase.** B38–B48, plus the nine prior findings re-verified as open
+(B10, B13, B20, B24, B26, B28, B29, B30, B31, B32, B33, B34, B35, B36). The review's Part 5 gives a
+suggested order and Part 6 lists six open questions that need one command each on a live host and
+cannot be answered from a checkout.
+
+---
+
 ## 2026-08-18 — Phase 7.5 close-out (Minimus Container Images + Phase 7 Deploy Backlog)
 
 > Context: G1–G6 shipped and fully verified on staging and prod. This entry records the phase-level
