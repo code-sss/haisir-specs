@@ -31,14 +31,14 @@ Two distinct sections on the dashboard:
 
 ### Home Study section (green, `#1D9E75`)
 - Heading: "Home Study"
-- Shown **only** if the student has at least one active `parent_child_links` record.
+- Shown **only** if the student has at least one **visible** Home Study node (BR-STU-002) — an active `parent_child_links` record alone is not sufficient, since the parent may have bound their curriculum to a sibling only.
 - If no active link: show a placeholder card "No Home Study content yet — ask your parent to link their account."
-- Grid of subject cards from the linked parent's adopted/built curriculum (`owner_type = 'parent'`, `owner_id = parent.idp_sub`).
+- Grid of subject cards from the linked parent's adopted/built curriculum (`owner_type = 'parent'`, `owner_id = parent.idp_sub`), restricted to roots bound to this student in `parent_content_bindings` (BR-DATA-026).
 - Clicking a card opens S-nav with `source = 'parent'`.
 
 **Business rules:**
 - BR-STU-001: Content visibility uses BR-DATA-003 filter — platform content always visible; parent content only if active `parent_child_links` exists.
-- BR-STU-002: Home Study section is hidden entirely if there are zero active parent links.
+- BR-STU-002: Home Study section is hidden entirely if there are **zero visible Home Study nodes**. Note this is *not* the same as "zero active parent links" (Phase 8, BR-DATA-026): a student may hold an active link yet see nothing, because their parent bound the curriculum to a sibling only. Condition on what is visible, not on whether a link exists.
 
 ---
 
@@ -106,7 +106,7 @@ Two source tabs: **Platform** | **Home Study**.
 ### Left sidebar — Node tree
 - Hierarchical tree of `course_path_nodes` filtered by the selected source.
 - Platform tab: `owner_type = 'platform'`.
-- Home Study tab: `owner_type = 'parent'` where `owner_id` is the linked parent's `idp_sub`.
+- Home Study tab: `owner_type = 'parent'` where `owner_id` is the linked parent's `idp_sub` **and** the node's `root_node_id` is bound to this student in `parent_content_bindings` (BR-DATA-026).
 - Expandable/collapsible nodes. Leaf nodes show topic count badge.
 - Selecting a leaf node loads the topic list on the right.
 

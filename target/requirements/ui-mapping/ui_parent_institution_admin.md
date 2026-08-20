@@ -29,14 +29,16 @@
 | Topbar | `#3D2000`, logo left, parent name + avatar right |
 | Child selector strip | Horizontal scroll strip below topbar; each child = avatar + name chip; active child = amber underline |
 | "Link your child" card | Shown if zero children linked; dashed border, "+" icon, navigates to P-link |
-| Tab bar | "Overview" | "Curriculum" | "Results" — active tab = amber underline |
-| Overview tab | Summary cards: Topics Uploaded (count), Exams Created (count), Last Exam Score, Weak Topics |
-| Curriculum tab | Shortcut link banner → `/parent/curriculum` |
-| Results tab | Shortcut link banner → `/parent/children/:child_idp_sub/results` |
+| Tab bar | "Curriculum" | "Results" — **two tabs** (Phase 8); active tab = amber underline |
+| ~~Overview tab~~ | ⚠ **Removed (Phase 8)** — all four metrics unproducible for Home Study; see `05_parent.md` |
+| Curriculum tab | Home Study module cards (topic counts, live/draft split, content-item counts) + "About Home Study" explainer + entry to `/parent/curriculum` |
+| Results tab | ⚠ **Coming-soon placeholder.** Empty state only, no fetch. Copy: "Results — coming soon / Exam results for your child's Home Study will appear here." |
+| Child switcher | Avatar + name + **"Grade N"** (`grade` from `GET /api/parent/children`; omit the line when null) |
 
 **States:**
 - No children linked → only "Link your child" card, no tabs.
-- Active child with no curriculum → Overview tab shows zeroes; Curriculum tab shows "Start building" prompt.
+- Active child with no curriculum → Curriculum tab shows "Start building" prompt.
+- Child linked but no tree bound to them → Curriculum tab shows the same "Start building" prompt, **not** an error: the parent may have bound their curriculum to a sibling (BR-DATA-026).
 
 ---
 
@@ -54,7 +56,10 @@
 | "Add Node" | Appears on hover of any node row; adds a child |
 | "Rename" / "Delete" | Contextual actions; Delete shows confirmation if has children |
 | Right panel | Empty state "Select a node to see topics" until node selected |
-| Topic row | Title, status badge (Draft/Live), "Upload Content", "Create Exam", "Delete" |
+| Topic row | Title, status badge (Draft/Live), "Set draft"/"Set live", "Delete". **"Create Exam" removed (Phase 8)** — it linked to `/parent/exams`, which does not exist and 404s. |
+| Topic card body | **Content renders inline here (Phase 8)** — no navigation to a separate screen. Upload group = one collapsed card: source filename, "N page(s) extracted · from <file>", mutually-exclusive `Document \| Text` toggle, `View`, `Show pages` expander (per-page rows with Published/Draft + `Edit`), `Delete`. Video/text rows = single row + Draft/Published toggle. |
+| Privacy pill | Reflects the real binding set — "Visible to Arjun and Meera" / "Arjun +1" (BR-DATA-026). Not a hardcoded single name. |
+| Bind control | "Who is this for?" multi-select on adopt / create-root; binding editor on an existing root. Actively-linked children only (BR-SEC-024). |
 | "Publish" toggle | Draft → Live toggle per topic; green when Live |
 | "Add Topic" button | Below topic list |
 
@@ -84,7 +89,12 @@
 
 ---
 
-## P-topic — Topic Content Manager (`/parent/curriculum/:node_id/topics/:topic_id`)
+## P-topic — Topic Content Manager (⚠ retired as a screen — renders inline in P-curriculum)
+
+> **Phase 8:** the route redirects to `/parent/curriculum?nodeId=<node_id>`. Everything below still
+> applies, rendered inside P-curriculum's topic cards. See also the parent-specific quota/cost-cap
+> differences in the second P-topic block near the end of this file — that content is **not**
+> duplicated here and must be preserved.
 
 | Element | Detail |
 |---|---|
@@ -301,9 +311,15 @@ Native `<dialog>`, 560 px wide. Triggered by Edit button on any content row.
 - Cost estimate >$2 → Upload button disabled until checkbox confirmed.
 - Per-job cost cap exceeded → status pill "✕ Failed · cost cap reached" + admin contact link.
 
-### P-topic — Parent Topic Content Manager (`/parent/curriculum/:node_id/topics/:topic_id`)
+### P-topic — Parent content differences vs. SA-boards (⚠ renders inline in P-curriculum since Phase 8)
 
-Mirrors SA-boards Add Content modal + topic card behaviour exactly. Differences:
+> **Retained deliberately.** This block is the **only** place specifying the parent quota gate, the
+> "78 / 100 today" footer and the parent-account-scoped daily cost cap — the quota line the Phase 8
+> builder renders. It is *not* a duplicate of the earlier P-topic block. Do not delete it when
+> folding P-topic into P-curriculum.
+
+Mirrors SA-boards Add Content modal + topic card behaviour exactly, now rendered inline in
+P-curriculum's topic cards rather than on a standalone screen. Differences:
 
 | Element | Difference |
 |---|---|

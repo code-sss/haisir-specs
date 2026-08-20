@@ -135,7 +135,7 @@ ALTER TABLE exam_templates
 `owner_type = 'platform'`, `owner_id = NULL`. Created and managed by `admin` role only. Visible to all authenticated students.
 
 **BR-DATA-002 — Parent content:**
-`owner_type = 'parent'`, `owner_id = parent.idp_sub`. Created by `parent` role. Visible only to students who have an active, non-revoked `parent_child_links` record where `parent_idp_sub = owner_id`.
+`owner_type = 'parent'`, `owner_id = parent.idp_sub`. Created by `parent` role. Visible only to the **bound children** of that parent — a student must both (a) hold an active, non-revoked `parent_child_links` record where `parent_idp_sub = owner_id`, **and** (b) be bound to the content's root node via `parent_content_bindings` (BR-DATA-026). Being linked to the parent is no longer sufficient on its own.
 
 **BR-DATA-003 — Visibility filter (applied on all student queries for nodes/topics/exams):**
 
@@ -143,15 +143,131 @@ ALTER TABLE exam_templates
 
 ```sql
 WHERE (owner_type = 'platform')
-   OR (owner_type = 'parent' AND owner_id IN (
-       SELECT parent_idp_sub FROM parent_child_links
-       WHERE child_idp_sub = :current_user_idp_sub
-         AND revoked_at IS NULL
-   ))
+   OR (owner_type = 'parent'
+       AND owner_id IN (
+           SELECT parent_idp_sub FROM parent_child_links
+           WHERE child_idp_sub = :current_user_idp_sub
+             AND revoked_at IS NULL
+       )
+       AND EXISTS (
+           SELECT 1 FROM parent_content_bindings b
+           WHERE b.root_node_id = <table>.root_node_id
+             AND b.child_sub    = :current_user_idp_sub
+       ))
 ```
+
+> **Both terms are required — do not "simplify" either away.** The
+> `parent_child_links` term is what makes revocation take effect *instantly*: revoking a link kills
+> access on the next query with no binding-cleanup job and no window where a stale
+> `parent_content_bindings` row still grants sight of the content. The `parent_content_bindings`
+> term is what scopes a parent's content to the specific children it was built for. Dropping the
+> link term leaves revoked parents' content readable; dropping the binding term restores the
+> pre-Phase-8 behaviour where every linked child sees everything. They are not redundant.
+
+`<table>.root_node_id` resolves in one column comparison — no recursive walk up `parent_id`. See
+BR-DATA-026 for how `root_node_id` is denormalised onto all three parent-owned tables.
 
 **BR-DATA-004 — Parent sees only own content:**
 Parent API endpoints filter `owner_id = current_user.idp_sub` for all write operations and their own curriculum reads.
+
+---
+
+## Per-Child Content Binding (Phase 8)
+
+**BR-DATA-026 — Parent content is bound to specific children:**
+
+Before this rule, parent-owned content was scoped by `owner_id` alone, so **every** child linked to
+a parent saw **all** of that parent's content. A parent with a Grade 6 and a Grade 9 child had one
+shared Home Study tree and no way to separate them. This rule adds the missing dimension.
+
+### Binding table
+
+```sql
+CREATE TABLE parent_content_bindings (
+    root_node_id UUID NOT NULL REFERENCES course_path_nodes(id) ON DELETE CASCADE,
+    child_sub    UUID NOT NULL,          -- Keycloak sub; NO FK (no local users table)
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (root_node_id, child_sub)
+);
+CREATE INDEX ix_parent_content_bindings_child ON parent_content_bindings (child_sub);
+```
+
+`child_sub` carries **no foreign key** — identity is the Keycloak `sub` and there is no local users
+table. Consistent with `parent_child_links`, which uses the same raw-UUID-string convention.
+
+### Denormalised `root_node_id`
+
+```sql
+ALTER TABLE course_path_nodes ADD COLUMN root_node_id UUID NULL;
+ALTER TABLE topics            ADD COLUMN root_node_id UUID NULL;
+ALTER TABLE exam_templates    ADD COLUMN root_node_id UUID NULL;
+```
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `root_node_id` | UUID | NULL | Id of the top-level parent node this row belongs to. Self-referential on a root node. `NULL` on all platform-owned rows. |
+
+Set at create time and at clone time; **immutable thereafter**. Resolution from any row to its
+binding is a single column comparison — deliberately *not* a recursive walk up `parent_id`, which
+would put a recursive CTE on every student read.
+
+### Cardinality: one tree, one or many children
+
+A root node may be bound to **one or several** children. This is the common case, not an edge case:
+two children in the same grade studying the same board share a single tree, so the parent builds and
+uploads the material **once**. Where a parent wants the two to diverge, they create a separate root
+and bind it to one child only.
+
+The alternative — one tree per child — was considered and rejected: it forces a parent with
+same-grade siblings to maintain two byte-identical curricula, and makes them pay the BR-PAR-008a
+extraction quota and the storage cost **twice** for the same uploads.
+
+**Binding is anchored at the root only.** Subtree-level binding is deliberately out of scope: a
+topic would then have to resolve its nearest bound ancestor, which reintroduces the recursive walk
+this design exists to avoid. Divergence between children is expressed as a separate root.
+
+### Rules
+
+- **Bind-time validation:** a parent may only bind a root to a child they are **actively linked to**
+  (BR-SEC-024). Binding to an unlinked or revoked child is rejected.
+- **Unbinding cascades nothing.** Removing a binding hides the content from that child; it deletes
+  no nodes, topics, content or exam sessions. Unbinding is permitted even with in-flight
+  `exam_sessions` — the session remains readable to the student. BR-PAR-004's delete-block is
+  deliberately **not** extended to unbind: it guards irreversible deletion, whereas unbinding is a
+  reversible policy change with no data at risk.
+- **Bindings outlive link revocation, by intent.** Revoking a parent-child link immediately hides
+  the content (the `parent_child_links` term in BR-DATA-003 does that with no cleanup job). The
+  binding row is left in place, so re-linking the same pair via a fresh code (BR-PAR-014) restores
+  the previous visibility rather than silently losing it. This is intended behaviour, not an
+  oversight.
+- **Zero bindings means invisible.** A root with no binding rows is reachable by nobody. The `EXISTS`
+  in BR-DATA-003 is strict — there is no "unbound means visible to all" fallback, which would
+  silently expose an orphaned tree the moment a new child was linked.
+
+### Migration (behaviour-preserving)
+
+```sql
+INSERT INTO parent_content_bindings (root_node_id, child_sub)
+SELECT n.id, l.child_sub
+FROM course_path_nodes n
+JOIN parent_child_links l
+  ON l.parent_sub = n.owner_id AND l.revoked_at IS NULL
+WHERE n.owner_type = 'parent' AND n.parent_id IS NULL;
+```
+
+Binds every existing parent tree to every child currently linked to that parent — **exactly today's
+visibility**, preserved for every parent including those with several children. No child loses
+access to anything, so no revocation-without-a-revocation-event (which would contradict BR-STU-012).
+Parents with no linked children get no binding rows, which matches today's behaviour: nobody could
+see that content anyway.
+
+`root_node_id` is backfilled in the same migration by walking each parent tree once from its root.
+
+**BR-DATA-006 and the V40 adopt-idempotency index are deliberately unchanged.** Under one-tree-per-
+child an index on `(owner_id, source_node_id)` would have wrongly blocked a parent from adopting the
+same board for a second child. Under this design "one adopt per parent per source board, shared by
+whichever children need it" is the correct invariant again, so the existing index and the existing
+`AlreadyAdoptedError` → 409 behaviour stay exactly as they are.
 
 ---
 
@@ -161,6 +277,8 @@ Parent API endpoints filter `owner_id = current_user.idp_sub` for all write oper
 When a parent adopts a platform board subtree:
 - Deep copy of `course_path_nodes` rows (the selected subtree) with `owner_type = 'parent'`, `owner_id = parent.idp_sub`.
 - Deep copy of attached `topics` rows with `owner_type = 'parent'`, `owner_id = parent.idp_sub`, `status = 'draft'`.
+- Every cloned row (nodes and topics) carries `root_node_id` = the id of the cloned root, set inside the same transaction (BR-DATA-026). The cloned root's own `root_node_id` is self-referential.
+- One `parent_content_bindings` row is inserted per child named in the adopt request's `child_subs` (BR-PAR-022). An adopt naming two children produces **one** cloned tree with **two** binding rows — not two trees.
 - **Not cloned:** `topic_contents`, `data_topic_content_chunks`, `questions`, `exam_templates`, `exam_template_questions`. Parent populates their own content and exams after adoption.
 - Platform updates to the original board do **not** propagate to parent copies. Each parent copy is independent.
 

@@ -586,7 +586,7 @@ path, unchanged:
 | Step | Platform branch (`owner_type='platform'`) | Parent branch (`owner_type='parent'`) |
 |---|---|---|
 | 1. Topic load | `topic_repo.get(topic_id)` — 403 if not found | same |
-| 2. Ownership/link check | `enrollment_id` required (403 if `None`); enrollment must belong to `user_sub` (403) | active, non-revoked `parent_child_links` row with `parent_sub = topic.owner_id`, `child_sub = user_sub` (403 if none) — the same predicate as the BR-DATA-003 visibility clause (`01_data_model.md` §"Content Ownership Rules"), applied here as a service-level gate rather than a query filter |
+| 2. Ownership/link check | `enrollment_id` required (403 if `None`); enrollment must belong to `user_sub` (403) | **both** (a) an active, non-revoked `parent_child_links` row with `parent_sub = topic.owner_id`, `child_sub = user_sub`, **and** (b) a `parent_content_bindings` row binding `topic.root_node_id` to `user_sub` (403 if either is missing) — the same two-term predicate as the BR-DATA-003 visibility clause (`01_data_model.md` §"Content Ownership Rules"), applied here as a service-level gate rather than a query filter. **The binding term is not optional (Phase 8, BR-DATA-026):** with only the link term, a child could open a doubt thread on a sibling's topic — content they cannot see in the UI but could still reach through hAITU. This gate must move in lockstep with BR-DATA-003 or it becomes an access hole |
 | 3. Scope/status check | topic's `course_path_node_id` must be within the enrolled subtree (403) | `topic.status == 'live'` (403 if `draft`) |
 | 4. Rate limit | `HaituRateLimiter` (20/hr, shared) | same |
 | 5. Context assembly | grade/subject from ancestor path (unchanged) | same |

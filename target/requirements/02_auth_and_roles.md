@@ -100,9 +100,9 @@ CurrentUser: idp_sub, email, name, email_verified, roles: list[str], current_rol
 | Resource | Allowed |
 |---|---|
 | Platform `course_path_nodes` / `topics` / `topic_contents` | Read (visibility filter applied) |
-| Parent Home Study nodes/topics (linked parent only) | Read (visibility filter applied) |
+| Parent Home Study nodes/topics (linked parent **and** bound to this student) | Read (visibility filter applied — BR-DATA-026) |
 | Platform `exam_templates` | Read |
-| Parent `exam_templates` (linked parent only) | Read |
+| Parent `exam_templates` (linked parent **and** bound to this student) | Read (BR-DATA-026) |
 | Own `exam_sessions` | Read + submit |
 | Own `student_profiles` | Read + write |
 | Own `parent_link_codes` | Read + generate |
@@ -116,6 +116,7 @@ CurrentUser: idp_sub, email, name, email_verified, roles: list[str], current_rol
 | Platform `course_path_nodes` / `topics` | Read (browse for adoption — no write) |
 | Own curriculum nodes (`owner_id = self`) | Full CRUD |
 | Own curriculum topics (`owner_id = self`) | Full CRUD |
+| Bind/unbind own curriculum root to a linked child | ✓ — actively-linked children only (BR-SEC-024) |
 | Own `topic_contents` (upload to own topics) | Read + upload |
 | Own `exam_templates` (`owner_id = self`) | Full CRUD |
 | Child's `exam_sessions` (parent-owned exams only, linked child only) | Read scores |
@@ -144,7 +145,7 @@ CurrentUser: idp_sub, email, name, email_verified, roles: list[str], current_rol
 - **BR-SEC-001:** All endpoints require JWT; only `/api/health` and OIDC endpoints are unauthenticated.
 - **BR-SEC-002:** Students receive 404 (not 403) for other students' data.
 - **BR-SEC-003:** Parent access to child data requires an active (`revoked_at IS NULL`) `parent_child_links` record; revocation removes access immediately.
-- **BR-SEC-004:** Parent content (`owner_type='parent'`) is never visible to students without a valid `parent_child_links` linking `owner_id` to the requesting student.
+- **BR-SEC-004:** Parent content (`owner_type='parent'`) is never visible to a student without **both** a valid `parent_child_links` record linking `owner_id` to the requesting student **and** a `parent_content_bindings` row binding the content's `root_node_id` to that student (BR-DATA-026). An active link alone is no longer sufficient — a child sees only the trees their parent bound to them.
 - **BR-SEC-005:** Platform Admin cannot read or modify parent-owned content.
 - **BR-SEC-006:** `X-Current-Role` is required on all role-gated endpoints. Missing header returns `400 "X-Current-Role header required"`. Explicit exceptions (use lenient path — no header required): `GET /api/users/me`, `POST /api/users/me/assign-role`, `PATCH /api/users/me/onboarding-complete`, and `GET /images/questions/{filename}` (browser subresource — an `<img src>` cannot send a custom header; authentication still enforced, role never used). See the exemption list above for why the fourth differs in kind from the first three.
 - **BR-SEC-007:** Never log JWT, CSRF tokens, or session cookies; use structlog with redaction.
@@ -155,8 +156,9 @@ CurrentUser: idp_sub, email, name, email_verified, roles: list[str], current_rol
 - **BR-SEC-012:** Essay grade override and confirm-grade (`PATCH .../grade`, `POST .../confirm-grade`) are allowed only for the exam owner: Parent for `owner_type='parent'` exams (`owner_id = parent.idp_sub`); Admin for `owner_type='platform'` exams. A Platform Admin cannot override or confirm grades on parent-owned exams (BR-SEC-005 extends here). Missing or wrong role → 403.
 - **BR-SEC-020:** The backend validates the JWT **audience**. Local JWKS decode asserts the backend's own client is present in `aud` (`verify_aud: True`, or an explicit post-decode assertion). A token minted for a different client in the same realm — including the frontend's own access token — is rejected with `401`. Introspection confirms a token is *active*, not that it was issued *for this API*; without audience validation the two checks together still permit audience confusion. The Keycloak audience mapper adding `haisir-backend-admin` to `aud` is already provisioned (see "JWT" above), so the claim exists to enforce against — confirm APISIX-injected tokens carry it before enabling.
 - **BR-SEC-021:** Every backend→Keycloak channel verifies TLS. `OAUTH__KEYCLOAK__SSL_VERIFY` must be `true` in staging and production; the code default is already `true` and must not be overridden. This covers the token-introspection channel (RFC 7662) and the Keycloak Admin API client. An introspection call made over an unverified TLS channel is **not** fail-closed in the sense BR-SEC-010 requires — an on-path attacker can answer `active: true` for a revoked token, silently defeating revocation. Self-signed development certificates are handled by trusting the internal CA, never by disabling verification.
+- **BR-SEC-024:** A parent may bind a curriculum root to a child only when an active, non-revoked `parent_child_links` record exists for that pair at bind time. Applied **per binding row** — an `adopt` or `create-node` request naming several children validates every one, and rejects the whole request if any is unlinked or revoked (no partial binding). Enforced on `POST /api/parent/curriculum/nodes`, `POST /api/parent/curriculum/adopt`, and `POST /api/parent/curriculum/nodes/:root_id/bindings`. Binding to a child the caller is not linked to returns `404` (oracle protection — same pattern as BR-PAR-006), never `403`.
 
-> **BR-SEC numbering note:** `13_secrets_management.md` independently allocated **BR-SEC-011 … BR-SEC-019** for secrets-management rules, colliding with BR-SEC-011/012 above. The collision is recorded rather than renumbered — the IDs are referenced from shipped code and past decision entries. It has since taken **BR-SEC-022 … BR-SEC-023** (deploy env files under release control; `ip-restriction` deny-by-default), continuing past this file's 020/021 rather than repeating them, so the 011/012 overlap remains the only one. New rules in **either** file continue from the highest ID allocated across both — next free is **BR-SEC-024**. New cross-cutting infrastructure specs use their own prefix (`BR-INFRA-*`, `BR-WAF-*`, `BR-CSP-*`) rather than extending `BR-SEC-*`.
+> **BR-SEC numbering note:** `13_secrets_management.md` independently allocated **BR-SEC-011 … BR-SEC-019** for secrets-management rules, colliding with BR-SEC-011/012 above. The collision is recorded rather than renumbered — the IDs are referenced from shipped code and past decision entries. It has since taken **BR-SEC-022 … BR-SEC-023** (deploy env files under release control; `ip-restriction` deny-by-default), continuing past this file's 020/021 rather than repeating them, so the 011/012 overlap remains the only one. New rules in **either** file continue from the highest ID allocated across both — next free is **BR-SEC-025** (BR-SEC-024 allocated above for per-child content binding). New cross-cutting infrastructure specs use their own prefix (`BR-INFRA-*`, `BR-WAF-*`, `BR-CSP-*`) rather than extending `BR-SEC-*`.
 
 ---
 

@@ -16,9 +16,9 @@ Parents are content creators — they build or adopt a private curriculum for th
 |---|---|---|
 | P-home | Parent Dashboard | `/parent` |
 | P-curriculum | Curriculum Builder | `/parent/curriculum` |
-| P-topic | Topic Content Manager | `/parent/curriculum/:node_id/topics/:topic_id` |
-| P-exam | Exam Creator | `/parent/exams` |
-| P-results | Child Results | `/parent/children/:child_idp_sub/results` |
+| P-topic | Topic Content Manager | ⚠ **RETIRED as a screen** — folded inline into P-curriculum; old route redirects |
+| P-exam | Exam Creator | `/parent/exams` — ⚠ **DEFERRED**, not built |
+| P-results | Child Results | `/parent/children/:child_idp_sub/results` — ⚠ **DEFERRED**, not built |
 | P-link | Link Child | `/parent/link-child` |
 
 ---
@@ -29,9 +29,9 @@ Parents are content creators — they build or adopt a private curriculum for th
 - If no child linked: prominent "Link your child" card with navigation to P-link.
 
 ### Tabs (per active child)
-1. **Overview** — summary cards: topics uploaded, exams created, last exam score, weak topics count.
+1. ~~**Overview**~~ — ⚠ **removed (Phase 8).** All four metrics are structurally unproducible for Home Study: mastery rows require an enrollment, and enrollment rejects parent-owned nodes. See `05_parent.md` for the full reasoning.
 2. **Curriculum** — shortcut to P-curriculum filtered for this child's view.
-3. **Results** — shortcut to P-results for this child.
+3. **Results** — ⚠ **coming-soon placeholder only** (Phase 8). Calls no endpoint. See `05_parent.md` for the fixed copy.
 
 ---
 
@@ -62,14 +62,19 @@ Two entry paths:
 
 **Business rules:**
 - BR-PAR-001: Parent can only read/write nodes where `owner_id = parent.idp_sub`.
+- **BR-PAR-022 (Phase 8):** every curriculum root is bound to **one or more** children via `parent_content_bindings` (BR-DATA-026); `POST .../nodes` (roots) and `POST .../adopt` require `child_subs: list[UUID]` (min 1) — **breaking change**, 400 if absent, no fallback. Canonical text in `05_parent.md`.
 - BR-PAR-002: Adopted subtree is an independent copy — platform updates to the original do not propagate.
 - BR-PAR-003: Adopt is idempotent per subtree root — second adopt returns 409.
 - BR-PAR-004: Delete node cascades to child nodes and topics. Not allowed if any topic has active (in-progress) exam sessions.
-- BR-PAR-005: Topic `status = 'draft'` is not visible to the linked child. Set to `live` to make it visible.
+- BR-PAR-005: Topic `status = 'draft'` is not visible to the bound child. Set to `live` to make it visible.
 
 ---
 
 ## P-topic — Topic Content Manager
+
+> ⚠ **RETIRED as a standalone screen (Phase 8)** — content management renders inline in
+> P-curriculum's detail pane; the old route redirects. Behaviour and rules unchanged. Canonical text
+> in `05_parent.md`.
 
 - Topic title (editable).
 - Content actions: same Add Content modal as Platform Admin (PDF / Image / Video / Text). PDF and Image trigger the extraction pipeline; Video and Text save instantly.
@@ -87,6 +92,8 @@ Two entry paths:
 
 ## P-exam — Exam Creator
 
+> ⚠ **DEFERRED (2026-08-20): not built, not Phase 8 scope.** Canonical text in `05_parent.md`.
+
 - Lists all `exam_templates` where `owner_type = 'parent'` and `owner_id = parent.idp_sub`.
 - "Create Exam" → modal with: title, linked node (optional), time limit, pass mark.
 - Questions tab: add MCQ questions (stem + 4 options + correct answer) or paragraph questions.
@@ -101,6 +108,9 @@ Two entry paths:
 ---
 
 ## P-results — Child Results
+
+> ⚠ **DEFERRED (2026-08-20): not built, not Phase 8 scope.** BR-PAR-012 stands unchanged.
+> Canonical text in `05_parent.md`.
 
 - Scope: `exam_sessions` where:
   - `user_id = child.idp_sub`
@@ -133,15 +143,17 @@ Two entry paths:
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/parent/children` | List linked children |
+| `GET` | `/api/parent/children` | List linked children (`grade` added Phase 8) |
 | `POST` | `/api/parent/children/link` | Link a child using a link code |
 | `DELETE` | `/api/parent/children/:child_idp_sub/link` | Revoke link to a child |
 | `GET` | `/api/parent/curriculum/nodes` | List parent's curriculum root nodes |
 | `GET` | `/api/parent/curriculum/nodes/:node_id` | Get node detail + children |
-| `POST` | `/api/parent/curriculum/nodes` | Create a new node |
+| `POST` | `/api/parent/curriculum/nodes` | Create a new node. **Root creates require `child_subs: list[UUID]` (min 1)** — 400 if absent |
+| `POST` | `/api/parent/curriculum/nodes/:root_id/bindings` | Bind a root to additional children |
+| `DELETE` | `/api/parent/curriculum/nodes/:root_id/bindings/:child_sub` | Unbind a child (hides, deletes nothing) |
 | `PATCH` | `/api/parent/curriculum/nodes/:node_id` | Rename a node |
 | `DELETE` | `/api/parent/curriculum/nodes/:node_id` | Delete a node (cascade) |
-| `POST` | `/api/parent/curriculum/adopt` | Adopt a platform subtree (clone) |
+| `POST` | `/api/parent/curriculum/adopt` | Adopt a platform subtree (clone). **Requires `child_subs: list[UUID]` (min 1)**; two children → one tree, two bindings |
 | `GET` | `/api/parent/curriculum/nodes/:node_id/topics` | List topics for a node |
 | `POST` | `/api/parent/curriculum/nodes/:node_id/topics` | Create a topic |
 | `PATCH` | `/api/parent/curriculum/topics/:topic_id` | Update topic (title, status) |

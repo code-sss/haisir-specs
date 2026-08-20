@@ -393,7 +393,7 @@ which were never inside the OpenBao migration boundary.
 
 ---
 
-## Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog (stub, 2026-08-09)
+## Phase 7.5 — Minimus Container Images + Phase 7 Deploy Backlog ✓ (completed 2026-08-18)
 
 **Outcome (T7.7, 2026-08-18, corrected 2026-08-18 — see note below):** G1–G6 fully shipped and
 E2E-verified on both staging and prod. G6.2's prod deny-all (T6.2.6/T6.2.7), the last piece flagged
@@ -571,6 +571,172 @@ It does not depend on G1–G4 and should not wait behind them.
 >    so the CVE regression is gated in CI too. Scope note kept from the Jenkinsfile's own comment:
 >    the gate proves the WAF *runs and filters*, not **which** Coraza/CRS version it runs; the version
 >    floors are asserted at build time in the Dockerfile (`coraza-proxy-wasm/VENDORED.md`).
+
+---
+
+## Phase 8 — Parent UX Alignment (stub, 2026-08-20)
+
+> Root goal: the parent surface matches `target/prototypes/haisir_parent_flow.html`, and Home Study
+> content becomes genuinely **per-child** instead of shared across every linked child.
+
+Baseline at scoping: backend `67b6cc3`, frontend `784f700`, deploy `790e29d`.
+
+Scoped 2026-08-20 from a gap analysis of `parent-screens/` (11 annotated screenshots: 4 of the
+shipped UI, 7 of the target mock) against the live parent slice, the parent backend routes, and the
+gateway config. Not yet planned — no `PLAN.md` goal tree or `TASKS.md` rows exist for it.
+
+**The finding that drives the phase.** The mock labels every surface per-child — *"Arjun's
+curriculum"*, *"Private — visible only to Arjun"*, *"Home Study curriculum for Arjun"*. The data
+model cannot honour any of it. `course_path_nodes` and `topics` carry only `owner_type='parent'` +
+`owner_id=<parent_sub>`; there is no child column, and `student_visibility_clause`
+(`src/infrastructure/visibility.py`) hands **every linked child of a parent the same Home Study
+tree**. A parent with a Grade 6 and a Grade 9 child builds one shared curriculum, and switching the
+child tab would change the heading while showing identical content. The mock's central promise is
+false today, and no amount of frontend work makes it true.
+
+**The second finding, which shrank the phase.** Most of the mock's Overview tab has no data source
+and cannot get one cheaply. `enrollment_topics` — the only per-topic progress record — is written
+**exclusively by the post-exam mastery pipeline** (`mastery_service._upsert_topic_mastery`), never on
+content reads. It also requires a `student_enrollments` row, and `EnrollmentService.enroll()` hard-
+rejects non-platform nodes (`"Node {id} is not a platform node"`). So a parent-owned topic can never
+produce a mastery row: **"1/3 topics studied", "Child progress 60%", and "2 weak topics flagged in
+Home Study" are describing data the system is structurally incapable of producing.** Day streak and
+topics-this-week are worse — nothing anywhere logs study activity per day. All of it is out of scope
+rather than faked.
+
+**Sequencing:** G1 gates every child-labelled string in G2–G4 and must land first. G3 and G4 are
+independent of each other and both sit behind G2.
+
+### Goals
+
+- **G1 — Per-child Home Study binding** `[backend]` `[specs]`
+  A `parent_content_bindings(root_node_id, child_sub)` join table, plus a denormalised
+  `root_node_id` on `course_path_nodes`, `topics` and `exam_templates` so resolution is one column
+  comparison rather than a recursive walk up `parent_id`. `student_visibility_clause` gains an
+  `EXISTS` against the bindings table **alongside** the existing `parent_child_links` term — both
+  terms are load-bearing and neither may be optimised away (BR-DATA-003). `POST
+  /api/parent/curriculum/nodes` (roots) and `POST /api/parent/curriculum/adopt` take
+  `child_subs: list[UUID]` (min 1); new `POST`/`DELETE .../nodes/:root_id/bindings`. Spec updates:
+  `01_data_model.md` (BR-DATA-026), `02_auth_and_roles.md` (BR-SEC-024), `05_parent.md`
+  (BR-PAR-022), `05_06_07_personas.md`, `03_student.md`, `11_haitu_ai_layer.md`.
+
+  > **Design corrected 2026-08-20, after a challenger pass.** This goal originally specced a
+  > *scalar* `child_sub` on root nodes only — one tree, one child. Two problems killed it. (a)
+  > Root-only anchoring is not expressible in `student_visibility_clause`, which is a generic
+  > single-table helper reused for nodes, topics and exams; descendants carry no binding, so every
+  > student read would need a recursive CTE. (b) One-tree-per-child forces a parent with two
+  > same-grade children to maintain two byte-identical curricula, paying the BR-PAR-008a extraction
+  > quota and storage **twice** — and it would have required widening the adopt-idempotency index,
+  > because `(owner_id, source_node_id)` wrongly blocks adopting the same board for a second child.
+  > Many-to-many binding fixes all three: the **V40 adopt index needs no change at all**, the
+  > migration becomes behaviour-preserving, and same-grade siblings share one tree.
+  >
+  > **Binding is anchored at the root only.** Subtree-level binding would make a topic resolve its
+  > nearest bound ancestor — the recursive walk this design exists to avoid. Divergence between
+  > children is a separate root. Unbinding hides and deletes nothing, and is permitted with
+  > in-flight `exam_sessions`; BR-PAR-004's delete-block is deliberately not extended to it.
+
+  > **hAITU must move in lockstep.** `11_haitu_ai_layer.md`'s doubt-thread gate was specced as "the
+  > same predicate as the BR-DATA-003 visibility clause". The moment BR-DATA-003 gains the binding
+  > term, a child could otherwise open a doubt thread on a **sibling's** topic — reachable through
+  > hAITU despite being invisible in the UI. This is the one genuine access hole in the increment.
+
+- **G2 — Parent shell + child switcher + tab nav** `[frontend]` `[backend: 1 field]`
+  Parent-themed shell (brown/amber topbar, `PARENT` pill, `+ Link child`) replacing the generic
+  `Header`. Child strip with avatar, name and **Grade N** — the grade needs an additive field on
+  `GET /api/parent/children`, which returns only `child_sub`, `linked_at` and `child_display_name`
+  today. **Two tabs: `Curriculum` | `Results`** (see the Overview note below).
+
+- **G3 — Curriculum tab, derivable metrics only** `[frontend]`
+  Module cards showing topic counts, live/draft split and content-item counts; the "About Home
+  Study" explainer; `Open builder` CTAs. Plus the Results coming-soon state.
+
+- **G4 — Builder: content inline, topic route retired** `[frontend]`
+  Mount the shared `TopicContentSection` (already adapter-driven via `parentContentAdapter`) inside
+  each topic card in the detail pane. Regroup content rows into the mock's group card — source
+  filename, `N page(s) extracted · ✨ from …`, segmented **`Document | Text`** toggle, `View`,
+  **`▸ Show pages`** expander with per-page Published/Draft + Edit. `groupContentsByPublish` already
+  computes the grouping, so this is a rendering change, not new domain logic.
+  `/parent/curriculum/:node_id/topics/:topic_id` redirects to `/parent/curriculum?nodeId=…`.
+  Upload quota line (`N in progress · N/100 today`) — enforced server-side per BR-PAR-008a but never
+  returned to the client. **Removes the dead `Create Exam` link**, which points at `/parent/exams`,
+  a route that does not exist and 404s on every topic row today.
+
+### Scope decisions taken at scoping (owner calls, 2026-08-20)
+
+- **Child scoping is real, not cosmetic.** The alternative — keep one shared tree and reword the UI
+  to "visible to your linked children" — was rejected. Per-child curricula is the product intent, so
+  the schema moves rather than the copy.
+- **A tree binds to one *or several* children** (owner call, 2026-08-20, after the challenger pass).
+  Two children in the same grade share one curriculum, built and uploaded once. This is the common
+  case, not an edge case, and it is what makes the migration behaviour-preserving. Recorded honestly:
+  this is close to the "assign at node level" option declined at first scoping — arrived at from the
+  concrete same-grade-siblings case, and a superset of it, since it also supports fully separate
+  per-child trees.
+- **`child_subs` is required — hard 400, no fallback** (owner call, 2026-08-20). A breaking change to
+  two already-shipped endpoints; frontend and backend ship together. No "default to the only child"
+  convenience, which would have been a conditional rule to implement and test for no lasting gain.
+- **Overview metrics: only what is derivable.** Day streak, topics-this-week, active modules,
+  progress % and "N topics studied" are all out. Nothing renders a hardcoded zero.
+- **Results is deferred entirely, behind a coming-soon placeholder.** Two rounds of scoping moved
+  this. It was first cut because, scoped as `05_parent.md` specifies it (BR-PAR-012: parent-owned
+  exams only), it would return `[]` forever with exam authoring out of scope. Widening it to include
+  the child's **platform** exam results would have made it real on day one — the sessions already
+  exist, and the prototype anticipated exactly this, defining a `.source-pill-platform` style
+  (line 123) that its own `renderResults()` never emits. That widening **reverses BR-PAR-012** and
+  materially expands what a parent can see about their child, so the owner deferred the question to
+  a later phase rather than decide it under scoping pressure. **BR-PAR-012 stands unchanged.**
+- **The Overview tab is not built.** Once the snapshot stats and the weak-topic banner came out,
+  Overview and Curriculum would have rendered the same module cards. Overview returns as the first
+  tab in the phase that gives it something to show; inserting it later changes the default landing
+  tab, which is accepted churn.
+- **The weak-topic status banner follows Results out.** It was briefly back in scope when the
+  platform-results widening was on the table — `count_weak_for_student(student_sub)` is keyed on the
+  student sub, not an enrollment, so a parent-facing count is a direct reuse of an existing repo
+  method. But it draws on the same platform-derived child performance data the owner is still
+  thinking about, so it waits with Results. The mock's `View results` CTA goes with it.
+- **Placeholder copy must not over-promise.** The Results empty state says *"Exam results for your
+  child's Home Study will appear here"* — true under every outcome of the platform-results decision.
+  It deliberately does not promise platform exam scores, which may never ship.
+
+### Migration — resolved, behaviour-preserving
+
+The open item this section previously carried (*"count multi-child parents before building anything"*)
+is **moot** under many-to-many binding, and the count gate is withdrawn. One statement covers every
+parent:
+
+```sql
+INSERT INTO parent_content_bindings (root_node_id, child_sub)
+SELECT n.id, l.child_sub
+FROM course_path_nodes n
+JOIN parent_child_links l
+  ON l.parent_sub = n.owner_id AND l.revoked_at IS NULL
+WHERE n.owner_type = 'parent' AND n.parent_id IS NULL;
+```
+
+Every existing parent tree is bound to every child currently linked to that parent — **exactly
+today's visibility**, preserved for single-child, multi-child and zero-child parents alike. Nobody
+loses access to anything, so there is no revocation-without-a-revocation-event to contradict
+BR-STU-012, and "copy this curriculum to another child" stops being a migration-safety dependency:
+it degenerates into inserting a binding row and can ship whenever. `root_node_id` is backfilled in
+the same migration by walking each parent tree once from its root.
+
+### Explicitly out of phase 8
+
+Parent exam authoring (`/api/parent/exams*` and the mock's `+ Exam` button — fully specced in
+`05_parent.md`, zero implementation; `POST /api/exams/template` is `require_instructor()` and sets
+no `owner_type`/`purpose`). The child-results read path. Study-activity tracking and day streak.
+Home Study progress and weak topics. Upcoming/scheduled exams — no such model exists anywhere.
+Essay grade review.
+
+### Deploy scope: none
+
+New parent endpoints ride the generic `/api/*` routes (`04-api-read`, `05-api-write`,
+`06-api-delete`), so no APISIX route is needed. The one deploy item the analysis surfaced — a Coraza
+exemption pass for `/api/parent/exams*`, whose LaTeX-bearing question stems would hit the same OWASP
+CRS rules that needed `id:199120/199121/199122` for topic-contents — left the phase with exam
+authoring. Note for whoever plans this: the `request-validation` plugin on `/api/*` writes still
+requires a JSON body on every PATCH, including body-less ones.
 
 ---
 
@@ -1894,3 +2060,42 @@ confirmed from a checkout. Five concrete items:
 `security-audit.sh` verifies, carrying items 1–3 and 6. Items 4 and 5 are independent and can ship
 alone. **B24's real fix (option 1, a second rootless daemon for CI) has nowhere to live until this
 exists** — that dependency is the main argument for doing it.
+
+---
+
+## Backlog — carried out of Phase 7.5 `TASKS.md` at close-out (2026-08-20)
+
+> These three were live operational items recorded **only** inside Phase 7.5's `TASKS.md`. That file
+> is archived by `/plan` at the start of the next cycle, which would have buried them — B49 in
+> particular currently **aborts every staging and prod deploy**. Filed here so they survive the
+> archive. None is Phase 8 scope; all three are deploy-operator actions, not code.
+
+### B49 — `ALERT_SLACK_WEBHOOK` is armed but never seeded, so every staging and prod deploy aborts at render time (deploy) — surfaced 2026-08-14, carried 2026-08-20
+
+G3's alert routing switched from SMTP (five `ALERT_*` keys) to a single Slack incoming webhook
+(`decisions.md` 2026-08-14). Its `deploy-required-keys.txt` entry is **ARMED**, not commented out —
+so the earlier "no unrelated deploy is blocked" property no longer holds: **every** staging and prod
+deploy aborts at render time until `ALERT_SLACK_WEBHOOK` is seeded in OpenBao on both hosts. Nothing
+was ever seeded under the SMTP form, so there is no residue to clean up. This is a `pre_checks:` item
+on the current release manifest, not only on the release that first ships the monitoring profile.
+
+**Fix:** seed the key on staging and prod. Single action; it is the last thing standing between G3
+and a clean close.
+
+### B50 — prod has never run `bootstrap.sh db-engine` (deploy) — surfaced 2026-08-12, carried 2026-08-20
+
+T5.3's operator step was completed on staging 2026-08-12 and verified end-to-end by T5.12 (a real
+`database/creds/haisir-worker` lease reports `1min`/`5min`). **Prod still needs its own run.** Note
+T5.12's own finding: the backstop is inert either way while the application connects as the static
+`haisir_app` role, so this is posture-completion rather than an active outage.
+
+### B51 — T3.3's APISIX metrics-bind fix is unverified; `13-test-prometheus.sh` self-skips on staging (deploy) — surfaced 2026-08-12, carried 2026-08-20
+
+T3.3 fixed a live defect — APISIX's metrics export server was bound to container-loopback, so
+Prometheus could never scrape it. The verifying test self-skips on staging ("not configured for this
+environment"), so the v2026.7 manifest's claim that it hard-fails when APISIX is not re-rendered
+**does not hold there**, and prod is the fix's first real coverage. Related manifest defect found at
+the same time and not yet corrected: that manifest's `pre_checks` names the datadir volume
+`haisir-backend-datadir-staging`, but the volume compose actually mounts is `haisir-backend-datadir`
+(unsuffixed) — the wrong name silently auto-creates an empty decoy volume. **Correct that text before
+reusing it for prod.**
