@@ -20,7 +20,7 @@
 
 ## G0 [deploy][specs]: B49 record corrected, prod render path confirmed
 - [ ] T0.1 [deploy]: Capture prod's render-side confirmation (opportunistic — next prod window)
-- [ ] T0.2 [specs]: Correct the B49 backlog entry
+- [x] T0.2 [specs]: Correct the B49 backlog entry (2026-08-21)
 - [ ] **G0: B49 record corrected, prod render path confirmed** — E2E test
 
 ## G1 [backend][frontend][specs]: Per-child Home Study binding
@@ -73,10 +73,10 @@
 - [ ] **G1.5: Regression fixtures survive the breaking change** — integration test
 
 ### G1.6 — Specs stop contradicting the shipped rule
-- [ ] T1.33 [specs]: 03_student.md BR-STU-001 two-term rewrite
-- [ ] T1.34 [specs]: docs/parent-guide.md §7 per-child flip
-- [ ] T1.35 [specs]: 05_06_07_personas.md parent section resynced
-- [ ] T1.36 [specs]: 05_parent.md API table — 2 missing live contracts
+- [x] T1.33 [specs]: 03_student.md BR-STU-001 two-term rewrite (2026-08-21)
+- [x] T1.34 [specs]: docs/parent-guide.md §7 per-child flip (2026-08-21)
+- [x] T1.35 [specs]: 05_06_07_personas.md parent section resynced (2026-08-21)
+- [x] T1.36 [specs]: 05_parent.md API table — 2 missing live contracts (2026-08-21)
 - [ ] T1.37 [specs]: current/schema.md V42/V43/V44 + new schema objects (depends on T1.7 [backend])
 - [ ] **G1.6: Specs stop contradicting the shipped rule** — integration test
 
@@ -158,18 +158,15 @@ Tasks with no pending dependencies — can be started immediately.
 
 **Also startable now:**
 - T0.1 [deploy]: prod render confirmation (no deps — opportunistic, next prod window)
-- T0.2 [specs]: correct the B49 entry (no deps)
 - T1.19 [backend]: ?include_revoked=true (no deps)
-- T1.33 [specs]: 03_student.md BR-STU-001 (no deps)
-- T1.34 [specs]: docs/parent-guide.md §7 (no deps)
-- T1.35 [specs]: 05_06_07_personas.md resync (no deps)
-- T1.36 [specs]: 05_parent.md API table (no deps)
 - T2.1 [backend]: grade on the children DTO (no deps)
 - T3.2 [backend]: daily quota window roll (no deps)
 
-13 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
-specs has nothing left blocking it. Landed 2026-08-21: T1.1/T1.11/T1.13 [backend] (the
-parent_content_bindings table model plus root_node_id stamping in create_node and adopt_node).
-That landing unblocked T1.5 [backend] (via T1.1+T1.2), T1.8 [backend] (via T1.1), T1.15 [backend]
-(via T1.11) and T3.1 [backend] (via T1.11). T1.12/T1.14 remain blocked on T1.9, which is still
-blocked on T1.8 (now ready).
+8 of 62 tasks are startable, spread across two repos — deploy's only task is opportunistic and specs
+has nothing left ready (T1.37 stays blocked on backend T1.7). Landed 2026-08-21: T1.1/T1.11/T1.13
+[backend] (the parent_content_bindings table model plus root_node_id stamping in create_node and
+adopt_node) and, in this repo, T0.2/T1.33/T1.34/T1.35/T1.36 [specs] (B49 record corrected; BR-STU-001,
+parent-guide.md §7, 05_06_07_personas.md and the 05_parent.md API table all resynced to the shipped
+per-child binding rule). Backend landing unblocked T1.5 [backend] (via T1.1+T1.2), T1.8 [backend] (via
+T1.1), T1.15 [backend] (via T1.11) and T3.1 [backend] (via T1.11). T1.12/T1.14 remain blocked on T1.9,
+which is still blocked on T1.8 (now ready).

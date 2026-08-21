@@ -258,7 +258,7 @@ The Draft/Published pill on each content row shows what's currently visible. To 
 
 You can link up to **10 children** to your account. Each child sees only your content — they cannot see each other's names or activity.
 
-The **child selector strip** on your dashboard lets you switch between children. The curriculum and topics you build are shared across all your linked children — there is no per-child curriculum in this version.
+The **child selector strip** on your dashboard lets you switch between children. Each curriculum you build is for the children you choose when you create or adopt it — pick more than one if same-grade siblings should share it, so you only build and upload once. You can change who a curriculum is visible to later from the builder. A child you link after a curriculum was already built sees nothing in it until you add them.
 
 To add another child, click **+ Add another child** on your dashboard and repeat the [linking steps](#2-linking-your-child).
 

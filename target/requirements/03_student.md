@@ -37,7 +37,7 @@ Two distinct sections on the dashboard:
 - Clicking a card opens S-nav with `source = 'parent'`.
 
 **Business rules:**
-- BR-STU-001: Content visibility uses BR-DATA-003 filter — platform content always visible; parent content only if active `parent_child_links` exists.
+- BR-STU-001: Content visibility uses the BR-DATA-003 filter — platform content always visible; parent content only if **both** an active `parent_child_links` record exists **and** a matching `parent_content_bindings` row binds the content's root to this student (BR-DATA-026).
 - BR-STU-002: Home Study section is hidden entirely if there are **zero visible Home Study nodes**. Note this is *not* the same as "zero active parent links" (Phase 8, BR-DATA-026): a student may hold an active link yet see nothing, because their parent bound the curriculum to a sibling only. Condition on what is visible, not on whether a link exists.
 
 ---

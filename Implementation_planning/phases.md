@@ -2082,21 +2082,19 @@ exists** — that dependency is the main argument for doing it.
 ## Backlog — carried out of Phase 7.5 `TASKS.md` at close-out (2026-08-20)
 
 > These three were live operational items recorded **only** inside Phase 7.5's `TASKS.md`. That file
-> is archived by `/plan` at the start of the next cycle, which would have buried them — B49 in
-> particular currently **aborts every staging and prod deploy**. Filed here so they survive the
-> archive. None is Phase 8 scope; all three are deploy-operator actions, not code.
+> is archived by `/plan` at the start of the next cycle, which would have buried them. Filed here so
+> they survive the archive. None is Phase 8 scope; all three are deploy-operator actions, not code.
 
-### B49 — `ALERT_SLACK_WEBHOOK` is armed but never seeded, so every staging and prod deploy aborts at render time (deploy) — surfaced 2026-08-14, carried 2026-08-20
+### B49 — `ALERT_SLACK_WEBHOOK` render-side confirmation still outstanding on prod (deploy) — surfaced 2026-08-14, carried 2026-08-20
 
 G3's alert routing switched from SMTP (five `ALERT_*` keys) to a single Slack incoming webhook
-(`decisions.md` 2026-08-14). Its `deploy-required-keys.txt` entry is **ARMED**, not commented out —
-so the earlier "no unrelated deploy is blocked" property no longer holds: **every** staging and prod
-deploy aborts at render time until `ALERT_SLACK_WEBHOOK` is seeded in OpenBao on both hosts. Nothing
-was ever seeded under the SMTP form, so there is no residue to clean up. This is a `pre_checks:` item
-on the current release manifest, not only on the release that first ships the monitoring profile.
+(`decisions.md` 2026-08-14). The key was seeded on both hosts 2026-08-14 via `rotate-secret.sh` under
+the admin-ops cert identity, and proven end-to-end on staging 2026-08-15 (full CI/CD deploy exit 0,
+13/13 healthy; `TargetDown` pending → firing with the Slack message delivered). The only outstanding
+item is prod's render-side confirmation (T0.1), because prod has had no `deploy.sh` run since the key
+was armed.
 
-**Fix:** seed the key on staging and prod. Single action; it is the last thing standing between G3
-and a clean close.
+**Fix:** capture prod's render-side confirmation on the next prod `deploy.sh` window (T0.1).
 
 ### B50 — prod has never run `bootstrap.sh db-engine` (deploy) — surfaced 2026-08-12, carried 2026-08-20
 

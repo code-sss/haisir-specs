@@ -62,11 +62,27 @@ Two entry paths:
 
 **Business rules:**
 - BR-PAR-001: Parent can only read/write nodes where `owner_id = parent.idp_sub`.
-- **BR-PAR-022 (Phase 8):** every curriculum root is bound to **one or more** children via `parent_content_bindings` (BR-DATA-026); `POST .../nodes` (roots) and `POST .../adopt` require `child_subs: list[UUID]` (min 1) — **breaking change**, 400 if absent, no fallback. Canonical text in `05_parent.md`.
 - BR-PAR-002: Adopted subtree is an independent copy — platform updates to the original do not propagate.
 - BR-PAR-003: Adopt is idempotent per subtree root — second adopt returns 409.
 - BR-PAR-004: Delete node cascades to child nodes and topics. Not allowed if any topic has active (in-progress) exam sessions.
 - BR-PAR-005: Topic `status = 'draft'` is not visible to the bound child. Set to `live` to make it visible.
+- **BR-PAR-022 (Phase 8) — Every curriculum root is bound to one or more children.** A parent's
+  content is scoped not just by `owner_id` but by an explicit binding to the specific children it was
+  built for (BR-DATA-026). A root may be bound to **several** children — two children in the same
+  grade share one tree, so the parent builds and uploads once. Divergence is expressed as a separate
+  root, not as a subtree binding.
+  - `POST /api/parent/curriculum/nodes` and `POST /api/parent/curriculum/adopt` take
+    **`child_subs: list[UUID]`, minimum length 1**. This is a **breaking change to two already-shipped
+    endpoints**: a request omitting `child_subs` is rejected with `400`, with no single-child
+    fallback and no default. Frontend and backend must ship together.
+  - Bindings are managed after creation via `POST` / `DELETE
+    /api/parent/curriculum/nodes/:root_id/bindings`.
+  - Every named child must be actively linked to the caller at bind time (BR-SEC-024); one unlinked
+    child rejects the whole request — no partial binding.
+  - Unbinding hides content from that child and deletes nothing. It is allowed even with in-flight
+    `exam_sessions`; BR-PAR-004's delete-block is **not** extended to unbind.
+  - The builder's privacy pill reflects the real binding set: "Visible to Arjun and Meera" /
+    "Arjun +1", not a hardcoded single name.
 
 ---
 
@@ -87,6 +103,8 @@ Two entry paths:
 - BR-PAR-006: Parent can upload to their own topics only (`owner_id = parent.idp_sub`). Wrong owner → 404 (oracle protection).
 - BR-PAR-007: File uploads go through the same `StorageBackend` interface as platform content (local disk v1).
 - BR-PAR-008a: Parent extraction quota — max 5 concurrent jobs (`status IN ('pending','extracting')`) and max 100 jobs/day. Enforced application-layer via `parent_quota_counters` row lock inside the POST handler TX. APISIX rate limit (50/day per parent token) is a coarse second-line defence.
+- BR-PAR-020: Parent can view indexing status and trigger a manual retry only for content under their own topics (`owner_id = parent.idp_sub`) — same 404-oracle ownership pattern as BR-PAR-006. See BR-DATA-023 for the retry mechanics and the cooldown-window abuse guard. Endpoint: `POST /api/parent/curriculum/topic-contents/{content_id}/retry-indexing`. Canonical text (status-pill mapping, polling cadence) in `05_parent.md`.
+- BR-PAR-021 (Content Viewing & Publish increment): Content items default to `visibility_status='draft'` regardless of the topic's own Draft/Live status — a `live` Home Study topic can still have content the linked child cannot yet see, pending the parent's publish decision. See BR-DATA-024/025.
 
 ---
 
@@ -125,6 +143,26 @@ Two entry paths:
 
 ---
 
+## P-essay-grading — Essay Grade Review
+
+Parents are the grading owners for their private exams. They see `ai_score`, `ai_feedback`, and
+(owner-only) `ai_rationale` per graded essay, plus a `grading_status` per question, a "Confirm" button
+(review_first mode) and an "Override" form (all modes).
+
+- **`auto_release` (default):** AI score visible to the student immediately after grading; parent can
+  override at any time; child disputes show as a flag the parent confirms or overrides.
+- **`review_first` (opt-in):** AI score hidden from the student until the parent confirms.
+
+Override: `PATCH /api/exam-sessions/session/{session_id}/questions/{question_id}/grade` (own exams
+only — BR-SEC-012). Confirm: `POST .../confirm-grade` (review_first only).
+
+**Business rules:**
+- BR-PAR-017: Parents can only override essay grades for exams where `exam_templates.owner_id = parent.idp_sub`. Platform exam grading is outside parent scope.
+- BR-PAR-018: When a student disputes an essay grade (`grading_status = 'disputed'`), the parent sees the dispute flag in P-results. The parent can confirm the original AI grade (confirm-grade) or override with a different score.
+- BR-PAR-019: The `ai_rationale` (per-criterion breakdown from the LLM) is visible to the parent only — never returned to the student. This prevents coaching answers based on criterion feedback before a dispute.
+
+---
+
 ## P-link — Link Child
 
 - Input field for the child's link code (`parent_link_codes.code`).
@@ -133,9 +171,9 @@ Two entry paths:
 - On error: "Invalid or expired code" message.
 
 **Business rules:**
-- BR-PAR-014: A link code can only be used once (consumed on first use; or the student can generate a new one).
+- BR-PAR-014: A link code is single-use — redeeming it marks it used. A student may only have one *active* (unused, unexpired) code at a time; generating a new one deactivates the prior one. A revoked parent-child pair can be re-linked via a fresh code.
 - BR-PAR-015: A parent can be linked to multiple children.
-- BR-PAR-016: Maximum 10 children per parent account — 422 if exceeded.
+- BR-PAR-016: Maximum 10 *active* children per parent account — 422 if exceeded on redemption. Revoked links do not count against the cap.
 
 ---
 

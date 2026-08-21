@@ -295,7 +295,7 @@ Allowed when `exam_templates.owner_id = parent.idp_sub` (own exams only — BR-S
 | `DELETE` | `/api/parent/children/:child_sub/link` | Revoke link to a child (sets `revoked_at`); 404 if no active link |
 | `GET` | `/api/parent/curriculum/nodes` | List parent's curriculum root nodes |
 | `GET` | `/api/parent/curriculum/nodes/:node_id` | Get node detail + children |
-| `POST` | `/api/parent/curriculum/nodes` | Create a new node. **Root creates require `child_subs: list[UUID]` (min 1)** — 400 if absent (BR-PAR-022) |
+| `POST` | `/api/parent/curriculum/nodes` | Create a new node. **Root creates require `child_subs: list[UUID]` (min 1)** — 400 if absent (BR-PAR-022). **Root creates also require `category_id`** — 400 if absent; for a child node (`parent_id` given) `category_id` is derived from the owner-scoped parent instead, 404 if that parent is not found or not owned by the caller |
 | `POST` | `/api/parent/curriculum/nodes/:root_id/bindings` | Bind a curriculum root to one or more additional children (BR-SEC-024) |
 | `DELETE` | `/api/parent/curriculum/nodes/:root_id/bindings/:child_sub` | Unbind a child — hides the tree from them, deletes nothing |
 | `PATCH` | `/api/parent/curriculum/nodes/:node_id` | Rename a node |
@@ -308,6 +308,7 @@ Allowed when `exam_templates.owner_id = parent.idp_sub` (own exams only — BR-S
 | `GET` | `/api/parent/curriculum/topics/:topic_id/content` | List content items for a topic, each including its RAG indexing `status`/`last_error` joined from `rag_indexing_outbox` (drives the status pills in P-topic) |
 | `POST` | `/api/parent/curriculum/topics/:topic_id/content` | Create video URL or text content (instant) |
 | `PATCH` | `/api/parent/curriculum/topic-contents/:content_id` | Update a content item (title/order/description/url/text) — note the path is `topic-contents`, not nested under `topics/:topic_id` |
+| `PATCH` | `/api/parent/curriculum/topic-contents/:content_id/publish` | Publish a parent-owned content row and draft its opposite side (raw vs. extracted text). 404 if not found, not owned, or platform content (BR-PAR-006 oracle protection) |
 | `DELETE` | `/api/parent/curriculum/topic-contents/:content_id` | Delete a content item |
 | `POST` | `/api/parent/curriculum/topic-contents/:content_id/retry-indexing` | Reset a `failed` (or stuck) indexing row to `pending` via the BR-DATA-020 upsert-with-reset (BR-PAR-020 / BR-DATA-023); 404 if not owned, 429 inside the cooldown window |
 | `POST` | `/api/parent/curriculum/topics/:topic_id/extraction-jobs` | Upload PDF/image for extraction (multipart, ≤50MB, 1 file/request, parent-quota gated, requires `Idempotency-Key` header) |
