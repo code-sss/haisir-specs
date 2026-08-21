@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> **Last baselined: backend:`67b6cc3` frontend:`784f700` deploy:`790e29d` (2026-08-20)** — all three
+> **Last baselined: backend:`67b6cc3` frontend:`dd50f0e` deploy:`790e29d` (2026-08-21)** — all three
 > working trees clean at scoping. Specs baseline `510bbd8`. Alembic head V43; this phase adds V44.
 >
 > **Phase 8 — Parent UX Alignment.** Scoped 2026-08-20 via `/plan`. 62 leaf tasks across four repos.
@@ -59,8 +59,8 @@
 ### G1.4 — Parent binds content at create time (ships in lockstep with G1.2)
 - [x] T1.23 [frontend]: Child multi-select in the Add Root modal (2026-08-21)
 - [x] T1.25 [frontend]: Child multi-select in the Adopt modal (2026-08-21)
-- [ ] T1.24 [frontend]: createNode sends child_subs (depends on T1.23, T1.10 [backend])
-- [ ] T1.26 [frontend]: adoptSubtree sends child_subs (depends on T1.25, T1.10 [backend])
+- [x] T1.24 [frontend]: createNode sends child_subs (depends on T1.23, T1.10 [backend]) (2026-08-21)
+- [x] T1.26 [frontend]: adoptSubtree sends child_subs (depends on T1.25, T1.10 [backend]) (2026-08-21)
 - [ ] T1.27 [frontend]: Privacy pill renders the real binding set (depends on T1.18 [backend])
 - [ ] T1.28 [frontend]: Binding editor on an existing root (depends on T1.16, T1.17 [backend], T1.27)
 - [ ] T1.29 [frontend]: Revoked-but-bound child greyed in the pill (depends on T1.19 [backend], T1.27)
@@ -159,8 +159,6 @@ Tasks with no pending dependencies — can be started immediately.
 - T0.1 [deploy]: prod render confirmation (no deps — opportunistic, next prod window)
 - T0.2 [specs]: correct the B49 entry (no deps)
 - T1.19 [backend]: ?include_revoked=true (no deps)
-- T1.24 [frontend]: createNode sends child_subs (deps T1.23 ✅, T1.10 ✅)
-- T1.26 [frontend]: adoptSubtree sends child_subs (deps T1.25 ✅, T1.10 ✅)
 - T1.33 [specs]: 03_student.md BR-STU-001 (no deps)
 - T1.34 [specs]: docs/parent-guide.md §7 (no deps)
 - T1.35 [specs]: 05_06_07_personas.md resync (no deps)
@@ -168,10 +166,11 @@ Tasks with no pending dependencies — can be started immediately.
 - T2.1 [backend]: grade on the children DTO (no deps)
 - T3.2 [backend]: daily quota window roll (no deps)
 
-14 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
+12 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
 specs has nothing left blocking it. Landed 2026-08-21: T1.2/T1.10 [backend],
-T1.23/T1.25/T2.3/T2.4/T4.1/T4.2/T4.3/T4.4/T4.5/T4.6/T4.7 [frontend] (G2.2 and G4.2's leaf tasks are
-now fully checked; their subgoal integration tests are still open). That landing unblocked T1.1
-[backend] (via T1.3, already done), T1.11/T1.13 [backend] (via T1.2), and T1.24/T1.26 [frontend]
-(via T1.23/T1.25 + T1.10) — all five folded into the lists above. T1.9/T1.16 remain blocked on T1.8,
-which is still blocked on T1.1.
+T1.23/T1.24/T1.25/T1.26/T2.3/T2.4/T4.1/T4.2/T4.3/T4.4/T4.5/T4.6/T4.7 [frontend] (G2.2 and G4.2's leaf
+tasks are now fully checked; their subgoal integration tests are still open). T1.24/T1.26 close
+the createNode/adoptSubtree child_subs wiring that T1.23/T1.25 left open for the backend; the G1.4
+subgoal still waits on T1.27/T1.28/T1.29, all blocked on backend read-path tasks (T1.16/T1.17/T1.18/
+T1.19). That landing unblocked T1.1 [backend] (via T1.3, already done), T1.11/T1.13 [backend]
+(via T1.2). T1.9/T1.16 remain blocked on T1.8, which is still blocked on T1.1.
