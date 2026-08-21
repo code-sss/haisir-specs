@@ -1,8 +1,9 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> **Last baselined: backend:`442ef7f` frontend:`dd50f0e` deploy:`790e29d` (2026-08-21)** — all three
+> **Last baselined: backend:`442ef7f` frontend:`6d3e08b` deploy:`790e29d` (2026-08-21)** — all three
 > working trees clean at scoping. Specs baseline `510bbd8`. Alembic head V43; this phase adds V44.
+> T2.2/T2.5–T2.9 [frontend] committed (`6d3e08b`) and pushed to `origin/main`.
 >
 > **Phase 8 — Parent UX Alignment.** Scoped 2026-08-20 via `/plan`. 62 leaf tasks across four repos.
 > Goal tree, per-task Build/Done-when/Test, the scope locks and the four corrections taken at
@@ -101,8 +102,12 @@
 
 ### G2.1 — Grade reaches the client
 - [x] T2.1 [backend]: grade on the children DTO (2026-08-21)
-- [ ] T2.2 [frontend]: Child model carries grade (depends on T2.1 [backend])
-- [ ] **G2.1: Grade reaches the client** — integration test
+- [x] T2.2 [frontend]: Child model carries grade (depends on T2.1 [backend]) (2026-08-21)
+- [ ] **G2.1: Grade reaches the client** — integration test — NOT RUN: all children done
+      (T2.1 [backend] ✅, T2.2 [frontend] ✅), but the subgoal test is a backend integration test
+      needing a live parent with `student_profiles.grade` set — unreachable in this environment.
+      Frontend mapping (`grade: d.grade ?? null`, `.nullish()` schema) is unit-covered at 100%
+      (`tests/unit/features/parent/api/parent-api.test.ts`). Re-run once a live backend is reachable.
 
 ### G2.2 — Parent chrome
 - [x] T2.3 [frontend]: ParentShell renders a parent header (modify, do not duplicate) (2026-08-21)
@@ -110,12 +115,19 @@
 - [x] **G2.2: Parent chrome** — integration test (2026-08-21)
 
 ### G2.3 — Child and tab navigation
-- [ ] T2.5 [frontend]: ParentChildStrip (depends on T2.2)
-- [ ] T2.6 [frontend]: Active child shared across the surface (depends on T2.5)
-- [ ] T2.7 [frontend]: Curriculum | Results tab bar (depends on T2.6)
-- [ ] T2.8 [frontend]: Results coming-soon placeholder (depends on T2.7)
-- [ ] T2.9 [frontend]: Zero-children state hides the tabs (depends on T2.7)
-- [ ] **G2.3: Child and tab navigation** — integration test
+- [x] T2.5 [frontend]: ParentChildStrip (depends on T2.2) (2026-08-21)
+- [x] T2.6 [frontend]: Active child shared across the surface (depends on T2.5) (2026-08-21)
+- [x] T2.7 [frontend]: Curriculum | Results tab bar (depends on T2.6) (2026-08-21)
+- [x] T2.8 [frontend]: Results coming-soon placeholder (depends on T2.7) (2026-08-21)
+- [x] T2.9 [frontend]: Zero-children state hides the tabs (depends on T2.7) (2026-08-21)
+- [ ] **G2.3: Child and tab navigation** — integration test — NOT RUN: all five children done,
+      but the subgoal test's "re-renders the tab body against the new child" clause cannot fully
+      pass until G3's module-card consumer (T3.4, blocked on T1.18 [backend]) mounts. The
+      switcher/persistence/tab-independence behaviours ARE covered by
+      `tests/unit/features/parent/components/parent-dashboard.test.tsx` (strip `aria-pressed`,
+      `parent.activeChildSub` localStorage persist via `selectActiveChild`, arrow-key tab switch
+      not resetting the child, sibling `useParentActiveChild` probe). Re-run the full integration
+      scenario once T3.4 lands.
 
 - [ ] **G2: Parent shell, child switcher, tab nav** — E2E test
 
@@ -172,23 +184,37 @@
 Tasks with no pending dependencies — can be started immediately.
 
 **Critical path — unblocks the most downstream work:**
+- T1.27 [frontend]: Privacy pill renders the real binding set (dep T1.18 ✅ [backend]) ← unblocks
+  T1.28, T1.29
+- T3.4 [frontend]: Module cards for the active child (dep T2.6 ✅, T1.18 ✅ [backend], T3.1 ✅
+  [backend]) ← unblocks T3.5, T3.6
 - T1.31 [backend]: Rewrite the cross-owner 404 sweep (dep T1.30 ✅, T1.20 ✅)
-- T1.32 [backend]: Rewrite the E2E journey test (dep T1.30 ✅, T1.21 ✅) ← unblocks the G1.5 subgoal
-- T2.2 [frontend]: Child model carries grade (dep T2.1 ✅ [backend])
+- T1.32 [backend]: Rewrite the E2E journey test (dep T1.30 ✅, T1.21 ✅)
 
 **Also startable now:**
 - T0.1 [deploy]: prod render confirmation (no deps — opportunistic, next prod window)
-- T1.27 [frontend]: Privacy pill renders the real binding set (dep T1.18 ✅ [backend])
 - T3.7 [frontend]: Quota line in the add-content modal (dep T3.3 ✅ [backend])
 
-7 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
-specs has none left ready (T1.37 landed). Landed 2026-08-21 (this batch): T1.12/T1.14/T1.18/T1.20/
-T1.21/T1.22/T1.30/T3.3 [backend] — the full G1.2/G1.3 write+read binding enforcement plus the T1.30
-fixture helpers and the T3.3 quota endpoint (see below for detail). This unblocks T1.31, T1.32
-[backend] and T1.27, T3.7 [frontend]. T1.21 ("the failure mode") landing closes the BR-DATA-003 gap
-where an unbound-but-linked child could still see a parent's Home Study content via
-`_resolve_parent_nodes` — that path is now filtered by `parent_content_bindings`, not just
-`parent_child_links`. Landed earlier 2026-08-21: T1.9 [backend] — `bind_children`
+6 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
+specs has none left ready. 52 of 62 tasks are now done. Landed 2026-08-21, backend batch:
+T1.12/T1.14/T1.18/T1.20/T1.21/T1.22/T1.30/T3.3 — the full G1.2/G1.3 write+read binding enforcement
+plus the T1.30 fixture helpers and the T3.3 quota endpoint (see below for detail). T1.21 ("the
+failure mode") landing closes the BR-DATA-003 gap where an unbound-but-linked child could still see
+a parent's Home Study content via `_resolve_parent_nodes` — that path is now filtered by
+`parent_content_bindings`, not just `parent_child_links`. Landed 2026-08-21, frontend batch
+(committed `6d3e08b`, pushed to `origin/main`): T2.2 (Child.grade model + `.nullish()` schema +
+`grade: d.grade ?? null` mapping) and T2.5–T2.9 — the extracted `ParentChildStrip` (initials avatar,
+`Grade {grade}` omitted when null, amber-underline active, `+ Link child` trailing), the
+`ParentActiveChildContext` in `providers.tsx` (split `setActiveChildSub` in-memory vs
+`selectActiveChild` persist — fixes a mount race that would have corrupted the stored selection), the
+`Curriculum | Results` tab bar (`role="tablist"` + arrow-key nav + `role="tabpanel"`, Curriculum
+panel = existing `/parent/curriculum` nav card, Results = static coming-soon placeholder, no fetch),
+and the zero-children early-return gating strip + tabs. 470 tests / 100% coverage on the parent
+slice (3988 total in the frontend suite). Reviewed via `/review-frontend` (no CRITICAL/HIGH/MEDIUM
+findings; pre-commit/pre-push hooks green; `no-commit-to-branch` skipped deliberately — main is
+trunk-based in this repo). Together these two batches unblock T1.31, T1.32 [backend] and T1.27,
+T3.4, T3.7 [frontend] — T1.18 landing was the last dependency T3.4 needed (T2.6 ✅, T3.1 ✅ were
+already in place). Earlier 2026-08-21: T1.9 [backend] — `bind_children`
 all-or-nothing validation (BR-SEC-024), unblocking T1.12/T1.14/T1.16. And T1.37 [specs] —
 current/schema.md now documents the `parent_content_bindings` table and `root_node_id` on
 `course_path_nodes`/`topics`/`exam_templates` (V44, confirmed against the actual migration file
@@ -214,7 +240,7 @@ bug. And, in this repo, T0.2/T1.33/T1.34/T1.35/T1.36 [specs] (B49 record correct
 parent-guide.md §7, 05_06_07_personas.md and the 05_parent.md API table all resynced to the shipped
 per-child binding rule). T1.8 unblocked T1.9/T1.17/T1.18/T1.21/T1.22/T1.30; T1.5/T1.6 unblocked
 T1.20; T1.7 unblocked T1.37 [specs]; T2.1 unblocked T2.2 [frontend]; T3.2 unblocked T3.3.
-T1.9 unblocked T1.12/T1.14/T1.16. T3.1 alone does not unblock T3.4 [frontend]
-(also needs T2.6 and T1.18). G1.1's and G3.1's integration tests could not be executed in this
-environment (no live Postgres reachable) — see the notes on those lines; their child tasks are
-done and unit coverage (including the T3.1 fan-out regression case) is green at 100%.
+T1.9 unblocked T1.12/T1.14/T1.16. G1.1's, G1.2's, G1.3's, G3.1's, G3.2's, G2.1's and G2.3's
+integration tests could not be executed in this environment (no live backend/Postgres reachable) —
+see the notes on those lines; their child tasks are done and unit coverage (including the T3.1
+fan-out regression case and the T2.2–T2.9 parent surface behaviours) is green at 100%.
