@@ -28,7 +28,7 @@
 ### G1.1 — Binding schema + behaviour-preserving migration
 - [x] T1.3 [specs]: BR-DATA-026 DDL types child_sub as String
 - [x] T1.4 [specs]: BR-DATA-026 backfill binds revoked pairs too
-- [ ] T1.2 [backend]: root_node_id column on the three owner-scoped tables
+- [x] T1.2 [backend]: root_node_id column on the three owner-scoped tables (2026-08-21)
 - [ ] T1.1 [backend]: parent_content_bindings table model (depends on T1.3)
 - [ ] T1.5 [backend]: V44 schema half (depends on T1.1, T1.2)
 - [ ] T1.6 [backend]: V44 root_node_id backfill (depends on T1.5)
@@ -36,7 +36,7 @@
 - [ ] **G1.1: Binding schema + behaviour-preserving migration** — integration test
 
 ### G1.2 — Write path stamps root_node_id and bindings
-- [ ] T1.10 [backend]: child_subs on the two create payloads
+- [x] T1.10 [backend]: child_subs on the two create payloads (2026-08-21)
 - [ ] T1.19 [backend]: GET /api/parent/children?include_revoked=true
 - [ ] T1.8 [backend]: ParentContentBindingRepository (depends on T1.1)
 - [ ] T1.9 [backend]: Bind-time validation is all-or-nothing (depends on T1.8)
@@ -167,5 +167,6 @@ Tasks with no pending dependencies — can be started immediately.
 - T2.1 [backend]: grade on the children DTO (no deps)
 - T3.2 [backend]: daily quota window roll (no deps)
 
-13 of 62 tasks are startable, spread across all four repos — no repo is blocked waiting on another to
-begin. T1.23/T1.25/T2.3/T2.4/T4.1/T4.2/T4.3/T4.4/T4.5/T4.6/T4.7 [frontend] landed 2026-08-21; T1.24/T1.26 stay blocked on T1.10 [backend].
+21 of 62 tasks are startable, spread across all four repos — no repo is blocked waiting on another to
+begin. T1.23/T1.25/T2.3/T4.1/T4.6 [frontend] landed 2026-08-21; T1.2/T1.10 [backend] landed 2026-08-21,
+unblocking T1.11/T1.13 [backend] and T1.24/T1.26 [frontend] (all four newly ready).
