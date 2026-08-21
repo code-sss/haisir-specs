@@ -4,6 +4,83 @@
 
 ---
 
+## 2026-08-20 — Phase 8 scoping (Parent UX Alignment)
+
+Phase 7.5 closed (109/109 tasks); `PLAN.md`/`TASKS.md` archived to
+`archive/PLAN_Phase7.5-MinimusImages-DeployBacklog_2026-08-18.md` /
+`archive/TASKS_Phase7.5-MinimusImages-DeployBacklog_2026-08-18.md`. Phase 8 planned from the
+`phases.md` stub of the same day. 62 leaf tasks across four repos, two challenger passes (one on the
+scope options, one on the decomposition).
+
+- **Scope: Phase 8 full (G1-G4), not G1-only and not a security phase.** The B38-B48 security backlog
+  was the main alternative and was ranked below it: nothing in it is an actively exploited exposure,
+  B38's two real injections were already fixed 2026-08-20, B43 is PLAUSIBLE-only, and six of the
+  eleven items need a live host to even verify — which gates that phase on operator windows rather
+  than code. G1-only was rejected on the challenger's finding that it cannot actually ship: with
+  `child_subs` a hard 400 and no UI sending it, the shipped parent builder would 400 on every
+  create-root and every adopt, so it pulls G2's child-data plumbing in anyway and is not smaller than
+  it looks.
+
+- **B49 was wrong, and the correction changed the ranking.** The backlog entry asserts
+  `ALERT_SLACK_WEBHOOK` is "armed but never seeded" and "aborts every staging and prod deploy". The
+  archived Phase 7.5 `TASKS.md` contradicts it: seeded on both hosts 2026-08-14 via `rotate-secret.sh`
+  under the `admin-ops` cert identity, and **staging proven end-to-end** — a full CI/CD staging deploy
+  ran 2026-08-15 (169s, exit 0, 13/13 healthy), which the `deploy.sh:564` gate could not have
+  permitted with an unreadable key, and G3's E2E closed the same day with `TargetDown` observed
+  pending → firing and the message arriving in the Slack channel. The single strongest argument
+  against Phase 8 had been "a full phase of undeployable work behind B49"; that argument is void. Only
+  prod's render-side confirmation is outstanding, because prod has had no `deploy.sh` run since the
+  key was armed. Recorded as G0 (opportunistic, nothing depends on it) and T0.2 corrects the entry.
+  **Lesson worth keeping: the close-out carried B49 forward from a stale reading of its own source
+  file.** Backlog items carried across an archive boundary need their evidence re-read, not their
+  summary re-copied.
+
+- **`parent_content_bindings.child_sub` is `String`, not `UUID`** (owner call). BR-DATA-026's DDL said
+  UUID while its own rationale note argued for matching `parent_child_links.child_sub`, which is
+  `String`. String wins: the spec's backfill `INSERT ... SELECT l.child_sub` aborts on Postgres
+  without a cast, and with a cast it aborts on any non-UUID sub. T1.3 corrects the DDL. This was a
+  migration-abort, not a style preference.
+
+- **The backfill binds revoked pairs too** (T1.4), amending the spec's SQL. The spec filtered
+  `revoked_at IS NULL`, which would have left pre-migration revoked pairs unable to regain visibility
+  on re-link — the inverse of the "bindings outlive revocation" property that holds for every
+  post-Phase-8 pair, and an asymmetry that would read as a bug. A binding to a revoked child grants
+  nothing today anyway, because BR-DATA-003's link term is false.
+
+- **The revoked-but-bound grant is made visible rather than closed** (T1.19 + T1.29). Bindings survive
+  revocation but `list_children_for_parent` returns active links only, so a binding to a revoked child
+  would render as nothing at all — the parent repurposes the tree, adds material, and the moment the
+  other child re-links they see everything added while unlinked. Adding `?include_revoked=true` and
+  greying the child in the privacy pill makes the grant legible. Revoking the binding on link-revoke
+  was considered and rejected: it would break re-link restoration, which is the property BR-PAR-014
+  depends on.
+
+- **The extraction-quota "divergence" does not exist, but a worse bug does.**
+  `current/api_contracts.md:418` records the live gate as 3 concurrent / 20 daily; the running code is
+  5 / 100, already matching BR-PAR-008a. Nothing to reconcile — the current-state doc is stale.
+  Underneath it, `parent_quota_counters.daily_window_start` is written and **never read**, so "100
+  daily" is in fact a lifetime cap: the 100th upload ever locks a parent out permanently. Folded into
+  G3 (T3.2) because G3's quota line would otherwise put an accurate, permanent `100/100` in front of
+  the affected parents.
+
+- **The per-child filter goes service-side, not in the repository.** `_resolve_parent_nodes`
+  (`student_dashboard_service.py:219-231`) resolves parent nodes in Python and never touches
+  `student_visibility_clause`, so it is a second enforcement site the stub did not name. Its
+  `get_by_owner` call cannot carry the filter: that method's only other caller is the parent's own
+  builder list, which would then show a parent nothing of their own tree. Recorded because the failure
+  is silent — miss it and per-child binding is a no-op on the child's primary screen while every
+  exam/topic/content test still passes.
+
+- **`exam_templates.root_node_id` ships inert, deliberately.** No live endpoint creates a parent-owned
+  template. The column exists so `student_visibility_clause` stays a uniform single-table helper
+  across all three tables. Noted so nobody hunts for the missing writer.
+
+- **T1.10 is left as one oversized task.** It carries two schema changes, the 400, and ~32
+  test-function updates. Splitting it would produce a knowingly-red intermediate state, since the
+  tests must move in the same commit.
+
+---
+
 ## 2026-08-19 — Full security re-scan (all three repos, all environments)
 
 > Context: owner-requested full re-audit, not a phase gate. Two jobs — re-verify every finding left

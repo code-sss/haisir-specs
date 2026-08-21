@@ -574,7 +574,7 @@ It does not depend on G1–G4 and should not wait behind them.
 
 ---
 
-## Phase 8 — Parent UX Alignment (stub, 2026-08-20)
+## Phase 8 — Parent UX Alignment (PLANNED 2026-08-20)
 
 > Root goal: the parent surface matches `target/prototypes/haisir_parent_flow.html`, and Home Study
 > content becomes genuinely **per-child** instead of shared across every linked child.
@@ -583,7 +583,23 @@ Baseline at scoping: backend `67b6cc3`, frontend `784f700`, deploy `790e29d`.
 
 Scoped 2026-08-20 from a gap analysis of `parent-screens/` (11 annotated screenshots: 4 of the
 shipped UI, 7 of the target mock) against the live parent slice, the parent backend routes, and the
-gateway config. Not yet planned — no `PLAN.md` goal tree or `TASKS.md` rows exist for it.
+gateway config. **Planned 2026-08-20 via `/plan`** — the goal tree (5 goals, 14 subgoals, 62 leaf
+tasks) is in `PLAN.md` and the checkboxes in `TASKS.md`. Decisions in `decisions.md` (2026-08-20).
+
+**Four corrections were taken at planning time and are encoded in `PLAN.md`, not here:** (1) the
+target specs were already written by `510bbd8`, so `[specs]` tasks are corrections rather than new
+spec text; (2) `parent_content_bindings.child_sub` is `String`, not the `UUID` the BR-DATA-026 DDL
+said — the spec's backfill aborts on Postgres otherwise; (3) the backfill binds revoked pairs too,
+removing an asymmetry the spec's `revoked_at IS NULL` filter would have created; (4) **B49 below is
+stale** — the webhook was seeded 2026-08-14 and staging is proven end-to-end, so it never blocked
+this phase (T0.2 corrects the entry).
+
+**Two findings the decomposition added to the stub's four goals:** `_resolve_parent_nodes`
+(`student_dashboard_service.py:219-231`) is a second, Python-level enforcement site the stub did not
+name — miss it and per-child binding is a no-op on the child's primary screen while every test still
+passes (T1.21); and `parent_quota_counters.daily_window_start` is never read, making the 100/day
+parent upload cap a *lifetime* cap today (T3.2, folded into G3 because G3's quota line would have
+exposed it).
 
 **The finding that drives the phase.** The mock labels every surface per-child — *"Arjun's
 curriculum"*, *"Private — visible only to Arjun"*, *"Home Study curriculum for Arjun"*. The data

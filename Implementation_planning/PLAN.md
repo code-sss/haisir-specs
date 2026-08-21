@@ -1,967 +1,1015 @@
-# PLAN — Phase 7.5: Minimus Container Images + Phase 7 Deploy Backlog
+# PLAN — Phase 8: Parent UX Alignment
 
-> Scoped 2026-08-09 via `/plan`. Phase 7 (Gateway WAF Modernisation, CSP & Security Review
-> Closeout) closed 2026-08-06 and shipped as v2026.6 (staging 2026-08-07, prod 2026-08-08); its
-> plan and tasks are archived at `archive/PLAN_Phase7-GatewayWAF-CSP_2026-08-06.md` /
-> `archive/TASKS_Phase7-GatewayWAF-CSP_2026-08-06.md`.
+> Scoped 2026-08-20 via `/plan`. Phase 7.5 (Minimus Container Images + Phase 7 Deploy Backlog)
+> closed 2026-08-18; its plan and tasks are archived at
+> `archive/PLAN_Phase7.5-MinimusImages-DeployBacklog_2026-08-18.md` /
+> `archive/TASKS_Phase7.5-MinimusImages-DeployBacklog_2026-08-18.md`.
 >
-> **Specs:** `target/requirements/14_container_images.md` (G1–G4 — written 2026-07-26, unchanged;
-> the inventory, version targets and variant-tier policy were already complete, so no
-> `/update-target-state` pass was needed) and `target/requirements/13_secrets_management.md`
-> (G6 — **BR-SEC-022**, **BR-SEC-023** and the amended **BR-SEC-011**, from the
-> `/update-target-state` pass run 2026-08-09).
+> **Specs were written ahead of this plan.** Commit `510bbd8` (2026-08-20) landed the entire
+> per-child binding design as spec text: BR-DATA-026 (`01_data_model.md:175-283`), BR-SEC-024
+> (`02_auth_and_roles.md:159`), BR-PAR-022 (`05_parent.md:113-129`), the two-term BR-DATA-003 /
+> BR-SEC-004 visibility clause, the hAITU doubt-thread gate (`11_haitu_ai_layer.md:589`) and the
+> parent ui-mapping. **`[specs]` tasks in this plan are therefore corrections to what that commit
+> missed, not new spec text.**
 >
-> Phase stub, backlog detail (B1–B6) and the full B6 root-cause trace: `phases.md` § Phase 7.5.
+> Phase stub, the gap analysis it came from and the eight owner scope decisions: `phases.md` § Phase 8.
 >
-> **Two challenger rounds run.** Round 1 raised 20 issues, all applied. Round 2 verified the
-> dependency graph is a DAG with no dangling IDs, re-checked the invariants, and corrected three
-> file references and four non-runnable or destructive tests. Four owner decisions were taken during
-> planning and are encoded below rather than left open — see "Decisions taken during planning".
+> **One challenger round run on the scope options, one checklist pass on the decomposition.** The
+> scope challenger corrected two premises that had been carried in the stub and the backlog — see
+> "Corrections taken during planning" below. The decomposition pass verified the dependency graph is
+> a DAG across all 63 tasks with no cycles and no orphans, that every leaf carries exactly one repo
+> tag, and that all 11 cross-repo edges are declared.
 
 | Repo | HEAD at scoping |
 |---|---|
-| haisir-backend | `00c2c73` |
-| haisir-frontend | `705833d` |
-| haisir-deploy | `844e8f9` |
+| haisir-backend | `67b6cc3` |
+| haisir-frontend | `784f700` |
+| haisir-deploy | `790e29d` |
+| haisir-specs | `510bbd8` |
 
-## ROOT — Pinned images, fail-closed deploy
+Alembic head is **V43**; this phase adds **V44**.
 
-**Root goal**: Every container image in the stack pulls from Minimus (`reg.mini.dev`) at an explicit pinned version tag, and the deploy-layer failure modes the v2026.6 prod window exposed — all of them fail-open — are closed at the mechanism rather than the value.
+## ROOT — Home Study is per-child, and the parent surface matches the mock
 
-**Acceptance test**: From a clean `haisir-deploy` checkout with the three env-config files deleted off the staging host, run `deploy.sh --manifest releases/v<next>/manifest.yaml --env staging`; the deploy completes, then `docker inspect --format '{{.Config.Image}}' $(docker ps -q)` on the staging host emits zero images matching `:latest$` or a registry other than `reg.mini.dev`/`${DOCKER_REGISTRY}`, and `curl -o /dev/null -w '%{http_code}' https://<staging-host>/admin/master/console/` returns `403`.
+**Root goal**: A parent's Home Study content is visible only to the children it was explicitly built
+for, and the parent surface renders the mock's shell, child switcher, two-tab nav, derivable
+curriculum metrics and inline builder content.
 
-**Repos**: [backend] [frontend] [deploy] [specs]
+**Acceptance test** (staging, manual + `tests/e2e`): Parent P links children Arjun (grade 6) and
+Meera (grade 9). P builds root "Grade 6 Maths" bound to Arjun only and a root "Grade 9 Science"
+bound to both. Then: (a) Arjun's `/student` Home Study shows Grade 6 Maths + Grade 9 Science;
+Meera's shows Grade 9 Science only. (b) Meera `POST /api/haitu/topic-doubt` on a Grade 6 Maths topic
+→ 403. (c) P's `/parent` shows a brown/amber topbar, a PARENT pill, `+ Link child`, a child strip
+reading `Arjun · Grade 6` / `Meera · Grade 9`, and tabs `Curriculum | Results`. (d) With Meera
+active, the Curriculum tab lists only Grade 9 Science with `3 topics · 2 live · 1 draft · 7 content
+items`; with Arjun active it lists both. (e) The builder shows `Visible to Arjun and Meera` on
+Grade 9 Science, renders content inline on each topic card, exposes no `Create Exam` link, and
+`/parent/curriculum/<n>/topics/<t>` 302s to `/parent/curriculum?nodeId=<n>`.
 
-### Scope locks (encoded decisions — do not re-open)
+**Repos**: [backend] [frontend] [specs] [deploy]
 
-- **Node stays on the 26 (current) line.** `haisir-frontend/Dockerfile:2` already builds on `node:26-trixie-slim` and `package.json` declares no `engines`, so G1 is a pure registry swap with no runtime-version delta and a G1 build failure is attributable to the base image alone. Resolves the "24-LTS vs 26-current" open call in `14_container_images.md`.
-- **Keycloak admin exposure model. ⟲ REVERSED 2026-08-13 — see T6.2.0.** ~~Gateway routes 13/14/15 stay published and deny everything. Admin reaches Keycloak over the tailnet via `KEYCLOAK_ADMIN_PORT_BINDING`. This is what makes `KC_HOSTNAME_ADMIN` load-bearing.~~ The tailnet-only model **does not work and has been abandoned.** `KC_HOSTNAME_ADMIN` governs only the admin console's own base URLs; the console's `authServerUrl` follows `KC_HOSTNAME`, so the OIDC login redirect still lands on the public hostname and route 14 regardless. It is also server-global, not master-scoped, which is how setting it broke the staging console outright on 2026-08-12. **Current model: routes 13/14/15 stay published on the public hostname and are restricted by `KEYCLOAK_ADMIN_ALLOWED_CIDR` holding the operator's PUBLIC IP CIDR** — the model that worked before v2026.7. `KC_HOSTNAME_ADMIN` is removed from the compose file and from the required-keys gate.
-- **G6.2 does not queue behind G1–G4.** The Keycloak admin console answers `200` from the public internet today. It is the most urgent open security item on the system and has no dependency on any image work. Its only ancestors are `T6.1.1`, `T6.1.2` and `T6.1.3` — none of which touch an image.
-- **G6 scope guard, non-negotiable, applies to every G6 task**: three files by exact filename — `{env}/.env`, `{env}/.env.config.sh`, `common/.env.config.common.sh` — across `dev`, `staging` and `prod`. Seven paths total. No other file, no prefix/suffix variants, no glob or regex matching. `.gitignore` negations, rsync excludes, gitleaks edits, KV migrations **and every test command** are each enumerated by exact path.
-- **The gateway *builder* stage is already done** (`gateway-docker/Dockerfile:69` on `reg.mini.dev/go@${GO_BUILDER_DIGEST}`, Phase 7's carve-out). The gateway *runtime* stage is in G2.
-- **B2 stays in the backlog** — fixed in both environments 2026-08-07, not deploy-blocking.
+### Corrections taken during planning (do not re-open)
 
-### Decisions taken during planning (2026-08-09)
+- **B49 is stale and was wrong.** The backlog entry asserts `ALERT_SLACK_WEBHOOK` is "armed but
+  never seeded" and "aborts every staging and prod deploy". The archived Phase 7.5 `TASKS.md`
+  contradicts it: the key was seeded on both hosts 2026-08-14 via `rotate-secret.sh` under the
+  `admin-ops` cert identity, and **staging is proven end-to-end** — a full CI/CD staging deploy ran
+  2026-08-15 (169s, exit 0, 13/13 healthy), which the `deploy.sh:564` gate could not have permitted
+  with an unreadable key, and G3's E2E closed the same day with `TargetDown` observed moving pending
+  → firing and the message arriving in the Slack channel. **The deploy channel is not blocked.**
+  Only prod's render-side confirmation was never captured, because prod has had no `deploy.sh` run
+  since the key was armed (T4.12 was a manual container recreation; G6.1's prod half was explicitly
+  read-only). That residue is T0.1; correcting the record is T0.2. **Nothing in G1–G4 depends on G0.**
+- **The extraction-quota divergence does not exist.** `current/api_contracts.md:418` records the live
+  gate as 3 concurrent / 20 daily; the running code at `extraction_service.py:28-29` is
+  `_MAX_CONCURRENT_PARENT_JOBS = 5` / `_MAX_DAILY_PARENT_JOBS = 100`, already matching BR-PAR-008a.
+  There is nothing to reconcile. **But a worse bug sits underneath it** — see T3.2.
+- **`child_sub` is `String`, not `UUID`** (owner call, 2026-08-20). BR-DATA-026's DDL types it `UUID`
+  while its own rationale note argues for matching `parent_child_links.child_sub`, which is `String`
+  (`src/infrastructure/models/user_metadata.py:89`). String wins: the backfill `INSERT ... SELECT
+  l.child_sub` aborts on Postgres without a cast, and with a cast it aborts on any non-UUID sub. The
+  spec DDL is corrected by T1.3.
+- **The backfill binds revoked pairs too** (T1.4). The spec's SQL filters `revoked_at IS NULL`, which
+  would leave pre-migration revoked pairs unable to regain visibility on re-link — the inverse of the
+  "bindings outlive revocation" property that holds for every post-Phase-8 pair. A binding to a
+  revoked child grants nothing today anyway, because BR-DATA-003's link term is false.
 
-Four calls were settled at scoping rather than left as `UNRESOLVED` markers. Each is encoded in the
-task that implements it; none is re-litigated downstream.
+### Scope locks (owner calls carried from the stub — do not re-open)
 
-| # | Decision | Where it lands |
-|---|---|---|
-| 1 | **Node stays on the 26 (current) line**, not 24 LTS — resolves `14_container_images.md`'s open call | Scope lock, T1.4 |
-| 2 | **Go builder parity is in scope**, not deferred — Phase 7 moved the registry but never checked the version behind the digest against `go.mod` | **T2.9** (new) |
-| 3 | **Monitoring ships alert rules, dashboards and paging**, not just a stand-up — with the paging *destination* an owner input rather than a value this plan invents | **T3.4, T3.5, T3.6** (new) |
-| 4 | **`--port-driver=slirp4netns`** on both hosts — the value staging already behaves as, so only prod converges; both `allow_admin` entries stay | T5.8 |
-| 5 | **Review independence means different *basis*, not different reviewer** — Pass A reads the diff, Pass B reads the end state against the business rules from a fresh session, and the union of their declared coverage ranges must equal the phase range | T7.6 |
+- **Child scoping is real, not cosmetic.** Rewording the UI to "visible to your linked children" over
+  a shared tree was rejected. The schema moves, not the copy.
+- **A tree binds to one *or several* children.** Same-grade siblings share one curriculum, built and
+  uploaded once. This is what makes the migration behaviour-preserving and is why the **V40 adopt
+  index needs no change at all**.
+- **`child_subs` is required — hard 400, no fallback.** A breaking change to two shipped endpoints;
+  frontend and backend ship together.
+- **Overview metrics: only what is derivable.** Day streak, topics-this-week, active modules,
+  progress % and "N topics studied" are out. Nothing renders a hardcoded zero.
+- **Results is deferred entirely** behind a coming-soon placeholder. **BR-PAR-012 stands unchanged** —
+  widening to the child's platform exam results would reverse it and was deferred by owner call.
+- **The Overview tab is not built.** With the snapshot stats and weak-topic banner out, it would
+  render identically to Curriculum.
+- **Binding is anchored at the root only.** Subtree-level binding would force a nearest-bound-ancestor
+  walk — the recursive resolution this design exists to avoid.
+- **Unbinding hides nothing and deletes nothing**, and is permitted with in-flight `exam_sessions`.
+  BR-PAR-004's delete-block is deliberately not extended to it.
 
-> Decision 5 exists because of a specific recorded failure: both Phase 7 G8 review passes ran
-> against the same commit range, so `92a4da2` fell through a gap neither reviewer knew existed.
-> Differing `Reviewer:` lines would not have caught it; differing *bases* and asserted coverage do.
+### Explicitly out of phase
 
----
+Parent exam authoring (`/api/parent/exams*`, the mock's `+ Exam` button). The child-results read
+path. Study-activity tracking and day streak. Home Study progress and weak topics. Upcoming or
+scheduled exams. Essay grade review. The Overview tab.
 
-## G1 — Application images build and boot from pinned Minimus bases
+> `enrollment_topics` is written **only** by the post-exam mastery pipeline
+> (`mastery_service.py:246`), requires a `student_enrollments` row, and `EnrollmentService.enroll()`
+> hard-rejects non-platform nodes (`enrollment_service.py:57-61`). A parent-owned topic can therefore
+> never produce a mastery row — the Overview metrics are structurally impossible, not merely unbuilt.
 
-**Goal**: `haisir-backend` and `haisir-frontend` build their builder *and* runtime stages from `reg.mini.dev` at the same explicit version pin, removing the Chainguard-`latest` / Docker-Hub split.
-**Goal test**: `docker build` both images from a clean cache, run each container, and `docker inspect --format '{{index .Config.Labels "org.opencontainers.image.base.name"}}' <image>` plus the Dockerfile `FROM` lines show `reg.mini.dev/python:3.14` and `reg.mini.dev/node:26` on the runtime stages, with both containers reaching their healthcheck-passing state.
-**Repos**: [specs] [backend] [frontend] [deploy]
+### Deploy scope: none
 
-> Whether Minimus publishes a `-hardened` variant for python/node/postgres/pgvector on the free tier, and the exact tag line each image offers, are both answered by T1.1's DISCOVER/SELECT TAG steps. Not owner decisions — every G1/G2 task already states its fallback (plain tag per BR-INFRA-003; a BR-INFRA-006 digest pin if no line exists at all).
+New endpoints ride the generic `/api/*` routes (`04-api-read`, `05-api-write`, `06-api-delete`), so
+no APISIX route is needed. G0's single deploy task is an observation on an already-scheduled prod
+window, not new infrastructure.
 
-##### T1.1 [specs] — Pull and record the current Minimus migration workflow
-- **Build**: Fetch `https://api.mini.dev/v1/skills/dockerfile` at implementation time (DISCOVER → SELECT TAG → INSPECT → CHECK FOR SHELL → RESOLVE PACKAGES → WRITE → VERIFY → ANALYZE). Record the workflow revision identifier and fetch date in an `Implementation_planning/decisions.md` entry. Do not cache a copy in the repo — Minimus revises it independently of our spec.
-- **Done when**: `decisions.md` contains a Phase 7.5 entry naming the workflow revision and fetch date.
-- **Test**: `grep -q 'api.mini.dev/v1/skills/dockerfile' Implementation_planning/decisions.md` exits 0.
-- **Depends on**: None.
+### Standing operational preconditions on the G1 release
 
-##### T1.2 [backend] — Backend Dockerfile to Minimus, both stages
-- **Build**: In `haisir-backend/Dockerfile`, change `:4` `python:3.14-slim` → `reg.mini.dev/python:3.14-dev` and `:52` `cgr.dev/chainguard/python:latest` → `reg.mini.dev/python:3.14`. Both stages pin the same minor version (BR-INFRA-004 — the existing "builder and runner Python minor version must match" comment now has a mechanism behind it). Confirm at SELECT TAG whether a `-hardened` runtime variant is listed; use it if so (BR-INFRA-003), never `-advanced` or `-fips`. Any `USER` or `chown` the new base forces belongs here, not in T1.6.
-- **Done when**: `docker build --no-cache -t haisir-backend:t1.2 .` exits 0.
-- **Test**: `[ "$(grep -c '^FROM reg.mini.dev/python:3.14' Dockerfile)" = 2 ]` exits 0.
-- **Depends on**: T1.1 [specs].
-
-##### T1.3 [backend] — Backend runtime container boots on the Minimus base
-- **Build**: Run the CHECK FOR SHELL step against `reg.mini.dev/python:3.14`. Rewrite any shell-form `CMD`/`ENTRYPOINT` for `haisir-backend`/`haisir-worker` that assumes `/bin/sh` into exec form. Run the built image and check startup logs against the Minimus error-signature table (this is the VERIFY step — a green `docker build` is not sufficient evidence).
-- **Done when**: `docker run --rm haisir-backend:t1.2` reaches the app's ready log line without an entrypoint or interpreter error.
-- **Test**: `docker run -d --name t13 haisir-backend:t1.2 && sleep 20 && [ "$(docker inspect -f '{{.State.Running}}' t13)" = true ]` exits 0.
-- **Depends on**: T1.2 [backend].
-
-##### T1.4 [frontend] — Frontend Dockerfile to Minimus, both stages
-- **Build**: In `haisir-frontend/Dockerfile`, change `:2` `node:26-trixie-slim` → `reg.mini.dev/node:26-dev` and `:60` `cgr.dev/chainguard/node:latest` → `reg.mini.dev/node:26`. Delete the stale comment at `:58` claiming no versioned tags are available on the free plan — it is the justification for a split that no longer exists. Node stays on 26 per the scope lock. Any `USER` or `chown` the new base forces belongs here, not in T1.6.
-- **Done when**: `docker build --no-cache -t haisir-frontend:t1.4 .` exits 0.
-- **Test**: `! grep -q 'free plan' Dockerfile` exits 0.
-- **Depends on**: T1.1 [specs].
-
-##### T1.5 [frontend] — Frontend runtime container boots on the Minimus base
-- **Build**: CHECK FOR SHELL against `reg.mini.dev/node:26`; rewrite any shell-form `CMD` for `haisir-frontend` into exec form. Run and check startup logs against the error-signature table.
-- **Done when**: `docker run --rm -p 3000:3000 haisir-frontend:t1.4` serves an HTTP response on its listen port.
-- **Test**: `docker run -d --name t15 -p 3000:3000 haisir-frontend:t1.4 && sleep 20 && [ "$(curl -o /dev/null -sw '%{http_code}' localhost:3000)" = 200 ]` exits 0.
-- **Depends on**: T1.4 [frontend].
-
-##### T1.6 [deploy] — Reconcile the hardcoded 65532 UID against the Minimus images
-- **Build**: Read the actual non-root UID of `reg.mini.dev/python:3.14` and `reg.mini.dev/node:26` via the Minimus INSPECT step. `common/docker-compose.yml`'s tmpfs mounts for the backend, worker and frontend services hardcode `uid=65532,gid=65532` (the Chainguard value). If Minimus differs, update every tmpfs mount option and bind-mount ownership for those three services **in `common/docker-compose.yml` and `dev/docker-compose.yml`**. Any `USER` or `chown` inside the application Dockerfiles is T1.2/T1.4's scope, not this task's. Do not carry `65532` over on the assumption it matches.
-- **Done when**: the UID in every tmpfs mount option for backend/worker/frontend equals the UID reported by `docker run --rm --entrypoint "" reg.mini.dev/python:3.14 id -u` (resp. node).
-- **Test**: `docker compose -f common/docker-compose.yml up -d backend && ! docker compose -f common/docker-compose.yml logs backend | grep -q 'Permission denied'` exits 0.
-- **Depends on**: T1.3 [backend], T1.5 [frontend].
-
-##### T1.7 [deploy] — Boot the full application stack on the migrated bases
-- **Build**: Bring backend, worker and frontend up together from `common/docker-compose.yml` on the Minimus images with the reconciled UIDs. T1.3/T1.5 prove each image starts alone; this proves they start against the shared volumes and tmpfs mounts T1.6 changed — the only place a UID mismatch between the python and node images shows up.
-- **Done when**: backend, worker and frontend all report `healthy`.
-- **Test**: `docker compose -f common/docker-compose.yml up -d backend worker frontend && sleep 90 && [ "$(docker compose -f common/docker-compose.yml ps --format '{{.Name}} {{.Health}}' | grep -vc healthy)" = 0 ]` exits 0.
-- **Depends on**: T1.6 [deploy].
-
----
-
-## G2 — Infrastructure services run on pinned, hardened images
-
-**Goal**: Postgres+pgvector, keycloak-db Postgres, APISIX runtime, Keycloak and etcd all run from `reg.mini.dev` at pinned tags, and the from-source pgvector compile is deleted rather than ported.
-**Goal test**: `docker compose -f common/docker-compose.yml up -d` on staging brings all five services to `healthy`, and `docker compose config | grep -E 'image:' | grep -vc 'reg.mini.dev|\$\{DOCKER_REGISTRY\}'` reports `0`.
-**Repos**: [deploy]
-
-> **Go builder parity is in scope** (owner call, 2026-08-09). Phase 7 migrated `gateway-docker/Dockerfile:69`'s builder to `reg.mini.dev/go@${GO_BUILDER_DIGEST}` but never checked the version behind that digest against the source. T2.9 closes it.
-
-##### T2.1 [deploy] — App Postgres to the standalone Minimus pgvector image
-- **Build**: Replace `common/docker-compose.yml:4` and `:25` (`${DOCKER_REGISTRY}/haisir-postgres:${POSTGRES_IMAGE_TAG}`) and `dev/docker-compose.yml:4` (`pgvector/pgvector:0.8.2-pg18-trixie`) with `reg.mini.dev/pgvector:18` — one tag across all three, replacing two separate pins. Verify at SELECT TAG that the `18` line ships pgvector ≥ 0.8.4 so no extension downgrade occurs.
-- **Done when**: all three `image:` lines read `reg.mini.dev/pgvector:18`.
-- **Test**: `docker compose -f dev/docker-compose.yml up -d postgres && docker compose -f dev/docker-compose.yml exec postgres psql -U postgres -tAc "SELECT extversion FROM pg_extension WHERE extname='vector'"` prints a version ≥ `0.8.4`.
-- **Depends on**: T1.1 [specs].
-
-##### T2.2 [deploy] — Delete the from-source pgvector build
-- **Build**: Delete `postgres-docker/` entirely — the Wolfi builder stage, the from-source pgvector compile, the `POSTGRES_BASE_IMAGE` default of `cgr.dev/chainguard/postgres:latest` and its `checkov:skip` comment. Remove the `haisir-postgres` build-and-push stage from `Jenkinsfile` and any `POSTGRES_IMAGE_TAG` **build-arg** threading that exists only to feed it. **Leave `POSTGRES_IMAGE_TAG` itself in `{env}/.env` and in `deploy.sh:535-574`'s drift loop** (`postgres:POSTGRES_IMAGE_TAG:haisir-db-${ENV}`) — the image is now a pinned `reg.mini.dev` tag rather than a built artifact, but the drift comparison still needs a desired value to compare the running container against.
-- **Done when**: `postgres-docker/` does not exist and no Jenkins stage builds `haisir-postgres`.
-- **Test**: `! grep -rq 'haisir-postgres' Jenkinsfile Jenkinsfile.deploy common/scripts/` exits 0.
-- **Depends on**: T2.1 [deploy].
-
-##### T2.3 [deploy] — Re-verify the Postgres data-directory ownership workaround
-- **Build**: `common/docker-compose.yml` sets `user: "70"` and `chown -R 70:70` for Postgres — the Chainguard UID. The Chainguard entrypoint does its `mkdir`+`chown` as root *before* dropping privileges, which is why a named volume (docker-created, `0755` root-owned) rather than a root-owned `0700` tmpfs was the T1.4.2 workaround. Read `reg.mini.dev/pgvector:18`'s UID via INSPECT, confirm whether the same entrypoint ordering holds, and update `user:`, the `chown` and the volume type accordingly. Do not assume the workaround still applies.
-- **Done when**: the `user:` value for the Postgres services equals the UID reported by `docker run --rm --entrypoint "" reg.mini.dev/pgvector:18 id -u`.
-- **Test**: `docker volume rm haisir_pgdata; docker compose -f common/docker-compose.yml up -d postgres && docker compose -f common/docker-compose.yml logs postgres | grep -q 'database system is ready to accept connections'` exits 0.
-- **Depends on**: T2.1 [deploy].
-
-##### T2.4 [deploy] — keycloak-db Postgres to Minimus
-- **Build**: Replace `common/docker-compose.yml:340` and `:361` (`cgr.dev/chainguard/postgres:latest` — the two rolling-tag services) with `reg.mini.dev/postgres:18`, or its `-hardened` variant if the gallery lists one (BR-INFRA-003). Plain Postgres, no pgvector needed here. Apply the same UID/entrypoint check as T2.3 to these two services.
-- **Done when**: neither line contains `cgr.dev` or `:latest`.
-- **Test**: `docker compose -f common/docker-compose.yml up -d keycloak-db && docker compose -f common/docker-compose.yml exec keycloak-db pg_isready` exits 0.
-- **Depends on**: T2.3 [deploy].
-
-##### T2.5 [deploy] — APISIX runtime stage to Minimus
-- **Build**: In `gateway-docker/Dockerfile`, change the runtime `FROM apache/apisix@${APISIX_DIGEST}` at `:157` to `FROM reg.mini.dev/apache-apisix:3.17`, delete the now-dead `ARG APISIX_DIGEST=sha256:27fdde75…` at `:54` and its `checkov:skip=CKV_DOCKER_7` comment at `:156`. In `gateway-docker/Jenkinsfile`, `:104`'s `grep '^ARG APISIX_DIGEST=' gateway-docker/Dockerfile` will return empty into `apisixDigest` and the `'pull apisix'` branch at `:107` would then `docker pull apache/apisix@` — update both to pull `reg.mini.dev/apache-apisix:3.17` by tag. Leave `:54`'s `GO_BUILDER_DIGEST`, `:69`'s builder `FROM reg.mini.dev/go@${GO_BUILDER_DIGEST}` and `:103`'s `goDigest` grep alone — Phase 7 already migrated that stage.
-- **Done when**: `docker build -f gateway-docker/Dockerfile .` exits 0 and the WAF Functional Gate stage (`gateway-docker/Jenkinsfile:158` → `common/scripts/tests/waf-harness.sh`, no `when` guard, sits before Export/Push) passes on the rebuilt image.
-- **Test**: `bash common/scripts/tests/waf-harness.sh` exits 0 with the CVE-2026-21876 multipart case attributed to rule `922110`.
-- **Depends on**: T1.1 [specs].
-
-##### T2.6 [deploy] — Keycloak to one pinned Minimus tag across dev and prod
-- **Build**: Replace `common/docker-compose.yml:419` (`quay.io/keycloak/keycloak:${KEYCLOAK_IMAGE_TAG}`) and `dev/docker-compose.yml:46` (`keycloak/keycloak:26.6`) with `reg.mini.dev/keycloak:26.7` — one tag across both, ending the dev/prod version skew. Check whether the Keycloak image has a shell; `common/openbao/`'s vault-agent renders `keycloak.conf` rather than passing password env vars, so confirm that mount path and the healthcheck both survive.
-- **Done when**: both lines read `reg.mini.dev/keycloak:26.7` and neither environment references quay.io or Docker Hub for Keycloak.
-- **Test**: `docker compose -f dev/docker-compose.yml up -d keycloak && [ "$(curl -o /dev/null -sw '%{http_code}' http://localhost:8080/realms/master/.well-known/openid-configuration)" = 200 ]` exits 0.
-- **Depends on**: T1.1 [specs].
-
-##### T2.7 [deploy] — etcd to Minimus
-- **Build**: Replace `common/docker-compose.yml:514` (`quay.io/coreos/etcd:${ETCD_IMAGE_TAG}`) and `dev/docker-compose.yml:79` (`quay.io/coreos/etcd:v3.6.11`) with `reg.mini.dev/etcd:<pin>`, verifying Minimus's own etcd line at SELECT TAG (spec suggested `3.6.6` as of 2026-07-26 — re-verify, and do not downgrade below the running `v3.6.11`).
-- **Done when**: neither line references `quay.io`.
-- **Test**: `docker compose -f dev/docker-compose.yml up -d etcd && docker compose -f dev/docker-compose.yml exec etcd etcdctl endpoint health | grep -q 'is healthy'` exits 0.
-- **Depends on**: T1.1 [specs].
-
-##### T2.8 [deploy] — Audit shell-dependent healthchecks across the migrated services
-- **Build**: Minimus production images may ship without a shell. Every compose healthcheck and `command:` override for the five G2 services that shells out (`pg_isready`, `curl`, `wget`, `CMD-SHELL`) fails *silently* on a shell-less image — the container reports unhealthy for the wrong reason, or never reports at all. Convert each to exec form using a binary that exists in the image, or move it to a `-dev` stage.
-- **Done when**: every healthcheck for the postgres, keycloak-db, keycloak, etcd and apisix services uses `CMD` exec form with a binary verified present in that image.
-- **Test**: `sleep 120 && [ "$(docker compose -f common/docker-compose.yml ps --format '{{.Name}} {{.Health}}' | grep -E 'postgres|keycloak|etcd|apisix' | grep -vc healthy)" = 0 ]` exits 0.
-- **Depends on**: T2.4 [deploy], T2.5 [deploy], T2.6 [deploy], T2.7 [deploy].
-
-##### T2.9 [deploy] — Bring the Go builder digest to BR-INFRA-004 parity
-- **Build**: `gateway-docker/Dockerfile:69` is `FROM reg.mini.dev/go@${GO_BUILDER_DIGEST}` — Phase 7 moved the registry but never asserted the Go version behind that digest matches what the source targets. BR-INFRA-004 requires the builder track `go.mod`'s `go` directive and the `GO_VERSION` ARG exactly; `14_container_images.md` names upstream `1.26`. Resolve the digest to its version, and bump the digest, `GO_VERSION` and `go.mod` together if they disagree — never the digest alone, which is the failure mode BR-INFRA-004 exists to name. `gateway-docker/Jenkinsfile:103` greps `ARG GO_BUILDER_DIGEST=` into `goDigest`, so the digest stays digest-pinned (BR-INFRA-006 allows it; T4.10's allowlist covers `@sha256:` lines).
-- **Done when**: the Go version behind `GO_BUILDER_DIGEST` equals the `go` directive in the gateway's `go.mod`.
-- **Test**: `[ "$(docker run --rm reg.mini.dev/go@$(grep '^ARG GO_BUILDER_DIGEST=' gateway-docker/Dockerfile | cut -d= -f2) go version | grep -oE '[0-9]+\.[0-9]+')" = "$(grep -oE '^go [0-9]+\.[0-9]+' gateway-docker/coraza-proxy-wasm/go.mod | cut -d' ' -f2)" ]` exits 0.
-- **Depends on**: T2.5 [deploy].
+- **Stop the worker before the V44 deploy** (`constraints.md:117`) — poller sessions sit
+  `idle in transaction` and block Alembic.
+- **Rollback is the pre-deploy dump + datadir tarball, not `alembic downgrade`** (`constraints.md:125`).
+- **Keep `data_topic_content_chunks` out of autogenerate** (`constraints.md:133`) — it is
+  LlamaIndex-owned and autogenerate will propose dropping columns it does not know about.
+- **CSP is enforced** (`constraints.md:109`, BR-CSP-010, CI-asserted) — no inline `<script>`, no
+  `style=` attributes, every route dynamically rendered. Applies to every G1.4/G2/G3/G4 task.
 
 ---
 
-## G3 — Monitoring is live and alerts fire
+## G0 — B49 record corrected, prod render path confirmed
 
-**Goal**: The Prometheus and Grafana stack, deferred outright in `decisions.md` 2026-06-18 because Chainguard gated both behind a paid plan, runs from pinned `reg.mini.dev` images — and a real failure produces a real alert at a real destination, rather than a dashboard nobody is watching.
-**Goal test**: `docker compose --profile monitoring up -d` starts the stack; `curl -s localhost:9090/api/v1/targets | jq '[.data.activeTargets[] | select(.health=="up")] | length'` returns the full exporter count; stopping the backend container fires a `BackendDown` alert that reaches the configured receiver within its `for:` window.
-**Repos**: [deploy]
-
-> **Scope call (owner, 2026-08-09, confirmed 2026-08-10): alert rules, dashboards and alert *routing* land in this phase. The paging *policy* does not.** `common/prometheus/prometheus.yml`, `common/grafana/config/grafana.ini`, `common/grafana/provisioning/{dashboards,datasources}` and one dashboard (`json/apisix-overview.json`) already exist. **No alert rules exist anywhere in the repo** — T3.4 is net-new, not an edit.
->
-> **The split, kept deliberately narrow.** Rules and dashboards are config that ships alongside the images, so they belong here. T3.6 wires the alertmanager route and receiver — but the **destination, escalation and quiet hours are an owner input supplied at implementation time**, not a value this plan invents. The plumbing is engineering; who gets woken at 3am is not. This is a phase boundary rather than a deferral: nothing downstream waits on the policy, and T3.6's fail-closed gate means a missing destination stops a deploy instead of silently swallowing every alert.
-
-##### T3.1 [deploy] — Add the Prometheus + exporters compose services
-- **Build**: Add `prometheus`, `alertmanager`, `node-exporter`, `postgres-exporter` and `nginx-prometheus-exporter` services to `common/docker-compose.yml` under a `monitoring` profile, at `reg.mini.dev/prometheus`, `-alertmanager`, `-node-exporter`, `-postgres-exporter`, `nginx-prometheus-exporter`, each pinned (spec suggests the `3.11` line — re-verify at SELECT TAG). Mount the existing `common/prometheus/prometheus.yml`. No compose service for any of these exists today.
-- **Done when**: `docker compose --profile monitoring config` validates and lists all five services with `reg.mini.dev` images at explicit tags.
-- **Test**: `docker compose --profile monitoring up -d && sleep 30 && curl -s localhost:9090/-/ready | grep -q 'Prometheus Server is Ready'` exits 0.
-- **Depends on**: T1.1 [specs].
-
-##### T3.2 [deploy] — Add the Grafana compose service
-- **Build**: Add a `grafana` service to the same `monitoring` profile at `reg.mini.dev/grafana:13.0` (re-verify the line), mounting `common/grafana/config/grafana.ini` and `common/grafana/provisioning/`. This also avoids the AGPL `grafana/grafana-oss` fallback the original deferral had settled on. Check the image's UID via INSPECT before setting volume ownership.
-- **Done when**: the `grafana` service starts and serves its login page.
-- **Test**: `[ "$(curl -o /dev/null -sw '%{http_code}' localhost:3001/login)" = 200 ]` exits 0.
-- **Depends on**: T3.1 [deploy].
-
-##### T3.3 [deploy] — Turn the skipped Prometheus test into a live gate
-- **Build**: `common/scripts/tests/13-test-prometheus.sh` currently short-circuits with "Prometheus/metrics endpoints not configured" because `common/scripts/tests/config.sh` sets `DEFAULT_PROMETHEUS_URL=""` for every environment (`:84`, `:115`, `:139`). Set the dev default to the stood-up endpoint so the test actually runs. Leave staging and prod empty until the stack is deployed there.
-- **Done when**: `13-test-prometheus.sh` reports a pass/fail count greater than zero for `ENV=dev` instead of the "not configured" info line.
-- **Test**: `! ENV=dev bash common/scripts/tests/13-test-prometheus.sh | grep -q 'not configured'` exits 0.
-- **Depends on**: T3.2 [deploy].
-
-##### T3.4 [deploy] — Write the alert rules
-- **Build**: Add `common/prometheus/rules/haisir.rules.yml` and reference it from `prometheus.yml`'s `rule_files`. **No alert rule exists anywhere in the repo today** — this is net-new. Cover the failure modes this phase and the last one actually hit, not a generic starter set: service down (backend, worker, frontend, apisix, keycloak, db), certificate expiry inside 21 days (B3's silent failure — certbot renewed while nothing distributed the result, and the only symptom was a cert quietly nearing expiry behind an edge terminator), Postgres `idle in transaction` older than 5 minutes (B1, which held sessions for 2h27m and blocks DDL), disk above 85%, and APISIX 5xx rate. Each rule carries a `severity` label and a `summary` annotation naming the runbook step.
-- **Done when**: `promtool check rules` validates the file and every rule carries both a `severity` label and a `summary` annotation.
-- **Test**: `docker run --rm -v "$PWD/common/prometheus:/p" reg.mini.dev/prometheus:<pin> promtool check rules /p/rules/haisir.rules.yml` exits 0.
-- **Depends on**: T3.1 [deploy].
-
-##### T3.5 [deploy] — Provision the dashboards
-- **Build**: `common/grafana/provisioning/dashboards/json/` holds exactly one dashboard (`apisix-overview.json`). Add provisioned dashboards for the tiers that have no view at all: application (backend/worker request rate, latency, error rate, queue depth for the two poller job tables), Postgres (connections, `idle in transaction` count, replication/vacuum lag, cache hit ratio) and host (CPU, memory, disk, from node-exporter). Provisioned as files under the existing `dashboards.yaml` provider — not hand-created in the UI, which does not survive a container replacement.
-- **Done when**: Grafana lists four dashboards after a cold start with no manual UI step.
-- **Test**: `[ "$(curl -s -u admin:$GRAFANA_PASS localhost:3001/api/search?type=dash-db | jq length)" -ge 4 ]` exits 0.
-- **Depends on**: T3.2 [deploy].
-
-##### T3.6 [deploy] — Route alerts to the owner-supplied destination
-- **Build**: Add `common/prometheus/alertmanager.yml` with a route tree keyed on the `severity` label from T3.4 and a receiver per tier. **The destination and escalation policy are an owner input, not a value this task invents** — the task wires the route, the webhook/SMTP/integration URL arrives as a secret. Store it in `secret/haisir/infra` following the BR-SEC-022 pattern (it is host-specific and must not be committed), register it in `deploy-required-keys.txt` so an unset destination aborts the render rather than silently dropping every alert on the floor — a monitoring stack that fails open is the same defect class as the rest of this phase.
-- **Done when**: a firing alert reaches the configured receiver, and an unset destination fails the render rather than starting alertmanager with no route.
-- **Test**: `docker compose stop backend; sleep 120; [ "$(curl -s localhost:9093/api/v2/alerts | jq '[.[] | select(.labels.alertname=="BackendDown")] | length')" -ge 1 ]` exits 0.
-- **Depends on**: T3.4 [deploy], T3.5 [deploy].
-
----
-
-## G4 — No unpinned image can reach a host
-
-**Goal**: Every remaining image in the stack is pinned, the components with no Minimus equivalent are recorded as explicit exceptions rather than silently missed, a CI gate fails the build if a `:latest` reappears, and the migrated set is proven at runtime on staging.
-**Goal test**: The pinning gate script run over the whole repo exits 0; `grep -rn ':latest' --include='docker-compose*.yml' --include='Dockerfile*' . | grep -v archived` returns only lines documented as BR-INFRA-005/006/007 exceptions.
-**Repos**: [deploy]
-
-##### T4.1 [deploy] — Pin OpenBao to a Minimus image
-- **Build**: Replace the six `${OPENBAO_IMAGE:-ghcr.io/openbao/openbao:2.6.0}` defaults — five in `common/docker-compose.yml` (`:657`, `:698`, `:739`, `:779`, `:816`) and one in `common/openbao/docker-compose.openbao.yml:105` — with `reg.mini.dev/openbao:2.6.1`. Keep the ≥ v2.6.0 floor for CVE-2025-54996 (BR-SEC-016 status note); 2.6.1 satisfies it.
-- **Done when**: all six defaults read `reg.mini.dev/openbao:2.6.1`.
-- **Test**: `docker compose -f common/openbao/docker-compose.openbao.yml up -d && docker compose -f common/openbao/docker-compose.openbao.yml exec openbao bao status | grep -q 'Sealed *false'` exits 0.
-- **Depends on**: T1.1 [specs].
-
-##### T4.2 [deploy] — Pin the serving-path `other/services` images
-- **Build**: `other/services/cftunnel/docker-compose.yml:3` (`cloudflare/cloudflared:latest`) → `reg.mini.dev/cloudflared:<pin>`; `other/services/embedding/docker-compose.yml:18`, `:56`, `:71`, `:86` (four `ollama/ollama:latest` service definitions) → `reg.mini.dev/ollama:<pin>`, one tag across all four. Both are currently rolling tags in the live request path.
-- **Done when**: `! grep -rq ':latest' other/services/cftunnel/ other/services/embedding/` exits 0.
-- **Test**: `docker compose -f other/services/embedding/docker-compose.yml up -d && [ "$(curl -s localhost:11434/api/version | jq -r .version)" = "<pin>" ]` exits 0.
-- **Depends on**: T1.1 [specs].
-
-##### T4.3 [deploy] — Pin the internal registry to `distribution-registry`
-- **Build**: `other/services/registry/docker-compose.yml:13` `registry:3` → `reg.mini.dev/distribution-registry:<pin>` — same upstream project, same API. This registry hosts every `haisir-*` image, so the push/pull auth config (`htpasswd`/`REGISTRY_AUTH_*`) must carry over unchanged; a broken auth carry-over breaks the whole build pipeline, which is why this is its own task.
-- **Done when**: the registry service starts on the Minimus image and accepts an authenticated push.
-- **Test**: `docker compose -f other/services/registry/docker-compose.yml up -d && docker push ${DOCKER_REGISTRY}/haisir-backend:probe` exits 0.
-- **Depends on**: T1.1 [specs].
-
-##### T4.4 [deploy] — Pin SonarQube and its Postgres
-- **Build**: `other/services/sonarqube/docker-compose.yml:91` `sonarqube:community` → `reg.mini.dev/sonarqube:<pin>` and `:41` `postgres:18-alpine` → `reg.mini.dev/postgres:18` (same tag T2.4 settles on).
-- **Done when**: both `image:` lines resolve to `reg.mini.dev` at an explicit tag.
-- **Test**: `docker compose -f other/services/sonarqube/docker-compose.yml up -d && sleep 120 && curl -s localhost:9000/api/system/status | jq -e '.status == "UP"'` exits 0.
-- **Depends on**: T1.1 [specs].
-
-##### T4.5 [deploy] — Pin nginx-proxy-manager
-- **Build**: `other/services/npm/docker-compose.yml:15` `jc21/nginx-proxy-manager:2.15.1` → `reg.mini.dev/nginx-proxy-manager:<pin>`. Already at an explicit tag today, so this is a registry move only — but it terminates the edge, so verify an existing proxy host still resolves after the swap.
-- **Done when**: the `image:` line resolves to `reg.mini.dev` at an explicit tag.
-- **Test**: `docker compose -f other/services/npm/docker-compose.yml up -d && sleep 30 && [ "$(curl -o /dev/null -sw '%{http_code}' localhost:81)" = 200 ]` exits 0.
-- **Depends on**: T1.1 [specs].
-
-##### T4.6 [deploy] — Rebuild the Jenkins Docker-in-Docker layer on Minimus
-- **Build**: `other/services/jenkins/docker-compose.yml:14` runs `jenkins-with-docker:lts`, a locally built layer over `jenkins/jenkins:lts`. Rebase on `reg.mini.dev/jenkins` + `reg.mini.dev/jenkins-agent` at the current LTS line. The Docker-CLI layer needs the Minimus RESOLVE PACKAGES step (workflow step 5) re-run against the new base — the package names and manager differ from the Debian original.
-- **Done when**: the rebuilt Jenkins image starts and its agents can invoke `docker` against the mounted socket.
-- **Test**: `docker exec jenkins docker version --format '{{.Client.Version}}'` prints a version string.
-- **Depends on**: T1.1 [specs].
-
-##### T4.7 [deploy] — Opportunistic busybox swap for the init/util images
-- **Build**: Per BR-INFRA-007 (not a hard requirement), swap three named services: the `openbao-init` init container at `common/docker-compose.yml:494` (`alpine:latest`), the `openbao-init` init container at `common/openbao/docker-compose.openbao.yml:36` (`alpine:latest`) and the `sonarqube-init` sysctl container at `other/services/sonarqube/docker-compose.yml:16` (`busybox:stable`) → `reg.mini.dev/busybox`. The busybox case is a pure registry swap with no image-family change. If an alpine init container's inline script depends on something busybox lacks, leave it and record why — this rung is optional.
-- **Done when**: each of the three either references `reg.mini.dev/busybox` or carries a one-line comment naming the blocking dependency.
-- **Test**: `docker compose -f common/docker-compose.yml up openbao-init && [ "$(docker compose -f common/docker-compose.yml ps -a --format '{{.Name}} {{.ExitCode}}' | grep openbao-init | awk '{print $2}')" = 0 ]` exits 0.
-- **Depends on**: T1.1 [specs].
-
-##### T4.8 [deploy] — Record the no-match components as digest-pinned exceptions
-- **Build**: CrowdSec (`other/services/crowdsec/docker-compose.yml:18`, `crowdsecurity/crowdsec:v1.7.8`), HuggingFace text-embeddings-inference (`other/services/embedding/docker-compose.yml:99`, `ghcr.io/huggingface/text-embeddings-inference:cpu-1.9`) and dockhand (`other/services/dockhand/docker-compose.yml:3`, `fnsys/dockhand:latest`) have no Minimus equivalent. Per BR-INFRA-006 pin each to version **and** digest (`image@sha256:...`) and add an inline comment with the DISCOVER re-check date. dockhand is the only one currently on a rolling tag.
-- **Done when**: all three `image:` lines carry an `@sha256:` digest and a dated BR-INFRA-006 comment.
-- **Test**: `for f in other/services/crowdsec/docker-compose.yml other/services/embedding/docker-compose.yml other/services/dockhand/docker-compose.yml; do grep -q '@sha256:' "$f" || exit 1; done` exits 0.
-- **Depends on**: T4.2 [deploy].
-
-##### T4.9 [deploy] — Rename image references outside the Dockerfiles
-- **Build**: `DOCKER_REGISTRY` and the `*_IMAGE_TAG` build args are threaded through `Jenkinsfile`, `Jenkinsfile.deploy`, `gateway-docker/Jenkinsfile` and the deploy/build scripts, not only the Dockerfiles and compose files. Update every reference the G1–G4 swaps invalidated — otherwise the migration builds the right image and records it under the wrong tag. Includes the `APISIX_DIGEST` grep and pull in `gateway-docker/Jenkinsfile:104`/`:107` that T2.5 makes dead.
-- **Done when**: no build arg or pipeline variable names an image or registry that no longer exists after G1–G4.
-- **Test**: `! grep -rqE 'cgr\.dev|quay\.io/keycloak|apache/apisix|APISIX_DIGEST|python:3\.14-slim|node:26-trixie' Jenkinsfile Jenkinsfile.deploy gateway-docker/Jenkinsfile common/scripts/` exits 0.
-- **Depends on**: T2.2 [deploy], T2.5 [deploy], T4.1 [deploy].
-
-##### T4.10 [deploy] — CI gate that fails on an unpinned image
-- **Build**: Add a check to the existing lint/validate pipeline stage: scan tracked `Dockerfile*` and `docker-compose*.y*ml`, excluding `archived/` and `gateway-docker/coraza-proxy-wasm/example/`, and exit non-zero on any `FROM`/`image:` matching `:latest` or carrying no tag. Allowed, by explicit allowlist: the non-versioned Minimus bases (`static`, `glibc-dynamic`, `busybox`); any line pinned by `@sha256:` digest, which is strictly stronger than a tag and covers both the BR-INFRA-006 exceptions and `gateway-docker/Dockerfile:69`'s `FROM reg.mini.dev/go@${GO_BUILDER_DIGEST}`; and one explicit BR-INFRA-005 exclusion for `dev/docker-compose.yml:26`'s `dpage/pgadmin4:latest`, annotated inline in the compose file with `# BR-INFRA-005: dev-only, never ships`. One grep with an allowlist, not a policy framework.
-- **Done when**: the check exits 0 on the migrated tree and exits non-zero when `:latest` is reintroduced into any scanned file.
-- **Test**: `cp dev/docker-compose.yml /tmp/dc.bak; sed -i 's|reg.mini.dev/etcd:.*|reg.mini.dev/etcd:latest|' dev/docker-compose.yml; bash common/scripts/check-image-pins.sh; rc=$?; mv /tmp/dc.bak dev/docker-compose.yml; [ $rc -ne 0 ]` exits 0 (the injected `:latest` is reverted whether the check passes or fails — the test must not leave a tracked file mutated).
-- **Depends on**: T1.7 [deploy], T2.8 [deploy], T2.9 [deploy], T3.2 [deploy], T4.3 [deploy], T4.4 [deploy], T4.5 [deploy], T4.6 [deploy], T4.7 [deploy], T4.8 [deploy], T4.9 [deploy].
-
-##### T4.11 [deploy] — Deploy the migrated image set to staging and verify at runtime
-- **Build**: Cut a release manifest at the migrated tags and run `deploy.sh --env staging`. This is the first time the migrated images run as a *stack* on a real host rather than individually on a workstation: every `docker build` and local `compose up` above stops at the image, and the root acceptance test asserts staging container state. Run the full `common/scripts/tests/` suite against staging afterwards.
-- **Done when**: every container running on staging reports a `reg.mini.dev`/`${DOCKER_REGISTRY}` image at an explicit tag.
-- **Test**: `[ "$(ssh <staging> "docker inspect --format '{{.Config.Image}}' \$(docker ps -q)" | grep -vcE 'reg\.mini\.dev|'"${DOCKER_REGISTRY}")" = 0 ]` exits 0.
-- **Depends on**: T4.10 [deploy].
-
-##### T4.12 [deploy] — Recreate the 9 non-`deploy.sh`-managed containers on prod
-- **Build**: T4.11 closed G4 for staging only — its own goal test and Build text say "staging" explicitly, so this is a new gap, not a reopen. Prod's OpenBao server + 5 vault-agent sidecars are still running `ghcr.io/openbao/openbao:2.6.0`, and `npm`/`dockhand`/`crowdsec` are in the same state — the same 9 containers T4.11 recreated on staging, on the other host. This is deliberately **not** part of any `deploy.sh` release: T4.1's owner call keeps the OpenBao stack out of `deploy.sh`'s `SERVICES`-driven redeploy loop and drift detection, so no manifest will ever recreate these on its own. The code fix is already committed and shared across environments — `common/openbao/docker-compose.openbao.yml`'s `openbao` service and all 6 `vault-agent-*` services in `common/docker-compose.yml` already carry the `user: "100:1000"` pin from `16983f2` (T4.11's live finding: `reg.mini.dev/openbao:2.6.1` has no default non-root `USER`, so under rootless Docker it crash-loops on `Permission denied` writing `/openbao/seal/unseal.key` without this pin) — and prod's `.env` already has `OPENBAO_IMAGE_TAG=2.6.1` set, inert until something recreates the containers. **Blast radius, why this is its own window**: backend, worker, keycloak, db and keycloak-db are each gated behind `depends_on: service_healthy` on their vault-agent sidecar — an uid mistake here crash-loops five services at once, not one. Recreate one container at a time (server first, then each sidecar), confirming `healthy` before the next, exactly as T4.11 did on staging; do not batch-recreate all 6 in one `up -d`. **Crowdsec (B19): same lower-risk approach as staging, not a full compose sync.** `other/services/crowdsec/docker-compose.yml` mounts a gitignored, host-local TLS cert (`other/services/crowdsec/tls/{crowdsec.crt,crowdsec.key}`) that `config.yaml.local` requires unconditionally — `docker compose up -d` fails outright if it's missing (`other/services/crowdsec/README.md`'s "TLS Setup" section). Recreating prod's crowdsec from the full committed compose file would hit this, same as it would have on staging. T4.11 avoided it there with a **single-line image-tag-only edit** on the live host — bump the running container's image reference and recreate, leaving the rest of its config (including the TLS mount) untouched — rather than scp'ing the cert or syncing the full compose file. Do the identical thing on prod: manual image-tag edit only, no file copy. This keeps the TLS rollout itself (B19's actual open gap) out of scope for T4.12 — it stays a future fix, not attempted here.
-- **Done when**: every container running on prod reports a `reg.mini.dev`/`${DOCKER_REGISTRY}` image at an explicit tag — same literal criterion as T4.11, now true for prod.
-- **Test**: `[ "$(ssh <prod> "docker inspect --format '{{.Config.Image}}' \$(docker ps -q)" | grep -vcE 'reg\.mini\.dev|'"${DOCKER_REGISTRY}")" = 0 ]` exits 0. Follow with T4.1's own deferred runtime test: `docker compose -f common/openbao/docker-compose.openbao.yml exec openbao bao status | grep -q 'Sealed *false'`, and per-sidecar: `docker inspect --format '{{.State.Health.Status}}' <vault-agent-*>` reports `healthy` for all 6.
-- **Depends on**: T4.11 [deploy].
-
----
-
-## G5 — The v2026.6 backlog failure modes are closed
-
-**Goal**: B1, B3, B4-residual and B5-residual no longer fail open — the worker stops parking transactions, the certbot hook cannot drift unnoticed, secret-render failures name their cause, and the container runtime is pinned across hosts. (B6 is not here: it is G6.2, fixed at the mechanism.)
-**Goal test**: On staging after a full deploy, `SELECT count(*) FROM pg_stat_activity WHERE state='idle in transaction'` returns `0` twenty minutes after worker start, the deploy's hook-hash assertion passes, and `docker info --format '{{.ClientInfo.Version}}'` reports the same pinned rootless version on staging and prod.
-**Repos**: [backend] [deploy] [specs]
-
-> **`--port-driver=slirp4netns` is the standard** (owner call, 2026-08-09). It is the safer of the two: `allow_admin` has carried `10.0.2.0/24` since before B5, so staging keeps behaving exactly as it does today and only prod converges onto it. Both `allow_admin` entries stay — the `172.19.0.1/32` line added 2026-08-08 becomes redundant rather than wrong, and removing a working allowlist entry to tidy up is how B5 happened in the first place (T7.7.1 removed `172.19.0.0/16`, and nothing noticed until a deploy broke).
-
-##### T5.1 [backend] — Release the extraction poller's transaction on an empty poll
-- **Build**: `src/infrastructure/repositories/extraction_job_repository.py:249` executes a `SELECT ... FOR UPDATE SKIP LOCKED`, which opens a transaction; `:251-252` then `return None` when no job matches, without committing or rolling back. `src/worker/__main__.py:149` opens `s_extraction` once for the process lifetime, so that transaction stays open across every subsequent `asyncio.sleep` — the observed 2h27m `idle in transaction`. Add `await self.session.rollback()` immediately before the `return None`. Do not touch the claim path: on the success path `:256` flushes and the caller owns the commit, and that boundary carries the claim semantics.
-- **Done when**: `claim_next()` returning `None` leaves the session with no open transaction.
-- **Test**: `assert (await repo.claim_next()) is None and not repo.session.in_transaction()`
-- **Depends on**: None.
-
-##### T5.2 [backend] — Release the essay-grading poller's transaction on an empty poll
-- **Build**: Same defect, same shape: `src/infrastructure/repositories/essay_grading_job_repository.py:62` opens the transaction, `:64-65` returns `None` before reaching the `await self.session.commit()` at `:70`. `s_grading` is likewise a process-lifetime session (`src/worker/__main__.py:150`). Add `await self.session.rollback()` before the `return None`.
-- **Done when**: `get_next_queued()` returning `None` leaves the session with no open transaction.
-- **Test**: `assert (await repo.get_next_queued()) is None and not repo.session.in_transaction()`
-- **Depends on**: None.
-
-##### T5.3 [deploy] — Backstop the dynamic DB roles with an idle-transaction timeout
-- **Build**: The app connects with **dynamic OpenBao credentials**, not a static `haisir_worker` role, and there is no app-DB init SQL in `haisir-deploy` — the roles are minted per lease by `common/openbao/bootstrap.sh:265`'s `creation_statements`. Append `ALTER ROLE "{{name}}" SET idle_in_transaction_session_timeout = '60s'; ALTER ROLE "{{name}}" SET statement_timeout = '300s';` to that `creation_statements` string (the loop covers `haisir-backend` and `haisir-worker`), so the setting is applied at role-creation time for every future lease. This is defence in depth against a future poller acquiring the same shape — it is **not** the fix and must not land instead of T5.1/T5.2. A `REINDEX`/`ALTER TABLE` needing `ACCESS EXCLUSIVE` queues behind an idle transaction, and once queued every subsequent reader queues behind it too; that is how the first staging reindex attempt stalled the whole app.
-- **Done when**: a freshly issued dynamic credential's session reports a non-zero `idle_in_transaction_session_timeout`.
-- **Test**: `user=$(bao read -field=username database/creds/haisir-worker); PGPASSWORD=… psql -U "$user" -tAc "SHOW idle_in_transaction_session_timeout"` prints `1min`.
-- **Depends on**: T5.1 [backend], T5.2 [backend].
-
-##### T5.4 [deploy] — Surface the real cause of a deploy-secret render failure
-- **Build**: `bao_deploy_token()` in `common/openbao/render-deploy-secrets.sh` redirects stderr to `/dev/null`, collapsing container-down, sealed vault, missing cert, unregistered role, `docker: command not found` and wrong-socket into one generic four-cause message — none of which was the actual cause when B4 was diagnosed. Capture stderr into a variable and print it on the failure path. Keep the fail-closed exit; only the diagnostic changes.
-- **Done when**: a render failure prints the underlying `bao`/`docker` stderr above the generic message.
-- **Test**: With the OpenBao container stopped, `bash common/openbao/render-deploy-secrets.sh 2>&1 | grep -q 'Cannot connect to the Docker daemon'` exits 0.
-- **Depends on**: None.
-
-##### T5.5 [deploy] — Bring `other/cert/` inside the deploy sync
-- **Build**: `deploy-lib.sh`'s sync covers only `common/` and `${ENV}/`, so `other/cert/haisir-sync-certs.sh` — installed as the certbot renewal hook — is hand-placed on each host and never updated. The T1.3.3 OpenBao fallback sat three weeks unshipped to prod. Add an `other/cert/` rsync step in `deploy-lib.sh` carrying `--chmod=F755` **on that invocation only** — the file is mode `644` in git and certbot execs it directly, so a content-correct copy that is not executable is still a broken hook. Do **not** add `--chmod` to the `common/` or `${ENV}/` rsyncs: they cover far more than the seven in-scope paths, and `common/scripts/full-setup.sh:268` invokes `"$SCRIPT_DIR/setup.sh"` directly, so stripping the exec bit there breaks the next deploy. Do this in `deploy-lib.sh` only, **not** `deploy-remote-common.sh` — T6.6.1 deletes that file.
-- **Done when**: a deploy transfers `other/cert/haisir-sync-certs.sh` to the remote host.
-- **Test**: `[ "$(ssh <staging> "sha256sum ~/haisir-deploy/other/cert/haisir-sync-certs.sh" | cut -d' ' -f1)" = "$(sha256sum other/cert/haisir-sync-certs.sh | cut -d' ' -f1)" ]` exits 0.
-- **Depends on**: None.
-
-##### T5.6 [deploy] — Assert the installed certbot hook matches the repo
-- **Build**: Syncing the file is not sufficient — the copy that runs lives at `/etc/letsencrypt/renewal-hooks/deploy/`, and rsync does not reach it. Add a deploy-time hash comparison between the repo copy and the installed copy, failing loud on mismatch. This is the check that actually closes B3: it catches drift regardless of how the installed file got there. The failure it prevents is silent by construction — a broken hook produces no alert, and the only symptom is a cert quietly nearing expiry behind an edge terminator that hides it.
-- **Done when**: a deploy aborts with a named error when the installed hook's hash differs from the repo's.
-- **Test**: `ssh <staging> "echo '# drift' >> /etc/letsencrypt/renewal-hooks/deploy/haisir-sync-certs.sh"` then run the deploy; it exits non-zero citing the hook hash mismatch.
-- **Depends on**: T5.5 [deploy].
-
-##### T5.7 [deploy] — Assert the installed certbot hook is executable
-- **Build**: The hash comparison in T5.6 is content-only and passes on a mode-`644` copy that certbot cannot exec — the exact failure `--chmod=F755` in T5.5 exists to prevent, and the one a content hash cannot see. Add a mode assertion alongside the hash check in the same deploy step.
-- **Done when**: the installed hook at `/etc/letsencrypt/renewal-hooks/deploy/haisir-sync-certs.sh` is mode `755` after a deploy.
-- **Test**: `[ "$(ssh <staging> "stat -c '%a' /etc/letsencrypt/renewal-hooks/deploy/haisir-sync-certs.sh")" = 755 ]` exits 0.
-- **Depends on**: T5.6 [deploy].
-
-##### T5.8 [deploy] — Pin the rootless container runtime across hosts
-- **Build**: B5's residual. Neither staging nor prod sets `--port-driver`, so each follows its own rootlesskit version and the two rewrite the source address differently (`slirp4netns` → `10.0.2.2`, `builtin` → the bridge gateway `172.19.0.1`). `allow_admin` now carries both, so either resolves — but staging is correct **by accident**, and a rootlesskit upgrade there reproduces prod's failure exactly. Pin the rootless Docker/rootlesskit version in the host provisioning and set **`--port-driver=slirp4netns`** explicitly and identically on both hosts (owner call — see the note above; it is the value staging already behaves as, so only prod changes). Leave both `allow_admin` entries in place. This is environment drift at the container-runtime layer, invisible to every config diff — and it is why the image-pinning and deploy-backlog concerns share this phase.
-- **Done when**: both hosts report the same rootlesskit version and `--port-driver=slirp4netns`.
-- **Test**: `[ "$(for h in staging prod; do ssh $h "rootlesskit --version; grep -o 'port-driver=[a-z0-9]*' ~/.config/systemd/user/docker.service"; done | sort -u | wc -l)" = 2 ]` exits 0 — two unique lines total (one version, one driver) proves both hosts agree on both.
-- **Depends on**: None.
-
-##### T5.9 [specs] — Close the review-coverage gap on `92a4da2`
-- **Build**: `92a4da2` ("test(csp): add production CSP enforcement e2e soak") was not covered by either Phase 7 G8 security review pass — both ran against the host range ending at `d6adec7`. It is now an ancestor of the `705833d` frontend baseline, so this is a review-coverage gap, not a merge question. The review reads `haisir-frontend` code; the deliverable is an entry in this repo, which is why the task is tagged `[specs]` and not `[frontend]` — no frontend file changes.
-- **Done when**: a `decisions.md` entry records the review verdict on `92a4da2` with a date.
-- **Test**: `grep -q '92a4da2' Implementation_planning/decisions.md` exits 0.
-- **Depends on**: None.
-
-##### T5.10 [backend] — Declare `question_id` on `ExamReviewChatRequest`
-- **Build**: `haisir-frontend/src/features/student/api/student-api.ts:611` sends `question_id`, but `src/schemas/haitu.py:17-27` declares only `attempt_id`, `message` and `history`, so Pydantic drops it. This is not a stray field: the frontend deliberately reversed `explainQuestion`'s parameter order to `(questionId, questionNumber)` and dropped the question-text preview from the student bubble *because* the backend was to re-ground via `question_id` (`use-exam-review-chat.ts:332-338`). Deleting it from the payload would therefore lose UX, not just a dead field. Add `question_id: UUID | None = None`.
-- **Done when**: `ExamReviewChatRequest(**payload).question_id` equals the UUID sent in the request body.
-- **Test**: `assert ExamReviewChatRequest(attempt_id=a, message="x", question_id=q).question_id == q`
-- **Depends on**: None.
-
-##### T5.11 [backend] — Narrow exam-review grounding to the named question
-- **Build**: With `question_id` now arriving, restrict the grounding context for the review-chat stream to that question when it is present, falling back to the whole-attempt grounding when it is absent. Behaviour is currently correct but over-broad — grounding covers every question in the attempt, which is not what the endpoint's contract implies.
-- **Done when**: a request carrying `question_id` produces a grounding context containing only that question's content.
-- **Test**: `assert [c.question_id for c in build_grounding(attempt, question_id=q)] == [q]`
-- **Depends on**: T5.10 [backend].
-
-##### T5.12 [deploy] — Confirm the pollers hold no transaction on staging
-- **Build**: Deploy the B1 fix to staging, leave the worker idle through several poll cycles, and sample `pg_stat_activity`. This is G5's goal test and the only evidence that the two `rollback()` calls actually close the observed 2h27m sessions rather than moving where they open — a unit assertion on `in_transaction()` cannot see a process-lifetime session on a real host.
-- **Done when**: no worker session is `idle in transaction` twenty minutes after worker start on staging.
-- **Test**: `sleep 1200; [ "$(psql -tAc "SELECT count(*) FROM pg_stat_activity WHERE state='idle in transaction'")" = 0 ]` exits 0.
-- **Depends on**: T5.3 [deploy].
-
-##### T5.13 [deploy] — Fix the certbot hook assertion to survive root ownership and non-`755` modes
-- **Build**: T5.12's live run against prod found T5.6/T5.7's assertion is wrong on two counts, not the host. (1) The installed hook is `-rwx------ root root`; the deploy user has no passwordless sudo, so `assert_certbot_hook_matches()`'s plain `sha256sum` returns *Permission denied*, comes back as an empty hash, and the function's `-z` branch reports "Certbot hook not found at …" — a message that misdirects to a missing file when the file is present and merely unreadable. Read it with `sudo sha256sum` / `sudo stat` instead of a bare user-context read. (2) T5.7 demands mode exactly `755`; the installed copy is `700`, which is functionally correct (root runs certbot, root execs the hook) — loosen the check to "owner-executable" (`stat -c '%a'` first digit is `7`) rather than an exact match.
-- **Done when**: `assert_certbot_hook_matches()` correctly reports match/mismatch against a root-owned, mode-`700` hook without a false "not found", and accepts any owner-executable mode.
-- **Test**: Against a real root-owned `700` copy identical in content to the repo's: the deploy's Step 2b passes. Against a deliberately drifted copy (content changed, still root-owned `700`): Step 2b fails citing a hash mismatch, not "not found".
-- **Depends on**: T5.6 [deploy], T5.7 [deploy].
-
----
-
-## G6 — Env config is version-controlled and fails closed
-
-**Goal**: The three deploy config files ship with the release instead of being hand-copied to each host, host topology comes from `secret/haisir/infra` fully derived, `ip-restriction` denies by default, and the remote copy is never authoritative.
-**Goal test**: Delete all three env-config files off the staging host, run a CI deploy from a clean workspace, and the deploy completes with the three files present at mode `600` matching the committed copies byte for byte, while `curl -o /dev/null -w '%{http_code}' https://<staging-host>/admin/master/console/` returns `403` from a non-whitelisted address and `200` from a whitelisted one.
+**Goal**: The alerting-secret record in `phases.md` states what is actually true, and prod's
+secret-render path is confirmed the next time prod deploys.
+**Goal test**: On the prod host, `bash common/scripts/template-configs.sh` from `prod/` exits 0, logs
+no unresolved-placeholder warning for any `{{ALERT_*}}`, and `rendered/common/prometheus/alertmanager.yml`
+contains a `hooks.slack.com` URL; `phases.md`'s B49 entry no longer claims the key is unseeded.
 **Repos**: [deploy] [specs]
 
-> **SCOPE GUARD — applies to every task in G6 without exception.** Three files by exact filename, across `dev`, `staging` and `prod`: `dev/.env`, `staging/.env`, `prod/.env`, `dev/.env.config.sh`, `staging/.env.config.sh`, `prod/.env.config.sh`, `common/.env.config.common.sh`. Seven paths. No prefix or suffix variants, no glob or regex matching, no other file in those directories. Every `.gitignore` negation, rsync exclude, gitleaks entry, KV migration **and every `grep`/`git grep` pathspec in a test command below** is enumerated by exact path.
+> **Opportunistic, not blocking.** T0.1 needs a prod window that is not currently scheduled. Phase 8
+> validates on staging, which is proven clean. Nothing in G1–G4 depends on this goal, and G0 staying
+> open must not be read as the phase being blocked.
+
+##### T0.1 [deploy] — Capture prod's render-side confirmation
+- **Build**: On the next prod `deploy.sh` window, before Step 4, run `bash common/scripts/template-configs.sh`
+  from `prod/` and record two things in the deploy log: that it exits 0 with no unresolved-placeholder
+  warning from the `:355-373` scan, and that `render-deploy-secrets.sh` reports all ~7 pre-existing
+  `secret/haisir/infra` keys as `(set)` — the second guards the failure mode where a `kv put` replaced
+  the whole secret rather than patching it.
+- **Done when**: A prod deploy log shows `template-configs.sh` exit 0 with zero `{{ALERT_` occurrences
+  in `rendered/common/prometheus/alertmanager.yml` and all pre-existing infra keys still `(set)`.
+- **Test**: `grep -c '{{ALERT_' prod/rendered/common/prometheus/alertmanager.yml` returns 0.
+- **Depends on**: None
+
+##### T0.2 [specs] — Correct the B49 backlog entry
+- **Build**: Rewrite the B49 entry in `Implementation_planning/phases.md`. Remove "armed but never
+  seeded" and "aborts every staging and prod deploy". Replace with: seeded on both hosts 2026-08-14
+  via `rotate-secret.sh` under the admin-ops cert identity; proven end-to-end on staging 2026-08-15
+  (full CI/CD deploy exit 0, 13/13 healthy; `TargetDown` pending → firing with the Slack message
+  delivered); the only outstanding item is prod's render-side confirmation (T0.1), because prod has
+  had no `deploy.sh` run since the key was armed.
+- **Done when**: `grep -n "never seeded" Implementation_planning/phases.md` returns nothing in the B49 entry.
+- **Test**: The B49 entry contains the string "2026-08-15" and does not contain "aborts every staging and prod deploy".
+- **Depends on**: None
 
 ---
 
-### G6.1 — Host topology resolves from KV, fully derived
+## G1 — Per-child Home Study binding
 
-**Subgoal**: Nine host-topology values resolve from `secret/haisir/infra` for staging and prod — eight moved out of the env-config files, plus `KC_HOSTNAME_ADMIN`, which is net-new and appears in none of the seven files today — stored as final values, with a fail-closed gate on each.
-
-> **⟲ Amended 2026-08-13 (T6.2.0): eight, not nine.** `KC_HOSTNAME_ADMIN` was seeded (T6.1.3) and gated (T6.1.5) for a consumer — G6.2's tailnet admin model — that has since been abandoned as unworkable. Its gate entry is removed from `deploy-required-keys.txt`; a stale KV value may remain on staging and is inert. The other eight are unaffected. T6.1.3/T6.1.4/T6.1.5 stay checked off as the historical record of what was seeded.
-**Subgoal test**: On staging with the eight keys removed from both files and the three decorative `:-` CIDR defaults removed from the common file, `bash common/scripts/template-configs.sh` renders every `*_CIDR` and `*_BASE_URL` placeholder to the same value it produced before the move; with `secret/haisir/infra` unreadable, the render aborts non-zero before writing any file.
-**Repos**: [deploy]
-
-##### T6.1.1 [deploy] — `template-configs.sh` sources the render hook
-- **Build**: `common/scripts/template-configs.sh` is the only provisioning script that does not source `render-secrets-hook.sh` — `setup.sh:121`, `setup-keycloak.sh:23`, `configure-ssl.sh:39`, `create_plugin_config.sh:23` and `create_route_config.sh:23` all do — and it is the sole consumer of the admin CIDRs. Add the same `source .../openbao/render-secrets-hook.sh` + `render_deploy_secrets_or_die` pair, after the `.env.config.sh` discovery block at `:14-30` and before placeholder expansion. **This is the unblocking task for all of G6**: the hook is a no-op when the OpenBao flag is off, so it is safe to land alone, but the CIDR move must not land without it or every CIDR renders empty — which under today's code is exactly the fail-open path G6.2 exists to close.
-- **Done when**: `template-configs.sh` sources `render-secrets-hook.sh` and calls `render_deploy_secrets_or_die` before placeholder expansion.
-- **Test**: `grep -q 'render-secrets-hook.sh' common/scripts/template-configs.sh` exits 0.
-- **Depends on**: None.
-
-##### T6.1.2 [deploy] — Delete `template-configs.sh`'s cross-environment config fallback
-- **Build**: `common/scripts/template-configs.sh:15-30` resolves `ENV_CONFIG` as `$PWD/.env.config.sh` → `../staging/.env.config.sh` → `../dev/.env.config.sh` → `../prod/.env.config.sh`. Those three fallbacks are dead today only because a clean checkout has no committed `.env.config.sh` anywhere; the moment G6.3 commits the seven paths they become live, and any invocation from a directory without its own `.env.config.sh` — **including a prod run** — silently templates with *staging's* config. Delete the `elif` chain at `:19-25`; keep the existing `if [ -z "$ENV_CONFIG" ]` hard failure at `:28-31` as the only remaining branch. Must land before T6.3.2 commits the files.
-- **Done when**: `template-configs.sh` exits non-zero when run from a directory containing no `.env.config.sh`.
-- **Test**: `(cd "$(mktemp -d)" && bash /path/to/haisir-deploy/common/scripts/template-configs.sh)` exits non-zero.
-- **Depends on**: T6.1.1 [deploy].
-
-##### T6.1.3 [deploy] — Seed `KC_HOSTNAME_ADMIN` into KV for staging and prod — ⟲ **SUPERSEDED 2026-08-13 by T6.2.0** (done, kept as record; the key it seeded now has no consumer)
-- **Build**: Write the single key `KC_HOSTNAME_ADMIN` into `secret/haisir/infra` for staging and prod, holding its **final** value — the tailnet origin, not the public one. This key is **net-new**: `grep` across all seven in-scope paths at `844e8f9` finds it in none of them, so nothing is being moved and no config file is edited here. It is split out from the other eight because G6.2 — the most urgent open security item on the system — needs only this one, and must not queue behind an eight-key migration across two environments. No new path, policy or machine identity: `secret/haisir/infra` exists and the `deploy` policy already grants read on it.
-- **Done when**: `bao kv get -format=json secret/haisir/infra` returns a non-empty `KC_HOSTNAME_ADMIN` on both staging and prod.
-- **Test**: `[ -n "$(bao kv get -field=KC_HOSTNAME_ADMIN secret/haisir/infra)" ]` exits 0 on each of staging and prod.
-- **Depends on**: T6.1.1 [deploy].
-
-##### T6.1.4 [deploy] — Seed the other eight infra keys, fully derived
-- **Build**: Write the remaining eight keys into `secret/haisir/infra` for staging and prod, each holding its **final** value: `KEYCLOAK_ADMIN_PORT_BINDING`, `BACKEND_DB_PORT_BINDING`, `TAILSCALE_ADMIN_CIDR`, `KEYCLOAK_ADMIN_ALLOWED_CIDR`, `APISIX_ADMIN_ALLOWED_CIDR`, `EXTRACTION__OLLAMA_BASE_URL`, `EMBEDDING__OLLAMA_BASE_URL`, `HAITU__RERANK_BASE_URL`. The base addresses `TAILSCALE_IP`, `CLIENT_ADMIN_TAILSCALE_IP` and `COMPUTE_TAILSCALE_IP` **must not** be stored and composed at render time: `env-setup.sh:128-157` sources `.env.config.sh` and `.env` *before* rendering from OpenBao, so a base address arriving later leaves `${TAILSCALE_IP}/32` already evaluated to the literal `/32`.
-- **Done when**: no value under `secret/haisir/infra` on staging or prod contains an unexpanded `${`.
-- **Test**: `[ -z "$(bao kv get -format=json secret/haisir/infra | jq -r '.data.data | to_entries[] | select(.value | contains("${")) | .key')" ]` exits 0.
-- **Depends on**: T6.1.3 [deploy].
-
-##### T6.1.5 [deploy] — Arm the per-key fail-closed gate for all nine
-- **Build**: Append nine `infra:<KEY>:envs=staging,prod` lines to `common/openbao/deploy-required-keys.txt`, following the file's documented `path:KEY:envs=` format. This arms the existing per-key check so a partially-seeded KV aborts the render rather than templating an empty value (BR-SEC-019). Land this **before** T6.1.7/T6.1.9 delete any plaintext — the manifest's own convention is gate first, delete second, so a half-cutover state is unrepresentable. No dev key: dev has no host-topology values and no CI deploy path.
-- **Done when**: `deploy-required-keys.txt` contains all nine key names with `envs=staging,prod`.
-- **Test**: `orig=$(bao kv get -field=KC_HOSTNAME_ADMIN secret/haisir/infra); bao kv patch secret/haisir/infra KC_HOSTNAME_ADMIN=""; APP_ENV=staging bash common/openbao/render-deploy-secrets.sh 2>&1 | grep -q KC_HOSTNAME_ADMIN; rc=$?; bao kv patch secret/haisir/infra KC_HOSTNAME_ADMIN="$orig"; [ $rc -eq 0 ]` exits 0 (the key is restored unconditionally — this test blanks live KV, so it must not leave it blanked on failure).
-- **Depends on**: T6.1.4 [deploy].
-
-##### T6.1.6 [deploy] — Delete the three decorative CIDR defaults from the common file
-- **Build**: Delete `common/.env.config.common.sh:39` (`export TAILSCALE_ADMIN_CIDR="${TAILSCALE_ADMIN_CIDR:-127.0.0.1/32}"`), `:44` (`KEYCLOAK_ADMIN_ALLOWED_CIDR`, same shape) and `:48` (`APISIX_ADMIN_ALLOWED_CIDR`, same shape) outright. That path is one of the seven, and `deploy.sh:591` runs `cd ${ENV} && source .env.config.sh && … && bash template-configs.sh` where `.env.config.sh` sources the common file — so all three are exported as `127.0.0.1/32` **before** the render hook fires, and any `${VAR:-…}` there pre-empts the KV value. Without this deletion, `APISIX_ADMIN_ALLOWED_CIDR` on prod silently reverts from B5's `172.19.0.1/32` to `127.0.0.1/32`, `setup.sh` cannot reach the Admin API and routes are never pushed — the v2026.6 failure, reproduced by this plan. It is also the same decorative-`:-` pattern that made B6's fail-closed default inert. No other line in the file is touched.
-- **Done when**: `common/.env.config.common.sh` contains no `_CIDR` assignment.
-- **Test**: `! grep -q '_CIDR=' common/.env.config.common.sh` exits 0.
-- **Depends on**: T6.1.5 [deploy].
-
-##### T6.1.7 [deploy] — Remove the eight from staging's config files
-- **Build**: Delete the eight assignments from `staging/.env.config.sh` and `staging/.env` (those two paths only; `KC_HOSTNAME_ADMIN` was never in either). Before deleting, capture the pre-move rendered output of `template-configs.sh` into `.templated-before/`; after deleting, diff the rendered output. Staging is the proving ground because `dev/.env.config.sh:54` sets `KEYCLOAK_ADMIN_ALLOWED_CIDR="0.0.0.0/0"` — a deliberate dev convenience that stays, so dev never exercises this path.
-- **Done when**: a staging render after the deletion is byte-identical to the render captured before it.
-- **Test**: `[ -z "$(diff -r .templated-before .templated)" ]` exits 0.
-- **Depends on**: T6.1.6 [deploy].
-
-##### T6.1.8 [deploy] — Positive control: the render aborts when KV is unreadable
-- **Build**: T6.1.7's byte-identical diff passes whether the value came from KV or from a surviving `${VAR:-default}` — it cannot, on its own, distinguish "KV supplied it" from "a default supplied it", which is exactly the blind spot that made the three CIDRs decorative. Add the negative half: with `secret/haisir/infra` unreadable (bad token), the staging render must abort non-zero **before writing any file**, rather than producing the same output. Assert `.templated/` is untouched on the failure path.
-- **Done when**: a staging render with an invalid `BAO_TOKEN` exits non-zero and writes no file into `.templated/`.
-- **Test**: `BAO_TOKEN=invalid bash common/scripts/template-configs.sh` exits non-zero.
-- **Depends on**: T6.1.7 [deploy].
-
-##### T6.1.9 [deploy] — Remove the eight from prod's config files
-- **Build**: Same deletion in `prod/.env.config.sh` and `prod/.env` (those two paths only), only after T6.1.7's staging render proves identical and T6.1.8 proves the gate is live. Note `prod/.env.config.sh:23` currently sets `KEYCLOAK_ADMIN_ALLOWED_CIDR=""` explicitly — that assignment goes away here, and G6.2 makes its absence harmless rather than fatal.
-- **Done when**: a prod render after the deletion is byte-identical to the render captured before it.
-- **Test**: `! grep -qE '^ *(export )?(KEYCLOAK_ADMIN_PORT_BINDING|BACKEND_DB_PORT_BINDING|TAILSCALE_ADMIN_CIDR|KEYCLOAK_ADMIN_ALLOWED_CIDR|APISIX_ADMIN_ALLOWED_CIDR|EXTRACTION__OLLAMA_BASE_URL|EMBEDDING__OLLAMA_BASE_URL|HAITU__RERANK_BASE_URL)=' prod/.env prod/.env.config.sh` exits 0.
-- **Depends on**: T6.1.8 [deploy].
+**Goal**: A parent's curriculum root is visible to exactly the children it is bound to, on every
+student read path and through hAITU, and the parent chooses those children when they create or adopt
+the root.
+**Goal test**: E2E — parent P (linked to children A and B) creates root R1 with `child_subs=[A]` and
+adopts board R2 with `child_subs=[A,B]`. `GET /api/student/nodes?owner_type=parent` as A returns both
+roots; as B returns R2 only. `GET /api/student/nodes/{R1_child}/topics` as B → empty. `POST
+/api/haitu/topic-doubt` on an R1 topic as B → 403; as A → 200. After `DELETE /nodes/R2/bindings/{B}`,
+B sees nothing; after `POST /nodes/R2/bindings {child_subs:[B]}`, B sees R2 again with no content
+re-upload.
+**Repos**: [backend] [frontend] [specs]
 
 ---
 
-### G6.2 — `ip-restriction` denies by default and is always present
+### G1.1 — Binding schema + behaviour-preserving migration
 
-**Subgoal**: An empty, missing or unrendered `*_CIDR` reduces admin reach to zero instead of publishing the route, and the operator retains admin access to Keycloak over the public hostname from a whitelisted IP. (BR-SEC-023; absorbs B6.)
-**Subgoal test**: Render routes 13/14/15 with every `*_CIDR` unset; each rendered file contains `.plugins["ip-restriction"].whitelist == ["127.0.0.1/32"]`. After applying on staging, `https://<staging-host>/admin/master/console/` returns 403, returns 200 after `keycloak-admin-access.sh grant`, and returns 403 again after `revoke` — while `https://<staging-host>/realms/haisir-realm-staging/.well-known/openid-configuration` returns 200 throughout.
-**Repos**: [deploy]
+**Subgoal**: The binding table and the denormalised `root_node_id` exist, and every parent-owned row
+that was visible before V44 is still visible after it.
+**Subgoal test**: Integration — seed (pre-migration fixture) a parent with 2 active children and 1
+revoked child, a 3-level tree with topics; run `alembic upgrade V44`; assert one
+`parent_content_bindings` row per (root, child) for all 3 children, and that every node/topic row's
+`root_node_id` equals its tree's root id, self-referential on the root.
+**Repos**: [backend] [specs]
 
-> **⟲ SCOPE REVERSAL 2026-08-13 — the tailnet admin model is abandoned. Read this before touching any G6.2 task.**
->
-> T6.2.1/T6.2.1a/T6.2.1b/T6.2.2 tried to make admin access work over the Tailscale tailnet, via `KC_HOSTNAME_ADMIN` + `KEYCLOAK_ADMIN_PORT_BINDING`. **It cannot work, and it broke things.** Two measured findings, both from the 2026-08-12 gate run:
-> 1. `KC_HOSTNAME_ADMIN` does **not** move the admin console's `authServerUrl` — that follows `KC_HOSTNAME`. The console shell loads over the tailnet, then keycloak-js initialises against the **public** origin to authenticate, hitting route 14, which the deny-all is designed to 403. The tailnet path was never end-to-end.
-> 2. `KC_HOSTNAME_ADMIN` is **server-global, not master-scoped**. Pointing it at the tailnet broke the *public* admin console too — proven by natural experiment against prod, which has never had the variable.
->
-> `phases.md` recorded the right answer during the v2026.6 window and this plan overrode it: a tailnet `/32` can never match what `ip-restriction` evaluates, because `real-ip` extracts the client address from `cf-connecting-ip`. The corollary the plan missed is that the *converse* also holds — the whitelist has to hold the operator's **public** IP, and once it does, the public path is the working admin path and no tailnet plumbing is needed at all.
->
-> **The replacement model** (owner call, 2026-08-13): routes 13/14/15 stay published on the public hostname and ship **deny-all**. **No operator CIDR is stored in the deployment at all** — `KEYCLOAK_ADMIN_ALLOWED_CIDR` is *deleted* from KV and from the required-keys gate, not merely set to a safe value (T6.2.0a), so on staging and prod there is nothing that can resolve empty, drift, or fail open. The deny-all comes from T6.2.3's guard in `template-configs.sh`. When an operator needs the console they grant their own public IP directly to the running APISIX with `keycloak-admin-access.sh` (T6.2.0b) and revoke when done; a deploy **preserves** a live grant rather than revoking it mid-session (T6.2.0c). `KC_HOSTNAME_ADMIN` is deleted from compose, from the gate, and from KV. Strictly tighter than the pre-v2026.7 model, which kept a standing allowlist in config.
->
-> **The one thing this model gives up**: grants no longer self-expire. Nothing but `revoke` closes one. That is the deliberate trade for "a deploy must never revoke access mid-session" — see T6.2.0c.
->
-> **Why this is not an access-loss risk the way the old plan was.** Routes 13/14/15 match `/admin/*`, `/realms/master/*` and `/resources/*` gated by `^/resources/[^/]+/admin/`. App login is route 01, `/realms/haisir-realm-{{APP_ENV}}/*` (realm name at `common/keycloak/01-realm.json:2`). **Zero path overlap — an admin CIDR change is structurally incapable of affecting normal user authentication.** The only lockout risk left is a wrong CIDR value, recoverable by re-seeding KV and re-pushing routes, provided `APISIX_ADMIN_ALLOWED_CIDR` still admits the Admin API (verify before T6.2.6).
->
-> **Superseded tasks below are kept, not deleted** — repo convention is to preserve incident history.
+> **T1.5, T1.6 and T1.7 build one file — `V44_parent_content_bindings.py` — in three checkpoints and
+> land as a single commit.** A migration is atomic; T1.5's "Done when" would pass before the backfills
+> exist. They are separate tasks because each has its own falsifiable assertion, not because each is
+> independently deployable.
 
-> **Ancestry check**: G6.2's only ancestors are T6.1.1 → T6.1.3. Neither touches an image, a Dockerfile or a compose `image:` line, so no G1–G4 task is upstream of this subgoal, directly or transitively.
+##### T1.1 [backend] — parent_content_bindings table model
+- **Build**: Add a `parent_content_bindings` `Table` to `src/infrastructure/models/user_metadata.py`
+  (next to `parent_child_links`): `root_node_id UUID FK→course_path_nodes.id ON DELETE CASCADE`,
+  `child_sub String NOT NULL` (no FK — `constraints.md:21`), `created_at TIMESTAMP(timezone=True)`,
+  composite PK `(root_node_id, child_sub)`, plus `Index("ix_parent_content_bindings_child", "child_sub")`.
+- **Done when**: `parent_content_bindings` appears in `registry_mapper.metadata.tables` with `child_sub` typed `String`.
+- **Test**: `assert parent_content_bindings.c.child_sub.type.python_type is str`.
+- **Depends on**: T1.3 [specs]
 
-##### T6.2.0 [deploy] — Revert `KC_HOSTNAME_ADMIN` and the tailnet admin model
-- **Build**: Three deletions, no replacement. (1) Delete the `KC_HOSTNAME_ADMIN=${KC_HOSTNAME_ADMIN}` line from the keycloak service in `common/docker-compose.yml` — **delete the line, do not merely clear the KV value**: an unset `${KC_HOSTNAME_ADMIN}` expands to an empty string, which Keycloak reads as set-and-invalid rather than absent. (2) Delete the `infra:KC_HOSTNAME_ADMIN:envs=staging,prod` entry and its comment from `common/openbao/deploy-required-keys.txt`, otherwise every staging/prod deploy fails closed on a key with no consumer. (3) Correct `.github/instructions/keycloak.instructions.md`, which tells the reader to set `KEYCLOAK_ADMIN_ALLOWED_CIDR` to a Tailscale CIDR — wrong for any Cloudflare-fronted env and the origin of this whole detour. `KEYCLOAK_ADMIN_PORT_BINDING` is **kept**: it predates this attempt and `deploy.sh:960` runs `setup-keycloak.sh` against it every deploy.
-- **Done when**: no tracked file in `haisir-deploy` references `KC_HOSTNAME_ADMIN` except as historical commentary, and `KEYCLOAK_ADMIN_PORT_BINDING` is untouched.
-- **Test**: `! grep -rn 'KC_HOSTNAME_ADMIN=' common/ && grep -q 'KEYCLOAK_ADMIN_PORT_BINDING' common/docker-compose.yml` exits 0.
-- **Depends on**: none — this is a pure revert and unblocks the rest of G6.2.
+##### T1.2 [backend] — root_node_id column on the three owner-scoped tables
+- **Build**: Add `Column("root_node_id", UUID(as_uuid=True), nullable=True)` to `course_path_nodes`
+  (`src/infrastructure/models/course_path_node.py:9-28`), `topics` and `exam_templates`. No FK — a
+  self-referential root and the ON DELETE CASCADE on the binding table already cover integrity, and an
+  FK on `topics.root_node_id` would fight `delete_subtree`'s manual DELETE ordering.
+- **Done when**: All three tables expose a nullable `root_node_id` column.
+- **Test**: `assert all(t.c.root_node_id.nullable for t in (course_path_nodes, topics, exam_templates))`.
+- **Depends on**: None
 
-##### T6.2.0a [deploy] — Delete `KEYCLOAK_ADMIN_ALLOWED_CIDR` (and `KC_HOSTNAME_ADMIN`) from KV and the gate
-- **Build**: Owner call 2026-08-13 — **remove the variable rather than set it**, so there is no stored allowlist to resolve empty, drift, or fail open. (1) Delete the `infra:KEYCLOAK_ADMIN_ALLOWED_CIDR:envs=staging,prod` line from `common/openbao/deploy-required-keys.txt` (done in-repo). (2) Delete **both** `KEYCLOAK_ADMIN_ALLOWED_CIDR` and the stale `KC_HOSTNAME_ADMIN` from `secret/haisir/infra` on staging and prod — live KV, operator action. With the key unset everywhere, `template-configs.sh` renders routes 13/14/15 to the deny-all default (`127.0.0.1/32`) from T6.2.3's guard alone. `dev/.env.config.sh:54` keeps its explicit `0.0.0.0/0` and is the only env where the variable exists.
-- **Why this is also the prod deploy unblocker**: T6.1.5 armed the gate on this key and `check_required_keys()` (`render-deploy-secrets.sh:84-106`) rejects a **seeded-but-empty** value — jq `@sh` renders `""` as exactly `''`. Prod's KV holds `""` (T6.1.9), so **prod's next deploy currently aborts at render time**. Removing the gate entry and the key clears it. Note this changes nothing live on its own: prod's routes are v2026.6-rendered in etcd until T6.2.6 re-pushes them.
-- **Ordering**: delete the gate entry *before* deleting the KV keys, or the deploy fails closed on a key that is gone. Both are safe on their own.
-- **Done when**: neither key exists under `secret/haisir/infra` on staging or prod, and `render-deploy-secrets.sh` exits 0 on both.
-- **Test**: `[ -z "$(bao kv get -format=json secret/haisir/infra | jq -r '.data.data | keys[] | select(. == "KEYCLOAK_ADMIN_ALLOWED_CIDR" or . == "KC_HOSTNAME_ADMIN")')" ] && APP_ENV=prod bash common/openbao/render-deploy-secrets.sh >/dev/null` exits 0.
-- **Depends on**: T6.2.0 [deploy].
+##### T1.3 [specs] — BR-DATA-026 DDL types child_sub as String
+- **Build**: In `target/requirements/01_data_model.md:186-192`, change `child_sub UUID NOT NULL` to
+  `child_sub VARCHAR NOT NULL` and add a one-line note pointing at `parent_child_links.child_sub`
+  (`src/infrastructure/models/user_metadata.py:89`) and `constraints.md:21`. Without this the backfill
+  `INSERT ... SELECT l.child_sub` aborts on Postgres with a varchar→uuid mismatch. The rule's own
+  rationale paragraph already argues String; only the DDL disagreed.
+- **Done when**: The BR-DATA-026 DDL block contains no `UUID` on the `child_sub` line.
+- **Test**: `grep -A6 'CREATE TABLE parent_content_bindings' target/requirements/01_data_model.md | grep child_sub` matches `VARCHAR`.
+- **Depends on**: None
 
-##### T6.2.0c [deploy] — A deploy must not revoke a live admin grant
-- **Build**: In `common/scripts/create_route_config.sh`, before the whole-route `PUT`, read the live route from the Admin API; if it already carries `plugins["ip-restriction"].whitelist`, carry that value into the payload. Scoped to that one field — WAF directives, rate limits and upstream still come from the repo, so this preserves an *access decision*, not arbitrary drift. A route with no live whitelist (new host, or the plugin stripped by the pre-T6.2.3 bug) has nothing to preserve and gets the template's deny-all, which is what closes the exposure on first push.
-- **Preservation must be BOUNDED — found by challenger review 2026-08-13, and it was a real hole.** The first cut carried the live value forward unconditionally, which laundered *any* whitelist into permanence: a `0.0.0.0/0` pasted from dev, a fat-fingered `curl`, or a leaked admin key would be re-published by every subsequent deploy and never expire. Demonstrated empirically against a mock Admin API — the deploy re-published `0.0.0.0/0` over the template's deny-all and logged it as a normal "preserving" line. Fix: refuse to preserve any entry broader than `MAX_PRESERVE_PREFIX` (`/24`), fall back to the template's deny-all, and say so loudly. Refusing an illegitimate grant is a deliberate exception to "a deploy never revokes" — the rule protects an operator's own narrow grant, not an unbounded one. `keycloak-admin-access.sh`'s `MIN_GRANT_PREFIX` must stay `>=` this value or the script could issue a grant the next deploy then refuses.
-- **Consequence to document loudly**: grants no longer self-expire. The earlier design leaned on "the next deploy reverts it"; owner call is that a deploy must never revoke access mid-session, so `revoke` is now the *only* thing that closes a grant. `keycloak-admin-access.sh` and the instructions file both say so explicitly.
-- **Done when**: a route push preserves a narrow grant, refuses a broad one, and applies deny-all to a route that has none.
-- **Test**: `common/scripts/tests/route-whitelist-preservation-check.sh` — six cases against a mock Admin API on loopback, offline. Verified it fails when `MAX_PRESERVE_PREFIX` is weakened.
-- **Depends on**: T6.2.0 [deploy].
+##### T1.4 [specs] — BR-DATA-026 backfill binds revoked pairs too
+- **Build**: In `01_data_model.md:249-264`, drop `AND l.revoked_at IS NULL` from the backfill `SELECT`
+  and add the rationale: a revoked pair's binding grants nothing today (BR-DATA-003's link term is
+  false), and keeping it makes pre-migration pairs obey the same "bindings outlive revocation"
+  property as every post-Phase-8 pair — otherwise re-linking an old child restores the link but
+  silently not the visibility. Also update the "Rules" bullet so the property is stated without a
+  pre/post-migration exception.
+- **Done when**: The migration SQL block contains no `revoked_at` filter and the asymmetry is not documented as accepted behaviour anywhere in BR-DATA-026.
+- **Test**: `grep -A8 'INSERT INTO parent_content_bindings' target/requirements/01_data_model.md | grep -c revoked_at` returns 0.
+- **Depends on**: None
 
-##### T6.2.0b [deploy] — Grant/revoke script for on-demand admin access
-- **Build**: `common/scripts/keycloak-admin-access.sh` with `status` / `grant [CIDR]` / `revoke`, writing the whitelist on routes `keycloak-admin`, `keycloak-master-realm` and `keycloak-admin-resources` directly through the APISIX Admin API. Sub-path `PATCH /apisix/admin/routes/{id}/plugins/ip-restriction/whitelist` so the route's WAF directives, rate limits and upstream are left untouched — a whole-route `PUT` would mean reconstructing all of that by hand. `grant` with no argument detects the caller's **public** IP; it refuses `0.0.0.0/0`. `revoke` resets to `[127.0.0.1/32]`, never an empty array (fails the plugin's schema). Grants are intentionally **not** persisted — the next deploy re-templates from the repo and reverts them, so a forgotten grant cannot outlive a deploy. Resolve `APISIX_ADMIN_KEY` through the same fail-closed OpenBao hook `setup.sh:115-121` uses. Document the runbook in `.github/instructions/keycloak.instructions.md`.
-- **Done when**: the script grants, reports and revokes against a live APISIX, and the runbook is in the instructions file.
-- **Test**: `bash common/scripts/keycloak-admin-access.sh status` lists all three routes as `deny-all` on a freshly deployed host; `grant 203.0.113.4/32` then `status` shows them granted; `revoke` then `status` returns all three to `deny-all`.
-- **Depends on**: T6.2.0 [deploy].
+##### T1.5 [backend] — V44 schema half
+- **Build**: New `alembic/versions/V44_parent_content_bindings.py`, `revision="V44"`,
+  `down_revision="V43"`, modelled on `V40_adopt_lineage_source_node_id.py`. `upgrade()` creates
+  `parent_content_bindings` (composite PK, FK to `course_path_nodes.id` ON DELETE CASCADE) +
+  `ix_parent_content_bindings_child`, then three `op.add_column(..., sa.Column("root_node_id",
+  sa.UUID(), nullable=True))`. `downgrade()` drops the three columns, the index and the table.
+  Docstring carries the worker-stop precondition (`constraints.md:117`).
+- **Done when**: `alembic upgrade head` on an empty DB reaches V44 and `alembic downgrade V43` returns cleanly.
+- **Test**: New `tests/unit/test_v44_migration.py` (mirroring `test_v40_migration.py`) asserts `parent_content_bindings` exists after upgrade and is gone after downgrade.
+- **Depends on**: T1.1 [backend], T1.2 [backend]
 
-##### ~~T6.2.1 [deploy] — Add `KC_HOSTNAME_ADMIN` to the Keycloak service~~ — ⟲ **SUPERSEDED by T6.2.0** (shipped, then reverted; kept as record)
-- **Build**: ~~Add `KC_HOSTNAME_ADMIN=${KC_HOSTNAME_ADMIN}` to the keycloak service environment block in `common/docker-compose.yml`.~~ Shipped in v2026.7 and broke the staging admin console. Its test — `KC_HOSTNAME_ADMIN != KC_HOSTNAME` — is satisfied by any wrong value, which is exactly how a dead address passed. **Lesson carried forward to T6.2.5/T6.2.6**: a `*_HOSTNAME_*`/`*_URL` assertion must compare against the live `docker port` mapping, never against another variable.
+##### T1.6 [backend] — V44 root_node_id backfill
+- **Build**: In V44's `upgrade()`, after the DDL, one recursive CTE anchored on `owner_type='parent'
+  AND parent_id IS NULL` propagating `root_id` down `parent_id`, then three `UPDATE ... FROM tree`
+  statements — `course_path_nodes.id = tree.id`, `topics.course_path_node_id = tree.id`,
+  `exam_templates.course_path_node_id = tree.id`. Both `course_path_node_id` columns are NOT NULL, so
+  no parent-owned row can be missed. Platform rows keep `root_node_id NULL`.
+- **Done when**: After upgrade, `SELECT count(*) FROM topics t JOIN course_path_nodes n ON n.id=t.course_path_node_id WHERE n.owner_type='parent' AND t.root_node_id IS NULL` returns 0.
+- **Test**: Integration test seeds a 3-level parent tree with topics and asserts every row's `root_node_id` equals the root's id, self-referential on the root.
+- **Depends on**: T1.5 [backend]
 
-##### ~~T6.2.1a / T6.2.1b / T6.2.2~~ — ⟲ **SUPERSEDED by T6.2.0** (kept as record; see TASKS.md for the full incident notes)
-- T6.2.1a re-seeded `KC_HOSTNAME_ADMIN` to restore the staging console. Its two operational findings survive the reversal and are still true: `rotate-secret.sh`'s `[restart-container]` argument does **not** apply to compose-env values (`Config.Env` is fixed at create time — a **recreate** is required), and `{env}/.env.runtime` does not exist between deploys and must be regenerated the way `build_compose_cmd` does (`deploy-lib.sh:244-252`).
-- T6.2.1b asked for a Tailscale ACL opening `tcp:8180`. **No longer required.** Optional break-glass only, for running `setup-keycloak.sh` by hand from an operator box; it is not an admin-console path (`KC_HOSTNAME_STRICT=true` rejects browser use).
-- T6.2.2 ran 2026-08-12 and **failed**, producing the two measurements that killed the tailnet model.
-
-##### T6.2.3 [deploy] — Replace plugin-stripping with a deny-all whitelist
-- **Build**: Net deletion in `common/scripts/template-configs.sh`. At `:152`, substitute `127.0.0.1/32` into `value` instead of setting `strip_ip_restriction=true`. Delete the `jq del(.plugins["ip-restriction"])` block at `:168-172` in full, including its "no restriction — drop the whole plugin" comment. An empty whitelist array fails `ip-restriction`'s own schema, so `127.0.0.1/32` is the schema-valid expression of deny-all — and because `real-ip` resolves the client address from `cf-connecting-ip` in prod, no external client can ever present it. The plugin is now present regardless of how the variable resolves, which also makes `prod/.env.config.sh:23`'s explicit `""` harmless: the mechanism no longer depends on the value.
-- **Done when**: `template-configs.sh` contains no `strip_ip_restriction` variable and no `jq del` call.
-- **Test**: `! grep -qE 'strip_ip_restriction|del\(\.plugins' common/scripts/template-configs.sh` exits 0.
-- **Depends on**: T6.2.0 [deploy]. *(Was T6.2.2 — the tailnet gate it waited on is withdrawn. The `authServerUrl` question logged against this task on 2026-08-12 is **moot**: route 14 stays reachable from a granted address, so the login redirect resolves normally. Amended: the default must also cover the **unset** case, not just empty, so the guard moves ahead of the `[ -v ]` check.)*
-
-##### T6.2.4 [deploy] — Regression test that fails if fail-open returns
-- **Build**: Add a test to `common/scripts/tests/` that renders routes `13-keycloak-admin.json`, `14-keycloak-master-realm.json` and `15-keycloak-admin-resources.json` with `KEYCLOAK_ADMIN_ALLOWED_CIDR` unset and asserts the whitelist equals `["127.0.0.1/32"]` — assert the *presence and value*, not the absence of the key. This is the regression the whole subgoal exists to prevent; the original defect produced three cheerful `INFO: ip-restriction disabled` lines and nothing else.
-- **Done when**: the test passes on the fixed script and fails when the `jq del` block is restored.
-- **Test**: `KEYCLOAK_ADMIN_ALLOWED_CIDR= bash common/scripts/template-configs.sh && jq -e '.plugins["ip-restriction"].whitelist == ["127.0.0.1/32"]' .templated/13-keycloak-admin.json` exits 0.
-- **Depends on**: T6.2.3 [deploy].
-
-##### T6.2.5 [deploy] — Apply the deny-all on staging
-- **Build**: Re-template and push routes 13/14/15 on staging: `deploy.sh --steps apisix_routes` (→ `setup.sh --routes-only`). No version bump and no image pull. Then run T6.2.0b's script end-to-end on staging — `status` → `grant` → console loads → `revoke` — because staging is where a mistake is cheap.
-- **Done when**: the staging public Keycloak console path returns 403 by default, 200 after `grant`, 403 again after `revoke`, and app login is unaffected throughout.
-- **Test**: `[ "$(curl -o /dev/null -sw '%{http_code}' https://<staging-host>/admin/master/console/)" = 403 ]` and `[ "$(curl -o /dev/null -sw '%{http_code}' https://<staging-host>/realms/haisir-realm-staging/.well-known/openid-configuration)" = 200 ]` both exit 0.
-- **Depends on**: T6.2.4 [deploy], T6.2.0b [deploy].
-
-##### T6.2.6 [deploy] — Apply the deny-all on prod — 🚫 **[PROD-GATED]**
-> **Deferred by owner call 2026-08-13**: no prod deploy until every non-prod-gated task in this phase is done. This task and T6.2.7 are what the prod window is *for*, not blockers on reaching it. Accepted consequence: prod's admin console stays publicly reachable until then.
-- **Build**: Re-template and push routes 13/14/15 on prod, same `--steps apisix_routes` path. B6's confirmed public reachability was `GET https://haisir.in/admin/master/console/ → 200` and `GET https://haisir.in/realms/master/.well-known/openid-configuration → 200`. **Before running: confirm `APISIX_ADMIN_ALLOWED_CIDR` on prod still admits the Admin API** (B5's `172.19.0.1/32`, not `127.0.0.1/32`) — if `setup.sh` cannot reach the Admin API, routes are never pushed and there is no way to grant access back. This is the v2026.6 failure mode and PLAN.md's T6.1.6 note flags exactly it.
-- **Done when**: the prod public Keycloak console path returns 403 and prod's app login is unaffected.
-- **Test**: `[ "$(curl -o /dev/null -sw '%{http_code}' https://haisir.in/admin/master/console/)" = 403 ]` exits 0 (was `200`), and `[ "$(curl -o /dev/null -sw '%{http_code}' https://haisir.in/realms/haisir-realm-prod/.well-known/openid-configuration)" = 200 ]` exits 0.
-- **Depends on**: T6.2.5 [deploy].
-
-##### T6.2.7 [deploy] — Prove admin access can still be granted on prod after the deny-all — 🚫 **[PROD-GATED]**
-- **Build**: Immediately after T6.2.6, run `keycloak-admin-access.sh grant` on prod, log into the admin console over the public hostname, then `revoke`. Split from T6.2.6 deliberately — "public is denied" and "admin still has a way in" fail independently, and the second one failing is a lockout, so it needs its own explicit pass/fail rather than riding on the 403 check.
-- **Done when**: an admin session is established on the prod console after a grant, and the console returns to 403 after the revoke.
-- **Test**: `keycloak-admin-access.sh grant && [ "$(curl -o /dev/null -sw '%{http_code}' https://haisir.in/admin/master/console/)" = 200 ] && keycloak-admin-access.sh revoke && [ "$(curl -o /dev/null -sw '%{http_code}' https://haisir.in/admin/master/console/)" = 403 ]` exits 0.
-- **Depends on**: T6.2.6 [deploy].
-
-##### T6.2.8 [deploy] — Fix `config.yaml`'s inaccurate `allow_admin` default comment
-- **Build**: `common/apisix_conf/config.yaml:94`'s comment claims `{{TAILSCALE_ADMIN_CIDR}}` "defaults to `127.0.0.1/32` when unset" — no such default exists. T6.2.3's deny-all guard lives in `template-configs.sh` and is gated on `.json` output; `config.yaml` is YAML and never enters that branch. Found while implementing T6.2.3, filed here 2026-08-13. Not a live exposure today — `TAILSCALE_ADMIN_CIDR` and `APISIX_ADMIN_ALLOWED_CIDR` are both seeded in `secret/haisir/infra` and gated `envs=staging,prod` in `deploy-required-keys.txt`, so a missing/empty value on those envs already fails the render closed at the gate, before this comment's claim would ever be tested. The gap is narrower than that: an env outside the gate, or a value that resolves to blanks-only rather than empty, has no fallback the comment promises. Fix the comment to state the true behavior, or extend the deny-all guard to also cover `.yaml`/`.yml` output — owner call on which.
-- **Done when**: `config.yaml`'s comment accurately describes what happens when `TAILSCALE_ADMIN_CIDR` is unset (either because the guard now covers it, or because the comment says there is no default and points at the gate as the real backstop).
-- **Test**: manual read — the comment and the code agree once this lands; no automated assertion, this is a documentation-accuracy fix.
-- **Depends on**: T6.2.3 [deploy].
+##### T1.7 [backend] — V44 bindings backfill
+- **Build**: In the same `upgrade()`, the amended BR-DATA-026 insert: `INSERT INTO
+  parent_content_bindings (root_node_id, child_sub) SELECT n.id, l.child_sub FROM course_path_nodes n
+  JOIN parent_child_links l ON l.parent_sub = n.owner_id WHERE n.owner_type='parent' AND n.parent_id
+  IS NULL ON CONFLICT DO NOTHING` — no `revoked_at` filter (T1.4), `ON CONFLICT` because a re-linked
+  pair has two link rows.
+- **Done when**: After upgrade, every (parent root, child) pair that had any link row — active or revoked — has exactly one binding row.
+- **Test**: Fixture with one active and one revoked link for the same parent root asserts `SELECT count(*) FROM parent_content_bindings WHERE root_node_id=:root` == 2.
+- **Depends on**: T1.5 [backend], T1.4 [specs]
 
 ---
 
-### G6.3 — The seven paths are committed, scanned, and sourced from the release
+### G1.2 — Write path stamps root_node_id and bindings
 
-**Subgoal**: The seven paths are tracked in git, gitleaks scans them for real, no `REMOTE_*` variable can be sourced from a committed file into a CI workspace, and the rsync no longer treats the remote copy as authoritative.
-**Subgoal test**: `git ls-files` lists all seven paths; `gitleaks detect --no-git` over the repo exits 0; `git grep 'REMOTE_HOST' --` over the seven literal paths returns nothing; and `deploy-lib.sh` carries no `--exclude` for any of the three filenames.
-**Repos**: [deploy]
+**Subgoal**: Every parent-owned row created after V44 carries its `root_node_id`, and every root is
+bound to at least one actively-linked child at the moment it is created.
+**Subgoal test**: Integration — `POST /api/parent/curriculum/nodes` without `child_subs` → 400; with
+an unlinked child → 404 and zero rows written; with `[A,B]` → 201 and 2 binding rows, and the created
+root's `root_node_id` equals its own id. `POST /adopt {source_node_id, child_subs:[A,B]}` → one cloned
+tree, every cloned node and topic carrying the cloned root's id, and exactly 2 binding rows.
+**Repos**: [backend]
 
-> **This is ONE COMMIT, and the graph now enforces it rather than describing it.** The env rsync at `deploy-lib.sh:136-144` carries `--delete` (`:142`), and the excludes at `:139-141` are currently the only thing protecting the remote copies from it. Committing the files without removing the excludes leaves the remote copy authoritative; removing the excludes without committing the files deletes them off the host; committing them without stripping `REMOTE_*` makes `load_env_config` overwrite the Jenkins-injected SSH target on the very next CI run. In draft v1 these were four tasks with an ordering note — a legal topological order existed that shipped the credential clobber. They are one task here.
+##### T1.8 [backend] — ParentContentBindingRepository
+- **Build**: `src/infrastructure/repositories/parent_content_binding_repository.py` with
+  `add_many(root_node_id, child_subs)` (bulk insert, `ON CONFLICT DO NOTHING`), `delete(root_node_id,
+  child_sub)` returning a bool, `list_for_root(root_node_id) -> list[str]`, `list_for_child(child_sub)
+  -> list[UUID]`, `exists(root_node_id, child_sub) -> bool`. Follow `ParentChildLinkRepository`
+  (`user_metadata_repository.py:299`): plain `AsyncSession`, `flush()` not `commit()`.
+- **Done when**: All five methods round-trip against a seeded binding row.
+- **Test**: `add_many(root, ["a","b"])` then `list_for_root(root) == ["a","b"]`.
+- **Depends on**: T1.1 [backend]
 
-##### T6.3.1 [deploy] — Precondition: scan the seven paths for secret and topology residue
-- **Build**: Before the files land in git, confirm each of the seven holds only ports, public hostnames, image tags, feature flags and `VERSION=` — no secret-shaped values (Phase 5.6 migrated them all to KV) and no host-topology values (G6.1 moved those). Run the existing `common/scripts/tests/full-plaintext-elimination-scan.sh` (it lives under `common/scripts/tests/`, alongside `plaintext-residue-scan.sh` — not under `common/openbao/`) over all three environments. Anything still present is a G6.1 gap to close there, not a new exception to record here. This is a gate on T6.3.2, not part of its commit.
-- **Done when**: `full-plaintext-elimination-scan.sh` reports zero migrated-key-name residue across dev, staging and prod.
-- **Test**: `bash common/scripts/tests/full-plaintext-elimination-scan.sh` exits 0.
-- **Depends on**: T6.1.9 [deploy].
+##### T1.9 [backend] — Bind-time validation is all-or-nothing
+- **Build**: `ParentCurriculumService.bind_children(root_id, child_subs, user)` — resolve the root via
+  `repo.get_node_by_id_and_owner` (None → 404 oracle), then for every sub check
+  `parent_child_link_repo.exists(parent_sub=user.sub, child_sub=sub)`; a single miss returns `None`
+  (→ 404, per BR-SEC-024: not 403, so an unlinked sub is indistinguishable from a nonexistent one)
+  with **no** insert. Only on a clean sweep call `add_many`. Inject `AbstractParentChildLinkRepository`
+  + the new binding repo into `ParentCurriculumService.__init__` and `get_service`
+  (`parent_curriculum.py:70`).
+- **Done when**: A two-sub request where one sub is revoked writes zero binding rows.
+- **Test**: `bind_children(root, [linked, revoked], user)` returns None and `list_for_root(root) == []`.
+- **Depends on**: T1.8 [backend]
 
-##### T6.3.2 [deploy] — Land the seven paths, the scanner and the sync in one commit
-- **Build**: One commit, five edits, none of which is safe without the others:
-  **(a) `.gitignore` negations by exact name.** `.gitignore:1` is `.env*`, which currently excludes all seven. Add `!dev/.env`, `!staging/.env`, `!prod/.env`, `!dev/.env.config.sh`, `!staging/.env.config.sh`, `!prod/.env.config.sh`, `!common/.env.config.common.sh` — seven lines written out individually, no glob, no `!**/.env.config.sh`. `.env.local` and every other `.env*` file stays ignored.
-  **(b) Strip `REMOTE_*` from the committed files.** Delete `REMOTE_HOST`, `REMOTE_USER` and `REMOTE_DEPLOY_DIR` outright from `staging/.env.config.sh:36`, `prod/.env.config.sh:34` and `common/.env.config.common.sh`. `${VAR:-default}` is **not** an acceptable substitute — that is the same decorative-`:-` pattern T6.1.6 deletes. Today CI never sees these files, so `deploy.sh:195`'s `elif [[ -z "${REMOTE_HOST:-}" ]]` branch is taken and the Jenkins credentials survive; once committed they exist in the workspace, `load_env_config` sources them, and `export REMOTE_HOST=...` **overwrites the credential**, pointing the deploy at whatever host the file names. Safe to remove: every consumer is deploy-client-side (`deploy.sh`, `deploy-lib.sh`, `deploy-remote-common.sh`, `common/scripts/tests/test-runner.sh`, `verify-setup.sh`), and nothing on a staging or prod host reads them.
-  **(c) Make gitleaks actually scan the filenames.** Delete the two allowlist entries at `.gitleaks.toml:156-157` (`'''(^|\/).*\.env\.config\.sh$'''` and `'''(^|\/).*\.env\.config\.common\.sh$'''`) — they existed because those files were the intentional secrets store, which BR-SEC-011 no longer permits. Add `# pragma: allowlist secret` to `dev/.env:13` (`PGADMIN_DEFAULT_PASSWORD`), a local-only tool credential in the only environment where pgadmin exists and the single recorded BR-SEC-011 exception.
-  **(d) Delete the five rsync excludes.** In `common/scripts/deploy-lib.sh`, delete `--exclude='.env'` and `--exclude='.env.config.common.sh'` from the common sync (`:130-131`) and `--exclude='.env'`, `--exclude='.env.config.sh'`, `--exclude='.env.config.common.sh'` from the env sync (`:139-141`). Keep `--exclude='.env.local'` at `:129`. The env sync's `--delete` at `:142` stays; with the files committed it is correct rather than dangerous. Do **not** add `--chmod` to either invocation (see T6.4.1).
-  **(e) Delete the `prepare_remote()` backup/restore block.** Delete `deploy-lib.sh:207-231` — the three `cp … .bak` calls before the wipe and the three `mv` restores after, plus the comment claiming these files "live only on the remote (never committed, excluded from rsync) and must survive the wipe-and-recreate cycle". That premise is exactly what BR-SEC-022 reverses. Leave the `rm -rf` + `mkdir -p` itself intact; the rsync now repopulates.
-- **Done when**: `git show --stat HEAD` lists `.gitignore`, `.gitleaks.toml`, `common/scripts/deploy-lib.sh` and all seven config paths as a single commit.
-- **Test**: `[ "$(git ls-files | grep -cE '^(dev|staging|prod)/\.env(\.config\.sh)?$|^common/\.env\.config\.common\.sh$')" = 7 ]` exits 0.
-- **Depends on**: T6.1.2 [deploy], T6.1.9 [deploy], T6.2.7 [deploy], T6.3.1 [deploy].
+##### T1.10 [backend] — child_subs on the two create payloads
+- **Build**: Add `child_subs: list[UUID4] | None = None` to `ParentNodeCreate` and `child_subs:
+  list[UUID4] = Field(min_length=1)` to `AdoptRequest` (`src/schemas/course_path_node.py:34-58`). In
+  `create_node` (`parent_curriculum.py:158`) raise `DomainValidationError` → 400 when `parent_id is
+  None` and `child_subs` is empty/absent — same shape as the existing `category_id` 400. Child-node
+  creates ignore the field. No single-child fallback (owner call). Update the ~19 signature-only call
+  sites in `tests/unit/domain/test_services/test_parent_curriculum_service.py` and the root-creating
+  tests in `tests/unit/routes/test_parent_curriculum.py` (lines 281/314/344/362/382/404) plus the 5
+  adopt tests (580/600/629/645/662) in the same commit.
+- **Done when**: `POST /nodes` with `parent_id=None` and no `child_subs` returns 400 and creates nothing.
+- **Test**: `test_parent_curriculum.py::TestCreateNode::test_root_without_child_subs_400` asserts `response.status_code == 400`.
+- **Depends on**: None
 
-##### T6.3.3 [deploy] — Verify no committed config path carries a `REMOTE_*` assignment
-- **Build**: Assert (b) above landed, using the seven literal pathspecs — no `*/.env` or `*/.env.config.sh` glob, which would match outside the scope guard. This is the check that a future edit reintroducing `REMOTE_HOST=` into a committed file trips.
-- **Done when**: none of the seven committed paths contains `REMOTE_HOST`, `REMOTE_USER` or `REMOTE_DEPLOY_DIR`.
-- **Test**: `! git grep -qE 'REMOTE_HOST|REMOTE_USER|REMOTE_DEPLOY_DIR' -- dev/.env staging/.env prod/.env dev/.env.config.sh staging/.env.config.sh prod/.env.config.sh common/.env.config.common.sh` exits 0.
-- **Depends on**: T6.3.2 [deploy].
+> **Largest single task in the phase, deliberately not split.** It carries two schema changes, the
+> 400, and ~32 test-function updates. The tests must move in the same commit or the suite breaks, so
+> splitting would produce a knowingly-red intermediate state.
 
-##### T6.3.4 [deploy] — Supply all three `REMOTE_*` vars as Jenkins credentials
-- **Build**: In `Jenkinsfile.deploy`, bind `REMOTE_DEPLOY_DIR` as a third secret-text credential alongside the existing `REMOTE_HOST`/`REMOTE_USER`, rather than relying on `deploy.sh:204`'s `~/haisir-deploy` fallback expanding correctly inside a quoted rsync target. Every CI deploy from T6.4.2 onward needs this binding present.
-- **Done when**: the deploy job's environment block binds all three credentials.
-- **Test**: A CI deploy run's console log shows the rsync target as an absolute path with no literal `~`.
-- **Depends on**: T6.3.2 [deploy].
+##### T1.11 [backend] — create_node stamps root_node_id
+- **Build**: In `ParentCurriculumService.create_node` (`parent_curriculum_service.py:82`), set
+  `root_node_id=node.id` when `parent_id is None`, else `root_node_id=parent.root_node_id` (the parent
+  was already owner-resolved at `:127`). Add the field to the `CoursePathNode` domain model and the
+  `CoursePathNode` constructor call at `:134`.
+- **Done when**: A root's `root_node_id` equals its own id; a child's equals its parent's.
+- **Test**: `create_node(parent_id=root.id, ...)` returns a node whose `root_node_id == root.id`.
+- **Depends on**: T1.2 [backend]
 
-##### T6.3.5 [deploy] — Make `deploy.sh` fail closed on a missing SSH target
-- **Build**: Delete the two decorative defaults in `deploy.sh`: `:202` `REMOTE_HOST="${REMOTE_HOST:-${ENV}-default}"` (silently invents a hostname) and `:204` `REMOTE_DIR="${REMOTE_DEPLOY_DIR:-~/haisir-deploy}"`. Replace with an explicit abort when any of the three is unset. With the config files now committed, `:193-200`'s `elif` branch no longer guards this — the files always exist in the workspace, so the branch never fires and a missing credential would silently resolve to `staging-default`.
-- **Done when**: `deploy.sh` exits non-zero with a named error when `REMOTE_HOST` is unset.
-- **Test**: `env -u REMOTE_HOST bash common/scripts/deploy.sh --env staging --dry-run 2>&1 | grep -q REMOTE_HOST` exits 0 with the script itself non-zero.
-- **Depends on**: T6.3.4 [deploy].
+##### T1.12 [backend] — create_node binds the named children
+- **Build**: After the successful `repo.add(node)` in `create_node`, when `parent_id is None`, call
+  `bind_children(node.id, child_subs, user)` in the same transaction; on a validation miss, roll back
+  and return None so the route 404s without an orphan root.
+- **Done when**: A root create naming two linked children leaves exactly two binding rows; a root create naming one unlinked child leaves zero nodes and zero bindings.
+- **Test**: `create_node(..., child_subs=[unlinked])` → the node count for that owner is unchanged.
+- **Depends on**: T1.9 [backend], T1.11 [backend], T1.10 [backend]
 
----
+##### T1.13 [backend] — adopt_node stamps root_node_id on every clone
+- **Build**: In `adopt_node` (`parent_curriculum_service.py:270`), allocate the cloned root's `new_id`
+  first, then set `root_node_id=<cloned root id>` on every cloned `CoursePathNode` and every cloned
+  `Topic` inside the existing single transaction. The cloned root is self-referential.
+- **Done when**: Every row produced by one adopt shares one `root_node_id` equal to the returned node's id.
+- **Test**: After `adopt_node`, `{n.root_node_id for n in cloned} == {root.id}`.
+- **Depends on**: T1.2 [backend]
 
-### G6.4 — The release artifact is the only source of the three files on any host
+##### T1.14 [backend] — adopt_node binds the named children
+- **Build**: After the clone commits, `bind_children(cloned_root.id, payload.child_subs, user)`; a
+  validation miss rolls back the whole clone. Leave `AlreadyAdoptedError` → 409
+  (`parent_curriculum.py:325`) and the V40 `ux_course_path_nodes_adopt_lineage` index **untouched** —
+  under many-to-many binding, one adopt per parent per source board is the correct invariant again.
+- **Done when**: An adopt naming two children produces exactly one cloned tree and two binding rows.
+- **Test**: `adopt_node(src, child_subs=[A,B])` → `len(list_for_root(cloned.id)) == 2` and one root node created.
+- **Depends on**: T1.9 [backend], T1.13 [backend], T1.10 [backend]
 
-**Subgoal**: The three files land from the release at mode 600 with content identical to the committed copies, with nothing preserved across the wipe.
-**Subgoal test**: Delete all three files off the staging host, run a CI deploy, and the files reappear from the release at `600` with contents matching the committed copies byte for byte.
-**Repos**: [deploy]
+##### T1.15 [backend] — Parent topic create stamps root_node_id
+- **Build**: In `ParentCurriculumService.create_topic` (the `POST /nodes/{node_id}/topics` path in
+  `parent_curriculum.py`), copy `root_node_id` from the owner-resolved node onto the new `Topic`.
+  `topics.course_path_node_id` is NOT NULL, so there is no other source and no orphan case.
+- **Done when**: A topic created under a parent node has that node's `root_node_id`.
+- **Test**: `create_topic(node_id=child_node.id, ...)` → `topic.root_node_id == root.id`.
+- **Depends on**: T1.11 [backend]
 
-##### T6.4.1 [deploy] — Tighten the three synced files to mode 600, by name
-- **Build**: After `sync_files_to_remote` in `common/scripts/deploy-lib.sh`, add one `remote_exec "chmod 600 ${REMOTE_DIR}/${env_name}/.env ${REMOTE_DIR}/${env_name}/.env.config.sh ${REMOTE_DIR}/common/.env.config.common.sh"`, naming the three paths explicitly. Do **not** use `--chmod=D700,F600` on the rsync invocations: those syncs cover all of `common/` and `{env}/`, so a blanket file mode is a scope-guard breach, and `F600` strips the exec bit off every synced script — `common/scripts/full-setup.sh:268` invokes `"$SCRIPT_DIR/setup.sh"` directly, so the next deploy after that change fails with permission denied on a file nobody edited.
-- **Done when**: `deploy-lib.sh` sets mode 600 on exactly the three named paths and adds no `--chmod` to either rsync.
-- **Test**: `! grep -q -- '--chmod' common/scripts/deploy-lib.sh` exits 0.
-- **Depends on**: T6.3.2 [deploy].
+> **`exam_templates.root_node_id` is deliberately inert.** No live endpoint creates a parent-owned
+> template — `src/api/routes/exam.py` is the only writer and it is platform-scoped via
+> `require_instructor()`. The column exists so `student_visibility_clause` stays a uniform
+> single-table helper across all three tables. There is no missing writer to hunt for.
 
-##### T6.4.2 [deploy] — Verify the files arrive at mode 600 from an empty start
-- **Build**: Delete all three files off the staging host, run a CI deploy, and check the resulting file permissions on the remote.
-- **Done when**: all three files exist on staging at mode `600` after a deploy that started with them absent.
-- **Test**: `[ "$(ssh <staging> "stat -c '%a' ~/haisir-deploy/staging/.env ~/haisir-deploy/staging/.env.config.sh ~/haisir-deploy/common/.env.config.common.sh" | sort -u)" = 600 ]` exits 0.
-- **Depends on**: T6.4.1 [deploy], T6.3.4 [deploy].
+##### T1.16 [backend] — POST /nodes/{root_id}/bindings
+- **Build**: New route in `parent_curriculum.py` taking `{child_subs: list[UUID4]}` (min 1),
+  `require_parent()` + `validate_csrf`, delegating to `bind_children`. 404 on unowned root or any
+  unlinked sub, 201 on success returning the updated `child_subs` list. Rejects non-root ids (binding
+  is anchored at the root only) with 400.
+- **Done when**: Binding a second child to an existing root makes that root's subtree visible to them with no content re-upload.
+- **Test**: `POST /nodes/{root}/bindings {"child_subs":["<B>"]}` → 201 and `list_for_root(root)` contains B.
+- **Depends on**: T1.9 [backend]
 
-##### T6.4.3 [deploy] — Verify the remote content matches the committed copy
-- **Build**: In the same deploy run, confirm nothing on the host was preserved across the wipe — the remote content must equal the committed content exactly, with no host-only line surviving.
-- **Done when**: each of the three remote files hashes identically to its committed counterpart.
-- **Test**: `[ "$(ssh <staging> "sha256sum ~/haisir-deploy/staging/.env" | cut -d' ' -f1)" = "$(sha256sum staging/.env | cut -d' ' -f1)" ]` exits 0.
-- **Depends on**: T6.4.2 [deploy], **T6.5.1 [deploy]** (added 2026-08-18 — see below).
+##### T1.17 [backend] — DELETE /nodes/{root_id}/bindings/{child_sub}
+- **Build**: New route deleting one binding row; 204 on success, 404 when the root is unowned or the
+  binding is absent. **No** in-flight-exam-session guard — BR-PAR-004's delete-block is deliberately
+  not extended to unbind, which is reversible and destroys nothing.
+- **Done when**: Unbinding a child with an in-progress exam session returns 204 and leaves the `exam_sessions` row intact.
+- **Test**: Unbind with an active session → 204 and the session row still exists.
+- **Depends on**: T1.8 [backend]
 
-> **⚠ DEPENDENCY CORRECTED 2026-08-18 after the first live run: this task also depends on T6.5.1,
-> and T6.5.1's stated dependency on *this* task is wrong.** The run returned 2 of 3 matching —
-> `.env.config.sh` and `common/.env.config.common.sh` byte-identical (so the sync path is correct and
-> no host-only line survived the wipe), `staging/.env` differing. The cause is not residue: it is
-> `deploy.sh` **Step 3** ("Update VERSION and image tags in remote staging/.env"), whose
-> `sed -i` calls at `:400,464,498` rewrite the host copy immediately *after* Step 2 syncs it. That is
-> the exact block T6.5.1 deletes, so this test cannot pass until T6.5.1 lands — while T6.5.1 was
-> written as waiting on this test. **Correct order: T6.5.1, then re-check this on the next deploy**
-> (no second wipe — T6.4.2 established bootstrap-from-empty independently).
->
-> **A first reading of this said the committed `.env` was stale in five values and needed operator
-> edits before T6.5.1. That was wrong, and the correction matters more than the claim did.** It was
-> inferred from log lines like `Setting GATEWAY_IMAGE_TAG=v2026.7 (manifest override)` — but the
-> deleted code's override path carried **no comparison**: it `sed`'d unconditionally whether or not
-> the value already matched, so that line only ever proved an override *existed*. T6.5.1's new
-> assertion (below) compares all seven keys against the committed file and **exits 0 on the real
-> v2026.7 manifest** — nothing was stale, no `.env` edit was ever needed.
->
-> **Which also gives the better explanation of the `.env` hash difference.** The deleted block wrote
-> *literal* tags over what the committed file stores as unexpanded refs — the old code has an
-> explicit comment about tags held as `v${VERSION}-${APP_ENV}`. Same meaning, different bytes. So the
-> divergence was never a wrong value on the host; it was the rewrite flattening a template. With the
-> rewrite gone the two copies should be byte-identical, and **T6.4.3 should pass on the next deploy
-> with no `.env` edit and no second wipe.**
->
-> *General lesson, since this is the second time in two days the same trap fired:* a log line that
-> reports an action is not evidence about the state that preceded it, unless the code took a branch
-> to decide. B22's own false negative was the same shape.
->
-> **Owner call this forces, and it belongs in `decisions.md` before T6.5.1 is built:** with Step 3
-> deleted, a release bump becomes an edit to a committed `.env`, and the manifest's `image_tags:`
-> block stops actuating anything and becomes documentation. Either accept that — it is BR-SEC-022's
-> actual premise, the release artifact as source of truth — or have the release process *generate*
-> the committed `.env` from the manifest so the two cannot drift. T6.5.3 already deletes `image_tags`
-> from the manifest template, which points at accepting it, but that was never stated as a decision.
+##### T1.18 [backend] — child_subs on parent root reads
+- **Build**: Add `child_subs: list[str] = []` to `CoursePathNodeRead` (`src/schemas/course_path_node.py:25`)
+  and populate it in `list_root_nodes` / `get_node_with_children` via one bulk query over the returned
+  root ids (single `WHERE root_node_id = ANY(...)`, not per-root). Platform reads and student reads
+  leave it empty — this is the parent's own builder view only, and it is what the privacy pill and
+  G3's per-child filter consume.
+- **Done when**: `GET /api/parent/curriculum/nodes` returns each root's real binding set.
+- **Test**: A root bound to A and B serialises `child_subs` of length 2.
+- **Depends on**: T1.8 [backend]
 
----
-
-### G6.5 — Version reconciliation is deleted, not repaired
-
-**Subgoal**: `deploy.sh` stops inferring image tags from whatever is on the host and instead asserts the manifest version equals the committed `VERSION=`; drift detection stays.
-**Subgoal test**: With the manifest version and `staging/.env`'s `VERSION=` deliberately mismatched, the Validate stage fails before any file reaches the host; with them equal, the deploy proceeds and never runs a remote `sed`.
-**Repos**: [deploy]
-
-> **`deploy.sh:6` is `set -euo pipefail`.** Every deletion below removes *reads and consumers together*. Deleting the six `*_IMAGE_TAG_OVERRIDE` reads at `:177-182` while `:266-268` and `:499-504` still reference them aborts every deploy on an unbound variable — which is why T6.5.2 is scoped to the full consumer set, not just the "display block" the draft named.
-
-##### T6.5.1 [deploy] — Delete the remote VERSION rewrite and the tag-reconciliation block
-- **Build**: Delete from `common/scripts/deploy.sh` the remote `sed -i 's/^VERSION=.*/VERSION=${VERSION}/'` at `:374` **together with its enclosing three-service guard at `:367-380`** (`_has_backend`/`_has_frontend`/`_has_gateway` and the `else` log line), and the **entire** tag-reconciliation block at `:394-485` — the SSH `grep` of the remote `.env`, `_old_env_vals`/`_old_version`/`_old_tags`, the `DEPLOY_TAG_VARS`/`DEPLOY_TAG_OVERRIDES`/`TAG_TO_COMPOSE_SVC` maps and their upsert loop. (Draft v1 said `:396-420`; the block actually runs to `:485`.) **Keep `:535-574`** — that compares `.env` against running containers, which is drift detection, not version arithmetic, and it stays useful once the file is authoritative. Its `postgres:POSTGRES_IMAGE_TAG:haisir-db-${ENV}` entry stays too (see T2.2).
-- **Done when**: `deploy.sh` performs no remote write to `${REMOTE_DIR}/${ENV}/.env`.
-- **Test**: `bash -n common/scripts/deploy.sh && ! grep -q "sed -i 's/\^VERSION=" common/scripts/deploy.sh` exits 0.
-- **Depends on**: ~~T6.4.3 [deploy]~~ — **inverted 2026-08-18, this precedes T6.4.3**; see the note on T6.4.3.
-
-✅ **DONE 2026-08-18** (owner call, mid-session: *"it must not override anymore in deploy — it is the
-responsibility of the developer/operator/devops to do before committing/releasing"*). Step 3 deleted
-in full: the `VERSION` `sed` and its three-service guard, and the entire tag-reconciliation block
-(`_old_env_vals`/`_old_version`/`_old_tags`, the three maps, the upsert loop). Step 3c drift
-detection kept, as specified. `deploy.sh` now performs **no write of any kind** to the remote `.env`;
-the only remaining remote `.env` reference is the pre-existing `.env.runtime` cleanup trap, which is
-a different, rendered file. Verified: `bash -n` clean, ShellCheck clean at the repo's
-`--severity=warning` bar, `--dry-run` against the real v2026.7 manifest exits 0, and no identifier
-from the deleted block survives anywhere in the file.
-
-**An interim fail-closed assertion was added and then REPLACED the same day, by owner call.** The
-first version aborted when the manifest and the committed `.env` disagreed. Overruled: *"whatever the
-version is defined in .env file must be source of truth even if devops misses it and forgot to update
-it. its his responsibility."* It is now a **warning, not a gate** — the plan prints the `.env`
-version labelled authoritative, and when the two differ prints the manifest's claim beside it. The
-deploy proceeds on `.env`. What survives is the half that mattered: the log never announces a version
-that was not deployed, which is the B11/B20/B22 shape.
-
-**T6.5.4 is therefore more load-bearing, not less.** With no deploy-side gate, a forgotten `.env` bump
-means the deploy pulls and recreates on the old image and reports success; a warning inside a
-1300-line log is not a gate. T6.5.4's Validate-stage check, which fails the build before `deploy.sh`
-is invoked, is. It is now an *equality report*, never a repair — nothing may rewrite `.env`.
-
-**Scope grew beyond the written task, by owner decision — `services:` is now a map.** Full rationale
-in `decisions.md` (2026-08-18). `recreate: true` runs `--force-recreate`; the default `false` is
-today's behaviour.
-
-**⚠ The justification first written here was wrong and is corrected in `decisions.md`.** It claimed
-plain `up -d` misses a removed environment variable or a rotated `.env` secret, and that Keycloak
-had to be recreated by hand on 2026-08-13 as a result. Compose *does* see both — they change its
-config hash — and the 2026-08-13 event is recorded in TASKS.md as an automatic `Recreate` confirmed
-in the deploy log. **The real gap is narrower:** compose hashes a mount path, not the bytes behind
-it, so the *content* of a bind-mounted or volume-delivered file read once at startup is invisible to
-it. `deploy.sh` Step 8's hand-rolled "rewrite the APISIX config volume, then restart APISIX" is the
-existing proof that this gap is real; `recreate: true` is its general form. Flat-list manifests are rejected rather than read as "no
-flags"; `v2026.7`'s was converted in place because the prod window still runs it. `worker`'s auto-add
-moved above `display_plan`, fixing a pre-existing mismatch where the plan under-reported by one
-service.
-
-**Test**: `common/scripts/tests/manifest-services-map-check.sh` (new, wired into the Jenkinsfile
-Static Security stage) — 11 assertions over every yq expression `deploy.sh` uses, the recreate
-default, dashed service names, `!!seq`/`!!map`/`!!null` detection, and that no committed manifest
-still carries `image_tags`. It also encodes a trap it found: **the `yq` snap cannot read files under
-`/tmp`** (private mount namespace — exits 0, prints nothing), so fixture-based YAML tests written to
-a `mktemp -d` silently compare empty against empty. Fixtures live in the repo, and the test probes
-that yq can actually read one before trusting any result.
-
-##### T6.5.2 [deploy] — Delete the override reads and every consumer of them
-- **Build**: Delete, in one change: the six `*_IMAGE_TAG_OVERRIDE=$(yaml_read '.image_tags.…')` reads at `deploy.sh:177-182`; the `ROLLBACK_VERSION`/`ROLLBACK_NOTES` reads at `:169-170`; the image-tags display block at `:238-261` **and its `_auto_bumped` loop at `:262-274`**, which reads three of the same vars outside the display block proper; the rollback display at `:299-301`; and **the manifest-override auto-extend block at `:488-520` in full** (`_override_to_compose`, `_override_vals` and their loop) — a second, separate block that reads all six vars at `:499-504` and that draft v1 deleted nothing from. With `set -u` in force and the reads gone, leaving either `:266` or `:499` behind aborts every deploy. With the committed `.env` authoritative, per-service manifest overrides have nothing to override.
-- **Done when**: `deploy.sh` contains no `_IMAGE_TAG_OVERRIDE` or `ROLLBACK_VERSION` identifier.
-- **Test**: `bash -n common/scripts/deploy.sh && ! grep -qE 'IMAGE_TAG_OVERRIDE|ROLLBACK_VERSION' common/scripts/deploy.sh` exits 0.
-- **Depends on**: T6.5.1 [deploy].
-
-##### T6.5.3 [deploy] — Remove the dead manifest fields
-- **Build**: Remove the `image_tags` block and `rollback.previous_version` from `releases/manifest-template.yaml`, including the "deploy.sh upserts each specified key as `*_IMAGE_TAG=` in the remote `.env`" comment that documents behaviour T6.5.1/T6.5.2 deleted. Leave `version`, `description`, `services` and `steps`.
-- **Done when**: `manifest-template.yaml` contains no `image_tags` or `previous_version` key.
-- **Test**: `yq -e '.image_tags == null' releases/manifest-template.yaml` exits 0.
-- **Depends on**: T6.5.2 [deploy].
-
-##### T6.5.4 [deploy] — Assert manifest version equals the committed `VERSION=`
-- **Build**: Add an assertion to `Jenkinsfile.deploy`'s `stage('Validate')` (`:70`) that the manifest's `version` equals the `VERSION=` line in the committed `{env}/.env`, failing the stage on mismatch. This is what replaces the reconciliation: the committed file is the source of record, so the operation is an equality check, not a repair. BR-SEC-022 is not shippable without it.
-- **Done when**: the Validate stage fails when the two values differ.
-- **Test**: With `staging/.env` set to `VERSION=2026.5` and the manifest to `version: "2026.7"`, the Validate stage exits non-zero before the Deploy stage runs.
-- **Depends on**: T6.5.3 [deploy].
-
-✅ **DONE 2026-08-18.** `common/scripts/tests/manifest-env-version-check.sh <manifest> <env>...`,
-called from `Jenkinsfile.deploy`'s `stage('Validate')`. Runs before any file reaches any host **and
-before the prod approval gate**, so a mismatch cannot burn an approval on something knowable at
-minute one. Env list follows `TARGET`: `staging`, or `staging prod` for `staging-and-prod`.
-
-**Written as a script rather than inline in the Jenkinsfile.** Inline was the obvious reading of
-"add an assertion to stage('Validate')", but it buries shell inside Groovy string interpolation where
-it is neither ShellCheck-able nor runnable locally — which is how a gate quietly stops working. The
-Jenkinsfile calls one line; the logic is testable.
-
-**It compares and never repairs**, and it reads **exactly one line** of each `.env` — the `VERSION=`
-assignment — printing nothing else, per CLAUDE.md's rule on these files.
-
-**Test deviation, stated plainly:** the literal test asks for `staging/.env` to be set to
-`VERSION=2026.5`. That was NOT done — editing a real `.env` to prove a check works is exactly the
-thing CLAUDE.md forbids, and it would leave a live environment file wrong if the run died midway.
-The same comparison is exercised against **fixture env directories** instead, which is strictly
-more coverage: four fail-closed paths (mismatch, `.env` missing, no `VERSION=` line, unreadable
-manifest version) plus the positive case, all in `manifest-contract-check.sh` (renamed from
-`manifest-services-map-check.sh`; 17 assertions, wired into the Jenkinsfile Static Security stage).
-It also asserts the real v2026.7 manifest matches both committed `staging/.env` and `prod/.env` —
-which it does today, so the prod window is not blocked by this gate.
-
-**Deliberate limit, worth stating because it is the remaining hole in BR-SEC-022's story:** this
-checks `VERSION` only. `GATEWAY_IMAGE_TAG` does not follow `VERSION`, and since T6.5.3 deleted
-`image_tags:` there is nothing in the manifest left to compare any tag against. A forgotten
-`GATEWAY_IMAGE_TAG` bump therefore still ships the old gateway silently. Two things narrow it:
-the mismatch message names the risk explicitly, and `/release-manifest` must now report every
-changed tag as an `.env` edit the operator owes. **That residual is closed by process, not code** —
-if it ever needs closing by code, the shape is a manifest field naming which tags a release expects
-to have changed, checked the same way.
+##### T1.19 [backend] — GET /api/parent/children?include_revoked=true
+- **Build**: Add an `include_revoked: bool = False` query param to `list_children`
+  (`src/api/routes/parent_children.py:31`); when true, `list_children_for_parent` uses a new
+  `get_links_for_parent` (no `revoked_at IS NULL` filter) and `ChildLinkView`/`ChildLinkWithProfile`
+  gain `revoked_at: datetime | None`. Default false — the shipped wire shape is unchanged for every
+  existing caller. This exists so the builder can render a binding to an unlinked child rather than
+  silently dropping it (the latent invisible grant).
+- **Done when**: A parent with one active and one revoked child gets 1 entry by default and 2 with the flag, the second carrying a non-null `revoked_at`.
+- **Test**: `GET /api/parent/children?include_revoked=true` returns 2 items; without the flag, 1.
+- **Depends on**: None
 
 ---
 
-### G6.6 — One deploy path, not two
+### G1.3 — Read path enforces both terms, everywhere
 
-**Subgoal**: The parallel manual deploy implementation is deleted, so every future change to the sync is applied once.
-**Subgoal test**: A local deploy performed with `deploy.sh` and the three `REMOTE_*` vars exported produces the same remote tree as a CI deploy, and `common/deploy-remote-common.sh` no longer exists.
-**Repos**: [deploy]
+**Subgoal**: A child sees and can reach a parent's content only when both an active link and a binding
+exist — on every SQL read path, on the Home Study grid, and through hAITU.
+**Subgoal test**: Integration — parent P, children A and B both actively linked, root R bound to A
+only. As B: `GET /api/student/nodes?owner_type=parent` omits R; `GET /nodes/{R_child}/topics` → `[]`;
+`GET /api/student/topic-contents/{id}` → 404; exam template list under R → `[]`; `POST
+/api/haitu/topic-doubt` on an R topic → 403. As A, all five succeed. Revoke A's link → all five fail
+for A on the next request with no cache flush.
+**Repos**: [backend]
 
-##### T6.6.1 [deploy] — Delete the manual deploy scripts
-- **Build**: Delete `common/deploy-remote-common.sh`, `staging/deploy-remote.sh` and `prod/deploy-remote.sh`. This is a separately written second implementation of the same sync that has already drifted from `deploy-lib.sh` — different excludes, a different backup set, and `${REMOTE_HOST}:` with no `user@` — and it is the reason B3's `other/` gap exists at all. Keeping it means applying every G6.4 change twice forever. **Must not start before G6.4 lands**: it is currently the only working path for a local deploy, so deleting it first retires the working path.
-- **Done when**: none of the three files exists.
-- **Test**: `! ls common/deploy-remote-common.sh staging/deploy-remote.sh prod/deploy-remote.sh` exits 0.
-- **Depends on**: T6.4.3 [deploy].
+##### T1.20 [backend] — The clause gains the binding EXISTS
+- **Build**: In `src/infrastructure/visibility.py:17-43`, add a third condition inside the existing
+  `and_(...)`: `select(1).select_from(_pcb).where(_pcb.c.root_node_id == table.c.root_node_id,
+  _pcb.c.child_sub == viewer_sub).exists()`. **Keep the `owner_id.in_(linked_parents)` term** —
+  BR-DATA-003 forbids optimising either away: dropping the link term leaves revoked parents readable;
+  dropping the binding term restores pre-Phase-8 behaviour. All 10 call sites
+  (`course_path_node_repository.py:67,108,143,166,237`; `topic_repository.py:43`;
+  `topic_content_repository.py:111,127`; `exam_repository.py:123,153`) inherit it with no edit,
+  because every table it is applied to now has `root_node_id`. Also update
+  `_assert_node_in_enrolled_subtree`'s docstring (`student_dashboard_service.py:252-256`) to name both
+  terms — its parent-owned early return is justified by this clause and the rationale must not drift.
+- **Done when**: A student actively linked to a parent but not bound to a root gets zero rows from every one of the 10 call sites.
+- **Test**: `tests/integration/routes/test_g6_visibility_student_read_paths.py` gains a case asserting a linked-but-unbound child receives `[]` from the topic list.
+- **Depends on**: T1.2 [backend], T1.6 [backend]
 
-##### T6.6.2 [deploy] — Take `REMOTE_HOST` from the environment in the test runner
-- **Build**: `common/scripts/tests/test-runner.sh:26-33` loads `REMOTE_HOST` from the env config to reach the host over SSH (`:157`, `:166-201`). T6.3.2 removed it from those files, so this is broken from the moment that commit lands. Change it to read `REMOTE_HOST` from the process environment and fail with its existing "Local tests require REMOTE_HOST to be set" message when absent — same fail-closed behaviour, different source.
-- **Done when**: `test-runner.sh` does not source the env config for `REMOTE_HOST`.
-- **Test**: `env -u REMOTE_HOST LOCAL_TESTS=true bash common/scripts/tests/test-runner.sh` exits non-zero.
-- **Depends on**: T6.3.2 [deploy], T6.6.1 [deploy].
+##### T1.21 [backend] — _resolve_parent_nodes filters service-side
+- **Build**: In `student_dashboard_service.py:219-231`, after `get_by_owner("parent", parent_sub)` at
+  `:230`, filter to `n.root_node_id in bound_root_ids` where `bound_root_ids = set(await
+  binding_repo.list_for_child(student_sub))` (one query, hoisted above the parent loop). Inject the
+  binding repo through `api/dependencies.get_student_dashboard_service`. **The filter must NOT go
+  inside `get_by_owner`** (`course_path_node_repository.py:461-473`): its only other caller is
+  `parent_curriculum_service.py:52`, the parent's own builder list, which would then show a parent
+  nothing of their own tree.
+- **Done when**: A linked-but-unbound child's `GET /api/student/nodes?owner_type=parent` returns `[]` while the parent's `GET /api/parent/curriculum/nodes` still returns the root.
+- **Test**: `tests/unit/domain/test_services/test_student_dashboard_service_parent_gate.py` gains a case asserting the unbound root is absent from the tree while `list_root_nodes` for the owner still contains it.
+- **Depends on**: T1.8 [backend]
 
-##### T6.6.3 [deploy] — Document the single deploy path
-- **Build**: Update `README.md` and `docs/` where they reference `deploy-remote.sh`: a local deploy is `deploy.sh` with `REMOTE_HOST`, `REMOTE_USER` and `REMOTE_DEPLOY_DIR` exported. One path, not two.
-- **Done when**: no committed documentation references `deploy-remote.sh`.
-- **Test**: `! git grep -q 'deploy-remote' -- '*.md'` exits 0.
-- **Depends on**: T6.6.2 [deploy].
+> **This is the whole goal's failure mode.** `_resolve_parent_nodes` resolves parent nodes in Python
+> and never touches `student_visibility_clause`. If it is missed, per-child binding is a **no-op on
+> the child's primary screen** while every exam/topic/content test still passes.
+
+##### T1.22 [backend] — hAITU gate gains the binding term
+- **Build**: In `haitu_doubt_service.py:153-171`, `_assert_parent_owned_access` currently checks only
+  `_parent_link_repo.exists(...)` and `topic.status == "live"`. Add `await
+  self._binding_repo.exists(topic.root_node_id, user_sub)` as a third mandatory condition, raising the
+  same `HaituAccessDeniedError` → 403. Inject the binding repo where `_parent_link_repo` is wired.
+  This is the one genuine access hole: without it a child can open a doubt thread on a sibling's topic
+  — invisible in the UI, reachable through hAITU.
+- **Done when**: A linked-but-unbound child gets 403 on `POST /api/haitu/topic-doubt` for a sibling's live parent-owned topic.
+- **Test**: `tests/unit/domain/test_services/test_haitu_doubt_service_parent_gate.py` gains `test_linked_but_unbound_child_403`.
+- **Depends on**: T1.8 [backend], T1.2 [backend]
 
 ---
 
-## G7 — Specs and phase record reflect what shipped
+### G1.4 — Parent binds content at create time (ships in lockstep)
 
-**Goal**: The two governing specs, the phase record and the decision log describe the delivered state, and the blast-radius review gate is satisfied.
-**Goal test**: `14_container_images.md` lists an actual pinned tag against every inventory row, `13_secrets_management.md`'s BR-SEC-022/023 read as shipped rather than target, and `phases.md`'s Phase 7.5 Outcome column is filled with two recorded independent security review passes.
+**Subgoal**: The parent chooses which children a root is for when creating or adopting it, and can see
+and change that set afterwards.
+**Subgoal test**: Integration (vitest + MSW) — open the Add Root modal with two linked children,
+submit without a selection → the submit button is disabled and no request fires; select both → the
+POST body carries `child_subs` of length 2; the builder pill then reads "Visible to Arjun and Meera";
+removing Meera via the editor fires `DELETE /nodes/{root}/bindings/{meera_sub}` and the pill reads
+"Visible to Arjun".
+**Repos**: [frontend]
+
+> These ship in the same release as G1.2 — `child_subs` is a hard 400 with no fallback, so an
+> un-updated frontend cannot create a root.
+
+##### T1.23 [frontend] — Child multi-select in the Add Root modal
+- **Build**: In `src/features/parent/components/parent-add-node-modal.tsx`, when creating a root (no
+  `parent_id`), render a "Who is this for?" checkbox group over `useParentChildren()`'s active
+  children, styled through `parent-add-node-modal.module.css` (no `style=` attributes — CSP,
+  `constraints.md:109`). Submit disabled while the selection is empty. Child-node creation renders no
+  such control.
+- **Done when**: The root form cannot be submitted with zero children selected.
+- **Test**: `tests/unit/features/parent/components/parent-add-node-modal.test.tsx` asserts the submit button has `disabled` until a child checkbox is checked.
+- **Depends on**: None
+
+##### T1.24 [frontend] — createNode sends child_subs
+- **Build**: Add `child_subs: string[]` to `CreateParentNodeInput`
+  (`src/features/parent/types/parent.types.ts`) and pass it through `parentCurriculumApi.createNode`
+  (`parent-curriculum-api.ts:137`) and `use-parent-node-mutations.ts`. Existing `fetchWithCSRFRetry` +
+  `buildApiHeaders` path unchanged.
+- **Done when**: The `POST /nodes` request body for a root contains the selected subs.
+- **Test**: A mocked fetch asserts `JSON.parse(body).child_subs` equals the selected array.
+- **Depends on**: T1.23 [frontend], T1.10 [backend]
+
+##### T1.25 [frontend] — Child multi-select in the Adopt modal
+- **Build**: Same checkbox group in `adopt-modal.tsx`, gating the "Import board curriculum" confirm
+  button. Copy makes the shared-tree semantics explicit ("one copy, shared by the children you pick").
+- **Done when**: Confirm stays disabled until at least one child is selected.
+- **Test**: `adopt-modal.test.tsx` asserts confirm is disabled with no selection and enabled after one check.
+- **Depends on**: None
+
+##### T1.26 [frontend] — adoptSubtree sends child_subs
+- **Build**: Add `child_subs: string[]` to `AdoptInput` and thread it through
+  `parentCurriculumApi.adoptSubtree` (`parent-curriculum-api.ts:208`) and `use-adopt.ts:9`. The
+  existing 409 "You have already adopted this board." handling stays — it is still the right invariant.
+- **Done when**: The `POST /adopt` body carries `child_subs`.
+- **Test**: A mocked fetch asserts the adopt body includes a two-element `child_subs`.
+- **Depends on**: T1.25 [frontend], T1.10 [backend]
+
+##### T1.27 [frontend] — Privacy pill renders the real binding set
+- **Build**: In `parent-curriculum-page.tsx`, replace the hardcoded pill with one derived from the
+  selected root's `child_subs` (T1.18) joined against `useParentChildren()` names: 1 child → "Visible
+  to Arjun"; 2 → "Visible to Arjun and Meera"; 3+ → "Arjun +2".
+- **Done when**: The pill text changes when a binding changes, with no hardcoded name anywhere in the component.
+- **Test**: `parent-curriculum-page.test.tsx` renders a root bound to two children and asserts the text "Visible to Arjun and Meera".
+- **Depends on**: T1.18 [backend]
+
+##### T1.28 [frontend] — Binding editor on an existing root
+- **Build**: A small popover on the privacy pill listing active children with checkboxes; checking
+  calls `POST /nodes/{root}/bindings`, unchecking calls `DELETE /nodes/{root}/bindings/{child_sub}`,
+  both via `fetchWithCSRFRetry` and invalidating `parentNodeTreeKey()`. This is the self-service
+  remedy for children linked after the migration, who get zero binding rows by design.
+- **Done when**: A child linked after the root was created can be granted access without recreating the root.
+- **Test**: Unchecking a child fires a DELETE to `/nodes/{root}/bindings/{sub}`.
+- **Depends on**: T1.16 [backend], T1.17 [backend], T1.27 [frontend]
+
+##### T1.29 [frontend] — Revoked-but-bound child greyed in the pill
+- **Build**: The pill/editor fetch children with `?include_revoked=true` (T1.19) and render any bound
+  sub whose link is revoked greyed with a "not linked" suffix. Without this the grant is invisible:
+  the parent repurposes the tree for one child, and the moment the other re-links they see everything
+  added while unlinked.
+- **Done when**: A root bound to a revoked child shows that child greyed rather than omitting them.
+- **Test**: With one revoked bound child, the pill contains that child's name and the string "not linked".
+- **Depends on**: T1.19 [backend], T1.27 [frontend]
+
+---
+
+### G1.5 — Regression fixtures survive the breaking change
+
+**Subgoal**: The existing backend suite exercises the new required field instead of failing on it.
+**Subgoal test**: `pytest tests/` is green with no test skipped or xfailed as a result of `child_subs`.
+**Repos**: [backend]
+
+##### T1.30 [backend] — linked_child fixture helper
+- **Build**: A `linked_child` fixture in `tests/integration/routes/conftest.py` creating a
+  `parent_child_links` row for the test parent and returning the child sub, plus a `bound_root` helper
+  that creates a root and its binding in one call. The ~32 affected test functions then differ only by
+  payload.
+- **Done when**: Both helpers are importable and produce a queryable link/binding pair.
+- **Test**: A smoke test asserts `linked_child` yields a sub for which `ParentChildLinkRepository.exists` is True.
+- **Depends on**: T1.8 [backend]
+
+##### T1.31 [backend] — Rewrite the cross-owner 404 sweep
+- **Build**: `tests/integration/routes/test_g3_1_cross_owner_404_sweep_integration.py:73,84,106` —
+  switch the three creation calls to the `linked_child` fixture and add `child_subs`. Add one case to
+  the sweep: parent A's root bound to child X is a 404 for parent A's *other* linked child Y on every
+  student read path.
+- **Done when**: The file passes and covers the linked-but-unbound case.
+- **Test**: The new sweep case asserts 404/empty for the unbound sibling on the topic-content route.
+- **Depends on**: T1.30 [backend], T1.20 [backend]
+
+##### T1.32 [backend] — Rewrite the E2E journey test
+- **Build**: `tests/integration/routes/test_g7_1_e2e_journey_integration.py:192,202` — the journey now
+  links a child before the root create/adopt and passes `child_subs`, then asserts the child sees the
+  tree end to end.
+- **Done when**: The full journey passes with bindings in place.
+- **Test**: The journey's student-read assertion returns the parent-built topic for the bound child.
+- **Depends on**: T1.30 [backend], T1.21 [backend]
+
+---
+
+### G1.6 — Specs stop contradicting the shipped rule
+
+**Subgoal**: No spec or guide still describes parent content as shared across every linked child, and
+the current-state docs match V44.
+**Subgoal test**: `grep -rn "no per-child curriculum\|visible to all linked children"` across
+`target/`, `current/` and `docs/` returns nothing.
 **Repos**: [specs]
 
-> **What makes the second review pass independent** (decided 2026-08-09). The Phase 7 G8 failure is the specification: both passes ran against the same commit range, so `92a4da2` fell through a gap neither reviewer knew existed, and differing `Reviewer:` lines would not have caught it. Independence here means three things, all asserted rather than asserted-to:
-> 1. **Different starting point, not just a different reviewer.** Pass A reviews the **diff** over the phase commit range. Pass B reviews the **end state** against BR-INFRA-001…007 and BR-SEC-011/022/023 **without reading the diff** — that is the pass that catches "internally consistent, wrong overall".
-> 2. **Fresh session, no shared context** for pass B. It must not inherit this plan's reasoning about why each change is correct.
-> 3. **Each pass declares the exact commit range it covered, per repo**, and T7.6 asserts the union of the two equals the phase range. This is the falsifiable part and the one that directly fixes the recorded failure.
+##### T1.33 [specs] — 03_student.md BR-STU-001
+- **Build**: `target/requirements/03_student.md:40` still reads "parent content only if active
+  `parent_child_links` exists", contradicting the updated BR-DATA-003 and the BR-STU-002 note two
+  lines below it. Rewrite two-term: active link **and** a `parent_content_bindings` row for the root.
+- **Done when**: BR-STU-001 names both terms.
+- **Test**: `sed -n '40p' target/requirements/03_student.md | grep -c parent_content_bindings` returns 1.
+- **Depends on**: None
 
-##### T7.1 [specs] — Record the delivered image inventory
-- **Build**: Update `target/requirements/14_container_images.md`: replace each "Suggested version" with the tag actually shipped and running on staging, mark the migration complete, record the Minimus workflow revision used (from T1.1), and note the DISCOVER re-check date against the BR-INFRA-006 no-match components. Record the BR-INFRA-005 `dpage/pgadmin4:latest` exclusion. Also record that the Node 24-LTS-vs-26 open call resolved to 26.
-- **Done when**: no inventory row still shows only a suggested version with no delivered tag.
-- **Test**: `! grep -q 'Suggested version' target/requirements/14_container_images.md` exits 0.
-- **Depends on**: T4.11 [deploy].
+##### T1.34 [specs] — parent-guide.md §7
+- **Build**: `docs/parent-guide.md:261` says "The curriculum and topics you build are shared across
+  all your linked children — there is no per-child curriculum in this version." Replace with the
+  shipped behaviour: each curriculum is built for the children you choose; same-grade siblings can
+  share one; you can change the audience later from the builder; a child linked after a curriculum was
+  built sees nothing until you add them.
+- **Done when**: The "no per-child curriculum" sentence is gone.
+- **Test**: `grep -c "no per-child curriculum" docs/parent-guide.md` returns 0.
+- **Depends on**: None
 
-##### T7.2 [specs] — Report CVE reduction per component from published counts
-- **Build**: For each migrated component, record the before/after CVE count from that image's `images.minimus.io` page (Minimus workflow step 8, ANALYZE) with the page URL as the source. Do not assert reductions without a citation — the spec's definition of done requires the counts be sourced.
-- **Done when**: every migrated component has a before/after count with a source URL.
-- **Test**: `[ "$(grep -c 'images.minimus.io' target/requirements/14_container_images.md)" -ge 19 ]` exits 0 — one citation per migrated inventory row (19 rows, less the three BR-INFRA-006 no-match components, plus the five monitoring images G3 adds).
-- **Depends on**: T7.1 [specs].
+##### T1.35 [specs] — 05_06_07_personas.md resync
+- **Build**: The parent section lags `05_parent.md` (missing BR-PAR-017–021, stale BR-PAR-014/016
+  wording) while self-declaring `05_parent.md` canonical. Bring the parent block up to date, including
+  BR-PAR-022.
+- **Done when**: Every BR-PAR id in `05_parent.md` appears in `05_06_07_personas.md` with matching wording.
+- **Test**: A diff of the BR-PAR id sets between the two files is empty.
+- **Depends on**: None
 
-##### T7.3 [specs] — Mark BR-SEC-022 and BR-SEC-023 shipped
-- **Build**: In `target/requirements/13_secrets_management.md`, mark BR-SEC-022 and BR-SEC-023 as shipped with dates. BR-SEC-022 covers the manifest-version assertion, so T6.5.4 must have landed before this claim is true.
-- **Done when**: both BR-SEC-022 and BR-SEC-023 carry a shipped status and a date.
-- **Test**: `[ "$(grep -cE '^\|? *BR-SEC-02[23].*[Ss]hipped' target/requirements/13_secrets_management.md)" = 2 ]` exits 0.
-- **Depends on**: T6.6.3 [deploy], T6.5.4 [deploy].
+##### T1.36 [specs] — 05_parent.md API table completeness
+- **Build**: Add the two live-but-undocumented contracts: `PATCH
+  /api/parent/curriculum/topic-contents/{id}/publish`, and the `category_id`-required-on-root note for
+  `POST /api/parent/curriculum/nodes` (400 today, `parent_curriculum.py:158-211`).
+- **Done when**: Both rows exist in the Parent API Endpoints table.
+- **Test**: `grep -c 'topic-contents/:content_id/publish' target/requirements/05_parent.md` returns >= 1.
+- **Depends on**: None
 
-##### T7.4 [specs] — Record the committed paths and KV keys in the layout section
-- **Build**: Add the seven committed deploy-config paths and the **eight** `secret/haisir/infra` topology keys to the KV layout section of `target/requirements/13_secrets_management.md`, enumerated by exact name in both cases. (Nine at plan time; `KC_HOSTNAME_ADMIN` was reverted by T6.2.0 and must not be listed.) Record that `KEYCLOAK_ADMIN_ALLOWED_CIDR` is **absent from KV entirely** on staging and prod (T6.2.0a) — not "set to a safe value". `127.0.0.1/32` is `template-configs.sh`'s fallback when the key is missing, not a value the variable holds. Do not write that the variable "holds" anything on those envs; dev is the only place it exists.
-- **Done when**: the KV layout section lists all seven paths and all eight key names.
-- **Test**: `[ "$(grep -cE 'KEYCLOAK_ADMIN_PORT_BINDING|BACKEND_DB_PORT_BINDING|TAILSCALE_ADMIN_CIDR|KEYCLOAK_ADMIN_ALLOWED_CIDR|APISIX_ADMIN_ALLOWED_CIDR|EXTRACTION__OLLAMA_BASE_URL|EMBEDDING__OLLAMA_BASE_URL|HAITU__RERANK_BASE_URL' target/requirements/13_secrets_management.md)" -ge 8 ]` exits 0 && `! grep -q KC_HOSTNAME_ADMIN target/requirements/13_secrets_management.md`.
-- **Depends on**: T7.3 [specs].
-
-##### T7.5 [specs] — Retire the render-hook follow-up item
-- **Build**: Remove the "template-configs.sh does not source render-secrets-hook.sh — it must" item from the Out of scope / follow-up section of `target/requirements/13_secrets_management.md`, now that T6.1.1 landed.
-- **Done when**: the follow-up section no longer lists the render-hook prerequisite as outstanding.
-- **Test**: `! grep -q 'does not source .render-secrets-hook' target/requirements/13_secrets_management.md` exits 0.
-- **Depends on**: T6.1.1 [deploy], T7.3 [specs].
-
-##### T7.6 [specs] — Two independent security review passes
-- **Build**: Run the two-independent-pass gate over the full Phase 7.5 commit range across all three code repos, per the independence procedure above: **Pass A reviews the diff; Pass B reviews the end state against BR-INFRA-001…007 and BR-SEC-011/022/023 from a fresh session without reading the diff.** Write each to `security/SECURITY_REVIEW_<date>_PHASE7.5_<reviewer>.md`, each carrying a `Reviewer:` line, a `Basis:` line (`diff` or `end-state`) and a `Covered:` line naming the exact per-repo commit range it read. The blast radius is every service in the stack including the database and the identity provider, plus a change that moves admin exposure and a change that commits config files to git. Every code-side task that could introduce a finding must be an ancestor of this task, or it reviews a tree that does not match what ships.
-- **Done when**: the union of the two passes' declared `Covered:` ranges equals the full phase commit range in all three repos, with no gap.
-- **Test**: `[ "$(grep -h '^Basis:' security/SECURITY_REVIEW_*PHASE7.5*.md | sort -u | wc -l)" = 2 ]` exits 0 — two passes on different bases, which is what `92a4da2` slipping past two same-range passes proved is the property that matters.
-- **Depends on**: T7.2 [specs], T7.4 [specs], T7.5 [specs], T3.6 [deploy], T5.3 [deploy], T5.4 [deploy], T5.6 [deploy], T5.7 [deploy], T5.8 [deploy], T5.9 [specs], T5.11 [backend], T5.12 [deploy], T5.13 [deploy], T6.5.4 [deploy].
-
-##### T7.7 [specs] — Fill the Phase 7.5 Outcome column
-- **Build**: Fill the Phase 7.5 Outcome column in `Implementation_planning/phases.md` with the delivered state and the two review verdicts from T7.6.
-- **Done when**: the Phase 7.5 row's Outcome cell is non-empty.
-- **Test**: `grep -A2 'Phase 7.5' Implementation_planning/phases.md | grep -q 'Outcome.*[A-Za-z]'` exits 0.
-- **Depends on**: T7.6 [specs].
-
-##### T7.8 [specs] — Record the phase close-out decisions
-- **Build**: Add a `decisions.md` close-out entry covering the four encoded calls: Node 26, the Keycloak admin exposure model (**deny-all + on-demand grant** — including the tailnet model that was tried and reversed, per the 2026-08-13 entry), the deny-by-default `ip-restriction` mechanism, and the rootlesskit/`--port-driver` pin.
-- **Done when**: `decisions.md` has a Phase 7.5 close-out entry naming all four decisions.
-- **Test**: `grep -A20 'Phase 7.5 close-out' Implementation_planning/decisions.md | grep -qE 'port-driver'` exits 0.
-- **Depends on**: T7.6 [specs].
-
-##### T7.9 [specs] — Clear the closed backlog items
-- **Build**: Move B1, B3, B4, B5 and B6 out of the Backlog section of `Implementation_planning/phases.md`, leaving B2 (fixed in both environments 2026-08-07, not deploy-blocking) in place.
-- **Done when**: `phases.md`'s Backlog section contains only B2.
-- **Test**: `[ "$(grep -c '^### B' Implementation_planning/phases.md)" = 1 ]` exits 0.
-- **Depends on**: T7.6 [specs].
-
-##### T7.10 [specs] — Add the new load-bearing constraints
-- **Build**: Add to `Implementation_planning/constraints.md` whatever this phase made load-bearing: the seven committed config paths, the `reg.mini.dev` pin requirement, **the Keycloak admin deny-all + on-demand-grant model (`keycloak-admin-access.sh`; no standing CIDR in the deployment, and `KC_HOSTNAME_ADMIN` must not be reintroduced)**, and the rootlesskit/`--port-driver` pin.
-- **Done when**: `constraints.md` records all four as constraints.
-- **Test**: `[ "$(grep -cE 'reg\.mini\.dev|keycloak-admin-access|port-driver|\.env\.config\.common\.sh' Implementation_planning/constraints.md)" -ge 4 ]` exits 0.
-- **Depends on**: T7.6 [specs].
-
-##### T7.11 [specs] — Re-snapshot `current/`
-- **Build**: Re-run the current-state capture so `current/` reflects the delivered schema, API and infrastructure after this phase.
-- **Done when**: every file under `current/` carries a capture date on or after the Phase 7.5 close-out date.
-- **Test**: `[ -z "$(find current/ -name '*.md' -not -newermt '<close-out-date>')" ]` exits 0.
-- **Depends on**: T7.9 [specs].
+##### T1.37 [specs] — current/schema.md brought to V44
+- **Build**: The Applied Migrations table stops at V41. Add V42_review_chat, V43_migrate_base64_images
+  and V44_parent_content_bindings, and add the `parent_content_bindings` table plus the three
+  `root_node_id` columns to the per-table sections.
+- **Done when**: The table's last row is V44 and `parent_content_bindings` has a section.
+- **Test**: `grep -c V44 current/schema.md` returns >= 2.
+- **Depends on**: T1.7 [backend]
 
 ---
 
-## Critical path
+## G2 — Parent shell, child switcher, tab nav
 
-```
-T6.1.1 → T6.1.2 ──────────────────────────────────────────────────────┐
-   └→ T6.1.3 → T6.1.4 → T6.1.5 → T6.1.6 → T6.1.7 → T6.1.8 → T6.1.9 ───┤
-        │                                                  └→ T6.3.1 ─┤
-        └→ T6.2.0 → T6.2.0a ─┬→ T6.2.3 → T6.2.4 →─┬→ T6.2.5 ⋮ T6.2.6 → T6.2.7
-           (revert)  (KV del) ├→ T6.2.0b (grant) ──┤  (staging) ⋮  🚫 PROD-GATED
-                              └→ T6.2.0c (preserve)┘            ⋮  (deferred — owner
-           T6.2.1/.1a/.1b/.2 SUPERSEDED — tailnet withdrawn     ⋮   call 2026-08-13)  │
-                                                                      ▼
-                                     ONE COMMIT: T6.3.2 (.gitignore + REMOTE_* strip
-                                                 + gitleaks + rsync excludes + prepare_remote)
-                                                          │
-                        ┌─────────────────┬───────────────┼──────────────┐
-                        ▼                 ▼               ▼              ▼
-                     T6.3.3            T6.3.4 ─┐       T6.4.1         T6.6.2
-                                          │    └───────→ T6.4.2 → T6.4.3
-                                       T6.3.5                        │
-                                                    ┌────────────────┴────────┐
-                                                    ▼                         ▼
-                                              T6.5.1→2→3→4              T6.6.1→2→3
+**Goal**: `/parent` renders the mock's parent chrome — brown/amber topbar with a PARENT pill and
+`+ Link child`, a child strip showing each child's name and grade, and a two-tab `Curriculum |
+Results` bar.
+**Goal test**: Playwright — sign in as a parent with two children (grades 6 and 9), load `/parent`:
+the topbar background is `#3D2000`, a "Parent" pill is present, the child strip shows "Arjun / Grade
+6" and "Meera / Grade 9" with Arjun's tab active, exactly two main tabs render, clicking Meera keeps
+the tab selection and reloads persist it. A parent with zero children sees the link card and **no**
+tab bar. No CSP violation is reported (`tests/e2e/g5-csp-soak.spec.ts` conventions).
+**Repos**: [frontend] [backend]
 
-T1.1 → G1 (T1.2→T1.3, T1.4→T1.5 → T1.6 → T1.7)  ─┐
-T1.1 → G2 (T2.1→T2.2/T2.3→T2.4, T2.5→T2.9, T2.6, T2.7 → T2.8) ─┤
-T1.1 → G3 (T3.1→T3.2→T3.3, T3.1→T3.4, T3.2→T3.5, T3.4+T3.5→T3.6) ─┼→ T4.10 → T4.11 → T7.1 → T7.2 ─┐
-T1.1 → G4 (T4.1…T4.9)                            ─┘                               │
-                                                                                  ▼
-T5.1, T5.2 → T5.3 → T5.12 ──────────────────────────────────────────────────→  T7.6 → T7.7/T7.8/T7.9/T7.10
-T5.5 → T5.6 → T5.7 ─────────────────────────────────────────────────────────→   ▲        T7.9 → T7.11
-T5.4, T5.8, T5.9, T5.10→T5.11 ──────────────────────────────────────────────→   │
-T6.6.3, T6.5.4 → T7.3 → T7.4 / T7.5 ────────────────────────────────────────→   ┘
-```
+### G2.1 — Grade reaches the client
 
-Fully independent of G6: all of G1–G4. Fully independent of G1–G4: all of G6, and every G5 task except through T7.6.
+**Subgoal**: `GET /api/parent/children` returns each child's grade, and the frontend model carries it.
+**Subgoal test**: Integration — a parent with one child whose `student_profiles.grade='6'` and one
+with a NULL grade gets `[{grade:"6"},{grade:null}]`.
+**Repos**: [backend] [frontend]
 
-**Ready now** (no pending dependencies):
-- **T1.1** [specs] — pull the current Minimus workflow. Unblocks all of G1–G4.
-- **T6.1.1** [deploy] — `template-configs.sh` sources `render-secrets-hook.sh`. Unblocks all of G6; safe alone (the hook is a no-op when the OpenBao flag is off).
-- **T5.1** [backend], **T5.2** [backend] — the two one-line poller rollbacks.
-- **T5.4** [deploy] — stop swallowing stderr in `bao_deploy_token()`.
-- **T5.5** [deploy] — add the `other/cert/` rsync with `--chmod=F755`. No longer gated behind G6; it is a live prod cert-expiry fix.
-- **T5.8** [deploy] — pin rootlesskit / `--port-driver`.
-- **T5.9** [specs] — record the `92a4da2` review verdict.
-- **T5.10** [backend] — declare `question_id` on `ExamReviewChatRequest`.
+##### T2.1 [backend] — grade on the children DTO
+- **Build**: Add `grade: str | None = None` to `ChildLinkView` (`src/domain/models/user_metadata.py:139`)
+  and `ChildLinkWithProfile` (`src/schemas/user_metadata.py:250`), populated in
+  `list_children_for_parent` (`user_metadata_service.py:395-418`) from the `profile` already loaded at
+  `:401` and currently discarded except for names. No join, no Keycloak call. (The loop is an existing
+  per-child N+1 with an IDP fallback; the switcher makes it hotter but 10 active children is the cap —
+  leaving it, batch only if it shows up in timings.)
+- **Done when**: The endpoint returns `grade` for a child with a profile grade and `null` for one without.
+- **Test**: `tests/unit/routes/` asserts `response.json()[0]["grade"] == "6"`.
+- **Depends on**: None
+
+##### T2.2 [frontend] — Child model carries grade
+- **Build**: Add `grade?: string | null` to `ChildDto` and `grade: string | null` to `Child`
+  (`parent.types.ts`), extend `ChildDtoSchema` (`domain/parent-schemas.ts`) and the mapping in
+  `parentApi.listChildren` (`parent-api.ts`). Nullable — no grade means the line is omitted, never
+  "Grade null".
+- **Done when**: `listChildren` returns `grade: null` for a child without one rather than throwing on the schema.
+- **Test**: A DTO with no `grade` key parses and maps to `grade: null`.
+- **Depends on**: T2.1 [backend]
+
+### G2.2 — Parent chrome
+
+**Subgoal**: Parent routes render parent-branded chrome instead of the generic shared header.
+**Subgoal test**: Rendering `ParentShell` shows the parent topbar and does **not** render the shared
+`Header`'s nav; the 18 other call sites of `Header` are untouched.
+**Repos**: [frontend]
+
+##### T2.3 [frontend] — ParentShell renders a parent header
+- **Build**: **Modify** `src/features/parent/components/parent-shell.tsx` (it exists and is an
+  unthemed pass-through) to render a new `ParentHeader` in place of the shared `Header`, following the
+  `src/features/admin/components/admin-header.tsx` precedent: `useAuth()` for name/roles/logout/
+  role-switch, brand text, a `PARENT` pill, an initials avatar. All styling in a new
+  `parent-header.module.css` — brand `#3D2000`, pill `rgba(255,200,80,.2)`/`#FAC775`, avatar `#BA7517`
+  — no inline `style=` (CSP). Do not create a second shell; do not touch the shared `Header`, which
+  has 18 call sites.
+- **Done when**: `/parent` renders the parent topbar and the shared `Header` component is no longer mounted under `/parent`.
+- **Test**: `tests/unit/features/parent/components/parent-shell.test.tsx` asserts the "Parent" pill is present.
+- **Depends on**: None
+
+##### T2.4 [frontend] — + Link child in the topbar
+- **Build**: An amber `+ Link child` link to `/parent/link-child` in `ParentHeader`'s right cluster,
+  styled via the CSS module.
+- **Done when**: The topbar link navigates to `/parent/link-child`.
+- **Test**: `getByRole("link", {name: /link child/i})` has `href="/parent/link-child"`.
+- **Depends on**: T2.3 [frontend]
+
+### G2.3 — Child and tab navigation
+
+**Subgoal**: The active child is chosen in a strip, persists across reloads, and drives every
+child-labelled surface; the two tabs switch content without navigation.
+**Subgoal test**: Integration — with two children, clicking the second updates the strip's active
+state, persists `parent.activeChildSub`, and re-renders the tab body against the new child; switching
+tabs does not reset the child.
+**Repos**: [frontend]
+
+##### T2.5 [frontend] — ParentChildStrip
+- **Build**: Extract the child strip out of `parent-dashboard.tsx` into `parent-child-strip.tsx` +
+  module CSS: per child an initials avatar (deterministic colour from the sub), the display name, and
+  `Grade {grade}` **omitted when grade is null**; active tab gets the amber underline; a trailing
+  `+ Link child`. Keep the existing revoke affordance — it is shipped behaviour and out of scope to
+  remove.
+- **Done when**: A child with a null grade renders their name with no grade line, and the active child carries the active class.
+- **Test**: `parent-dashboard.test.tsx` asserts "Grade 6" is present for one child and no "Grade" text renders for the null-grade child.
+- **Depends on**: T2.2 [frontend]
+
+##### T2.6 [frontend] — Active child shared across the surface
+- **Build**: Lift `activeChildSub` (currently local state + `ACTIVE_CHILD_KEY` in
+  `parent-dashboard.tsx:9`) into a small `ParentActiveChildContext` in `src/app/parent/providers.tsx`,
+  keeping the same localStorage key so existing sessions do not lose their selection. G3's cards and
+  G1.4's pill read from it.
+- **Done when**: The selected child survives a reload and is readable from a component outside the dashboard.
+- **Test**: Selecting the second child writes `parent.activeChildSub` and a sibling consumer reads that sub.
+- **Depends on**: T2.5 [frontend]
+
+##### T2.7 [frontend] — Curriculum | Results tab bar
+- **Build**: A two-tab bar in `parent-dashboard.tsx` (`role="tablist"`, amber underline on the active
+  tab), default `curriculum`. Two tabs only — Overview is not built; with the snapshot stats and
+  weak-topic banner out of scope it would render identically to Curriculum.
+- **Done when**: Exactly two tabs render and the Curriculum panel is shown by default.
+- **Test**: `getAllByRole("tab")` has length 2 and the first is `aria-selected="true"`.
+- **Depends on**: T2.6 [frontend]
+
+##### T2.8 [frontend] — Results coming-soon placeholder
+- **Build**: A static panel: "Results — coming soon / Exam results for your child's Home Study will
+  appear here." **No fetch, no hardcoded zero.** Copy deliberately does not promise platform exam
+  scores — BR-PAR-012 stands unchanged and the platform-results question is deferred.
+- **Done when**: Selecting Results issues no network request.
+- **Test**: With a fetch spy installed, clicking Results leaves the spy uncalled and shows the placeholder text.
+- **Depends on**: T2.7 [frontend]
+
+##### T2.9 [frontend] — Zero-children state hides the tabs
+- **Build**: When `children.length === 0`, render only the existing "Link your child" card — no strip,
+  no tab bar.
+- **Done when**: A parent with no children sees the link card and zero tabs.
+- **Test**: With an empty children list, `queryAllByRole("tab")` is empty.
+- **Depends on**: T2.7 [frontend]
 
 ---
 
-## Ground-truth notes for whoever implements
+## G3 — Curriculum tab shows only derivable numbers
 
-- `deploy.sh` and `deploy-lib.sh` live at `common/scripts/`, not the repo root. Every `[deploy]` path in G6 is `common/scripts/deploy.sh` / `common/scripts/deploy-lib.sh`.
-- ⟲ **2026-08-13**: `KC_HOSTNAME_ADMIN` is gone — reverted by T6.2.0, and the topology key count is **eight**, not nine. The note below is retained as the record of what was true when the plan was written.
-- Verified at `844e8f9`: `KC_HOSTNAME_ADMIN` appears in **none** of the seven in-scope paths — it is net-new, not a migration. The other eight keys are all present (`KEYCLOAK_ADMIN_PORT_BINDING` in four files, `BACKEND_DB_PORT_BINDING` and the three `*_BASE_URL` keys in `{staging,prod}/.env`, the three `*_CIDR` keys in `{staging,prod}/.env.config.sh` **and** `common/.env.config.common.sh`).
-- Verified at `844e8f9`: `gateway-docker/Dockerfile:157` is `FROM apache/apisix@${APISIX_DIGEST}`, not `apache/apisix:3.17.0-ubuntu`; the digest ARG is at `:54` and `gateway-docker/Jenkinsfile:104`/`:109` read and pull by it.
-- Verified at `844e8f9`: app DB credentials are dynamic OpenBao leases from `common/openbao/bootstrap.sh:265`; there is no app-DB init SQL and no static `haisir_worker` role.
-- Verified at `844e8f9`: `deploy.sh`'s tag reconciliation runs `:394-485`; a **second** block at `:488-520` reads the same six override vars; `:266-268` reads three more outside the display block; `deploy.sh:6` is `set -euo pipefail`.
-- Verified at `844e8f9`: `other/cert/haisir-sync-certs.sh` is mode `100644` in the index.
-- Verified at `844e8f9`: `dev/docker-compose.yml:26` is `dpage/pgadmin4:latest` (BR-INFRA-005, dev-only).
+**Goal**: The Curriculum tab lists the active child's Home Study modules with counts the system can
+actually produce, explains what Home Study is, and surfaces the real upload quota.
+**Goal test**: Playwright — parent with roots R1 (bound to Arjun, 3 topics: 2 live/1 draft, 7 content
+items) and R2 (bound to Meera). With Arjun active the tab shows one card reading `3 topics · 2 live ·
+1 draft · 7 content items` and an `Open builder` CTA; switching to Meera shows R2 only. A child bound
+to nothing shows "Start building", not an error. Opening the add-content modal shows `0 job(s) in
+progress · 12/100 uploads today` from the server, and no element on the page renders a hardcoded zero
+or a progress bar.
+**Repos**: [frontend] [backend]
 
-- Verified at `844e8f9`: `common/.env.config.common.sh:39`/`:44`/`:48` export all three admin CIDRs with `${VAR:-127.0.0.1/32}` defaults, and `deploy.sh:591` sources that file before `template-configs.sh` runs. This is why T6.1.6 exists and why T6.1.8 is a separate negative control.
-- Verified at `844e8f9`: the plaintext scan is `common/scripts/tests/full-plaintext-elimination-scan.sh`, **not** under `common/openbao/`.
-- Verified at `844e8f9`: `gateway-docker/Jenkinsfile:103` greps `GO_BUILDER_DIGEST`, `:104` greps `APISIX_DIGEST`, and the `'pull apisix'` branch is `:107`.
-- Verified at `844e8f9`: `common/openbao/deploy-required-keys.txt` supports the `path:KEY:envs=` form and `manifest.sh:25-32` parses it — T6.1.5's nine lines follow an existing convention, not a new one.
-- Verified at `844e8f9`: `common/prometheus/prometheus.yml`, `common/grafana/config/grafana.ini` and `common/grafana/provisioning/{dashboards,datasources}` exist, with exactly one dashboard (`json/apisix-overview.json`). **No alert rules exist anywhere in the repo** — T3.4 is net-new.
+> Out of scope by owner call and by structure: progress %, "N topics studied", day streak,
+> topics-this-week, weak-topic banner, `View results` CTA.
 
-### Critical Files for Implementation
-- /home/gulzar/Workspace/haisir-deploy/common/scripts/deploy.sh
-- /home/gulzar/Workspace/haisir-deploy/common/scripts/deploy-lib.sh
-- /home/gulzar/Workspace/haisir-deploy/common/scripts/template-configs.sh
-- /home/gulzar/Workspace/haisir-deploy/common/.env.config.common.sh
-- /home/gulzar/Workspace/haisir-deploy/common/docker-compose.yml
+### G3.1 — Server derives the card metrics
+
+**Subgoal**: One request returns every number a module card shows.
+**Subgoal test**: Integration — a root with 3 topics (2 live, 1 draft) and 7 published+draft content
+rows returns `{topic_count:3, live_topic_count:2, draft_topic_count:1, content_count:7}` in a single
+response.
+**Repos**: [backend]
+
+##### T3.1 [backend] — Root stats on GET /nodes
+- **Build**: Add a `get_parent_root_stats(root_ids)` repo method to `CoursePathNodeRepository` reusing
+  the recursive-CTE shape at `:487-509` (`get_topic_counts_for_nodes`) but grouped by `root_id` with
+  `count(*) FILTER (WHERE t.status='live')`, the draft complement, and a `LEFT JOIN topic_contents`
+  count. Surface the four numbers on `CoursePathNodeRead` for parent root reads only. One query for
+  the whole list — the alternative is a client-side N+1 across every topic of every root.
+- **Done when**: `GET /api/parent/curriculum/nodes` returns the four counts per root in one round trip.
+- **Test**: A root with 2 live and 1 draft topic serialises `live_topic_count == 2` and `draft_topic_count == 1`.
+- **Depends on**: T1.11 [backend]
+
+### G3.2 — The daily quota is actually daily
+
+**Subgoal**: The 100/day parent upload cap rolls every 24 hours instead of acting as a lifetime cap,
+and the counters are readable by the client.
+**Subgoal test**: Integration — a parent row with `daily_jobs=100` and `daily_window_start` 25 hours
+old accepts the next upload (201, `daily_jobs` reset to 1) and `GET /api/parent/curriculum/quota`
+reports `1/100`; with a 1-hour-old window the same upload is 429.
+**Repos**: [backend]
+
+##### T3.2 [backend] — daily_window_start actually rolls
+- **Build**: `parent_quota_counters.daily_window_start` (`src/infrastructure/models/extraction_job.py:152`)
+  is written once and **never read** — a grep across `src/`, `tests/` and `alembic/` finds it only in
+  the table definition and V26. So `_MAX_DAILY_PARENT_JOBS = 100` is really a lifetime cap: the 100th
+  upload ever locks the parent out permanently. Fix in the two places the counter is touched, in one
+  change: in `increment_quota` (`extraction_job_repository.py:529-537`) make the upsert `daily_jobs =
+  CASE WHEN daily_window_start < now() - interval '1 day' THEN 1 ELSE daily_jobs + 1 END` with a
+  matching `daily_window_start = CASE WHEN stale THEN now() ELSE daily_window_start END`; in the check
+  at `extraction_service.py:192-196` treat a stale window as 0 used. Both halves or neither — half of
+  it leaves the cap broken.
+- **Done when**: A parent at `daily_jobs=100` with a >24h-old window can upload again.
+- **Test**: A unit test with a 25-hour-old window asserts the create succeeds and the row reads `daily_jobs == 1`.
+- **Depends on**: None
+
+> **A live bug, not new scope.** It is in this phase because G3.3's quota line would otherwise put an
+> accurate, permanent `100/100` in front of every affected parent.
+
+##### T3.3 [backend] — GET /api/parent/curriculum/quota
+- **Build**: New route in `src/api/routes/parent_extraction.py` (`require_parent()`, GET so no CSRF)
+  returning `{concurrent_jobs, daily_jobs, max_concurrent: 5, max_daily: 100}` from `get_quota`, with
+  the window-roll applied on read so a stale window reports 0. Today no endpoint exposes these
+  counters at all — `grep quota src/api/routes/` finds only 429 handling. Constants stay in
+  `extraction_service.py:28-29`, which already matches BR-PAR-008a.
+- **Done when**: A parent with no quota row gets `{concurrent_jobs:0, daily_jobs:0, ...}` rather than a 404.
+- **Test**: `GET /api/parent/curriculum/quota` for a fresh parent returns 200 with `daily_jobs == 0`.
+- **Depends on**: T3.2 [backend]
+
+### G3.3 — The tab
+
+**Subgoal**: The Curriculum tab renders per-child module cards, the explainer and the quota line, with
+no fabricated metric.
+**Subgoal test**: Integration (vitest) — with a mocked roots response, switching the active child
+swaps the rendered cards; a child with no bound root renders the "Start building" prompt; no
+`progressbar` role and no "0" placeholder is emitted anywhere in the tab.
+**Repos**: [frontend]
+
+##### T3.4 [frontend] — Module cards for the active child
+- **Build**: A `ParentCurriculumTab` rendering the mock's `.curr-card` grid from `GET
+  /api/parent/curriculum/nodes`, filtered to roots whose `child_subs` (T1.18) contains the active
+  child (T2.6). Meta line: `{topic_count} topics · {live} live · {draft} draft · {content_count}
+  content items`. Footer: a single amber `Open builder` CTA to `/parent/curriculum?nodeId={root.id}` —
+  note `nodeId`, not `node`: WAF rule 932236 blocks the bare parameter name `node`. No progress bar,
+  no "N done".
+- **Done when**: Switching the active child changes the card set without a full page navigation.
+- **Test**: With two roots bound to different children, exactly one card renders per selected child.
+- **Depends on**: T2.6 [frontend], T1.18 [backend], T3.1 [backend]
+
+##### T3.5 [frontend] — "About Home Study" explainer
+- **Build**: The mock's explainer card below the grid, naming the active child: content added here is
+  private and visible only to {child}; import a platform board as a starting point, then add your own
+  notes.
+- **Done when**: The explainer names the currently active child.
+- **Test**: With Arjun active, the explainer text contains "Arjun".
+- **Depends on**: T3.4 [frontend]
+
+##### T3.6 [frontend] — "Start building" empty state
+- **Build**: When the active child has zero bound roots, render a "Start building" prompt linking to
+  `/parent/curriculum` — **not** an error. A linked child legitimately sees nothing when the parent
+  bound their curriculum to a sibling only (BR-DATA-026), and children linked after the V44 migration
+  start with zero bindings by design.
+- **Done when**: A child with no bound root shows the prompt and no error banner.
+- **Test**: With an empty filtered root list, the "Start building" copy renders and `queryByRole("alert")` is null.
+- **Depends on**: T3.4 [frontend]
+
+##### T3.7 [frontend] — Quota line in the add-content modal
+- **Build**: Fetch `GET /api/parent/curriculum/quota` in
+  `src/features/content-management/components/add-content-modal.tsx` when `contentSource === "parent"`
+  and render the mock's line: `{concurrent} job(s) in progress · {daily}/{max_daily} uploads today`.
+  Hidden entirely if the request fails — never a hardcoded zero.
+- **Done when**: The modal shows real server counters, and shows no quota line when the fetch errors.
+- **Test**: With the quota endpoint mocked at `{concurrent_jobs:2, daily_jobs:12}`, the modal contains "2 job(s) in progress · 12/100 uploads today".
+- **Depends on**: T3.3 [backend]
 
 ---
 
-<!-- plan-baseline: backend:00c2c738ace3ab6e5d40317a4298cea5a94a91ab frontend:705833ddeecae3201ba464d9b3837250e87e2432 deploy:844e8f9df25cca5ffb4b7d3f2ee1ef64a1d02e05 -->
+## G4 — Builder: content inline, topic route retired
+
+**Goal**: A parent manages a topic's content without leaving the builder, extraction uploads render as
+the mock's collapsible group card, and the separate topic screen and the dead exam link are gone.
+**Goal test**: Playwright — in `/parent/curriculum`, select a node, expand a topic card: an extraction
+group shows `notes.pdf` / `4 page(s) extracted · ✨ from notes.pdf`, a `Document | Text` segmented
+toggle, `View`, and `▸ Show pages`; expanding lists 4 page rows each with a Published/Draft badge and
+`Edit`; publishing the Text side flips the badges without a page reload. No `Create Exam` link exists
+on any topic row. Navigating to `/parent/curriculum/<n>/topics/<t>` lands on
+`/parent/curriculum?nodeId=<n>` with that node selected.
+**Repos**: [frontend]
+
+> Independent of G3; both sit behind G2. `groupContentsByPublish` (`content-grouping.ts:34-63`)
+> already returns ordered `{key, kind, rows}` and `PublishControl` already renders the two-sided
+> Document/Text choice — this goal is rendering and routing, not new domain logic.
+
+### G4.1 — Content renders in the topic card
+
+**Subgoal**: Every content operation available on the old topic screen is available inline on the
+topic card, in the mock's layout.
+**Subgoal test**: Integration (vitest + MSW) — rendering `ParentTopicRow` for a topic with one 4-page
+extraction and one video mounts `TopicContentSection`, shows one group card and one standalone row,
+and an add/rename/delete/publish round-trip fires the same `parentContentAdapter` calls the old page
+did.
+**Repos**: [frontend]
+
+##### T4.1 [frontend] — Mount TopicContentSection in the topic card
+- **Build**: In `parent-topic-row.tsx`, render `<TopicContentSection topicId={topic.id}
+  adapter={parentContentAdapter} contentSource="parent" onJobDone={...} />` inside a collapsible card
+  body, reusing the exact props from `parent-topic-content-page.tsx:107-114`. Keep the existing
+  `hasNoContents` hint chip. Default the body collapsed so a node with many topics does not fire one
+  content query per topic on mount.
+- **Done when**: Content for a topic can be added and deleted from `/parent/curriculum` with no navigation.
+- **Test**: `parent-topic-row.test.tsx` asserts `TopicContentSection` is mounted with `adapter === parentContentAdapter` after expanding the card.
+- **Depends on**: None
+
+##### T4.2 [frontend] — Extraction group card shell
+- **Build**: In `topic-content-section.tsx`, wrap each `kind === "extraction"` group in the mock's
+  `.cg-card`: header line = the group's `provenance.source_filename` (already on
+  `ParentTopicContent`), meta = `{rows.length} page(s) extracted · ✨ from {source_filename}`, actions
+  = `View` (opens the existing `ContentViewer` modal on the raw pdf/image row) and `Delete`.
+  Standalone groups keep today's single-row rendering. CSS module only — no `style=` attributes.
+- **Done when**: A 4-row extraction group renders as one card reading "4 page(s) extracted".
+- **Test**: A group of 4 rows renders exactly one `.cg-card` header containing "4 page(s) extracted".
+- **Depends on**: T4.1 [frontend]
+
+##### T4.3 [frontend] — Show pages expander
+- **Build**: A `▸ Show pages` / `▾ Hide pages` toggle on the group card (local `useState`), revealing
+  the group's rows as page rows — title, a Published/Draft badge derived from `getGroupPublishState`
+  (`publish-state.ts`), and `Edit` wired to the existing `setEditingContent`. Collapsed by default,
+  matching the mock.
+- **Done when**: Page rows are hidden until the expander is clicked.
+- **Test**: Page titles are absent initially and present after clicking "Show pages".
+- **Depends on**: T4.2 [frontend]
+
+##### T4.4 [frontend] — Segmented Document | Text toggle
+- **Build**: Restyle `content-publish-control.module.css` so `PublishControl`'s extraction branch
+  renders as the mock's segmented `.pub-toggle` with `Document` / `Text` labels and an amber active
+  segment. `publish-control.tsx`'s branching and `aria-label`s stay as they are — this is CSS plus the
+  two visible labels, not new state.
+- **Done when**: An extraction group renders one segmented control with the published side visually active.
+- **Test**: With the text row published, the "Text" segment carries the active class.
+- **Depends on**: T4.2 [frontend]
+
+### G4.2 — The old route and the dead link go
+
+**Subgoal**: No parent-facing link or route leads to a page that 404s or duplicates the builder.
+**Subgoal test**: E2E — `/parent/curriculum/<n>/topics/<t>` ends on `/parent/curriculum?nodeId=<n>`
+with that node selected, and a crawl of the builder finds no `href` to `/parent/exams`.
+**Repos**: [frontend]
+
+##### T4.5 [frontend] — Topic route redirects
+- **Build**: Replace `src/app/parent/curriculum/[node_id]/topics/[topic_id]/page.tsx` with a
+  `redirect(`/parent/curriculum?nodeId=${node_id}`)` (Next's `next/navigation` redirect; keep
+  `export const dynamic = "force-dynamic"` — BR-CSP-010 requires every route dynamically rendered).
+  `?nodeId=` not `?node=` (WAF 932236). `useRestoreNodeSelection` already rebuilds the breadcrumb and
+  expansion from that param. Delete `parent-topic-content-page.tsx` and its two test files once
+  nothing imports them.
+- **Done when**: The topic URL returns a redirect to the builder with the node preselected.
+- **Test**: The E2E navigation asserts the final URL is `/parent/curriculum?nodeId=<n>` and the node's topics are visible.
+- **Depends on**: T4.1 [frontend]
+
+##### T4.6 [frontend] — Remove the dead Create Exam link
+- **Build**: Delete the `Create Exam` `<Link href="/parent/exams">` at `parent-topic-row.tsx:173-175`.
+  The route does not exist and 404s on every topic row today. Delete the test that pins it broken —
+  `tests/unit/features/parent/components/parent-topic-row.test.tsx:97` (`"links 'Create Exam' to
+  /parent/exams"`). Parent exam authoring stays out of scope, so no replacement CTA.
+- **Done when**: No `/parent/exams` href remains in `src/features/parent/`.
+- **Test**: `parent-topic-row.test.tsx` asserts `queryByRole("link", {name:/create exam/i})` is null.
+- **Depends on**: None
+
+##### T4.7 [frontend] — Remove the Upload Content link
+- **Build**: Delete the `Upload Content` `<Link>` at `parent-topic-row.tsx:169` — content is now
+  inline — and its pinned test at `parent-topic-row.test.tsx:88-95`.
+- **Done when**: The topic row renders no navigation link, only inline content.
+- **Test**: `queryByRole("link", {name:/upload content/i})` is null while the content section is present.
+- **Depends on**: T4.1 [frontend]
+
+---
+
+## Cross-repo dependency edges
+
+These are the coordination points. Everything else is same-repo sequencing.
+
+| # | From | To | Why |
+|---|---|---|---|
+| 1 | T1.1 [backend] | T1.3 [specs] | DDL type must read String before the model is written, or the backfill aborts on varchar→uuid |
+| 2 | T1.7 [backend] | T1.4 [specs] | Migration SQL implements the amended (revoked-inclusive) backfill |
+| 3 | T1.24 [frontend] | T1.10 [backend] | `child_subs` is a hard 400 — the client cannot create a root until the field exists |
+| 4 | T1.26 [frontend] | T1.10 [backend] | Same, for adopt |
+| 5 | T1.27 [frontend] | T1.18 [backend] | Privacy pill reads the real binding set off the root read |
+| 6 | T1.28 [frontend] | T1.16, T1.17 [backend] | Binding editor calls the two new endpoints |
+| 7 | T1.29 [frontend] | T1.19 [backend] | Greyed revoked-but-bound child needs `include_revoked` |
+| 8 | T1.37 [specs] | T1.7 [backend] | `current/schema.md` records V44 as applied |
+| 9 | T2.2 [frontend] | T2.1 [backend] | `grade` must be on the wire before the strip can render it |
+| 10 | T3.4 [frontend] | T1.18, T3.1 [backend] | Cards need both `child_subs` (filter) and the counts |
+| 11 | T3.7 [frontend] | T3.3 [backend] | Quota line needs the read endpoint |
+
+**Release-coupling, not a DAG edge**: G1.2 [backend] and G1.4 [frontend] must deploy in the **same
+window** — `child_subs` is a breaking change to two shipped endpoints with no fallback. An un-updated
+frontend returns 400 on every create-root and every adopt.
+
+## Ready now
+
+No pending dependencies — startable immediately.
+
+**Critical path first** — all of G1 hangs off these three:
+- T1.3 [specs] — BR-DATA-026 DDL `child_sub` → String (unblocks T1.1 and the whole G1.1 chain)
+- T1.2 [backend] — `root_node_id` columns
+- T1.10 [backend] — `child_subs` on the two payloads (carries the ~32-function test update)
+
+**Also startable:**
+- T0.1 [deploy] — prod render confirmation (opportunistic, next prod window)
+- T0.2 [specs] — correct the B49 entry
+- T1.4 [specs] — backfill includes revoked pairs (unblocks T1.7)
+- T1.33 [specs] — 03_student.md BR-STU-001
+- T1.34 [specs] — parent-guide.md §7
+- T1.35 [specs] — 05_06_07_personas.md resync
+- T1.36 [specs] — 05_parent.md API table
+- T1.19 [backend] — `?include_revoked=true`
+- T2.1 [backend] — `grade` on the children DTO
+- T3.2 [backend] — daily quota window roll
+- T1.23 [frontend] — Add Root modal multi-select
+- T1.25 [frontend] — Adopt modal multi-select
+- T2.3 [frontend] — ParentShell parent header
+- T4.1 [frontend] — mount TopicContentSection inline
+- T4.6 [frontend] — remove the dead Create Exam link
+
+**Longest chain**: `T1.3 → T1.1 → T1.5 → T1.6 → T1.20` and, in parallel,
+`T1.8 → T1.9 → T1.12/T1.14 → T1.24/T1.26`.
+
+## Two things to carry into implementation
+
+- **T1.21 is the phase's real failure mode.** If `_resolve_parent_nodes` is missed, per-child binding
+  is a no-op on the child's primary screen while every exam/topic/content test still passes. And the
+  filter must go service-side — putting it in `get_by_owner` would show a parent nothing of their own
+  tree, because that method's only other caller is the parent's own builder list.
+- **T3.2 is a live bug the new UI would have exposed.** `daily_window_start` is never read, so "100
+  daily" is currently a lifetime cap.
+
+---
+
+<!-- plan-baseline: backend:67b6cc3d45ba8b32d4314f6d464f71e1762c93f6 frontend:784f7005c231e5d6bdeb195cb83ed879c168c9a2 deploy:790e29d44989af40228f4094c4a1b7546c5efe52 -->

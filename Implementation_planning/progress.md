@@ -37,7 +37,9 @@ Content is tagged with an `owner_type` discriminator (`'platform'` or `'parent'`
 > closes G6.1). **No ready task remains in this repo** — T7.1/T7.2 were already done 2026-08-14, and
 > the specs tail T7.3–T7.11 all sit behind the deploy chain.
 >
-> Phase 7.5 is still open. The sections below describe Phase 7 and earlier.
+> Phase 7.5 closed 2026-08-18 (109/109 tasks) and its plan/tasks are archived. **Phase 8 —
+> Parent UX Alignment was planned 2026-08-20** — see `PLAN.md` / `TASKS.md`. The sections below
+> describe Phase 7 and earlier.
 
 **Phase 7 — Gateway WAF Modernisation, CSP & Security Review Closeout — COMPLETE (2026-08-06).** All eight goals (G1–G8) closed. Full decision record in `decisions.md` (2026-08-06); task-level evidence in `TASKS.md`.
 
