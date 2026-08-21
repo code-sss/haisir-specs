@@ -83,7 +83,7 @@
 - [x] T1.34 [specs]: docs/parent-guide.md §7 per-child flip (2026-08-21)
 - [x] T1.35 [specs]: 05_06_07_personas.md parent section resynced (2026-08-21)
 - [x] T1.36 [specs]: 05_parent.md API table — 2 missing live contracts (2026-08-21)
-- [ ] T1.37 [specs]: current/schema.md V42/V43/V44 + new schema objects (depends on T1.7 [backend])
+- [x] T1.37 [specs]: current/schema.md V42/V43/V44 + new schema objects (2026-08-21)
 - [ ] **G1.6: Specs stop contradicting the shipped rule** — integration test
 
 - [ ] **G1: Per-child Home Study binding** — E2E test
@@ -171,10 +171,12 @@ Tasks with no pending dependencies — can be started immediately.
 - T1.21 [backend]: _resolve_parent_nodes filters service-side (dep T1.8 ✅) ← the failure mode
 - T1.22 [backend]: hAITU gate gains the binding term (dep T1.8 ✅, T1.2 ✅)
 - T1.30 [backend]: linked_child fixture helper (dep T1.8 ✅)
-- T1.37 [specs]: current/schema.md brought to V44 (dep T1.7 ✅)
 
-11 of 62 tasks are startable, spread across four repos — deploy's only task is opportunistic and
-specs has one task ready (T1.37, now unblocked by T1.7). Landed 2026-08-21: T1.1/T1.11/T1.13
+10 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
+specs has none left ready (T1.37 landed). Landed 2026-08-21: T1.37 [specs] — current/schema.md now
+documents the `parent_content_bindings` table and `root_node_id` on `course_path_nodes`/`topics`/
+`exam_templates` (V44, confirmed against the actual migration file after a discrepancy check — see
+below). Also landed earlier the same day: T1.1/T1.11/T1.13
 [backend] (the parent_content_bindings table model plus root_node_id stamping in create_node and
 adopt_node), T1.8 [backend] (the ParentContentBindingRepository — add_many/delete/list_for_root/
 list_for_child/exists, with an abstract interface and a DI provider; no migration, the table
