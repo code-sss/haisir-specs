@@ -88,6 +88,16 @@
 
 > **Column name note:** Physical columns are `parent_sub` / `child_sub`. The data-model spec (target/requirements/01_data_model.md) uses the logical aliases `parent_idp_sub` / `child_idp_sub`. Schema is sacred — the physical names will not change; the spec alias is documenting intent only.
 
+## parent_content_bindings
+> Added by **V44** (Phase 8, BR-DATA-026). Records which parent-owned course roots a child is bound to — the per-child Home Study visibility rule.
+
+- `root_node_id` (UUID, PK composite) — FK → `course_path_nodes.id` ON DELETE CASCADE; always a `course_path_nodes` row with `owner_type='parent'` and `parent_id IS NULL` (a root)
+- `child_sub` (String, PK composite) — child's `idp_sub`
+- `created_at` (DateTime TZ, default `now()`)
+- Index: `ix_parent_content_bindings_child` on `child_sub`
+
+> Backfilled from `parent_child_links` with **no `revoked_at` filter** (BR-DATA-026, amended by T1.4) — a revoked parent-child link does not retract bindings seeded before the revoke.
+
 ## class_invite_codes
 > Outside current target increment (class/institution flow deferred). Retained as-is.
 
@@ -113,6 +123,7 @@
 - `owner_type` (String, default "platform") — discriminator: "platform" or "parent"; enforced via `OwnerType(StrEnum)` in domain layer
 - `owner_id` (String, nullable) — parent's `idp_sub` for parent-owned nodes, NULL for platform nodes
 - `source_node_id` (UUID, nullable, self-FK → course_path_nodes) — set on a parent-adopted node to the platform node it was cloned from (V40); NULL for platform nodes and parent nodes built from scratch. Partial unique index on `(owner_id, source_node_id) WHERE source_node_id IS NOT NULL` enforces one adopt per parent per source (BR-DATA-006, 409 on repeat).
+- `root_node_id` (UUID, nullable) — added by **V44** (Phase 8). Points at the owning parent-root's own `id` for every node in a parent-owned tree (a root points at itself); NULL for platform nodes. Backfilled via a recursive-CTE walk from each `owner_type='parent' AND parent_id IS NULL` root; stamped going forward by `create_node`/`adopt_node`. Lets any node cheaply resolve its owning root without walking the tree — used by the `parent_content_bindings` EXISTS clause.
 
 > **Visibility enforced (as of V23 / commit aa5ddf7):** BR-DATA-003 and BR-SEC-005 are fully enforced on all GET endpoints. Students see platform nodes + parent-owned nodes where an active (non-revoked) `parent_child_links` record exists. Admins see platform-only nodes.
 
@@ -124,6 +135,7 @@
 - `status` (String, default "live") — **exposed in `TopicRead` responses** (column pre-existed; exposed as of commit 78a5490); required in `TopicCreate` (no default at API boundary — caller must pass `"draft"` or `"live"`).
 - `owner_type` (String, default "platform")
 - `owner_id` (String, nullable) — parent's `idp_sub` for parent-owned topics, NULL for platform topics
+- `root_node_id` (UUID, nullable) — added by **V44** (Phase 8); same meaning as `course_path_nodes.root_node_id` — see that section
 
 > **Visibility enforced (as of V23 / commit aa5ddf7):** same as course_path_nodes — BR-DATA-003 / BR-SEC-005 enforced on all GET endpoints.
 
@@ -225,6 +237,7 @@
 - `owner_id` (String, nullable) — added via V23 migration; parent's `idp_sub` for parent-owned templates, NULL for platform
 - `organization_id` (Integer, nullable)
 - `purpose` (String, default "exam") — "exam" or "quiz"
+- `root_node_id` (UUID, nullable) — added by **V44** (Phase 8); same meaning as `course_path_nodes.root_node_id` — see that section
 - `essay_grading_mode` (VARCHAR, NOT NULL, default `'auto_release'`) — CHECK IN ('auto_release', 'review_first'); `auto_release`: AI score released to student immediately after grading; `review_first`: score held in `ai_graded` state until exam owner confirms or overrides (V29)
 
 > **Visibility enforced (as of V23 / commit aa5ddf7):** BR-DATA-003 / BR-SEC-005 enforced on all GET endpoints. Students see platform + linked-parent exam templates; admins see platform-only; instructors see all.
