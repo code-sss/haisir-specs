@@ -150,23 +150,28 @@
 
 Tasks with no pending dependencies — can be started immediately.
 
-**Critical path — all of G1 hangs off these three:**
-- T1.3 [specs]: BR-DATA-026 DDL child_sub → String (no deps) — unblocks T1.1 and the whole G1.1 chain
-- T1.2 [backend]: root_node_id columns (no deps)
-- T1.10 [backend]: child_subs on the two create payloads (no deps) — carries the ~32-function test update
+**Critical path — unblocks the most downstream work:**
+- T1.1 [backend]: parent_content_bindings table model (dep T1.3 ✅) — unblocks T1.5/T1.8 and the rest of G1.1/G1.2
+- T1.11 [backend]: create_node stamps root_node_id (dep T1.2 ✅) — unblocks T1.12, T1.15, T3.1
+- T1.13 [backend]: adopt_node stamps root_node_id (dep T1.2 ✅) — unblocks T1.14
 
 **Also startable now:**
 - T0.1 [deploy]: prod render confirmation (no deps — opportunistic, next prod window)
 - T0.2 [specs]: correct the B49 entry (no deps)
-- T1.4 [specs]: backfill includes revoked pairs (no deps) — unblocks T1.7
+- T1.19 [backend]: ?include_revoked=true (no deps)
+- T1.24 [frontend]: createNode sends child_subs (deps T1.23 ✅, T1.10 ✅)
+- T1.26 [frontend]: adoptSubtree sends child_subs (deps T1.25 ✅, T1.10 ✅)
 - T1.33 [specs]: 03_student.md BR-STU-001 (no deps)
 - T1.34 [specs]: docs/parent-guide.md §7 (no deps)
 - T1.35 [specs]: 05_06_07_personas.md resync (no deps)
 - T1.36 [specs]: 05_parent.md API table (no deps)
-- T1.19 [backend]: ?include_revoked=true (no deps)
 - T2.1 [backend]: grade on the children DTO (no deps)
 - T3.2 [backend]: daily quota window roll (no deps)
 
-21 of 62 tasks are startable, spread across all four repos — no repo is blocked waiting on another to
-begin. T1.23/T1.25/T2.3/T4.1/T4.6 [frontend] landed 2026-08-21; T1.2/T1.10 [backend] landed 2026-08-21,
-unblocking T1.11/T1.13 [backend] and T1.24/T1.26 [frontend] (all four newly ready).
+14 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
+specs has nothing left blocking it. Landed 2026-08-21: T1.2/T1.10 [backend],
+T1.23/T1.25/T2.3/T2.4/T4.1/T4.2/T4.3/T4.4/T4.5/T4.6/T4.7 [frontend] (G2.2 and G4.2's leaf tasks are
+now fully checked; their subgoal integration tests are still open). That landing unblocked T1.1
+[backend] (via T1.3, already done), T1.11/T1.13 [backend] (via T1.2), and T1.24/T1.26 [frontend]
+(via T1.23/T1.25 + T1.10) — all five folded into the lists above. T1.9/T1.16 remain blocked on T1.8,
+which is still blocked on T1.1.
