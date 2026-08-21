@@ -185,15 +185,19 @@ shared Home Study tree and no way to separate them. This rule adds the missing d
 ```sql
 CREATE TABLE parent_content_bindings (
     root_node_id UUID NOT NULL REFERENCES course_path_nodes(id) ON DELETE CASCADE,
-    child_sub    UUID NOT NULL,          -- Keycloak sub; NO FK (no local users table)
+    child_sub    VARCHAR NOT NULL,       -- Keycloak sub; NO FK (no local users table)
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (root_node_id, child_sub)
 );
 CREATE INDEX ix_parent_content_bindings_child ON parent_content_bindings (child_sub);
 ```
 
-`child_sub` carries **no foreign key** — identity is the Keycloak `sub` and there is no local users
-table. Consistent with `parent_child_links`, which uses the same raw-UUID-string convention.
+`child_sub` is `VARCHAR`, matching `parent_child_links.child_sub`
+(`src/infrastructure/models/user_metadata.py:89`), not `UUID` — the migration backfill's
+`INSERT ... SELECT l.child_sub` reads directly from that column, and a `UUID` type here would abort
+the backfill on Postgres (varchar→uuid mismatch on every non-canonical sub, or unconditionally
+without a cast). `child_sub` carries **no foreign key** — identity is the Keycloak `sub` and there is
+no local users table. Consistent with `parent_child_links`, which uses the same raw-string convention.
 
 ### Denormalised `root_node_id`
 
@@ -235,11 +239,13 @@ this design exists to avoid. Divergence between children is expressed as a separ
   `exam_sessions` — the session remains readable to the student. BR-PAR-004's delete-block is
   deliberately **not** extended to unbind: it guards irreversible deletion, whereas unbinding is a
   reversible policy change with no data at risk.
-- **Bindings outlive link revocation, by intent.** Revoking a parent-child link immediately hides
-  the content (the `parent_child_links` term in BR-DATA-003 does that with no cleanup job). The
-  binding row is left in place, so re-linking the same pair via a fresh code (BR-PAR-014) restores
-  the previous visibility rather than silently losing it. This is intended behaviour, not an
-  oversight.
+- **Bindings outlive link revocation, by intent — with no pre/post-migration exception.** Revoking a
+  parent-child link immediately hides the content (the `parent_child_links` term in BR-DATA-003 does
+  that with no cleanup job). The binding row is left in place, so re-linking the same pair via a
+  fresh code (BR-PAR-014) restores the previous visibility rather than silently losing it. This holds
+  identically for bindings created by the V44 migration and bindings created after it — the migration
+  backfills revoked pairs too (see "Migration", below) precisely so a pre-existing revoked pair is not
+  a second-class case that fails to restore visibility on re-link.
 - **Zero bindings means invisible.** A root with no binding rows is reachable by nobody. The `EXISTS`
   in BR-DATA-003 is strict — there is no "unbound means visible to all" fallback, which would
   silently expose an orphaned tree the moment a new child was linked.
@@ -251,15 +257,21 @@ INSERT INTO parent_content_bindings (root_node_id, child_sub)
 SELECT n.id, l.child_sub
 FROM course_path_nodes n
 JOIN parent_child_links l
-  ON l.parent_sub = n.owner_id AND l.revoked_at IS NULL
-WHERE n.owner_type = 'parent' AND n.parent_id IS NULL;
+  ON l.parent_sub = n.owner_id
+WHERE n.owner_type = 'parent' AND n.parent_id IS NULL
+ON CONFLICT DO NOTHING;
 ```
 
-Binds every existing parent tree to every child currently linked to that parent — **exactly today's
-visibility**, preserved for every parent including those with several children. No child loses
-access to anything, so no revocation-without-a-revocation-event (which would contradict BR-STU-012).
-Parents with no linked children get no binding rows, which matches today's behaviour: nobody could
-see that content anyway.
+Binds every existing parent tree to every child ever linked to that parent, **active or revoked** —
+not just today's actively-visible set. A revoked link grants nothing today (BR-DATA-003's link term
+is false), so this does not expose anything; it makes the pre-migration pairs obey the same
+"bindings outlive revocation" property as every post-Phase-8 pair (see Rules, below), so a parent
+who re-links a child they'd unlinked before this migration ran regains the old content instead of
+finding it silently gone. `ON CONFLICT DO NOTHING` because a re-linked pair has two `parent_child_links`
+rows (one revoked, one active) joining to the same `(root_node_id, child_sub)`. No currently-visible
+child loses access to anything, so no revocation-without-a-revocation-event (which would contradict
+BR-STU-012). Parents with no linked children get no binding rows, which matches today's behaviour:
+nobody could see that content anyway.
 
 `root_node_id` is backfilled in the same migration by walking each parent tree once from its root.
 
