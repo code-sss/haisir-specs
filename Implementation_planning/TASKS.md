@@ -57,8 +57,8 @@
 - [ ] **G1.3: Read path enforces both terms, everywhere** — integration test
 
 ### G1.4 — Parent binds content at create time (ships in lockstep with G1.2)
-- [ ] T1.23 [frontend]: Child multi-select in the Add Root modal
-- [ ] T1.25 [frontend]: Child multi-select in the Adopt modal
+- [x] T1.23 [frontend]: Child multi-select in the Add Root modal (2026-08-21)
+- [x] T1.25 [frontend]: Child multi-select in the Adopt modal (2026-08-21)
 - [ ] T1.24 [frontend]: createNode sends child_subs (depends on T1.23, T1.10 [backend])
 - [ ] T1.26 [frontend]: adoptSubtree sends child_subs (depends on T1.25, T1.10 [backend])
 - [ ] T1.27 [frontend]: Privacy pill renders the real binding set (depends on T1.18 [backend])
@@ -90,7 +90,7 @@
 - [ ] **G2.1: Grade reaches the client** — integration test
 
 ### G2.2 — Parent chrome
-- [ ] T2.3 [frontend]: ParentShell renders a parent header (modify, do not duplicate)
+- [x] T2.3 [frontend]: ParentShell renders a parent header (modify, do not duplicate) (2026-08-21)
 - [ ] T2.4 [frontend]: + Link child in the topbar (depends on T2.3)
 - [ ] **G2.2: Parent chrome** — integration test
 
@@ -127,14 +127,14 @@
 ## G4 [frontend]: Builder — content inline, topic route retired
 
 ### G4.1 — Content renders in the topic card
-- [ ] T4.1 [frontend]: Mount TopicContentSection in the topic card
+- [x] T4.1 [frontend]: Mount TopicContentSection in the topic card (2026-08-21)
 - [ ] T4.2 [frontend]: Extraction group card shell (depends on T4.1)
 - [ ] T4.3 [frontend]: Show pages expander (depends on T4.2)
 - [ ] T4.4 [frontend]: Segmented Document | Text toggle (depends on T4.2)
 - [ ] **G4.1: Content renders in the topic card** — integration test
 
 ### G4.2 — The old route and the dead link go
-- [ ] T4.6 [frontend]: Remove the dead Create Exam link
+- [x] T4.6 [frontend]: Remove the dead Create Exam link (2026-08-21)
 - [ ] T4.5 [frontend]: Topic route redirects (depends on T4.1)
 - [ ] T4.7 [frontend]: Remove the Upload Content link (depends on T4.1)
 - [ ] **G4.2: The old route and the dead link go** — integration test
@@ -166,11 +166,10 @@ Tasks with no pending dependencies — can be started immediately.
 - T1.19 [backend]: ?include_revoked=true (no deps)
 - T2.1 [backend]: grade on the children DTO (no deps)
 - T3.2 [backend]: daily quota window roll (no deps)
-- T1.23 [frontend]: Add Root modal multi-select (no deps)
-- T1.25 [frontend]: Adopt modal multi-select (no deps)
-- T2.3 [frontend]: ParentShell parent header (no deps)
-- T4.1 [frontend]: mount TopicContentSection inline (no deps)
-- T4.6 [frontend]: remove the dead Create Exam link (no deps)
+- T2.4 [frontend]: + Link child in the topbar (dep T2.3 done 2026-08-21) — newly ready
+- T4.2 [frontend]: Extraction group card shell (dep T4.1 done 2026-08-21) — newly ready
+- T4.5 [frontend]: Topic route redirects (dep T4.1 done 2026-08-21) — newly ready
+- T4.7 [frontend]: Remove the Upload Content link (dep T4.1 done 2026-08-21) — newly ready
 
-18 of 62 tasks are startable on day one, spread across all four repos — no repo is blocked waiting on
-another to begin.
+17 of 62 tasks are startable, spread across all four repos — no repo is blocked waiting on another to
+begin. T1.23/T1.25/T2.3/T4.1/T4.6 [frontend] landed 2026-08-21; T1.24/T1.26 stay blocked on T1.10 [backend].
