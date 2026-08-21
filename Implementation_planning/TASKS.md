@@ -48,19 +48,28 @@
 - [x] T1.9 [backend]: Bind-time validation is all-or-nothing (depends on T1.8) (2026-08-21)
 - [x] T1.11 [backend]: create_node stamps root_node_id (depends on T1.2) (2026-08-21)
 - [x] T1.13 [backend]: adopt_node stamps root_node_id on every clone (depends on T1.2) (2026-08-21)
-- [ ] T1.12 [backend]: create_node binds the named children (depends on T1.9, T1.11, T1.10)
-- [ ] T1.14 [backend]: adopt_node binds the named children (depends on T1.9, T1.13, T1.10)
+- [x] T1.12 [backend]: create_node binds the named children (depends on T1.9, T1.11, T1.10) (2026-08-21)
+- [x] T1.14 [backend]: adopt_node binds the named children (depends on T1.9, T1.13, T1.10) (2026-08-21)
 - [x] T1.15 [backend]: Parent topic create stamps root_node_id (depends on T1.11) (2026-08-21)
 - [x] T1.16 [backend]: POST /nodes/{root_id}/bindings (depends on T1.9) (2026-08-21)
 - [x] T1.17 [backend]: DELETE /nodes/{root_id}/bindings/{child_sub} (depends on T1.8) (2026-08-21)
-- [ ] T1.18 [backend]: child_subs on parent root reads (depends on T1.8)
-- [ ] **G1.2: Write path stamps root_node_id and bindings** — integration test
+- [x] T1.18 [backend]: child_subs on parent root reads (depends on T1.8) (2026-08-21)
+- [ ] **G1.2: Write path stamps root_node_id and bindings** — integration test — NOT RUN: all
+      children done (2026-08-21), but no live Postgres was reachable in this environment
+      (`INTEGRATION_DB_URL` unset) to execute the subgoal's integration test. Unit coverage for
+      T1.12/T1.14/T1.18 (flush-then-bind atomicity, unlinked-child None/404, child_subs on reads) is
+      green at 100%. Re-run this subgoal test once `INTEGRATION_DB_URL` points at a live instance.
 
 ### G1.3 — Read path enforces both terms, everywhere
-- [ ] T1.20 [backend]: The clause gains the binding EXISTS (depends on T1.2, T1.6)
-- [ ] T1.21 [backend]: _resolve_parent_nodes filters service-side (depends on T1.8) ← **the failure mode**
-- [ ] T1.22 [backend]: hAITU gate gains the binding term (depends on T1.8, T1.2)
-- [ ] **G1.3: Read path enforces both terms, everywhere** — integration test
+- [x] T1.20 [backend]: The clause gains the binding EXISTS (depends on T1.2, T1.6) (2026-08-21)
+- [x] T1.21 [backend]: _resolve_parent_nodes filters service-side (depends on T1.8) ← **the failure mode** (2026-08-21)
+- [x] T1.22 [backend]: hAITU gate gains the binding term (depends on T1.8, T1.2) (2026-08-21)
+- [ ] **G1.3: Read path enforces both terms, everywhere** — integration test — NOT RUN: all children
+      done (2026-08-21), but no live Postgres was reachable in this environment
+      (`INTEGRATION_DB_URL` unset) to execute the subgoal's integration test
+      (`test_g6_visibility_student_read_paths.py`). Unit coverage for T1.20/T1.21/T1.22 (binding
+      EXISTS term, dashboard filter with hoisted `list_for_child` call, hAITU binding gate) is green
+      at 100%. Re-run this subgoal test once `INTEGRATION_DB_URL` points at a live instance.
 
 ### G1.4 — Parent binds content at create time (ships in lockstep with G1.2)
 - [x] T1.23 [frontend]: Child multi-select in the Add Root modal (2026-08-21)
@@ -73,7 +82,7 @@
 - [ ] **G1.4: Parent binds content at create time** — integration test
 
 ### G1.5 — Regression fixtures survive the breaking change
-- [ ] T1.30 [backend]: linked_child fixture helper (depends on T1.8)
+- [x] T1.30 [backend]: linked_child fixture helper (depends on T1.8) (2026-08-21)
 - [ ] T1.31 [backend]: Rewrite the cross-owner 404 sweep (depends on T1.30, T1.20)
 - [ ] T1.32 [backend]: Rewrite the E2E journey test (depends on T1.30, T1.21)
 - [ ] **G1.5: Regression fixtures survive the breaking change** — integration test
@@ -120,8 +129,12 @@
 
 ### G3.2 — The daily quota is actually daily
 - [x] T3.2 [backend]: daily_window_start actually rolls ← **live bug: 100/day is a lifetime cap today** (2026-08-21)
-- [ ] T3.3 [backend]: GET /api/parent/curriculum/quota (depends on T3.2)
-- [ ] **G3.2: The daily quota is actually daily** — integration test
+- [x] T3.3 [backend]: GET /api/parent/curriculum/quota (depends on T3.2) (2026-08-21)
+- [ ] **G3.2: The daily quota is actually daily** — integration test — NOT RUN: all children done
+      (2026-08-21), but no live Postgres was reachable in this environment (`INTEGRATION_DB_URL`
+      unset) to execute the subgoal's integration test. Unit coverage for T3.3 (fresh/stale/no-row
+      quota view, 403 for non-parent, no-CSRF GET) is green at 100%. Re-run this subgoal test once
+      `INTEGRATION_DB_URL` points at a live instance.
 
 ### G3.3 — The tab
 - [ ] T3.4 [frontend]: Module cards for the active child (depends on T2.6, T1.18 [backend], T3.1 [backend])
@@ -159,21 +172,23 @@
 Tasks with no pending dependencies — can be started immediately.
 
 **Critical path — unblocks the most downstream work:**
-- T1.20 [backend]: The clause gains the binding EXISTS (dep T1.2 ✅, T1.6 ✅) — the read-path term
-- T3.3 [backend]: GET /api/parent/curriculum/quota (dep T3.2 ✅)
+- T1.31 [backend]: Rewrite the cross-owner 404 sweep (dep T1.30 ✅, T1.20 ✅)
+- T1.32 [backend]: Rewrite the E2E journey test (dep T1.30 ✅, T1.21 ✅) ← unblocks the G1.5 subgoal
 - T2.2 [frontend]: Child model carries grade (dep T2.1 ✅ [backend])
 
 **Also startable now:**
 - T0.1 [deploy]: prod render confirmation (no deps — opportunistic, next prod window)
-- T1.12 [backend]: create_node binds the named children (dep T1.9 ✅, T1.11 ✅, T1.10 ✅)
-- T1.14 [backend]: adopt_node binds the named children (dep T1.9 ✅, T1.13 ✅, T1.10 ✅)
-- T1.18 [backend]: child_subs on parent root reads (dep T1.8 ✅)
-- T1.21 [backend]: _resolve_parent_nodes filters service-side (dep T1.8 ✅) ← the failure mode
-- T1.22 [backend]: hAITU gate gains the binding term (dep T1.8 ✅, T1.2 ✅)
-- T1.30 [backend]: linked_child fixture helper (dep T1.8 ✅)
+- T1.27 [frontend]: Privacy pill renders the real binding set (dep T1.18 ✅ [backend])
+- T3.7 [frontend]: Quota line in the add-content modal (dep T3.3 ✅ [backend])
 
-10 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
-specs has none left ready (T1.37 landed). Landed 2026-08-21: T1.9 [backend] — `bind_children`
+7 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
+specs has none left ready (T1.37 landed). Landed 2026-08-21 (this batch): T1.12/T1.14/T1.18/T1.20/
+T1.21/T1.22/T1.30/T3.3 [backend] — the full G1.2/G1.3 write+read binding enforcement plus the T1.30
+fixture helpers and the T3.3 quota endpoint (see below for detail). This unblocks T1.31, T1.32
+[backend] and T1.27, T3.7 [frontend]. T1.21 ("the failure mode") landing closes the BR-DATA-003 gap
+where an unbound-but-linked child could still see a parent's Home Study content via
+`_resolve_parent_nodes` — that path is now filtered by `parent_content_bindings`, not just
+`parent_child_links`. Landed earlier 2026-08-21: T1.9 [backend] — `bind_children`
 all-or-nothing validation (BR-SEC-024), unblocking T1.12/T1.14/T1.16. And T1.37 [specs] —
 current/schema.md now documents the `parent_content_bindings` table and `root_node_id` on
 `course_path_nodes`/`topics`/`exam_templates` (V44, confirmed against the actual migration file
