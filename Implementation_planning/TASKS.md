@@ -91,8 +91,8 @@
 
 ### G2.2 — Parent chrome
 - [x] T2.3 [frontend]: ParentShell renders a parent header (modify, do not duplicate) (2026-08-21)
-- [ ] T2.4 [frontend]: + Link child in the topbar (depends on T2.3)
-- [ ] **G2.2: Parent chrome** — integration test
+- [x] T2.4 [frontend]: + Link child in the topbar (depends on T2.3) (2026-08-21)
+- [x] **G2.2: Parent chrome** — integration test (2026-08-21)
 
 ### G2.3 — Child and tab navigation
 - [ ] T2.5 [frontend]: ParentChildStrip (depends on T2.2)
@@ -128,15 +128,15 @@
 
 ### G4.1 — Content renders in the topic card
 - [x] T4.1 [frontend]: Mount TopicContentSection in the topic card (2026-08-21)
-- [ ] T4.2 [frontend]: Extraction group card shell (depends on T4.1)
+- [x] T4.2 [frontend]: Extraction group card shell (depends on T4.1) (2026-08-21)
 - [ ] T4.3 [frontend]: Show pages expander (depends on T4.2)
 - [ ] T4.4 [frontend]: Segmented Document | Text toggle (depends on T4.2)
 - [ ] **G4.1: Content renders in the topic card** — integration test
 
 ### G4.2 — The old route and the dead link go
 - [x] T4.6 [frontend]: Remove the dead Create Exam link (2026-08-21)
-- [ ] T4.5 [frontend]: Topic route redirects (depends on T4.1)
-- [ ] T4.7 [frontend]: Remove the Upload Content link (depends on T4.1)
+- [x] T4.5 [frontend]: Topic route redirects (depends on T4.1) (2026-08-21)
+- [x] T4.7 [frontend]: Remove the Upload Content link (depends on T4.1) (2026-08-21)
 - [ ] **G4.2: The old route and the dead link go** — integration test
 
 - [ ] **G4: Builder — content inline, topic route retired** — E2E test
@@ -166,10 +166,10 @@ Tasks with no pending dependencies — can be started immediately.
 - T1.19 [backend]: ?include_revoked=true (no deps)
 - T2.1 [backend]: grade on the children DTO (no deps)
 - T3.2 [backend]: daily quota window roll (no deps)
-- T2.4 [frontend]: + Link child in the topbar (dep T2.3 done 2026-08-21) — newly ready
-- T4.2 [frontend]: Extraction group card shell (dep T4.1 done 2026-08-21) — newly ready
-- T4.5 [frontend]: Topic route redirects (dep T4.1 done 2026-08-21) — newly ready
-- T4.7 [frontend]: Remove the Upload Content link (dep T4.1 done 2026-08-21) — newly ready
+- T4.3 [frontend]: Show pages expander (dep T4.2 done 2026-08-21) — newly ready
+- T4.4 [frontend]: Segmented Document | Text toggle (dep T4.2 done 2026-08-21) — newly ready
 
-17 of 62 tasks are startable, spread across all four repos — no repo is blocked waiting on another to
-begin. T1.23/T1.25/T2.3/T4.1/T4.6 [frontend] landed 2026-08-21; T1.24/T1.26 stay blocked on T1.10 [backend].
+15 of 62 tasks are startable, spread across all four repos — no repo is blocked waiting on another to
+begin. T1.23/T1.25/T2.3/T4.1/T4.6/T2.4/T4.2/T4.5/T4.7 [frontend] landed 2026-08-21; T1.24/T1.26 stay
+blocked on T1.10 [backend]. G2.2 closed (parent chrome done); G4.2's leaf tasks are done but its goal
+test is E2E (Playwright), not runnable in the unit suite.
