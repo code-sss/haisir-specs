@@ -26,8 +26,8 @@
 ## G1 [backend][frontend][specs]: Per-child Home Study binding
 
 ### G1.1 — Binding schema + behaviour-preserving migration
-- [ ] T1.3 [specs]: BR-DATA-026 DDL types child_sub as String
-- [ ] T1.4 [specs]: BR-DATA-026 backfill binds revoked pairs too
+- [x] T1.3 [specs]: BR-DATA-026 DDL types child_sub as String
+- [x] T1.4 [specs]: BR-DATA-026 backfill binds revoked pairs too
 - [ ] T1.2 [backend]: root_node_id column on the three owner-scoped tables
 - [ ] T1.1 [backend]: parent_content_bindings table model (depends on T1.3)
 - [ ] T1.5 [backend]: V44 schema half (depends on T1.1, T1.2)
