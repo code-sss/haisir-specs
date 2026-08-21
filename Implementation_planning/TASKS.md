@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> **Last baselined: backend:`67b6cc3` frontend:`dd50f0e` deploy:`790e29d` (2026-08-21)** — all three
+> **Last baselined: backend:`442ef7f` frontend:`dd50f0e` deploy:`790e29d` (2026-08-21)** — all three
 > working trees clean at scoping. Specs baseline `510bbd8`. Alembic head V43; this phase adds V44.
 >
 > **Phase 8 — Parent UX Alignment.** Scoped 2026-08-20 via `/plan`. 62 leaf tasks across four repos.
@@ -45,14 +45,14 @@
 - [x] T1.10 [backend]: child_subs on the two create payloads (2026-08-21)
 - [x] T1.19 [backend]: GET /api/parent/children?include_revoked=true (2026-08-21)
 - [x] T1.8 [backend]: ParentContentBindingRepository (depends on T1.1) (2026-08-21)
-- [ ] T1.9 [backend]: Bind-time validation is all-or-nothing (depends on T1.8)
+- [x] T1.9 [backend]: Bind-time validation is all-or-nothing (depends on T1.8) (2026-08-21)
 - [x] T1.11 [backend]: create_node stamps root_node_id (depends on T1.2) (2026-08-21)
 - [x] T1.13 [backend]: adopt_node stamps root_node_id on every clone (depends on T1.2) (2026-08-21)
 - [ ] T1.12 [backend]: create_node binds the named children (depends on T1.9, T1.11, T1.10)
 - [ ] T1.14 [backend]: adopt_node binds the named children (depends on T1.9, T1.13, T1.10)
 - [x] T1.15 [backend]: Parent topic create stamps root_node_id (depends on T1.11) (2026-08-21)
-- [ ] T1.16 [backend]: POST /nodes/{root_id}/bindings (depends on T1.9)
-- [ ] T1.17 [backend]: DELETE /nodes/{root_id}/bindings/{child_sub} (depends on T1.8)
+- [x] T1.16 [backend]: POST /nodes/{root_id}/bindings (depends on T1.9) (2026-08-21)
+- [x] T1.17 [backend]: DELETE /nodes/{root_id}/bindings/{child_sub} (depends on T1.8) (2026-08-21)
 - [ ] T1.18 [backend]: child_subs on parent root reads (depends on T1.8)
 - [ ] **G1.2: Write path stamps root_node_id and bindings** — integration test
 
@@ -159,24 +159,25 @@
 Tasks with no pending dependencies — can be started immediately.
 
 **Critical path — unblocks the most downstream work:**
-- T1.9 [backend]: Bind-time validation all-or-nothing (dep T1.8 ✅) — unblocks T1.12, T1.14, T1.16
 - T1.20 [backend]: The clause gains the binding EXISTS (dep T1.2 ✅, T1.6 ✅) — the read-path term
 - T3.3 [backend]: GET /api/parent/curriculum/quota (dep T3.2 ✅)
 - T2.2 [frontend]: Child model carries grade (dep T2.1 ✅ [backend])
 
 **Also startable now:**
 - T0.1 [deploy]: prod render confirmation (no deps — opportunistic, next prod window)
-- T1.17 [backend]: DELETE /nodes/{root_id}/bindings/{child_sub} (dep T1.8 ✅)
+- T1.12 [backend]: create_node binds the named children (dep T1.9 ✅, T1.11 ✅, T1.10 ✅)
+- T1.14 [backend]: adopt_node binds the named children (dep T1.9 ✅, T1.13 ✅, T1.10 ✅)
 - T1.18 [backend]: child_subs on parent root reads (dep T1.8 ✅)
 - T1.21 [backend]: _resolve_parent_nodes filters service-side (dep T1.8 ✅) ← the failure mode
 - T1.22 [backend]: hAITU gate gains the binding term (dep T1.8 ✅, T1.2 ✅)
 - T1.30 [backend]: linked_child fixture helper (dep T1.8 ✅)
 
 10 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
-specs has none left ready (T1.37 landed). Landed 2026-08-21: T1.37 [specs] — current/schema.md now
-documents the `parent_content_bindings` table and `root_node_id` on `course_path_nodes`/`topics`/
-`exam_templates` (V44, confirmed against the actual migration file after a discrepancy check — see
-below). Also landed earlier the same day: T1.1/T1.11/T1.13
+specs has none left ready (T1.37 landed). Landed 2026-08-21: T1.9 [backend] — `bind_children`
+all-or-nothing validation (BR-SEC-024), unblocking T1.12/T1.14/T1.16. And T1.37 [specs] —
+current/schema.md now documents the `parent_content_bindings` table and `root_node_id` on
+`course_path_nodes`/`topics`/`exam_templates` (V44, confirmed against the actual migration file
+after a discrepancy check — see below). Also landed earlier the same day: T1.1/T1.11/T1.13
 [backend] (the parent_content_bindings table model plus root_node_id stamping in create_node and
 adopt_node), T1.8 [backend] (the ParentContentBindingRepository — add_many/delete/list_for_root/
 list_for_child/exists, with an abstract interface and a DI provider; no migration, the table
@@ -198,7 +199,7 @@ bug. And, in this repo, T0.2/T1.33/T1.34/T1.35/T1.36 [specs] (B49 record correct
 parent-guide.md §7, 05_06_07_personas.md and the 05_parent.md API table all resynced to the shipped
 per-child binding rule). T1.8 unblocked T1.9/T1.17/T1.18/T1.21/T1.22/T1.30; T1.5/T1.6 unblocked
 T1.20; T1.7 unblocked T1.37 [specs]; T2.1 unblocked T2.2 [frontend]; T3.2 unblocked T3.3.
-T1.12/T1.14/T1.16 remain blocked on T1.9 (now ready). T3.1 alone does not unblock T3.4 [frontend]
+T1.9 unblocked T1.12/T1.14/T1.16. T3.1 alone does not unblock T3.4 [frontend]
 (also needs T2.6 and T1.18). G1.1's and G3.1's integration tests could not be executed in this
 environment (no live Postgres reachable) — see the notes on those lines; their child tasks are
 done and unit coverage (including the T3.1 fan-out regression case) is green at 100%.
