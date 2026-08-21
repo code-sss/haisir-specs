@@ -30,21 +30,27 @@
 - [x] T1.4 [specs]: BR-DATA-026 backfill binds revoked pairs too
 - [x] T1.2 [backend]: root_node_id column on the three owner-scoped tables (2026-08-21)
 - [x] T1.1 [backend]: parent_content_bindings table model (depends on T1.3) (2026-08-21)
-- [ ] T1.5 [backend]: V44 schema half (depends on T1.1, T1.2)
-- [ ] T1.6 [backend]: V44 root_node_id backfill (depends on T1.5)
-- [ ] T1.7 [backend]: V44 bindings backfill (depends on T1.5, T1.4)
-- [ ] **G1.1: Binding schema + behaviour-preserving migration** — integration test
+- [x] T1.5 [backend]: V44 schema half (depends on T1.1, T1.2) (2026-08-21)
+- [x] T1.6 [backend]: V44 root_node_id backfill (depends on T1.5) (2026-08-21)
+- [x] T1.7 [backend]: V44 bindings backfill (depends on T1.5, T1.4) (2026-08-21)
+- [ ] **G1.1: Binding schema + behaviour-preserving migration** — integration test — NOT RUN: all
+      children done, but no live Postgres was reachable in this environment (`INTEGRATION_DB_URL`
+      unset, no docker postgres) to execute `alembic upgrade V44` against a pre-migration fixture.
+      `alembic history` confirms V44 chains cleanly from V43; the structural unit test
+      (`tests/unit/infrastructure/test_v44_migration.py`) and 4 gated integration tests
+      (`tests/integration/phase8/test_v44_parent_content_bindings.py`, skipped without a DB) are in
+      place. Re-run this subgoal test once `INTEGRATION_DB_URL` points at a live instance.
 
 ### G1.2 — Write path stamps root_node_id and bindings
 - [x] T1.10 [backend]: child_subs on the two create payloads (2026-08-21)
-- [ ] T1.19 [backend]: GET /api/parent/children?include_revoked=true
-- [ ] T1.8 [backend]: ParentContentBindingRepository (depends on T1.1)
+- [x] T1.19 [backend]: GET /api/parent/children?include_revoked=true (2026-08-21)
+- [x] T1.8 [backend]: ParentContentBindingRepository (depends on T1.1) (2026-08-21)
 - [ ] T1.9 [backend]: Bind-time validation is all-or-nothing (depends on T1.8)
 - [x] T1.11 [backend]: create_node stamps root_node_id (depends on T1.2) (2026-08-21)
 - [x] T1.13 [backend]: adopt_node stamps root_node_id on every clone (depends on T1.2) (2026-08-21)
 - [ ] T1.12 [backend]: create_node binds the named children (depends on T1.9, T1.11, T1.10)
 - [ ] T1.14 [backend]: adopt_node binds the named children (depends on T1.9, T1.13, T1.10)
-- [ ] T1.15 [backend]: Parent topic create stamps root_node_id (depends on T1.11)
+- [x] T1.15 [backend]: Parent topic create stamps root_node_id (depends on T1.11) (2026-08-21)
 - [ ] T1.16 [backend]: POST /nodes/{root_id}/bindings (depends on T1.9)
 - [ ] T1.17 [backend]: DELETE /nodes/{root_id}/bindings/{child_sub} (depends on T1.8)
 - [ ] T1.18 [backend]: child_subs on parent root reads (depends on T1.8)
@@ -85,7 +91,7 @@
 ## G2 [frontend][backend]: Parent shell, child switcher, tab nav
 
 ### G2.1 — Grade reaches the client
-- [ ] T2.1 [backend]: grade on the children DTO
+- [x] T2.1 [backend]: grade on the children DTO (2026-08-21)
 - [ ] T2.2 [frontend]: Child model carries grade (depends on T2.1 [backend])
 - [ ] **G2.1: Grade reaches the client** — integration test
 
@@ -107,11 +113,13 @@
 ## G3 [frontend][backend]: Curriculum tab shows only derivable numbers
 
 ### G3.1 — Server derives the card metrics
-- [ ] T3.1 [backend]: Root stats on GET /nodes (depends on T1.11)
-- [ ] **G3.1: Server derives the card metrics** — integration test
+- [x] T3.1 [backend]: Root stats on GET /nodes (depends on T1.11) (2026-08-21)
+- [ ] **G3.1: Server derives the card metrics** — integration test — NOT RUN: only child T3.1 is
+      done, but G3.1's own subgoal test is an integration test needing a live Postgres, unreachable
+      in this environment. Unit coverage (fan-out regression case included) is green at 100%.
 
 ### G3.2 — The daily quota is actually daily
-- [ ] T3.2 [backend]: daily_window_start actually rolls ← **live bug: 100/day is a lifetime cap today**
+- [x] T3.2 [backend]: daily_window_start actually rolls ← **live bug: 100/day is a lifetime cap today** (2026-08-21)
 - [ ] T3.3 [backend]: GET /api/parent/curriculum/quota (depends on T3.2)
 - [ ] **G3.2: The daily quota is actually daily** — integration test
 
@@ -151,22 +159,44 @@
 Tasks with no pending dependencies — can be started immediately.
 
 **Critical path — unblocks the most downstream work:**
-- T1.5 [backend]: V44 schema half (dep T1.1 ✅, T1.2 ✅) — unblocks T1.6, T1.7 and the rest of G1.1
-- T1.8 [backend]: ParentContentBindingRepository (dep T1.1 ✅) — unblocks T1.9, T1.17, T1.18, T1.21, T1.22, T1.30
-- T1.15 [backend]: Parent topic create stamps root_node_id (dep T1.11 ✅)
-- T3.1 [backend]: Root stats on GET /nodes (dep T1.11 ✅) — unblocks T3.4
+- T1.9 [backend]: Bind-time validation all-or-nothing (dep T1.8 ✅) — unblocks T1.12, T1.14, T1.16
+- T1.20 [backend]: The clause gains the binding EXISTS (dep T1.2 ✅, T1.6 ✅) — the read-path term
+- T3.3 [backend]: GET /api/parent/curriculum/quota (dep T3.2 ✅)
+- T2.2 [frontend]: Child model carries grade (dep T2.1 ✅ [backend])
 
 **Also startable now:**
 - T0.1 [deploy]: prod render confirmation (no deps — opportunistic, next prod window)
-- T1.19 [backend]: ?include_revoked=true (no deps)
-- T2.1 [backend]: grade on the children DTO (no deps)
-- T3.2 [backend]: daily quota window roll (no deps)
+- T1.17 [backend]: DELETE /nodes/{root_id}/bindings/{child_sub} (dep T1.8 ✅)
+- T1.18 [backend]: child_subs on parent root reads (dep T1.8 ✅)
+- T1.21 [backend]: _resolve_parent_nodes filters service-side (dep T1.8 ✅) ← the failure mode
+- T1.22 [backend]: hAITU gate gains the binding term (dep T1.8 ✅, T1.2 ✅)
+- T1.30 [backend]: linked_child fixture helper (dep T1.8 ✅)
+- T1.37 [specs]: current/schema.md brought to V44 (dep T1.7 ✅)
 
-8 of 62 tasks are startable, spread across two repos — deploy's only task is opportunistic and specs
-has nothing left ready (T1.37 stays blocked on backend T1.7). Landed 2026-08-21: T1.1/T1.11/T1.13
+11 of 62 tasks are startable, spread across four repos — deploy's only task is opportunistic and
+specs has one task ready (T1.37, now unblocked by T1.7). Landed 2026-08-21: T1.1/T1.11/T1.13
 [backend] (the parent_content_bindings table model plus root_node_id stamping in create_node and
-adopt_node) and, in this repo, T0.2/T1.33/T1.34/T1.35/T1.36 [specs] (B49 record corrected; BR-STU-001,
+adopt_node), T1.8 [backend] (the ParentContentBindingRepository — add_many/delete/list_for_root/
+list_for_child/exists, with an abstract interface and a DI provider; no migration, the table
+already existed in metadata), T1.5/T1.6/T1.7 [backend] — the V44 migration
+(`alembic/versions/V44_parent_content_bindings.py`), landed as one file/commit per the PLAN.md
+checkpoint note: creates the `parent_content_bindings` table + `ix_parent_content_bindings_child`
+index, adds nullable `root_node_id` to `course_path_nodes`/`topics`/`exam_templates`, backfills
+`root_node_id` via a recursive-CTE temp-table walk, and backfills bindings from
+`parent_child_links` with no `revoked_at` filter (T1.4); `alembic history` confirms V44 is the new
+head, chaining cleanly from V43. And, in one batch, T1.15/T3.1/T1.19/T2.1/T3.2 [backend]:
+`create_topic` stamps `root_node_id`; `list_root_nodes` merges per-root topic/content stats via a
+fan-out-safe two-CTE query (`get_parent_root_stats`); `GET /api/parent/children` gained
+`?include_revoked=true` (new `get_links_for_parent` repo method, `revoked_at` on the wire) and a
+`grade` field, both riding the same `ChildLinkView`/`ChildLinkWithProfile`/
+`list_children_for_parent` edit; and `increment_quota`'s upsert now rolls `daily_jobs`/
+`daily_window_start` via a SQL CASE when the window is >24h stale, with a matching Python-side
+staleness check in `extraction_service.py`'s quota gate — fixing the "100/day is a lifetime cap"
+bug. And, in this repo, T0.2/T1.33/T1.34/T1.35/T1.36 [specs] (B49 record corrected; BR-STU-001,
 parent-guide.md §7, 05_06_07_personas.md and the 05_parent.md API table all resynced to the shipped
-per-child binding rule). Backend landing unblocked T1.5 [backend] (via T1.1+T1.2), T1.8 [backend] (via
-T1.1), T1.15 [backend] (via T1.11) and T3.1 [backend] (via T1.11). T1.12/T1.14 remain blocked on T1.9,
-which is still blocked on T1.8 (now ready).
+per-child binding rule). T1.8 unblocked T1.9/T1.17/T1.18/T1.21/T1.22/T1.30; T1.5/T1.6 unblocked
+T1.20; T1.7 unblocked T1.37 [specs]; T2.1 unblocked T2.2 [frontend]; T3.2 unblocked T3.3.
+T1.12/T1.14/T1.16 remain blocked on T1.9 (now ready). T3.1 alone does not unblock T3.4 [frontend]
+(also needs T2.6 and T1.18). G1.1's and G3.1's integration tests could not be executed in this
+environment (no live Postgres reachable) — see the notes on those lines; their child tasks are
+done and unit coverage (including the T3.1 fan-out regression case) is green at 100%.
