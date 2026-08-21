@@ -29,7 +29,7 @@
 - [x] T1.3 [specs]: BR-DATA-026 DDL types child_sub as String
 - [x] T1.4 [specs]: BR-DATA-026 backfill binds revoked pairs too
 - [x] T1.2 [backend]: root_node_id column on the three owner-scoped tables (2026-08-21)
-- [ ] T1.1 [backend]: parent_content_bindings table model (depends on T1.3)
+- [x] T1.1 [backend]: parent_content_bindings table model (depends on T1.3) (2026-08-21)
 - [ ] T1.5 [backend]: V44 schema half (depends on T1.1, T1.2)
 - [ ] T1.6 [backend]: V44 root_node_id backfill (depends on T1.5)
 - [ ] T1.7 [backend]: V44 bindings backfill (depends on T1.5, T1.4)
@@ -40,8 +40,8 @@
 - [ ] T1.19 [backend]: GET /api/parent/children?include_revoked=true
 - [ ] T1.8 [backend]: ParentContentBindingRepository (depends on T1.1)
 - [ ] T1.9 [backend]: Bind-time validation is all-or-nothing (depends on T1.8)
-- [ ] T1.11 [backend]: create_node stamps root_node_id (depends on T1.2)
-- [ ] T1.13 [backend]: adopt_node stamps root_node_id on every clone (depends on T1.2)
+- [x] T1.11 [backend]: create_node stamps root_node_id (depends on T1.2) (2026-08-21)
+- [x] T1.13 [backend]: adopt_node stamps root_node_id on every clone (depends on T1.2) (2026-08-21)
 - [ ] T1.12 [backend]: create_node binds the named children (depends on T1.9, T1.11, T1.10)
 - [ ] T1.14 [backend]: adopt_node binds the named children (depends on T1.9, T1.13, T1.10)
 - [ ] T1.15 [backend]: Parent topic create stamps root_node_id (depends on T1.11)
@@ -151,9 +151,10 @@
 Tasks with no pending dependencies — can be started immediately.
 
 **Critical path — unblocks the most downstream work:**
-- T1.1 [backend]: parent_content_bindings table model (dep T1.3 ✅) — unblocks T1.5/T1.8 and the rest of G1.1/G1.2
-- T1.11 [backend]: create_node stamps root_node_id (dep T1.2 ✅) — unblocks T1.12, T1.15, T3.1
-- T1.13 [backend]: adopt_node stamps root_node_id (dep T1.2 ✅) — unblocks T1.14
+- T1.5 [backend]: V44 schema half (dep T1.1 ✅, T1.2 ✅) — unblocks T1.6, T1.7 and the rest of G1.1
+- T1.8 [backend]: ParentContentBindingRepository (dep T1.1 ✅) — unblocks T1.9, T1.17, T1.18, T1.21, T1.22, T1.30
+- T1.15 [backend]: Parent topic create stamps root_node_id (dep T1.11 ✅)
+- T3.1 [backend]: Root stats on GET /nodes (dep T1.11 ✅) — unblocks T3.4
 
 **Also startable now:**
 - T0.1 [deploy]: prod render confirmation (no deps — opportunistic, next prod window)
@@ -166,11 +167,9 @@ Tasks with no pending dependencies — can be started immediately.
 - T2.1 [backend]: grade on the children DTO (no deps)
 - T3.2 [backend]: daily quota window roll (no deps)
 
-12 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
-specs has nothing left blocking it. Landed 2026-08-21: T1.2/T1.10 [backend],
-T1.23/T1.24/T1.25/T1.26/T2.3/T2.4/T4.1/T4.2/T4.3/T4.4/T4.5/T4.6/T4.7 [frontend] (G2.2 and G4.2's leaf
-tasks are now fully checked; their subgoal integration tests are still open). T1.24/T1.26 close
-the createNode/adoptSubtree child_subs wiring that T1.23/T1.25 left open for the backend; the G1.4
-subgoal still waits on T1.27/T1.28/T1.29, all blocked on backend read-path tasks (T1.16/T1.17/T1.18/
-T1.19). That landing unblocked T1.1 [backend] (via T1.3, already done), T1.11/T1.13 [backend]
-(via T1.2). T1.9/T1.16 remain blocked on T1.8, which is still blocked on T1.1.
+13 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
+specs has nothing left blocking it. Landed 2026-08-21: T1.1/T1.11/T1.13 [backend] (the
+parent_content_bindings table model plus root_node_id stamping in create_node and adopt_node).
+That landing unblocked T1.5 [backend] (via T1.1+T1.2), T1.8 [backend] (via T1.1), T1.15 [backend]
+(via T1.11) and T3.1 [backend] (via T1.11). T1.12/T1.14 remain blocked on T1.9, which is still
+blocked on T1.8 (now ready).
