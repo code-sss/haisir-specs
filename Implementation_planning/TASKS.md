@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> **Last baselined: backend:`d927209` frontend:`6d3e08b` deploy:`790e29d` (2026-08-21)** — all three
+> **Last baselined: backend:`d927209` frontend:`d178c98` deploy:`790e29d` (2026-08-21)** — all three
 > working trees clean at scoping. Specs baseline `510bbd8`. Alembic head V43; this phase adds V44.
 > T2.2/T2.5–T2.9 [frontend] committed (`6d3e08b`) and pushed to `origin/main`.
 >
@@ -77,10 +77,14 @@
 - [x] T1.25 [frontend]: Child multi-select in the Adopt modal (2026-08-21)
 - [x] T1.24 [frontend]: createNode sends child_subs (depends on T1.23, T1.10 [backend]) (2026-08-21)
 - [x] T1.26 [frontend]: adoptSubtree sends child_subs (depends on T1.25, T1.10 [backend]) (2026-08-21)
-- [ ] T1.27 [frontend]: Privacy pill renders the real binding set (depends on T1.18 [backend])
-- [ ] T1.28 [frontend]: Binding editor on an existing root (depends on T1.16, T1.17 [backend], T1.27)
-- [ ] T1.29 [frontend]: Revoked-but-bound child greyed in the pill (depends on T1.19 [backend], T1.27)
-- [ ] **G1.4: Parent binds content at create time** — integration test
+- [x] T1.27 [frontend]: Privacy pill renders the real binding set (depends on T1.18 [backend]) (2026-08-22)
+- [x] T1.28 [frontend]: Binding editor on an existing root (depends on T1.16, T1.17 [backend], T1.27) (2026-08-22)
+- [x] T1.29 [frontend]: Revoked-but-bound child greyed in the pill (depends on T1.19 [backend], T1.27) (2026-08-22)
+- [x] **G1.4: Parent binds content at create time** — integration test (2026-08-22) — subgoal test (vitest+MSW)
+      behaviours covered at 100%: Add-Root submit-disabled-without-selection (T1.23), POST `child_subs`
+      (T1.24), pill "Visible to Arjun and Meera" (T1.27), editor uncheck fires
+      `DELETE /nodes/{root}/bindings/{sub}` (T1.28 — `parent-binding-editor` + `parent-curriculum-api`
+      tests), pill re-derives "Visible to Arjun" after the tree refetch (T1.27/T1.28 invalidation).
 
 ### G1.5 — Regression fixtures survive the breaking change
 - [x] T1.30 [backend]: linked_child fixture helper (depends on T1.8) (2026-08-21)
@@ -154,11 +158,14 @@
       `INTEGRATION_DB_URL` points at a live instance.
 
 ### G3.3 — The tab
-- [ ] T3.4 [frontend]: Module cards for the active child (depends on T2.6, T1.18 [backend], T3.1 [backend])
-- [ ] T3.5 [frontend]: "About Home Study" explainer (depends on T3.4)
-- [ ] T3.6 [frontend]: "Start building" empty state (depends on T3.4)
-- [ ] T3.7 [frontend]: Quota line in the add-content modal (depends on T3.3 [backend])
-- [ ] **G3.3: The tab** — integration test
+- [x] T3.4 [frontend]: Module cards for the active child (depends on T2.6, T1.18 [backend], T3.1 [backend]) (2026-08-22)
+- [x] T3.5 [frontend]: "About Home Study" explainer (depends on T3.4) (2026-08-22)
+- [x] T3.6 [frontend]: "Start building" empty state (depends on T3.4) (2026-08-22)
+- [x] T3.7 [frontend]: Quota line in the add-content modal (depends on T3.3 [backend]) (2026-08-22)
+- [x] **G3.3: The tab** — integration test (2026-08-22) — subgoal test (vitest) behaviours covered at
+      100%: switching the active child swaps the rendered cards (T3.4 `filterCurriculumRootsForChild`),
+      a child with no bound root renders the "Start building" prompt (T3.6), no `progressbar` role and
+      no "0" placeholder anywhere in the tab (T3.4 renders neither).
 
 - [ ] **G3: Curriculum tab shows only derivable numbers** — E2E test
 
@@ -188,19 +195,59 @@
 
 Tasks with no pending dependencies — can be started immediately.
 
-**Critical path — unblocks the most downstream work:**
-- T1.27 [frontend]: Privacy pill renders the real binding set (dep T1.18 ✅ [backend]) ← unblocks
-  T1.28, T1.29
-- T3.4 [frontend]: Module cards for the active child (dep T2.6 ✅, T1.18 ✅ [backend], T3.1 ✅
-  [backend]) ← unblocks T3.5, T3.6
-
 **Also startable now:**
 - T0.1 [deploy]: prod render confirmation (no deps — opportunistic, next prod window)
-- T3.7 [frontend]: Quota line in the add-content modal (dep T3.3 ✅ [backend])
 
-4 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic,
-backend has none left ready, and specs has none left ready. 54 of 62 tasks are now done. Landed
-2026-08-22, backend: T1.31/T1.32 — rewrote the G3.1 cross-owner 404 sweep and the G7.1 E2E journey
+1 of 62 leaf tasks is startable — deploy's only task is opportunistic (next prod window); backend
+and specs have none left ready; all frontend leaf tasks are done. 61 of 62 leaf tasks are now done
+(the sole remaining is T0.1). No leaf task unblocked by this batch — nothing in PLAN.md depends on
+T1.28/T1.29/T3.5/T3.6; the G2.3 subgoal integration test (blocked on T3.4) is now runnable too.
+Landed 2026-08-22, frontend: T1.28/T1.29/T3.5/T3.6 — the P-curriculum privacy pill is now an editable
+binding editor (`ParentBindingEditor`): a popover over the pill lists actively-linked children as
+checkboxes; checking POSTs `/nodes/{root}/bindings` (`{child_subs:[sub]}`), unchecking DELETEs
+`/nodes/{root}/bindings/{sub}`, both via `fetchWithCSRFRetry` + `X-Current-Role`, invalidating the
+node tree so the pill re-derives. The editor fetches `useParentChildren({includeRevoked:true})` (new
+`?include_revoked=true` path on `parentApi.listChildren`; `revoked_at`→optional `Child.revokedAt`)
+and renders bound-but-revoked children greyed with a "not linked" suffix, disabled (BR-SEC-024 — not
+bindable). A new pure `formatPrivacyPillParts` splits the active-only `summary` (reusing
+`formatPrivacyPill`) from `revokedEntries`; a test-agent-caught bug had the summary including revoked
+children — fixed by filtering active-only before formatting. The P-home Curriculum tab gained the
+"About Home Study" explainer (naming the active child; no "create custom quizzes" — P-exam deferred)
+and a "Start building" empty state (Link to `/parent/curriculum`, not an error) when the active child
+has zero bound roots. 44 new tests (editor 12 + domain 3 + api 6 + hooks 4 + page/tab/dashboard
+edits), 4080 total / 100% coverage; lint/typecheck/knip clean. G1.4 and G3.3 subgoal tests pass
+(behaviours covered in the vitest suite); G1/G3 not bubbled (sibling subgoals still NOT RUN — no
+live Postgres). Not yet committed — working tree has uncommitted changes on top of `d178c98`. Landed
+2026-08-22, frontend: T3.7 — the parent extraction quota (BR-PAR-008a) is now visible in the
+shared `AddContentModal`'s pdf/image drop-zone path: `{concurrent} job(s) in progress ·
+{daily}/{max_daily} uploads today`, sourced from a new `parentCurriculumApi.getQuota` (`GET
+/api/parent/curriculum/quota`, T3.3) threaded through an optional `ContentApiAdapter.getQuota`
+method so the admin/parent-shared `content-management` feature never imports from `parent/`
+directly — gated by adapter capability rather than a `contentSource` string check, since no admin
+adapter implementation of this shared component exists today. Hidden entirely on fetch failure
+(never a hardcoded zero); invalidates and refetches after a successful upload so the counters
+don't go stale mid-session (a blocking issue the challenger pass caught before build — the initial
+plan had no invalidation path). No task unblocked (T3.7 has no downstream dependents in PLAN.md).
+Also landed T3.4 — `ParentCurriculumTab` replaces the static Curriculum-tab nav card on
+P-home with a card grid, one per root bound to the active child (`filterCurriculumRootsForChild`
+membership-filters `useParentNodeTree()`'s roots against `child_subs`), each card showing the
+`{topic_count} topics · {live} live · {draft} draft · {content_count} content items` meta line
+(`formatCurriculumCardMeta`; `topic_count`/`content_count` field names are a flagged
+contract-assumption, defaulted to 0 if absent/renamed) and an `Open builder` CTA to
+`/parent/curriculum?nodeId={root.id}`. Zero-match renders nothing — T3.6 owns the actual empty
+state. Unblocks T3.5, T3.6. Also landed T1.27 — the P-curriculum privacy pill now derives "Visible
+to Arjun and Meera" / "Arjun +2" from the selected root's `child_subs` (T1.18) joined against
+`useParentChildren()`, via a new pure `formatPrivacyPill`
+(`src/features/parent/domain/parent-privacy-pill.ts`); unmatched (revoked) subs are silently
+dropped — greying them is T1.29. Unblocks T1.28, T1.29. Combined across T1.27/T3.4/T3.7: 48 new
+tests (T1.27: 9 domain + 6 component; T3.4: 8 domain + 8 component + `parent-dashboard.test.tsx`
+updated for the new default-mounted `ParentCurriculumTab`; T3.7: 2 API + 1 adapter + 4 hook + 6
+component, spanning `parent-curriculum-api.test.ts`, `parent-content-adapter.test.ts`,
+`use-content-management.test.tsx`, `add-content-modal.test.tsx`; 4036 total in the frontend
+suite), 100% coverage;
+lint/typecheck clean. Not yet committed — working tree has uncommitted changes on top of
+`6d3e08b`. Landed 2026-08-22, backend:
+T1.31/T1.32 — rewrote the G3.1 cross-owner 404 sweep and the G7.1 E2E journey
 test against the shipped binding contract (both previously passed `child_subs` a never-linked random
 UUID, which `bind_children`'s all-or-nothing validation would now 404 on; fixed to use real linked
 children via the T1.30 `linked_child` helper / the journey's own real link-code redemption). G3.1
