@@ -1,7 +1,7 @@
 # Progress
 
 > Auto-generated from PLAN.md. Updated by `/implement` in each code repo.
-> **Last baselined: backend:`442ef7f` frontend:`6d3e08b` deploy:`790e29d` (2026-08-21)** — all three
+> **Last baselined: backend:`d927209` frontend:`6d3e08b` deploy:`790e29d` (2026-08-21)** — all three
 > working trees clean at scoping. Specs baseline `510bbd8`. Alembic head V43; this phase adds V44.
 > T2.2/T2.5–T2.9 [frontend] committed (`6d3e08b`) and pushed to `origin/main`.
 >
@@ -84,9 +84,14 @@
 
 ### G1.5 — Regression fixtures survive the breaking change
 - [x] T1.30 [backend]: linked_child fixture helper (depends on T1.8) (2026-08-21)
-- [ ] T1.31 [backend]: Rewrite the cross-owner 404 sweep (depends on T1.30, T1.20)
-- [ ] T1.32 [backend]: Rewrite the E2E journey test (depends on T1.30, T1.21)
-- [ ] **G1.5: Regression fixtures survive the breaking change** — integration test
+- [x] T1.31 [backend]: Rewrite the cross-owner 404 sweep (depends on T1.30, T1.20) (2026-08-22)
+- [x] T1.32 [backend]: Rewrite the E2E journey test (depends on T1.30, T1.21) (2026-08-22)
+- [ ] **G1.5: Regression fixtures survive the breaking change** — integration test — NOT RUN: all
+      children done (2026-08-22), but no live Postgres was reachable in this environment
+      (`INTEGRATION_DB_URL` unset) to execute `pytest tests/integration/`. `pytest --cov
+      --cov-fail-under=100` is green (5204 passed, 60 skipped — all skips are the
+      `INTEGRATION_DB_URL`-gated integration tests, none skipped as a result of `child_subs`).
+      Re-run this subgoal test once `INTEGRATION_DB_URL` points at a live instance.
 
 ### G1.6 — Specs stop contradicting the shipped rule
 - [x] T1.33 [specs]: 03_student.md BR-STU-001 two-term rewrite (2026-08-21)
@@ -188,15 +193,22 @@ Tasks with no pending dependencies — can be started immediately.
   T1.28, T1.29
 - T3.4 [frontend]: Module cards for the active child (dep T2.6 ✅, T1.18 ✅ [backend], T3.1 ✅
   [backend]) ← unblocks T3.5, T3.6
-- T1.31 [backend]: Rewrite the cross-owner 404 sweep (dep T1.30 ✅, T1.20 ✅)
-- T1.32 [backend]: Rewrite the E2E journey test (dep T1.30 ✅, T1.21 ✅)
 
 **Also startable now:**
 - T0.1 [deploy]: prod render confirmation (no deps — opportunistic, next prod window)
 - T3.7 [frontend]: Quota line in the add-content modal (dep T3.3 ✅ [backend])
 
-6 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic and
-specs has none left ready. 52 of 62 tasks are now done. Landed 2026-08-21, backend batch:
+4 of 62 tasks are startable, spread across three repos — deploy's only task is opportunistic,
+backend has none left ready, and specs has none left ready. 54 of 62 tasks are now done. Landed
+2026-08-22, backend: T1.31/T1.32 — rewrote the G3.1 cross-owner 404 sweep and the G7.1 E2E journey
+test against the shipped binding contract (both previously passed `child_subs` a never-linked random
+UUID, which `bind_children`'s all-or-nothing validation would now 404 on; fixed to use real linked
+children via the T1.30 `linked_child` helper / the journey's own real link-code redemption). G3.1
+also gained a new regression case: a parent's linked-but-unbound child gets `[]` from
+`/api/student/topics/{id}/content` on the parent's bound-but-not-to-them topic (BR-DATA-026). This
+closes out G1.5 at the task level (subgoal integration test still NOT RUN — no live Postgres in this
+environment; `pytest --cov --cov-fail-under=100` is green, 5204 passed / 60 skipped, all skips
+`INTEGRATION_DB_URL`-gated). Landed 2026-08-21, backend batch:
 T1.12/T1.14/T1.18/T1.20/T1.21/T1.22/T1.30/T3.3 — the full G1.2/G1.3 write+read binding enforcement
 plus the T1.30 fixture helpers and the T3.3 quota endpoint (see below for detail). T1.21 ("the
 failure mode") landing closes the BR-DATA-003 gap where an unbound-but-linked child could still see
