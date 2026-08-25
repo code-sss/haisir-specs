@@ -2085,16 +2085,18 @@ exists** — that dependency is the main argument for doing it.
 > is archived by `/plan` at the start of the next cycle, which would have buried them. Filed here so
 > they survive the archive. None is Phase 8 scope; all three are deploy-operator actions, not code.
 
-### B49 — `ALERT_SLACK_WEBHOOK` render-side confirmation still outstanding on prod (deploy) — surfaced 2026-08-14, carried 2026-08-20
+### B49 — `ALERT_SLACK_WEBHOOK` render-side confirmation still outstanding on prod (deploy) — surfaced 2026-08-14, carried 2026-08-20, closed 2026-08-25
 
 G3's alert routing switched from SMTP (five `ALERT_*` keys) to a single Slack incoming webhook
 (`decisions.md` 2026-08-14). The key was seeded on both hosts 2026-08-14 via `rotate-secret.sh` under
 the admin-ops cert identity, and proven end-to-end on staging 2026-08-15 (full CI/CD deploy exit 0,
-13/13 healthy; `TargetDown` pending → firing with the Slack message delivered). The only outstanding
-item is prod's render-side confirmation (T0.1), because prod has had no `deploy.sh` run since the key
-was armed.
+13/13 healthy; `TargetDown` pending → firing with the Slack message delivered). Prod's render-side
+confirmation (T0.1) landed 2026-08-25 via the Jenkins CI/CD prod deploy of v2026.8: `template-configs.sh`
+Step 4 completed with no `ERROR: unresolved secret placeholder(s)` line (the `:355-373` scan greps
+`ALERTMANAGER_TEMPLATED_DIR` for every manifest secret, `ALERT_SLACK_WEBHOOK` included, across both the
+staging and prod logs) and the deploy finished "DEPLOYMENT COMPLETE" / exit 0 on both hosts.
 
-**Fix:** capture prod's render-side confirmation on the next prod `deploy.sh` window (T0.1).
+**Status: CLOSED.**
 
 ### B50 — prod has never run `bootstrap.sh db-engine` (deploy) — surfaced 2026-08-12, carried 2026-08-20
 

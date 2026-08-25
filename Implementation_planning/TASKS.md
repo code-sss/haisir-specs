@@ -20,9 +20,13 @@
 > (`constraints.md:117`), take the pre-deploy dump + datadir tarball (`:125`).
 
 ## G0 [deploy][specs]: B49 record corrected, prod render path confirmed
-- [ ] T0.1 [deploy]: Capture prod's render-side confirmation (opportunistic — next prod window)
+- [x] T0.1 [deploy]: Capture prod's render-side confirmation (2026-08-25)
 - [x] T0.2 [specs]: Correct the B49 backlog entry (2026-08-21)
-- [ ] **G0: B49 record corrected, prod render path confirmed** — E2E test
+- [x] **G0: B49 record corrected, prod render path confirmed** — E2E test — PASSED 2026-08-25: Jenkins
+      CI/CD prod deploy (v2026.8) log shows `template-configs.sh` Step 4 with zero
+      `ERROR: unresolved secret placeholder(s)` occurrences (the `:355-373` scan covers
+      `ALERT_SLACK_WEBHOOK` via `ALERTMANAGER_TEMPLATED_DIR`) and `DEPLOYMENT COMPLETE` / exit 0 on
+      both staging and prod hosts. `phases.md` B49 marked CLOSED.
 
 ## G1 [backend][frontend][specs]: Per-child Home Study binding
 
@@ -193,14 +197,8 @@
 
 ## Ready now
 
-Tasks with no pending dependencies — can be started immediately.
-
-**Also startable now:**
-- T0.1 [deploy]: prod render confirmation (no deps — opportunistic, next prod window)
-
-1 of 62 leaf tasks is startable — deploy's only task is opportunistic (next prod window); backend
-and specs have none left ready; all frontend leaf tasks are done. 61 of 62 leaf tasks are now done
-(the sole remaining is T0.1). No leaf task unblocked by this batch — nothing in PLAN.md depends on
+None — all 62 leaf tasks are done. T0.1 landed 2026-08-25 (prod render-side confirmation, see G0
+above), the last one outstanding. No leaf task unblocked by this batch — nothing in PLAN.md depends on
 T1.28/T1.29/T3.5/T3.6; the G2.3 subgoal integration test (blocked on T3.4) is now runnable too.
 Landed 2026-08-22, frontend: T1.28/T1.29/T3.5/T3.6 — the P-curriculum privacy pill is now an editable
 binding editor (`ParentBindingEditor`): a popover over the pill lists actively-linked children as
