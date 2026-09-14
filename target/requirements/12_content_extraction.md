@@ -2,7 +2,9 @@
 
 > **Phase 1d-real scope.** Replaces the incomplete URL-only Add Content modal shipped in Phase 1d. Applies to Platform Admin and Parent personas.
 >
-> **Persistence model (revised — Content Viewing & Publish increment):** ONE PDF/image upload → **one permanent raw** `topic_contents` row (`content_type='pdf'` or `'image'`) **plus** N extracted `topic_contents` rows (`content_type='text'`), all sharing one `source_extraction_job_id`. Extraction's primary purpose is feeding RAG embeddings — the raw row is what's normally shown to students (e.g. a well-formatted textbook page), with the extracted-text side available as an editable fallback the uploader can publish instead when the raw source is low quality (a poor scan, for instance). Only one side is published at a time (BR-DATA-024). Superseded rule: this used to be text-only, with the source PDF/image transient and never stored as a `topic_contents` row — see `target/requirements/01_data_model.md` BR-DATA-008/009 for the full before/after. The job's own working-directory copy (`extraction_jobs.source_path`) is still purged per the existing TTL; the permanent raw row is a separate copy made at finalize, with its path in the existing **`url`** column (not `text`).
+> **Persistence model (revised — Content Viewing & Publish increment):** ONE PDF/image upload → **one permanent raw** `topic_contents` row (`content_type='pdf'` or `'image'`) **plus** N extracted `topic_contents` rows (`content_type='text'`), all sharing one `source_extraction_job_id`. Extraction's primary purpose is feeding RAG embeddings — the raw row is what's normally shown to students (e.g. a well-formatted textbook page), with the extracted-text side available as an editable fallback the uploader can publish instead when the raw source is low quality (a poor scan, for instance). Only one side is published at a time (BR-DATA-024). Superseded rule: this used to be text-only, with the source PDF/image transient and never stored as a `topic_contents` row — see `target/requirements/01_data_model.md` BR-DATA-008/009 for the full before/after. The job's own working-directory copy (`extraction_jobs.source_path`) is still purged per the existing TTL; the permanent raw row is a separate copy, with its path in the existing **`url`** column (not `text`).
+>
+> **Extraction-Optional increment (revised again):** the raw row is created by the **POST handler at upload time**, not by the worker at finalize. Extraction is therefore **additive, not gating** — an upload stays viewable and publishable even when the vision LLM / OCR backend is unavailable and the job terminally fails. A parent who only wants their child to read the document never depends on the AI pipeline at all. See BR-EXT-038.
 
 ---
 
@@ -67,7 +69,7 @@ client uploads ── POST /jobs ── → pending ── worker picks up ─�
 
 | From | To | Trigger | Allowed by |
 |---|---|---|---|
-| (none) | `pending` | POST handler successfully wrote file + SHA + INSERT | API |
+| (none) | `pending` | POST handler successfully wrote file + SHA + INSERT job **+ INSERT raw `topic_contents` row** (one TX, BR-EXT-039) | API |
 | (none) | `upload_failed` | File write/MIME sniff/SHA dedup violation | API |
 | `pending` | `extracting` | Worker picked up via `FOR UPDATE SKIP LOCKED` | Worker |
 | `extracting` | `extracting` (heartbeat) | Per-page commit, refresh `locked_at` | Worker |
@@ -135,9 +137,9 @@ All endpoints require: APISIX-injected JWT, `X-Current-Role` header, CSRF token 
 
 | Code | Body | Meaning |
 |---|---|---|
-| `201 Created` | Full job object | New job (or replay of an existing job by Idempotency-Key) |
+| `201 Created` | Full job object **+ `raw_content_id`** | New job (or replay of an existing job by Idempotency-Key). The raw `topic_contents` row is already created and publishable at this point (BR-EXT-038); `raw_content_id` lets the client refresh its content list deterministically. |
 | `400` | `{ "detail": "X-Current-Role header required" }` | Missing role header |
-| `409` | `{ "detail": "...", "existing_job_id": "..." }` | SHA-256 already extracted on this topic. Bypass with `X-Force-Reextract: true`. |
+| `409` | `{ "detail": "...", "existing_job_id": "..." }` | SHA-256 already extracted on this topic. Bypass with `X-Force-Reextract: true`. **Cost note (Extraction-Optional):** a terminally-failed job still trips this dedup, and the bypass now creates a *second* permanent raw row and a *second* file for the same document — two upload groups, two "Publish as Document" entries. The UI must steer the user to **Retry** on the failed job rather than re-upload. |
 | `413` | `{ "detail": "File exceeds 50 MB" }` | Streaming parser rejected before full buffer |
 | `415` | `{ "detail": "Unsupported MIME type" }` | python-magic sniff (first 8KB) rejected |
 | `422` | `{ "detail": [...] }` | Other validation errors |
@@ -315,14 +317,10 @@ SELECT COALESCE(MAX(content_order), 0) AS base
 SELECT page_no, markdown_text FROM extraction_job_pages
   WHERE job_id = :job ORDER BY page_no;
 
--- Copy the source file from the job working directory into the permanent content store
--- (Content Viewing & Publish increment). Two DISTINCT storage roots are involved:
---   source:      EXTRACTION storage root (ExtractionSourceStorageImpl), holds job.source_path
---   destination: {data_dir}/topics/{content_type}/{filename} — the convention
---                TopicContentService.create already uses for manually-uploaded files,
---                and the only root the file-serving endpoint will resolve under.
--- extraction_jobs.source_path keeps its own TTL-purge lifecycle, unchanged.
-permanent_url := storage.copy_to_content_store(job.source_path, job.source_type, job.source_filename)
+-- NOTE (Extraction-Optional increment): the raw content row and its permanent file
+-- are NO LONGER created here. The POST handler already created both at upload time
+-- (BR-DATA-008 / BR-EXT-039), so they exist regardless of whether extraction succeeds.
+-- Finalize only re-orders the existing raw row (below).
 
 -- Materialize the extracted text rows (N per upload) — order UNCHANGED from the
 -- pre-increment behaviour, because provenance.page_no is derived from it (BR-DATA-008)
@@ -333,13 +331,13 @@ VALUES
   ...
 RETURNING id;
 
--- Materialize the raw content row (1 per upload), APPENDED after the text rows.
--- Path goes in the `url` column, not `text` — `url` is the existing file-path column.
-INSERT INTO topic_contents
-  (id, topic_id, content_type, title, url, content_order, source_extraction_job_id, visibility_status)
-VALUES
-  (uuid(), :topic, :job.source_type, :job.source_filename, :permanent_url, :page_count, :job, 'draft')
-RETURNING id;
+-- Re-order the raw content row (created at upload with order = 0) so it sits AFTER
+-- the text rows, preserving BR-DATA-008's ordering. A zero-row match is a NO-OP,
+-- never an error: the uploader may have deleted the raw row while extraction ran.
+UPDATE topic_contents
+   SET content_order = :page_count
+ WHERE source_extraction_job_id = :job
+   AND content_type IN ('pdf', 'image');
 
 -- Outbox for async embedding (challenger #3) — text rows only, regardless of visibility_status
 -- (extraction's primary purpose is RAG; the raw row is never enqueued, there is no text to embed —
@@ -519,18 +517,18 @@ The legacy `GET /api/topic-contents/{content_type}/{topic_id}` route is **remove
 - **BR-EXT-007** — Worker uses `FOR UPDATE SKIP LOCKED` to claim jobs. Lease is 5 minutes (refreshed via heartbeat per page). Expired leases are reclaimable by other workers.
 - **BR-EXT-008** — On worker death mid-extraction, another worker resumes from `MAX(page_no)+1` of staged pages. **No LLM-token waste from re-extraction.**
 - **BR-EXT-009** — Native PDF text extraction skips the vision LLM (heuristic: text length ≥50 chars AND image area ratio <0.95). Scanned PDFs and all images go through the vision LLM. When `EXTRACTION__RESTRUCTURE_TEXT=true`, the text path still calls `restructure_page()` via a text-only LLM (BR-EXT-032).
-- **BR-EXT-032** — When native PDF text extraction returns ≥50 chars and image coverage <0.95, and `EXTRACTION__RESTRUCTURE_TEXT=true` (default `true`), the worker passes the raw text through `provider.restructure_page()` before staging it. This corrects fragmentation artefacts common in educational PDFs: fractions split across lines, broken words, and layout ordering lost during text extraction. The method uses a text-only LLM call (no image). If the LLM returns an empty response, the raw extracted text is used unchanged.
+- **BR-EXT-032** — When native PDF text extraction returns ≥50 chars and image coverage <0.95, and `EXTRACTION__RESTRUCTURE_TEXT=true` (default `true`), the worker passes the raw text through `provider.restructure_page()` before staging it. This corrects fragmentation artefacts common in educational PDFs: fractions split across lines, broken words, and layout ordering lost during text extraction. The method uses a text-only LLM call (no image). If the LLM returns an empty response **or raises** (connection refused, timeout, model missing), the raw extracted text is used unchanged — the restructure pass is a cosmetic enhancement and must never fail a job. **Scope limit:** this fallback rescues *native-text* PDF pages only. Scanned pages and all images route to `glm_ocr.process`, which has no fallback and still fails the job when the vision backend is down; upload survivability comes from the raw row (BR-EXT-038), not from this rule.
 - **BR-EXT-033** — `restructure_page()` uses `EXTRACTION__RESTRUCTURE_MODEL_SPEC` if set; falls back to `EXTRACTION__MODEL_SPEC` otherwise. A lighter text-only model (e.g. `qwen3.5:9b`) is preferred to reduce cost and latency, since no image is processed in this path.
 - **BR-EXT-010** — Worker re-validates ownership of the target topic in the finalize transaction. Mismatch → `extraction_failed` with `error='ownership_violation'`.
-- **BR-EXT-011** — Finalize is one TX: `topic_contents INSERT` + `rag_indexing_outbox INSERT` + `extraction_job_audit INSERT` + `extraction_job_pages DELETE` + `extraction_jobs UPDATE`. Atomic.
+- **BR-EXT-011** — Finalize is one TX: `topic_contents INSERT` (the N **text** rows only — the raw row was already inserted at upload, BR-DATA-008) + `topic_contents UPDATE` (raw row `order` → `len(pages)`; a zero-row match is a **no-op, never an error** — the uploader may have deleted the raw row while extraction ran) + `rag_indexing_outbox INSERT` + `extraction_job_audit INSERT` + `extraction_job_pages DELETE` + `extraction_jobs UPDATE`. Atomic.
 - **BR-EXT-012** — RAG embedding is async via outbox, decoupled from student visibility (revised — Content Viewing & Publish increment). Failure to embed never rolls back content. Materialized rows are **not** visible to students on creation — they default to `visibility_status='draft'` and require an explicit publish action (BR-DATA-024). Embedding proceeds independently: extracted `text` rows are enqueued and become searchable by hAITU as soon as the outbox row drains, regardless of whether that row is ever published for student display.
 - **BR-EXT-013** — Per-job cost cap: `MAX_PER_JOB_USD=20` (env-configurable). Worker tracks running cost from token counts × per-token prices; kills job that exceeds.
 - **BR-EXT-014** — Per-day platform cost cap: `MAX_DAILY_PLATFORM_USD=200` (env-configurable). Worker queries today's `extraction_job_audit.cost_usd` sum before claiming a new job; if exceeded, sleeps 60s and retries.
 
 ### Cancellation
 
-- **BR-EXT-015** — DELETE on `pending` → status flips to `cancelled` immediately, source file deleted, `purge_at=NOW()+24h`.
-- **BR-EXT-016** — DELETE on `extracting` → sets `cancel_requested=true`. Worker checks at next page boundary; if true → `status='cancelled'`, partial pages staged are kept for forensic inspection but no `topic_contents` are written.
+- **BR-EXT-015** — DELETE on `pending` → status flips to `cancelled` immediately, source file deleted, `purge_at=NOW()+24h`. **The raw `topic_contents` row created at upload and its permanent file are deleted in the same TX** (BR-EXT-038): cancel is an explicit user abort, so it must leave nothing behind.
+- **BR-EXT-016** — DELETE on `extracting` → sets `cancel_requested=true`. Worker checks at next page boundary; if true → `status='cancelled'`, partial pages staged are kept for forensic inspection and **no text `topic_contents` are written**. The worker also **deletes the raw row and its permanent file**, matching BR-EXT-015 — an abort at page 3 and an abort before pickup must leave the same state.
 - **BR-EXT-017** — DELETE on `done` is rejected (404). Use `DELETE /api/topic-contents/{id}` to remove materialized rows individually.
 
 ### Frontend integration
@@ -541,7 +539,7 @@ The legacy `GET /api/topic-contents/{content_type}/{topic_id}` route is **remove
 
 ### Provenance & audit
 
-- **BR-EXT-021** — Each materialized `topic_contents` row carries `source_extraction_job_id` (nullable; only set for extracted rows). UI badge resolves filename via `extraction_job_audit` JOIN.
+- **BR-EXT-021** — Each materialized `topic_contents` row carries `source_extraction_job_id` (nullable; only set for extracted rows). UI badge resolves filename via `extraction_job_audit` JOIN. **A raw row surviving a terminal `extraction_failed` has no audit row and therefore no badge** — its `title` is the source filename, so identity is preserved without one (see BR-DATA-009).
 - **BR-EXT-022** — `extraction_job_audit` is **never purged**. It outlives the source file, the job row, and even (logically) the deleted `topic_contents` row.
 - **BR-EXT-023** — `topic_contents` rows manually deleted via `DELETE /api/topic-contents/{id}` do not cascade-delete the audit row. The audit retains "this job extracted N pages on date X by user Y" forever.
 - **BR-EXT-023a** — `PATCH /api/topic-contents/{id}` MUST NOT clear `source_extraction_job_id`. Edits change `title` and/or `body` only. Provenance is permanent.
@@ -573,6 +571,17 @@ The legacy `GET /api/topic-contents/{content_type}/{topic_id}` route is **remove
 - **BR-EXT-037** — Publish is a single atomic call per upload group, not a per-row toggle: `PATCH /api/topic-contents/{content_id}/publish` (and the parent-scoped mirror under `/api/parent/curriculum/`) resolves the row's group per BR-DATA-024's grouping key and, in **one transaction**, sets the chosen side to `'published'` and every other row in the group to `'draft'`. A per-row `visibility_status` write is not exposed — the mutual-exclusivity invariant cannot be enforced if callers can set one row at a time.
 - **BR-EXT-035** — Video playback uses the official YouTube IFrame Player API / Vimeo Player SDK, not a raw `<iframe src="...">`. Scope stays YouTube + Vimeo only (matching the existing hostname allowlist in BR-EXT/T13.2 — `youtube.com`, `www.youtube.com`, `youtu.be`, `vimeo.com`, `www.vimeo.com`). When the SDK reports an embed error (e.g. the video owner disabled embedding), the player falls back to a "Watch on YouTube"/"Watch on Vimeo" external-link button instead of a silently broken frame. Applies to both the uploader's preview and the student's viewer.
 - **BR-EXT-036** — Text content editing uses a markdown editor with live preview (textarea + rendered pane via the shared `MarkdownText` component), replacing a plain textarea-only editor. Uploader and student see identically-rendered markdown — one rendering pipeline for both authored and extracted text.
+
+### Extraction-Optional rules
+
+- **BR-EXT-038 — Extraction is additive, not gating.** The raw `topic_contents` row is created by the POST handler at upload time (BR-DATA-008), so an upload is viewable and publishable the moment the 201 returns — before the worker picks it up, while it is extracting, and permanently if it terminally fails. A terminal `extraction_failed` therefore degrades the upload to **document-only**: the raw row stays `'draft'` and publishable, the uploader may publish it for their child to read, and the failed job renders as an **advisory** in the status strip (with Retry), never as a blocker. Two carve-outs where the raw row and its file **are** deleted: (a) cancel, per BR-EXT-015/016 — an explicit abort leaves nothing behind; (b) `ownership_violation` at finalize (BR-DATA-011), where the topic's owner changed after upload and leaving a committed row would hand one owner's file to another. The existing orphan-file `unlink` on the ownership-violation path becomes a row-and-file delete rather than dead code — and that delete must be committed explicitly per BR-EXT-041, or the worker's next idle poll rolls it back and the file survives anyway.
+- **BR-EXT-039 — Upload is one transaction, after the idempotency gate.** Order is strict: `get_by_idempotency` early-return (a replay must never write a second raw row or a second file) → SHA dedup check → `storage.save` → **one TX** { `INSERT extraction_jobs` + `INSERT topic_contents` (raw) + `increment_quota` } → `201`. Splitting that TX reintroduces the bug this increment fixes: a crash between the two INSERTs leaves either a job with no raw row (upload silently unreachable again) or a raw row with no job. The raw file is written from the `file_bytes` already buffered in the handler — it is **not** re-read back out of the job storage root, which would make a 50 MB upload cost a write, a read and a second write. The `201` response body includes the created raw `content_id` so the client refreshes the content list deterministically instead of guessing.
+
+  **What makes it one TX (BR-EXT-041).** `insert_job`'s `session.commit()` *is* the transaction boundary. Repository writes that only `flush()` — `increment_quota`, `decrement_quota`, `increment_concurrent_quota`, `set_raw_content_order`, `delete_raw_content` — join whichever transaction is open and are committed by the **next** committing call, or lost if none comes. So every such write must be **staged before** the committing call that is meant to carry it, never after. Verified against the running system, not inferred: `increment_quota` was called *after* `insert_job` committed, leaving it in a transaction the per-request session (`get_async_session`, which yields and rolls back on exception with no commit of its own) never committed — so it was discarded on session close and **the parent quota had never functioned at all**. See `Implementation_planning/constraints.md` → "persistence — flush-only repo writes need a committing call after them".
+- **BR-EXT-040 — The parent concurrent-job quota decrements on every terminal transition, and retry re-increments it.** `decrement_quota` ran only on finalize success and on cancel-while-`pending`, so on the code's own terms a run of failures during a backend outage leaks `parent_quota_counters.concurrent_jobs` and the parent is eventually hard-`429`d out of uploading anything. **Correction to the original framing of this rule:** that leak could not actually bite, because the counter never incremented either (BR-EXT-039) — the quota was inert in both directions. Fixing the decrement alone would have been a no-op; BR-EXT-039's ordering rule is the load-bearing half, and this rule only becomes observable once it lands. All terminal paths must decrement (parent-owned jobs only, `expected_owner_type = 'parent'`): per-page extraction failure, per-job cost-cap breach, worker-honoured cancel, the worker's outer safety-net exception handler, and the finalize `ownership_violation` early return. **`POST /retry` must re-increment `concurrent_jobs`** — it moves a job back to `pending`, and without the re-increment the counter *under*-counts (the retried job decrements a second time at its own terminal state, `GREATEST(0, …)` hides it) and the 5-job cap stops holding. Retry re-increments `concurrent_jobs` **only** — it does not burn a second `daily_jobs` slot, since the daily cap meters uploads, not attempts. This rule is an independent correctness fix; it is not conditional on the raw-row change.
+
+  **Ordering.** Every quota write must precede the committing call in its path: `decrement_quota` before `update_job` in the worker's terminal-transition funnel, `increment_quota` before `insert_job` on create, `increment_concurrent_quota` before `update_job` on retry.
+- **BR-EXT-041 — Writes made after the last committing call must commit explicitly, because the worker's idle poll rolls back.** `claim_next` issues `session.rollback()` when no job is waiting (the normal case on a 2-second poll), so anything left flushed-but-uncommitted on the worker's long-lived session is **actively discarded**, not merely deferred. Two writes in `finalize` sit after `execute_finalize_tx` has already committed and have nothing downstream to carry them — the success-path `decrement_quota`, and the `delete_raw_content` carve-out for `ownership_violation` (BR-EXT-038). Both must call the repository's existing `commit()` explicitly. The `ownership_violation` case is the serious one: without the commit the raw row and its file survive a topic that has changed hands, which is precisely the outcome the carve-out exists to prevent. "It gets committed by the next loop iteration" is not a valid assumption anywhere in the worker.
 
 ---
 

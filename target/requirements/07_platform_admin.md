@@ -44,7 +44,7 @@ Platform Admin (`admin` role) manages the authoritative platform board content. 
 - **Publish toggle per topic:** `draft` → `live` (visible to all students) or `live` → `draft`.
 - **Publish Board modal:** preview of all draft changes, confirmation to publish.
 - **Content viewers:** admin can view every upload in both its raw form (PDF viewer / image viewer) and its extracted, editable text form — same shared `ContentViewer` used for students (`target/requirements/12_content_extraction.md` § Content viewers).
-- **Content publish control:** each upload group gets its own Publish action, independent of the topic's Draft/Live status — for PDF/Image, a mutually-exclusive "Publish as Document" (raw) vs. "Publish as Text" (extracted) toggle; for Video/Text, a simple Draft/Published toggle. A topic can be `live` while individual content items are still in draft, pending admin review (BR-ADM-008).
+- **Content publish control:** each upload group gets its own Publish action, independent of the topic's Draft/Live status — for PDF/Image, a mutually-exclusive "Publish as Document" (raw) vs. "Publish as Text" (extracted) toggle; for Video/Text, a simple Draft/Published toggle. While extraction is running, and permanently after a terminal failure, the group has no text side: "Publish as Text" renders **disabled** and "Publish as Document" stays available (BR-DATA-024 degenerate group). A topic can be `live` while individual content items are still in draft, pending admin review (BR-ADM-008).
 
 ### Add Content modal (Phase 1d-real)
 
@@ -104,6 +104,7 @@ mastery attribution (G4.2).
 - BR-ADM-006: Platform Admin extraction quota is APISIX-gated only (20 uploads/hr token-rate). No application-layer quota in v1.
 - BR-ADM-007: Every question authored via the exam builder SHOULD carry a `topic_id` (set via the per-question Topic dropdown) so its score contributes to per-topic mastery. `topic_id` is optional at the API (legacy / NULL-topic questions are skipped by mastery recalc, not rejected); the UI makes it effectively required.
 - BR-ADM-008 (Content Viewing & Publish increment): Content items default to `visibility_status='draft'` regardless of the topic's own Draft/Live status — a `live` topic can still have content no student can yet see, pending the admin's publish decision. See BR-DATA-024/025.
+- BR-ADM-009 (Extraction-Optional increment): Platform Admin shares the extraction pipeline with Parent (`create_admin_job` and `create_parent_job` are the same path), so **BR-EXT-038 applies identically**: an uploaded PDF/image is viewable and publishable the moment upload returns, and survives a terminal `extraction_failed` as a document-only content row. A failed job is an advisory with Retry, not a blocker. The quota rules of BR-EXT-040 do **not** apply to admin — per BR-ADM-006 there is no application-layer quota for platform admins, so there is no counter to decrement.
 
 ---
 

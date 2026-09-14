@@ -4,6 +4,77 @@
 
 ---
 
+## 2026-09-14 — Extraction-Optional uploads (`/update-target-state`)
+
+Triggered by a parent-persona bug report: uploading a PDF fails outright when the backend compute
+for extraction is unavailable, and the parent loses the upload. Root cause traced across
+`haisir-backend` before any spec was touched: the raw `topic_contents` row is materialized only
+inside `finalize()` (`src/worker/finalize.py:70`, `if pages:`), so a terminal `extraction_failed`
+leaves **zero** content rows and the uploaded file unreachable by any endpoint until TTL purge.
+
+- **Raw row moves to upload time, not finalize.** One TX with the `extraction_jobs` INSERT, after the
+  idempotency early-return. Extraction becomes additive, not gating (BR-EXT-038/039).
+- **No "no AI tutor" opt-in added.** Considered and rejected as unnecessary: raw rows are already
+  never enqueued for RAG (the enqueue gate is an allowlist on `content_type == 'text'`), and
+  BR-DATA-024's publish toggle already makes Document-vs-Text mutually exclusive. Publishing the
+  Document side *is* the opt-out. A checkbox would only earn its place if compute cost needed
+  capping up front.
+- **Ordering left unchanged — document-first was proposed, then withdrawn.** The initial
+  recommendation was raw at `order = 0` with text rows shifted to `page_no + 1`, and it was approved
+  before `BR-DATA-008`'s existing Ordering paragraph was read. It is wrong:
+  `TopicContentRepository._set_provenance` derives `provenance.page_no` directly from
+  `topic_contents.order`, so the shift would silently relabel every existing provenance badge
+  ("page 3" → "page 4"). Withdrawn before writing. Raw is created at `order = 0` and finalize
+  UPDATEs it to `len(pages)`; document-first display, if wanted, is a client-side sort, exactly as
+  the spec already advised. Ordering is moot in the failure case anyway — there are no text rows.
+- **Cancel deletes the raw row and its file; `extraction_failed` keeps it.** Cancel is an explicit
+  user abort and must leave nothing behind. BR-EXT-015/016 rewritten rather than left contradicting
+  the new model.
+- **`ownership_violation` also deletes the raw row + file.** The topic's owner changed after upload;
+  leaving a committed row would hand one owner's file to another. The existing orphan-file `unlink`
+  becomes a row-and-file delete.
+- **Failure-surviving raw rows carry no provenance badge.** `extraction_job_audit` is written only in
+  the finalize TX. Writing audit rows on all four terminal paths was considered; rejected as
+  unnecessary — "Extracted from `x.pdf` · page N" is meaningless when nothing was extracted, and the
+  row's `title` is already the filename. Stated explicitly in BR-DATA-009 so the gap is recorded, not
+  discovered later.
+- **Quota decrement bundled as an independent fix (BR-EXT-040).** Unrelated to the raw row, but it is
+  the compounding failure in the same outage: `decrement_quota` runs only on finalize-success and
+  cancel-while-pending, so five failed uploads leak all five concurrent slots permanently and the
+  parent is hard-`429`d. Challenger caught that adding decrement-on-failure alone makes the counter
+  *under*-count, because `retry_job` moves `failed → pending` without re-incrementing — so retry must
+  re-increment `concurrent_jobs` (not `daily_jobs`).
+- **`restructure_page` exception fallback folded into BR-EXT-032**, not a new rule. Scope limit
+  recorded: it rescues native-text PDF pages only; scanned pages and images still hard-fail, which is
+  precisely why upload survivability has to come from the raw row.
+- **`X-Force-Reextract` cost now user-visible.** A terminally-failed job still trips SHA dedup, and
+  the bypass now creates a second permanent raw row and file for the same document. UI steers to
+  Retry instead. Called out rather than re-engineering the dedup rule.
+- **Not phased.** 4 backend files, 0 frontend files for the core fix; lands as a direct increment
+  rather than a new phase. `publish-control-view.ts` already handles the raw-only group correctly
+  (`sideView` disables a null-id side), so the failure-case UX exists for free.
+- **Found mid-implementation: the parent extraction quota had never worked.** Probing the running
+  dev database (not reading the code) showed `increment_quota` never persisted — it only flushes,
+  and it ran *after* `insert_job`'s commit, so it sat in a transaction the per-request session never
+  commits and was discarded on close. `get_quota` always returned `None`; neither the 5-concurrent
+  nor the 100/day cap had ever fired. **This corrects the framing given when BR-EXT-040 was
+  written:** the "five failed uploads hard-429 the parent" failure mode could not actually occur,
+  because the counter never incremented either. The decrement fix alone would have been a no-op.
+- **`claim_next` rolls back when idle, so post-commit writes are discarded, not deferred.** Two
+  writes in `finalize` sit after `execute_finalize_tx` has committed with nothing downstream to
+  carry them: the success-path `decrement_quota`, and the `ownership_violation` raw-row delete added
+  by this increment. The latter is the serious one — the raw file survived a topic that had changed
+  owners, defeating the carve-out. Both now call the repository's existing `commit()`. An earlier
+  claim in this cycle that the worker decrement "does eventually persist, worth tightening but not
+  broken" was wrong and is retracted here.
+- **No session-level commit in `get_async_session`.** Considered as a blanket fix and rejected:
+  routes rely on repo-level commit boundaries, so a teardown commit would turn silent data loss into
+  silent partial writes. The rule is instead "stage flush-only writes before the committing call, or
+  commit explicitly" — recorded in `constraints.md` because it constrains every future spec that
+  claims atomicity, not just this one.
+
+---
+
 ## 2026-08-20 — Phase 8 scoping (Parent UX Alignment)
 
 Phase 7.5 closed (109/109 tasks); `PLAN.md`/`TASKS.md` archived to

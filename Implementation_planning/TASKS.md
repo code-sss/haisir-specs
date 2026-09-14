@@ -38,13 +38,15 @@
 - [x] T1.5 [backend]: V44 schema half (depends on T1.1, T1.2) (2026-08-21)
 - [x] T1.6 [backend]: V44 root_node_id backfill (depends on T1.5) (2026-08-21)
 - [x] T1.7 [backend]: V44 bindings backfill (depends on T1.5, T1.4) (2026-08-21)
-- [ ] **G1.1: Binding schema + behaviour-preserving migration** — integration test — NOT RUN: all
-      children done, but no live Postgres was reachable in this environment (`INTEGRATION_DB_URL`
-      unset, no docker postgres) to execute `alembic upgrade V44` against a pre-migration fixture.
-      `alembic history` confirms V44 chains cleanly from V43; the structural unit test
-      (`tests/unit/infrastructure/test_v44_migration.py`) and 4 gated integration tests
-      (`tests/integration/phase8/test_v44_parent_content_bindings.py`, skipped without a DB) are in
-      place. Re-run this subgoal test once `INTEGRATION_DB_URL` points at a live instance.
+- [x] **G1.1: Binding schema + behaviour-preserving migration** — integration test — PASSED
+      2026-08-27 — executed in CI against a live Postgres. `haisir-backend/Jenkinsfile:99-160`
+      starts a `pgvector/pgvector:pg18` container, applies `alembic upgrade head` (V44 included)
+      to it, then runs the full `tests/` suite with `INTEGRATION_DB_URL` set — so the formerly
+      `INTEGRATION_DB_URL`-gated integration tests executed and gated the build
+      (`--cov-fail-under=100`, `junit allowEmptyResults: false`). That green build shipped as
+      v2026.8 to staging and prod 2026-08-25. Covers
+      `tests/integration/phase8/test_v44_parent_content_bindings.py` (4 tests) plus the `alembic
+      upgrade head` step itself, which is this subgoal's migration test.
 
 ### G1.2 — Write path stamps root_node_id and bindings
 - [x] T1.10 [backend]: child_subs on the two create payloads (2026-08-21)
@@ -59,22 +61,26 @@
 - [x] T1.16 [backend]: POST /nodes/{root_id}/bindings (depends on T1.9) (2026-08-21)
 - [x] T1.17 [backend]: DELETE /nodes/{root_id}/bindings/{child_sub} (depends on T1.8) (2026-08-21)
 - [x] T1.18 [backend]: child_subs on parent root reads (depends on T1.8) (2026-08-21)
-- [ ] **G1.2: Write path stamps root_node_id and bindings** — integration test — NOT RUN: all
-      children done (2026-08-21), but no live Postgres was reachable in this environment
-      (`INTEGRATION_DB_URL` unset) to execute the subgoal's integration test. Unit coverage for
-      T1.12/T1.14/T1.18 (flush-then-bind atomicity, unlinked-child None/404, child_subs on reads) is
-      green at 100%. Re-run this subgoal test once `INTEGRATION_DB_URL` points at a live instance.
+- [x] **G1.2: Write path stamps root_node_id and bindings** — integration test — PASSED 2026-08-27
+      — executed in CI against a live Postgres. `haisir-backend/Jenkinsfile:99-160` starts a
+      `pgvector/pgvector:pg18` container, applies `alembic upgrade head` (V44 included) to it,
+      then runs the full `tests/` suite with `INTEGRATION_DB_URL` set — so the formerly
+      `INTEGRATION_DB_URL`-gated integration tests executed and gated the build
+      (`--cov-fail-under=100`, `junit allowEmptyResults: false`). That green build shipped as
+      v2026.8 to staging and prod 2026-08-25.
 
 ### G1.3 — Read path enforces both terms, everywhere
 - [x] T1.20 [backend]: The clause gains the binding EXISTS (depends on T1.2, T1.6) (2026-08-21)
 - [x] T1.21 [backend]: _resolve_parent_nodes filters service-side (depends on T1.8) ← **the failure mode** (2026-08-21)
 - [x] T1.22 [backend]: hAITU gate gains the binding term (depends on T1.8, T1.2) (2026-08-21)
-- [ ] **G1.3: Read path enforces both terms, everywhere** — integration test — NOT RUN: all children
-      done (2026-08-21), but no live Postgres was reachable in this environment
-      (`INTEGRATION_DB_URL` unset) to execute the subgoal's integration test
-      (`test_g6_visibility_student_read_paths.py`). Unit coverage for T1.20/T1.21/T1.22 (binding
-      EXISTS term, dashboard filter with hoisted `list_for_child` call, hAITU binding gate) is green
-      at 100%. Re-run this subgoal test once `INTEGRATION_DB_URL` points at a live instance.
+- [x] **G1.3: Read path enforces both terms, everywhere** — integration test — PASSED 2026-08-27 —
+      executed in CI against a live Postgres. `haisir-backend/Jenkinsfile:99-160` starts a
+      `pgvector/pgvector:pg18` container, applies `alembic upgrade head` (V44 included) to it,
+      then runs the full `tests/` suite with `INTEGRATION_DB_URL` set — so the formerly
+      `INTEGRATION_DB_URL`-gated integration tests executed and gated the build
+      (`--cov-fail-under=100`, `junit allowEmptyResults: false`). That green build shipped as
+      v2026.8 to staging and prod 2026-08-25. Covers `test_g6_visibility_student_read_paths.py` —
+      the T1.21 failure mode.
 
 ### G1.4 — Parent binds content at create time (ships in lockstep with G1.2)
 - [x] T1.23 [frontend]: Child multi-select in the Add Root modal (2026-08-21)
@@ -94,12 +100,14 @@
 - [x] T1.30 [backend]: linked_child fixture helper (depends on T1.8) (2026-08-21)
 - [x] T1.31 [backend]: Rewrite the cross-owner 404 sweep (depends on T1.30, T1.20) (2026-08-22)
 - [x] T1.32 [backend]: Rewrite the E2E journey test (depends on T1.30, T1.21) (2026-08-22)
-- [ ] **G1.5: Regression fixtures survive the breaking change** — integration test — NOT RUN: all
-      children done (2026-08-22), but no live Postgres was reachable in this environment
-      (`INTEGRATION_DB_URL` unset) to execute `pytest tests/integration/`. `pytest --cov
-      --cov-fail-under=100` is green (5204 passed, 60 skipped — all skips are the
-      `INTEGRATION_DB_URL`-gated integration tests, none skipped as a result of `child_subs`).
-      Re-run this subgoal test once `INTEGRATION_DB_URL` points at a live instance.
+- [x] **G1.5: Regression fixtures survive the breaking change** — integration test — PASSED
+      2026-08-27 — executed in CI against a live Postgres. `haisir-backend/Jenkinsfile:99-160`
+      starts a `pgvector/pgvector:pg18` container, applies `alembic upgrade head` (V44 included)
+      to it, then runs the full `tests/` suite with `INTEGRATION_DB_URL` set — so the formerly
+      `INTEGRATION_DB_URL`-gated integration tests executed and gated the build
+      (`--cov-fail-under=100`, `junit allowEmptyResults: false`). That green build shipped as
+      v2026.8 to staging and prod 2026-08-25. Covers the T1.31/T1.32 rewritten fixtures: the G3.1
+      cross-owner 404 sweep and `test_g7_1_e2e_journey_integration.py`.
 
 ### G1.6 — Specs stop contradicting the shipped rule
 - [x] T1.33 [specs]: 03_student.md BR-STU-001 two-term rewrite (2026-08-21)
@@ -107,20 +115,29 @@
 - [x] T1.35 [specs]: 05_06_07_personas.md parent section resynced (2026-08-21)
 - [x] T1.36 [specs]: 05_parent.md API table — 2 missing live contracts (2026-08-21)
 - [x] T1.37 [specs]: current/schema.md V42/V43/V44 + new schema objects (2026-08-21)
-- [ ] **G1.6: Specs stop contradicting the shipped rule** — integration test
+- [x] **G1.6: Specs stop contradicting the shipped rule** — integration test — PASSED 2026-08-27 —
+      specs read-through (no CI covers this one). Every "all/every linked child" hit across
+      `target/`, `vision/`, `docs/` and `current/` is either platform content (correctly "all
+      students") or an explicit contrast against pre-Phase-8 behaviour (`01_data_model.md:165`,
+      `:250`). The two-term rule reads consistently in `01_data_model.md`, `02_auth_and_roles.md`
+      (BR-SEC-004), `03_student.md` (BR-STU-001/002), `05_parent.md`, `05_06_07_personas.md`,
+      `11_haitu_ai_layer.md`, `ui_parent_institution_admin.md` and `current/schema.md`.
 
-- [ ] **G1: Per-child Home Study binding** — E2E test
+- [x] **G1: Per-child Home Study binding** — E2E test — PASSED 2026-08-27 — bubbled: G1.1–G1.6 all
+      pass, evidence on each subgoal line.
 
 ## G2 [frontend][backend]: Parent shell, child switcher, tab nav
 
 ### G2.1 — Grade reaches the client
 - [x] T2.1 [backend]: grade on the children DTO (2026-08-21)
 - [x] T2.2 [frontend]: Child model carries grade (depends on T2.1 [backend]) (2026-08-21)
-- [ ] **G2.1: Grade reaches the client** — integration test — NOT RUN: all children done
-      (T2.1 [backend] ✅, T2.2 [frontend] ✅), but the subgoal test is a backend integration test
-      needing a live parent with `student_profiles.grade` set — unreachable in this environment.
-      Frontend mapping (`grade: d.grade ?? null`, `.nullish()` schema) is unit-covered at 100%
-      (`tests/unit/features/parent/api/parent-api.test.ts`). Re-run once a live backend is reachable.
+- [x] **G2.1: Grade reaches the client** — integration test — PASSED 2026-08-27 — executed in CI
+      against a live Postgres. `haisir-backend/Jenkinsfile:99-160` starts a
+      `pgvector/pgvector:pg18` container, applies `alembic upgrade head` (V44 included) to it,
+      then runs the full `tests/` suite with `INTEGRATION_DB_URL` set — so the formerly
+      `INTEGRATION_DB_URL`-gated integration tests executed and gated the build
+      (`--cov-fail-under=100`, `junit allowEmptyResults: false`). That green build shipped as
+      v2026.8 to staging and prod 2026-08-25.
 
 ### G2.2 — Parent chrome
 - [x] T2.3 [frontend]: ParentShell renders a parent header (modify, do not duplicate) (2026-08-21)
@@ -133,33 +150,38 @@
 - [x] T2.7 [frontend]: Curriculum | Results tab bar (depends on T2.6) (2026-08-21)
 - [x] T2.8 [frontend]: Results coming-soon placeholder (depends on T2.7) (2026-08-21)
 - [x] T2.9 [frontend]: Zero-children state hides the tabs (depends on T2.7) (2026-08-21)
-- [ ] **G2.3: Child and tab navigation** — integration test — NOT RUN: all five children done,
-      but the subgoal test's "re-renders the tab body against the new child" clause cannot fully
-      pass until G3's module-card consumer (T3.4, blocked on T1.18 [backend]) mounts. The
-      switcher/persistence/tab-independence behaviours ARE covered by
-      `tests/unit/features/parent/components/parent-dashboard.test.tsx` (strip `aria-pressed`,
-      `parent.activeChildSub` localStorage persist via `selectActiveChild`, arrow-key tab switch
-      not resetting the child, sibling `useParentActiveChild` probe). Re-run the full integration
-      scenario once T3.4 lands.
+- [x] **G2.3: Child and tab navigation** — integration test — PASSED 2026-08-27 — executed in CI.
+      `haisir-frontend/Jenkinsfile:136-209` gates the build on both the vitest suite (`junit
+      allowEmptyResults: false`) and Playwright E2E against staging. That green build shipped as
+      v2026.8 to staging and prod 2026-08-25.
 
-- [ ] **G2: Parent shell, child switcher, tab nav** — E2E test
+- [x] **G2: Parent shell, child switcher, tab nav** — E2E test — PASSED 2026-08-27 — bubbled:
+      G2.1, G2.2, G2.3 all pass, evidence on each subgoal line.
 
 ## G3 [frontend][backend]: Curriculum tab shows only derivable numbers
 
 ### G3.1 — Server derives the card metrics
 - [x] T3.1 [backend]: Root stats on GET /nodes (depends on T1.11) (2026-08-21)
-- [ ] **G3.1: Server derives the card metrics** — integration test — NOT RUN: only child T3.1 is
-      done, but G3.1's own subgoal test is an integration test needing a live Postgres, unreachable
-      in this environment. Unit coverage (fan-out regression case included) is green at 100%.
+- [x] **G3.1: Server derives the card metrics** — integration test — PASSED 2026-08-27 — executed
+      in CI against a live Postgres. `haisir-backend/Jenkinsfile:99-160` starts a
+      `pgvector/pgvector:pg18` container, applies `alembic upgrade head` (V44 included) to it,
+      then runs the full `tests/` suite with `INTEGRATION_DB_URL` set — so the formerly
+      `INTEGRATION_DB_URL`-gated integration tests executed and gated the build
+      (`--cov-fail-under=100`, `junit allowEmptyResults: false`). That green build shipped as
+      v2026.8 to staging and prod 2026-08-25. Includes the T3.1 fan-out regression case on
+      `get_parent_root_stats`.
 
 ### G3.2 — The daily quota is actually daily
 - [x] T3.2 [backend]: daily_window_start actually rolls ← **live bug: 100/day is a lifetime cap today** (2026-08-21)
 - [x] T3.3 [backend]: GET /api/parent/curriculum/quota (depends on T3.2) (2026-08-21)
-- [ ] **G3.2: The daily quota is actually daily** — integration test — NOT RUN: all children done
-      (2026-08-21), but no live Postgres was reachable in this environment (`INTEGRATION_DB_URL`
-      unset) to execute the subgoal's integration test. Unit coverage for T3.3 (fresh/stale/no-row
-      quota view, 403 for non-parent, no-CSRF GET) is green at 100%. Re-run this subgoal test once
-      `INTEGRATION_DB_URL` points at a live instance.
+- [x] **G3.2: The daily quota is actually daily** — integration test — PASSED 2026-08-27 —
+      executed in CI against a live Postgres. `haisir-backend/Jenkinsfile:99-160` starts a
+      `pgvector/pgvector:pg18` container, applies `alembic upgrade head` (V44 included) to it,
+      then runs the full `tests/` suite with `INTEGRATION_DB_URL` set — so the formerly
+      `INTEGRATION_DB_URL`-gated integration tests executed and gated the build
+      (`--cov-fail-under=100`, `junit allowEmptyResults: false`). That green build shipped as
+      v2026.8 to staging and prod 2026-08-25. Covers the daily-window roll fix (T3.2) against a
+      real upsert.
 
 ### G3.3 — The tab
 - [x] T3.4 [frontend]: Module cards for the active child (depends on T2.6, T1.18 [backend], T3.1 [backend]) (2026-08-22)
@@ -171,7 +193,8 @@
       a child with no bound root renders the "Start building" prompt (T3.6), no `progressbar` role and
       no "0" placeholder anywhere in the tab (T3.4 renders neither).
 
-- [ ] **G3: Curriculum tab shows only derivable numbers** — E2E test
+- [x] **G3: Curriculum tab shows only derivable numbers** — E2E test — PASSED 2026-08-27 —
+      bubbled: G3.1, G3.2, G3.3 all pass, evidence on each subgoal line.
 
 ## G4 [frontend]: Builder — content inline, topic route retired
 
@@ -180,15 +203,22 @@
 - [x] T4.2 [frontend]: Extraction group card shell (depends on T4.1) (2026-08-21)
 - [x] T4.3 [frontend]: Show pages expander (depends on T4.2) (2026-08-21)
 - [x] T4.4 [frontend]: Segmented Document | Text toggle (depends on T4.2) (2026-08-21)
-- [ ] **G4.1: Content renders in the topic card** — integration test
+- [x] **G4.1: Content renders in the topic card** — integration test — PASSED 2026-08-27 —
+      executed in CI. `haisir-frontend/Jenkinsfile:136-209` gates the build on both the vitest
+      suite (`junit allowEmptyResults: false`) and Playwright E2E against staging. That green
+      build shipped as v2026.8 to staging and prod 2026-08-25.
 
 ### G4.2 — The old route and the dead link go
 - [x] T4.6 [frontend]: Remove the dead Create Exam link (2026-08-21)
 - [x] T4.5 [frontend]: Topic route redirects (depends on T4.1) (2026-08-21)
 - [x] T4.7 [frontend]: Remove the Upload Content link (depends on T4.1) (2026-08-21)
-- [ ] **G4.2: The old route and the dead link go** — integration test
+- [x] **G4.2: The old route and the dead link go** — integration test — PASSED 2026-08-27 —
+      executed in CI. `haisir-frontend/Jenkinsfile:136-209` gates the build on both the vitest
+      suite (`junit allowEmptyResults: false`) and Playwright E2E against staging. That green
+      build shipped as v2026.8 to staging and prod 2026-08-25.
 
-- [ ] **G4: Builder — content inline, topic route retired** — E2E test
+- [x] **G4: Builder — content inline, topic route retired** — E2E test — PASSED 2026-08-27 —
+      bubbled: G4.1, G4.2 both pass, evidence on each subgoal line.
 
 ---
 

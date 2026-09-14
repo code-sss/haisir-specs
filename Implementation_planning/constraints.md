@@ -209,3 +209,20 @@
 **Why it exists:** Rootless Docker is the deliberate runtime for all three hosts (see the runtime-pin section above), and the T6.3.4 no-Postgres-TLS acceptance is explicitly load-bearing on its containment properties. These two facts are the flip side of that choice and were not previously written down anywhere — pass B's B24 fix line and the re-scan's own §3.5 both recommended the proxy before it was checked.
 
 **Impact on target state:** Any spec proposing to "restrict" a Docker-socket consumer must state which HTTP verbs that consumer needs; if `POST` is among them, a proxy must not be presented as the control. Isolating Jenkins means a second rootless daemon under a different host user, or rootless BuildKit — both **host** changes, and this repo has no codified host baseline to carry them (backlog **B48**), which is the sequencing constraint: B24's real fix has nowhere to live until B48 exists. Any spec claiming mandatory-access-control coverage for containers must either scope it to seccomp only, or budget for loading an AppArmor profile at host bootstrap and referencing it per-service with `security_opt: ["apparmor=..."]`.
+
+
+---
+
+## persistence — flush-only repo writes need a committing call after them, and the worker's idle poll rolls back
+
+**What:** Repository methods split into two kinds, and mixing them up silently loses writes.
+
+(1) **Committing calls** end with `session.commit()` — e.g. `ExtractionJobRepository.insert_job`, `update_job`, `execute_finalize_tx`, and the explicit `commit()`. **Flush-only calls** end with `session.flush()` — `increment_quota`, `decrement_quota`, `increment_concurrent_quota`, `set_raw_content_order`, `delete_raw_content`. A flush-only write joins whatever transaction is open and persists **only** if a committing call follows it on the same session. So flush-only writes must be **staged before** the committing call meant to carry them, never after.
+
+(2) **The API session never commits on its own.** `get_async_session` (`infrastructure/db.py`) yields a session and rolls back on exception; there is no commit at teardown and no middleware commit. A flush-only write left pending at the end of a request is discarded on session close.
+
+(3) **The worker's idle poll actively rolls back.** `claim_next` calls `session.rollback()` when no job is waiting — the normal case on a 2-second poll. Pending writes on the worker's long-lived session are therefore **discarded**, not deferred. "The next loop iteration will commit it" is never a valid assumption.
+
+**Why it exists:** Found 2026-09-14 while implementing the Extraction-Optional increment, and confirmed by probing the running dev database rather than by reading the code. `increment_quota` was called *after* `insert_job` had already committed, so it was never persisted — meaning **the parent extraction quota (BR-PAR-008a: 5 concurrent, 100/day) had never functioned since it was written**. `get_quota` always returned `None` and neither cap ever fired. The same shape had two further instances in `finalize`, after `execute_finalize_tx`'s commit: the success-path `decrement_quota`, and the `ownership_violation` raw-row delete — the latter meaning a file survived a topic that had changed owners, defeating the carve-out's entire purpose.
+
+**Impact on target state:** Any spec that says "X and Y happen atomically" must name which call commits and confirm every other write is staged before it — "in one transaction" is not self-enforcing here, because most repo methods do not commit. Any write with no committing call after it in its path must call `commit()` explicitly. Do not add a session-level commit to `get_async_session` to paper over this: several routes rely on repo-level commit boundaries, and a blanket teardown commit would convert today's silent data loss into silent partial writes. When specifying a new counter, quota, or cleanup path, state its commit carrier explicitly. See `target/requirements/12_content_extraction.md` BR-EXT-039/040/041.

@@ -247,7 +247,7 @@ Visible only when `topic.jobs.length > 0`. One `.job-row` per job from `renderJo
 | Status pills | `.js-pending` "⏱ Queued" (grey) / `.js-uploading` "🌀 Uploading X%" (blue) / `.js-extracting` "🌀 Extracting" (purple, pulsing bar) / `.js-failed` "✕ Failed" (red) |
 | Progress bar | `.job-bar` 4px tall · `.job-fill` width=progress%, `.extracting` class adds pulse `@keyframes` |
 | Cancel | Visible for pending/uploading/failed; sets `cancel_requested=true` for extracting (soft) |
-| Retry | Visible only for `extraction_failed` |
+| Retry | Visible only for `extraction_failed`. Copy must make clear the **document is already available** and retry only re-attempts the text extraction — e.g. "Text extraction failed. Your document is saved and can be published. Retry". The failed job is an advisory, never a blocker (BR-EXT-038). Steer the user here rather than to a re-upload, which trips SHA dedup and, with `X-Force-Reextract`, creates a second copy of the same document. |
 
 ### Topic card — CONTENT section (`.tc-content`)
 
@@ -262,6 +262,9 @@ Visible whenever topic has any `contents`. One `.content-row` per item from `ren
 | View button | For `pdf`/`image` rows: opens the inline PDF/image viewer (read-only, no body to edit). For `video` rows: opens the SDK-based player preview. |
 | Edit button | For `text` rows: opens `#modal-edit-content` (560 px), title input + **markdown editor with live preview**. For `video` rows: title + URL input. Not shown on `pdf`/`image` rows (use View instead — there is no editable body). Save sends `PATCH /api/topic-contents/{id}` with `{title, body}`. |
 | Publish toggle | On the upload group (raw + its sibling text rows, keyed by `source_extraction_job_id`) or the standalone video/text row (`source_extraction_job_id IS NULL` → group of one): switches which side is `visibility_status='published'`. One `PATCH /api/topic-contents/{content_id}/publish` call per BR-EXT-037 — the server drafts the previous side in the same transaction; the UI never writes rows individually. |
+| Publish toggle — no-text-side state | A PDF/image group whose text rows do not exist yet (extraction still running) or never will (terminal `extraction_failed`): **"Publish as Text" renders disabled** with tooltip "No extracted text yet — retry extraction to enable this", **"Publish as Document" stays enabled**. Derived purely from `textRowId === null`; no new field. See BR-DATA-024 degenerate group / BR-EXT-038. |
+| Duplicate representation while extracting | From the Extraction-Optional increment, one upload appears **simultaneously** in the IN PROGRESS strip (as a job) and in the CONTENT section (as its raw row) — this is intended, not a double-render bug. The content row is immediately viewable and publishable; the strip reports only the extraction side. Do not suppress the content row while a job for the same `source_extraction_job_id` is active. |
+| Provenance badge — failed-extraction raw row | A raw row surviving a terminal `extraction_failed` has no `extraction_job_audit` row, so the badge does not render. The row's `title` is the source filename, so it remains identifiable. Do not fall back to a placeholder badge. See BR-EXT-021. |
 | Delete button | Confirm dialog mentioning audit is preserved. Sends `DELETE /api/topic-contents/{id}`. Provenance audit row is NOT cascade-deleted. |
 | Empty state | When no content AND no jobs: "No content yet — add a PDF, image, video URL, or text below." |
 
