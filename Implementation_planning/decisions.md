@@ -4,6 +4,76 @@
 
 ---
 
+## 2026-09-16 — Upload & Viewer Feedback (`/update-target-state`)
+
+Triggered by a tester/PM review of the shipped PDF upload flow (four annotated screenshots, parent
+and student). Three complaints, all traced in `haisir-frontend` before any spec was touched, and all
+frontend-only — **no API, schema, worker or deploy change**.
+
+- **"Queued, but never uploading" is not a rendering bug — there was no progress to render.**
+  `buildPseudoJob` (`use-content-management.ts:81`) sets `progress: 0` and nothing ever writes to it
+  again, and `createExtractionJob` goes through `fetchWithCSRFRetry`, i.e. `fetch`, which has **no**
+  upload-progress event. So the bar could not have moved however the strip was styled. Fix is
+  `XMLHttpRequest` + `upload.onprogress` for that one call (BR-EXT-042) — the platform's own API, no
+  HTTP client dependency, the "no Axios" rule stands. Throttled to whole-percent changes.
+- **`pending` must not render as a determinate zero.** `JobsStrip` draws `<progress value={0}>` for
+  a queued job, which is visually identical to a stalled upload — precisely how it was reported.
+  Native `<progress>` with the `value` attribute omitted is indeterminate, so the fix is deleting an
+  attribute, not adding a spinner (BR-EXT-043).
+- **BR-EXT-019's "modal closes immediately" is reversed.** It is the reason a user saw *nothing*
+  between pressing Upload and the topic card saying "Queued": the modal vanished, and the status
+  strip lives below the content list. The modal now stays open as an upload monitor and closes
+  itself when every file has left `uploading`. Keeping the uploads running while it is dismissed
+  costs nothing — `uploadFiles` is already fire-and-forget and never depended on the modal. A
+  **Hide** button preserves the original non-blocking intent.
+- **The earlier build had a controls bar; it was never ours.** Reviewer correction, taken: the
+  recollection is a tools/controls bar, not zoom specifically. What is verifiable is narrower — no
+  toolbar has ever existed in `haisir-frontend`: `/home` (the legacy course-navigation screen)
+  mounts the *same* `SecurePdfViewer` with `scale={1.75}`, `git log --follow` over the viewer shows
+  no toolbar in any revision, and `@react-pdf-viewer/*` has never been a dependency. The most
+  likely source is the **browser's own PDF toolbar**, which appears whenever a PDF is opened in a
+  tab or a plain `<iframe>`/`<object>` and disappears the moment rendering moves to pdf.js canvas,
+  as `SecurePdfViewer` does. Either way the requirement stands unchanged and is not re-litigated:
+  the viewer needs a controls bar. It goes **on the component**, so student, parent, admin and
+  `/home` all gain it from one change (BR-EXT-044) — which satisfies "we should still have that on
+  the old screen" without touching that screen.
+- **Built on the existing `SecurePdfViewer`, not a third-party viewer plugin — owner decision,
+  2026-09-16.** `@react-pdf-viewer/core` + `/default-layout` was put up as the alternative, since its
+  toolbar plugin ships zoom, page nav, fullscreen, search and thumbnails ready-made. Rejected on the
+  facts: its last release is 3.12.0 (Aug 2023), it peers on `pdfjs-dist` 3.x and React ≤18 against
+  this repo's `pdfjs-dist` 5.3.93 and React 19, so it means a second pdf.js copy plus a peer-dep
+  override; it changes the worker/cmap paths that `15_security_headers.md` pins to the self-hosted
+  `/pdf.worker.min.mjs`; and its default layout ships Download / Print / Open buttons that
+  `SecurePdfViewer` deliberately blocks. Record this so the option is not re-proposed: the toolbar
+  is ours, on the component we already ship.
+- **Toolbar built from what is already there.** Fit-width is react-pdf's existing `width` prop plus
+  a `ResizeObserver`; zoom is the `scale` prop already passed; fullscreen is `requestFullscreen()`;
+  the page indicator is an `IntersectionObserver` over page refs. No pager rewrite — pages stay
+  continuously scrolled and prev/next just `scrollIntoView`. No new dependency.
+- **Fit-width becomes the default.** The fixed `scale` is why pages rendered arbitrarily sized; this
+  is a one-line default change that fixes most of the "isn't user friendly" complaint on its own.
+- **No download/print button.** Considered and rejected as out of scope: `SecurePdfViewer`
+  deliberately blocks the context menu and overlays a selection guard. Adding a download is a
+  product decision about content protection, not a UX fix, and was not asked for.
+- **Student gets the parent's list-then-view shape, not a new one** (BR-EXT-045). The student screen
+  rendered every item inline and stacked because `ContentViewer` maps over the whole `contents`
+  array; the parent screen already listed rows with a View button, which is the behaviour the
+  reviewer preferred. One rule now: rows everywhere, one item open at a time, in a dialog shared
+  with the uploader's View button — which also deletes the duplicate view-modal markup local to the
+  topic content section.
+- **Rejected: keeping `text` items expanded inline.** It would have meant two row behaviours, and
+  the whole point of the change is one presentation rule the two screens cannot drift from. Revisit
+  only if short parent notes behind a click actually annoy people in testing.
+- **No backend work, deliberately checked.** The student content payload already carries `id`,
+  `content_type` and `title`, which is everything a row needs, so the list requires no new field and
+  no per-item size/page-count lookup.
+- **Not phased.** Frontend-only, lands as a direct increment like the Extraction-Optional one.
+  Specs touched: `12_content_extraction.md` (BR-EXT-019 revised, BR-EXT-042…045 added),
+  `ui-mapping/ui_student.md`, `ui-mapping/ui_parent_institution_admin.md`, `03_student.md`,
+  `05_parent.md`, `07_platform_admin.md`.
+
+---
+
 ## 2026-09-14 — Extraction-Optional uploads (`/update-target-state`)
 
 Triggered by a parent-persona bug report: uploading a PDF fails outright when the backend compute

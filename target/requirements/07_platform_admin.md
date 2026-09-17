@@ -43,7 +43,7 @@ Platform Admin (`admin` role) manages the authoritative platform board content. 
 - "Add Topic" button below the list.
 - **Publish toggle per topic:** `draft` → `live` (visible to all students) or `live` → `draft`.
 - **Publish Board modal:** preview of all draft changes, confirmation to publish.
-- **Content viewers:** admin can view every upload in both its raw form (PDF viewer / image viewer) and its extracted, editable text form — same shared `ContentViewer` used for students (`target/requirements/12_content_extraction.md` § Content viewers).
+- **Content viewers:** admin can view every upload in both its raw form (PDF viewer / image viewer) and its extracted, editable text form — same shared `ContentViewer`, and the same view dialog, that students use (`target/requirements/12_content_extraction.md` § Content list, then viewer). The PDF viewer carries fit-width, zoom, page-navigation and fullscreen controls (BR-EXT-044).
 - **Content publish control:** each upload group gets its own Publish action, independent of the topic's Draft/Live status — for PDF/Image, a mutually-exclusive "Publish as Document" (raw) vs. "Publish as Text" (extracted) toggle; for Video/Text, a simple Draft/Published toggle. While extraction is running, and permanently after a terminal failure, the group has no text side: "Publish as Text" renders **disabled** and "Publish as Document" stays available (BR-DATA-024 degenerate group). A topic can be `live` while individual content items are still in draft, pending admin review (BR-ADM-008).
 
 ### Add Content modal (Phase 1d-real)

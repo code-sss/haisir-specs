@@ -5,6 +5,8 @@
 > **Persistence model (revised — Content Viewing & Publish increment):** ONE PDF/image upload → **one permanent raw** `topic_contents` row (`content_type='pdf'` or `'image'`) **plus** N extracted `topic_contents` rows (`content_type='text'`), all sharing one `source_extraction_job_id`. Extraction's primary purpose is feeding RAG embeddings — the raw row is what's normally shown to students (e.g. a well-formatted textbook page), with the extracted-text side available as an editable fallback the uploader can publish instead when the raw source is low quality (a poor scan, for instance). Only one side is published at a time (BR-DATA-024). Superseded rule: this used to be text-only, with the source PDF/image transient and never stored as a `topic_contents` row — see `target/requirements/01_data_model.md` BR-DATA-008/009 for the full before/after. The job's own working-directory copy (`extraction_jobs.source_path`) is still purged per the existing TTL; the permanent raw row is a separate copy, with its path in the existing **`url`** column (not `text`).
 >
 > **Extraction-Optional increment (revised again):** the raw row is created by the **POST handler at upload time**, not by the worker at finalize. Extraction is therefore **additive, not gating** — an upload stays viewable and publishable even when the vision LLM / OCR backend is unavailable and the job terminally fails. A parent who only wants their child to read the document never depends on the AI pipeline at all. See BR-EXT-038.
+>
+> **Upload & Viewer Feedback increment (frontend only — no API, schema or worker change):** three defects found in tester review of the shipped upload flow. (1) There is **no upload progress**, in the UI or in principle: the pseudo-job is built with `progress = 0` and never updated, and the request goes through `fetch`, which cannot report upload bytes — so the first thing a user ever sees is the topic card saying "Queued". (2) The **PDF viewer has no controls** — `SecurePdfViewer` renders every page at a fixed `scale` with no zoom, no page navigation and no fullscreen. (3) The **student screen renders every content item inline and stacked**, so two uploaded PDFs become two fully-rendered documents one after the other, while the parent screen — which the tester preferred — lists them with a View button. See BR-EXT-042 … BR-EXT-045; BR-EXT-019 is revised.
 
 ---
 
@@ -431,11 +433,13 @@ Topic delete and `course_path_nodes` subtree delete (parent and admin paths) run
 - Type chip selector: PDF / Image(s) / Video URL / Text.
 - For PDF / Image: drag-drop zone + click-to-browse, file list with size + remove buttons. **Max 10 files per submission.**
 - "Upload N PDFs" button disabled until ≥1 file added; estimated cost band shown next to button (e.g. "Est. $0.50–$2.00"). For estimates >$2: confirmation checkbox required.
-- On click: **modal closes immediately**. For each file:
+- On click: **the modal stays open and becomes an upload monitor** (revised — Upload & Viewer Feedback increment; see BR-EXT-019). For each file:
   1. Frontend pushes a client-side pseudo-job onto `topic.jobs` with `status='uploading', progress=0` (UI only).
-  2. Parallel `POST /api/admin/topics/{id}/extraction-jobs` requests with `Idempotency-Key`.
-  3. On 201: pseudo-job replaced by real job (`status='pending'`).
-  4. On error: pseudo-job updated to `status='upload_failed'` with retry button.
+  2. Parallel `POST /api/admin/topics/{id}/extraction-jobs` requests with `Idempotency-Key`, sent over `XMLHttpRequest` so the upload leg reports byte progress (BR-EXT-042).
+  3. Each `upload.onprogress` event updates that file's pseudo-job `progress`; its row in the modal reads "Uploading 42%" over a determinate bar.
+  4. On 201: pseudo-job replaced by real job (`status='pending'`); the row reads "Queued".
+  5. On error: pseudo-job updated to `status='upload_failed'`, error text on the row, Retry button.
+  6. The modal closes itself once **every** file in the submission has left `uploading` (each is either `pending` or `upload_failed`). A **Hide** button closes it at any point before that; the uploads continue, because they are fire-and-forget in the hook and never depended on the modal staying mounted. Extraction progress from there on belongs to the topic card's status strip, not the modal.
 - For Video / Text: existing behaviour (instant `topic_contents` row creation via `POST /api/topic-contents`); modal closes after success.
 
 ### Topic card — IN PROGRESS strip
@@ -444,7 +448,8 @@ Topic delete and `course_path_nodes` subtree delete (parent and admin paths) run
 - Polls `GET /api/admin/topics/{id}/extraction-jobs` every 2s while any job is in `pending` or `extracting`.
 - Backoff to 10s when no active jobs; stop polling after 60s of all-done.
 - Sends `If-None-Match` for ETag-based 304s.
-- Shows per-job: filename, page count, progress bar with status pill (Queued / Uploading X% / Extracting / Failed), Cancel button (always visible; sets `cancel_requested=true` for `extracting`), Retry button (for `extraction_failed`).
+- Shows per-job: filename, page count, progress bar with status pill (Queued / Uploading X% / Extracting page n of N / Failed), Cancel button (always visible; sets `cancel_requested=true` for `extracting`), Retry button (for `extraction_failed`).
+- **A bar is determinate only when a real fraction exists** (BR-EXT-043). `pending` has no fraction — rendering it as `value=0` is what produced the shipped "Queued, with an empty bar" state the tester reported. `<progress>` with the `value` attribute omitted is natively indeterminate; no animation code is needed.
 - On `done`: job row removed from strip; topic content list refetched (or new rows merged into local state).
 
 ### Provenance display
@@ -459,18 +464,70 @@ Topic delete and `course_path_nodes` subtree delete (parent and admin paths) run
 - **Edit button** → full editor modal. For `text` rows: title input + **markdown editor with live preview** (textarea + rendered pane, toggleable or side-by-side — same `MarkdownText` rendering component the student viewer uses, so what the uploader previews is exactly what gets published). For `video` rows: title input + URL input. `pdf`/`image` rows are not text-edited (there is no body to edit) — see the viewers below. Save sends `PATCH /api/topic-contents/{id}` with `{title, body}`. Modal shows the provenance line at the top so admins know they are editing extracted content.
 - **Delete button** → confirm dialog mentioning that audit record is preserved.
 
+### Content list, then viewer (every persona)
+
+Revised — Upload & Viewer Feedback increment. Previously the student screen mounted the shared
+viewer over the whole `contents` array and rendered **every** item inline, so a topic with two PDFs
+rendered two complete documents stacked vertically (the parent/admin screen never did this — it
+listed rows with a View button, which is the behaviour the tester preferred). One rule now holds
+everywhere (BR-EXT-045):
+
+- Topic content is presented as a **list of rows** — type icon, title, and a **View** action — one
+  row per item the persona may see. Never more than one item is rendered at a time.
+- Opening a row mounts the single-item viewer in a near-fullscreen `<dialog>` (≈90vw × 90vh, max
+  1200px wide), with the item title and a close button in its header. Esc and backdrop click close
+  it; focus is trapped while open.
+- The uploader's existing View button on a content row opens **this same dialog**, replacing the
+  bespoke view-modal markup currently local to the topic content section — one modal, one
+  implementation, so parent, admin and student cannot drift apart again.
+- For the student, the row list replaces the stacked render; the hAITU doubt panel stays below the
+  list (it is topic-scoped, not item-scoped) and does not move into the dialog.
+
 ### Content viewers (uploader preview + student display — shared component)
 
-One `ContentViewer` dispatches on `content_type`, used identically by the uploader (reviewing before publish) and the student (reading published content).
+One `ContentViewer` dispatches on `content_type` for **one** item, used identically by the uploader
+(reviewing before publish) and the student (reading published content).
 
 **This component already exists** at `src/features/student/components/content-viewer.tsx` and already dispatches on `content_type` — the work is to promote it out of `features/student/` into a shared location so admin and parent can mount it, then extend the switch. It is not built from scratch.
 
 | `content_type` | Viewer | Status |
 |---|---|---|
-| `pdf` | `SecurePdfViewer` (react-pdf, `usePDFBlob` CSRF fetch, `PDFDocument`) | **Already exists** at `src/components/pdf-viewer/secure-pdf-viewer.tsx` and is already wired into `ContentViewer`. Repoint its `pdfUrl` at the new per-content file endpoint; otherwise reused as-is. |
+| `pdf` | `SecurePdfViewer` (react-pdf, `usePDFBlob` CSRF fetch, `PDFDocument`) | **Exists** at `src/components/pdf-viewer/secure-pdf-viewer.tsx` and is wired into `ContentViewer`; `pdfUrl` already points at the per-content file endpoint. **Gains a control toolbar** — see below (BR-EXT-044). |
 | `image` | Inline image viewer (lightbox/zoom optional) | **Net-new** — the only genuinely new viewer. Needs a matching `case "image"` in the `ContentViewer` switch, which is exhaustive over the `content_type` union. |
 | `text` | Rendered markdown (`MarkdownText`) | **Already exists** for display; gains the live-preview pairing above for the editor (BR-EXT-036). |
 | `video` | Player via official SDK | **Replaces** the current raw `<iframe src>` at `content-viewer.tsx:40`, which fails outright for embed-restricted YouTube videos, for both the uploader's preview and the student's viewer. See BR-EXT-035. |
+
+#### PDF viewer toolbar (BR-EXT-044)
+
+`SecurePdfViewer` is the single PDF surface in the product, so the toolbar is added **to it** rather
+than to any one screen. Every existing mount inherits the controls unchanged: the shared
+`ContentViewer` (student, parent, admin) and the legacy course-navigation screen at
+`src/app/home/page.tsx`, which mounts the same component with `scale={1.75}` — so "the old screen
+should keep its controls" is satisfied without that screen being touched.
+
+**No third-party viewer plugin** (owner decision, 2026-09-16). The toolbar is built on the
+`SecurePdfViewer` already shipped — `react-pdf` 10 over `pdfjs-dist` 5.3.93, with the worker
+self-hosted at `/pdf.worker.min.mjs` exactly as `15_security_headers.md` pins it.
+`@react-pdf-viewer/core` + `/default-layout` was considered for its ready-made toolbar plugin and
+rejected: it peers on `pdfjs-dist` 3.x and React ≤18 against this repo's pdf.js 5 and React 19
+(a second pdf.js copy plus a peer-dep override), it moves the worker/cmap paths the CSP pins, and
+its default layout ships Download / Print / Open buttons this viewer deliberately blocks. No
+toolbar has ever existed in `haisir-frontend` — not on `/home`, not in any revision of this
+component — so the controls below are net-new rather than a restoration.
+
+| Control | Behaviour | Built from |
+|---|---|---|
+| Fit width (**default**) | Measures the scroll container and passes `width={containerWidth}` to `<Page>` instead of `scale`. This is the initial state — the fixed `scale` the viewer shipped with is what made pages render arbitrarily over- or under-sized. | `ResizeObserver` + react-pdf's existing `width` prop |
+| Zoom out / Zoom in | `scale` steps of 0.25 across 0.5 – 3.0; either button leaves fit-width mode. Current value shown as a percentage between them. | react-pdf `scale` prop |
+| Page ◀ / ▶ and `n of N` | Pages stay **continuously scrolled** (no pager rewrite); the buttons `scrollIntoView` the target page and the indicator follows the scroll position. | `IntersectionObserver` over the page refs |
+| Fullscreen | Toggles `requestFullscreen()` / `exitFullscreen()` on the viewer container — this is the "make it full page / detach" ask. Toolbar stays pinned inside the fullscreened element. | Fullscreen API |
+
+- The toolbar is sticky at the top of the viewer container and **wraps** rather than scrolls
+  horizontally at phone width; every button carries an `aria-label`.
+- The existing protections are unchanged: context menu blocked, selection overlay retained, **no
+  download or print button** is added — `SecurePdfViewer` is deliberately read-only, and adding one
+  would be a product decision, not a UX fix.
+- No new dependency. Everything above is a react-pdf prop already in use or a native browser API.
 
 ### Raw file serving
 
@@ -534,8 +591,45 @@ The legacy `GET /api/topic-contents/{content_type}/{topic_id}` route is **remove
 ### Frontend integration
 
 - **BR-EXT-018** — `fetchWithCSRFRetry` MUST handle FormData correctly: re-clone FormData on CSRF retry (the original Body is consumed). Verify with integration test before any worker code is written. (Challenger #1)
-- **BR-EXT-019** — Frontend renders client-side pseudo-jobs for upload-phase progress. Pseudo-job is in-memory only; backend never sees `'uploading'`. Replaced by real job on 201; marked `'upload_failed'` on error.
+- **BR-EXT-019** — Frontend renders client-side pseudo-jobs for upload-phase progress. Pseudo-job is in-memory only; backend never sees `'uploading'`. Replaced by real job on 201; marked `'upload_failed'` on error. **Revised (Upload & Viewer Feedback increment): the Add Content modal no longer closes on click.** It stays open as an upload monitor until every file in the submission has left `uploading`, then closes itself; a **Hide** button dismisses it sooner and the in-flight uploads are unaffected, because `uploadFiles` is fire-and-forget and never depended on the modal being mounted. The original close-immediately rule is what left a user with no feedback whatsoever between pressing Upload and the topic card reporting "Queued".
 - **BR-EXT-020** — Topic card polling stops after 60s of no active jobs to avoid idle traffic.
+
+### Upload & viewer feedback (Upload & Viewer Feedback increment — frontend only)
+
+- **BR-EXT-042 — Upload progress is measured, not assumed.** The extraction-job POST is issued with
+  `XMLHttpRequest` and `xhr.upload.onprogress`, because `fetch` exposes no upload-progress event —
+  the shipped pseudo-job carries `progress: 0` from creation to replacement, so the bar could never
+  move regardless of UI work. Each event sets the pseudo-job's `progress` to
+  `loaded / total * 100`, **throttled to whole-percent changes** so a 50 MB upload does not
+  re-render the strip per chunk. When `event.lengthComputable` is false, the file falls back to the
+  indeterminate rendering of BR-EXT-043 rather than showing a frozen 0%. No HTTP client dependency
+  is added — the "no Axios" rule stands, and `XMLHttpRequest` is the platform's own API for this.
+  The CSRF-retry contract of BR-EXT-018 is unchanged and still applies: a retried send needs a
+  freshly built `FormData`, since the original body is consumed.
+
+- **BR-EXT-043 — A determinate progress bar requires a real fraction; everything else is
+  indeterminate.** Per display status: `uploading` → determinate on transferred bytes;
+  `pending` → **indeterminate**, labelled "Queued"; `extracting` with `pages_total` known →
+  determinate on `pages_completed / pages_total`, labelled "Extracting page n of N";
+  `extracting` with `pages_total` still null → indeterminate; any terminal status → no bar at all.
+  Rendering `pending` as `value={0}` (the shipped behaviour) reads as a stalled upload, which is
+  exactly how it was reported. A native `<progress>` with its `value` attribute omitted is
+  indeterminate — no animation code, no spinner component.
+
+- **BR-EXT-044 — PDF viewing has controls, on one component.** `SecurePdfViewer` carries a sticky
+  toolbar: fit-width (the default), zoom out/in across 0.5–3.0 in 0.25 steps, page prev/next with an
+  `n of N` indicator over continuously-scrolled pages, and a fullscreen toggle. Controls are added
+  to the component, not to a screen, so student, parent, admin and the legacy `/home` course
+  navigation all gain them from one change. No download or print control is added — the viewer's
+  existing read-only posture (context menu blocked, selection overlay) is deliberate and unchanged.
+
+- **BR-EXT-045 — Content is listed, then viewed — for every persona.** A topic's content renders as
+  one row per item (type icon, title, View) with at most **one** item open at a time, in a shared
+  near-fullscreen dialog. This replaces the student screen's stacked inline render, where every PDF
+  in a topic was fully rendered one after another, and it makes the student surface match the
+  parent/admin one, which already listed rows with a View action. The uploader's View button opens
+  the same dialog, so the two screens share a single viewer modal. The student's hAITU doubt panel
+  stays below the list, outside the dialog.
 
 ### Provenance & audit
 

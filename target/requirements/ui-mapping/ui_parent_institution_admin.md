@@ -229,12 +229,13 @@ Native `<dialog id="modal-add-content">`, `.modal-inner.modal-wide` (560px). Typ
 | Topic context line | "Topic: {topic.name}" — subtle grey, top of modal |
 | Type chips (`#uc-types`) | 4 chips horizontally: 📄 PDF / 🖼️ Image(s) / 🎬 Video URL / 📝 Text. Selected chip = `.uc-type.sel` (blue border + tint). Switching chip resets state. |
 | Drop zone (`.uc-drop`) | For PDF / Image: 120px tall dashed border zone with 📥 icon + "Drop files here or click to browse" + hint text. `.dragover` class on dragenter/dragover. Click triggers hidden `<input type="file" multiple>`. |
-| File list (`.uc-files`) | One `.uc-file` row per added file: icon, name, size (human), status text, mini progress bar (`.uc-file-bar` + `.uc-file-fill`), ✕ remove button (only when `status='pending'`). |
+| File list (`.uc-files`) | One `.uc-file` row per added file: icon, name, size (human), status text, mini progress bar (`.uc-file-bar` + `.uc-file-fill`), ✕ remove button (only before upload starts). During upload the row reads "Uploading 42%" over a **determinate** bar driven by real transferred bytes (BR-EXT-042), flips to "Queued" on 201 and to the error text on failure. |
 | URL input (Video) | Single `<input type="url">` with placeholder "https://youtube.com/watch?v=…". Optional title input below. |
 | Text body | Title input + 6-row textarea. Live char count. |
 | Cost preview band | Right of Upload button: "Est. $0.50–$2.00". For >$2: confirmation checkbox required. |
 | Confirm button (`#uc-confirm-btn`) | Label changes by type: "Upload N PDFs" / "Upload N images" / "Add video" / "Save text". Disabled when no content provided. |
 | Cancel button | "Cancel" (close + drop pseudo-jobs not yet POSTed). Closing during in-flight POSTs does NOT cancel — work continues on topic card. |
+| Modal lifetime | **Revised (BR-EXT-019):** the modal does **not** close on Upload. It stays open as an upload monitor and closes itself once every file has left `uploading`; a **Hide** button dismisses it sooner without affecting the uploads. Extraction progress belongs to the IN PROGRESS strip from that point on, not the modal. |
 
 ### Topic card — IN PROGRESS strip (`.tc-jobs`)
 
@@ -244,8 +245,8 @@ Visible only when `topic.jobs.length > 0`. One `.job-row` per job from `renderJo
 |---|---|
 | Section header | "IN PROGRESS ({n})" small caps, grey |
 | Job row layout | Icon (📄/🖼️) · main (filename, meta, progress bar) · status pill · actions |
-| Status pills | `.js-pending` "⏱ Queued" (grey) / `.js-uploading` "🌀 Uploading X%" (blue) / `.js-extracting` "🌀 Extracting" (purple, pulsing bar) / `.js-failed` "✕ Failed" (red) |
-| Progress bar | `.job-bar` 4px tall · `.job-fill` width=progress%, `.extracting` class adds pulse `@keyframes` |
+| Status pills | `.js-pending` "⏱ Queued" (grey) / `.js-uploading` "🌀 Uploading X%" (blue) / `.js-extracting` "🌀 Extracting page n of N" (purple) / `.js-failed` "✕ Failed" (red) |
+| Progress bar | `.job-bar` 4px tall · `.job-fill` width=progress%. **Determinate only when a real fraction exists** (BR-EXT-043): `uploading` → transferred bytes; `extracting` with `pages_total` → pages done; `pending`, and `extracting` before `pages_total` is known → **indeterminate** (native `<progress>` with no `value`); terminal → no bar. A `pending` job rendered as `value=0` reads as a stalled upload and is the defect this replaces. |
 | Cancel | Visible for pending/uploading/failed; sets `cancel_requested=true` for extracting (soft) |
 | Retry | Visible only for `extraction_failed`. Copy must make clear the **document is already available** and retry only re-attempts the text extraction — e.g. "Text extraction failed. Your document is saved and can be published. Retry". The failed job is an advisory, never a blocker (BR-EXT-038). Steer the user here rather than to a re-upload, which trips SHA dedup and, with `X-Force-Reextract`, creates a second copy of the same document. |
 
@@ -284,9 +285,9 @@ Native `<dialog>`, 560 px wide. Triggered by Edit button on any content row.
 
 | Element | Detail |
 |---|---|
-| PDF viewer | Inline, opened via the content row's View button. Reuses the existing `SecurePdfViewer` (`src/components/pdf-viewer/secure-pdf-viewer.tsx`) — not a new component; only its `pdfUrl` changes, to `GET /api/topic-contents/{content_id}/file`. |
+| PDF viewer | Opened via the content row's View button, in the shared near-fullscreen dialog (≈90vw × 90vh, max 1200px). Reuses `SecurePdfViewer` (`src/components/pdf-viewer/secure-pdf-viewer.tsx`) — not a new component. **Gains a sticky toolbar** (BR-EXT-044): fit-width (default), zoom out/in 0.5–3.0 in 0.25 steps with a % readout, page ◀/▶ with `n of N` over continuously-scrolled pages, fullscreen toggle. No download/print button. |
 | Image viewer | Inline (lightbox/zoom optional), same trigger. **Net-new** — fetches the same per-content file endpoint. |
-| Shared component | All three come from the `ContentViewer` promoted out of `src/features/student/components/` into a shared location, so student, admin and parent mount one component. |
+| Shared component | All three come from the `ContentViewer` promoted out of `src/features/student/components/` into a shared location, so student, admin and parent mount one component. **The view dialog itself is shared too** (BR-EXT-045) — the bespoke view-modal markup currently local to the topic content section is replaced by the same dialog the student list opens, so the two surfaces cannot drift apart again. |
 | Video player | YouTube IFrame Player API / Vimeo Player SDK, not a raw `<iframe>`. On an embed error (video owner disabled embedding), shows a "Watch on YouTube"/"Watch on Vimeo" external-link button instead of a broken frame. Same component used in the uploader's View action and the student's S-nav content viewer. |
 
 ### Polling cadence (frontend, JS)

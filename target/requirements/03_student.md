@@ -113,7 +113,7 @@ Two source tabs: **Platform** | **Home Study**.
 ### Right panel — Topic list
 - Lists topics for the selected node.
 - Each row: topic title, content type icons (PDF / image / video / text), status badge (`live` only — draft topics not shown to students), "Take Exam" button if an exam template is linked.
-- Clicking a topic opens the topic content viewer: a native PDF viewer for `pdf` content, an image viewer for `image` content, a rendered-markdown viewer for `text` content, and an SDK-based YouTube/Vimeo player (with a "Watch on YouTube/Vimeo" fallback if embedding is blocked) for `video` content. Only content items with `visibility_status='published'` appear in the list (BR-DATA-025) — a topic can be `live` while some of its content items are still in draft, mid-review by the uploader.
+- Clicking a topic lists its content as rows (type icon, title, **View**) — one row per item, nothing rendered until the student opens it (BR-EXT-045). View opens that one item in a near-fullscreen dialog: a PDF viewer with fit-width, zoom, page navigation and fullscreen controls (BR-EXT-044) for `pdf` content, an image viewer for `image` content, a rendered-markdown viewer for `text` content, and an SDK-based YouTube/Vimeo player (with a "Watch on YouTube/Vimeo" fallback if embedding is blocked) for `video` content. Only content items with `visibility_status='published'` appear in the list (BR-DATA-025) — a topic can be `live` while some of its content items are still in draft, mid-review by the uploader.
 - "Take Exam" → creates a new `exam_session` and navigates to S-exam.
 
 **Business rules:**
