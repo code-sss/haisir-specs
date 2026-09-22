@@ -4,6 +4,56 @@
 
 ---
 
+## 2026-09-22 — Viewer & Editor Polish (`/update-target-state`)
+
+Second tester/PM review of the content surfaces (parent flow, with admin and student checked for
+knock-on). Five complaints plus one PM addition, all traced in code (`origin/main` of each repo)
+before any spec was touched.
+
+- **Not phased.** Frontend-heavy; backend is three `max_length` constants; deploy is one
+  plugin_config. No schema, endpoint or permission change. Same pattern as 2026-09-14 / 2026-09-16.
+- **Image/text viewer controls come from the PDF toolbar, extracted.** The image viewer was a bare
+  `<img>`. The exam `ZoomedImageModal` (zoom only, and itself a modal) was considered and not
+  reused — it cannot nest inside the view dialog and has no fullscreen. The `SecurePdfViewer`
+  toolbar becomes a shared `ViewerToolbar` so PDF, image and text cannot drift. Rotate not added —
+  browsers honour EXIF orientation by default.
+- **No "publish all" button — owner decision.** Options were a content-level "Publish all drafts"
+  or reusing the topic row's Draft/Live toggle; the owner chose the toggle. Agreed, with one
+  addition: because student visibility needs topic Live **and** item published (BR-DATA-025), a
+  parent can press the topic Publish and the child still sees nothing, so the content header shows
+  an advisory drafts count. Per-upload `Document | Text` stays an explicit user choice — no bulk
+  default side is ever picked on the user's behalf.
+- **Unpublish deferred — owner decision.** Three specs promised a video/text Draft/Published
+  toggle; the backend has no unpublish and the UI's disabled button said so. Wording withdrawn
+  rather than an API contract added without being asked.
+- **Edit failure root cause: WAF `931130` on PATCH, compounded by the client.** POST chains
+  (`id:199100`/`199121`) remove `931130`; the PATCH chain (`id:199120`) never did. The Edit form
+  re-sent the unchanged `url` every time, so even a title edit of a video 403'd. Both fixed: the
+  gateway excludes `931130` on `json.url`/`json.text` for PATCH, the client sends only changed
+  fields (which also stops needless RAG re-embeds).
+- **Challenger correction taken: `931130` can be field-scoped.** The CRS 4.25.1 rule's primary
+  `SecRule` inspects `ARGS`; only its chained sub-rule reads `TX`. The recorded justification
+  ("targets a TX variable, so the ARGS_POST form cannot apply" — `03-secured-api.json`,
+  `16_gateway_waf.md`, `constraints.md`) is wrong. New PATCH exclusion is field-scoped, harness
+  proof required before enforcement, blanket fallback only with recorded evidence. POST chains
+  should follow in the same change.
+- **Text cap 20,000 characters (5×), owner confirmed after comparison.** 4,000 ≈ one dense A4 page
+  and was below a real 4,498-char extracted page. 20,000 sits under common long-form caps
+  (Stack Overflow 30k, Discourse 32k, Reddit 40k, GitHub 65,536 — published figures, not re-verified). RAG checked: 512-token chunks,
+  ≈10–12 per full row; hAITU retrieves top-k, no prompt growth. Gateway limits are **bytes**:
+  `arg_length=81920` (20k × 4-byte worst case) and `total_arg_length=131072`, exact URI + method
+  scope. PATCH needed `total_arg_length` too — raising only `arg_length` would still trip `920390`.
+- **Split editor chosen** over tabs-only and preview-button. Wide modal only for text; other chips
+  keep the narrow one.
+- **`.md` support is a browser import, not a content type.** Text rows are already markdown, so a
+  file is just a faster way to fill the editor. A server-side `md` type would need an enum
+  `ALTER TYPE`, worker handling, storage and a file endpoint for zero gain. Stated limits: no
+  relative/remote images, no raw HTML (by design), math waits for KaTeX.
+- **Two Add Content modals stay two.** Merging admin and content-management modals was noted and
+  left out of scope; every editor rule lands in both.
+
+---
+
 ## 2026-09-16 — Upload & Viewer Feedback (`/update-target-state`)
 
 Triggered by a tester/PM review of the shipped PDF upload flow (four annotated screenshots, parent

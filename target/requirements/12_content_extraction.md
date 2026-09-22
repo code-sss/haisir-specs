@@ -376,7 +376,7 @@ After materialization, every `topic_contents` row supports two edit affordances:
 | Affordance | Trigger | Scope | Persistence |
 |---|---|---|---|
 | **Inline title rename** | Click on title text in the content row | Title only | `PATCH /api/topic-contents/{id}` with `{title}` |
-| **Full editor modal** | Click the row’s **Edit** button | Title + body (markdown for text, URL for video) | `PATCH /api/topic-contents/{id}` with `{title, body}` |
+| **Full editor modal** | Click the row’s **Edit** button | Title + body (`text` markdown for text rows, `url` for video rows) | `PATCH /api/topic-contents/{id}` with **only the fields that changed** among `title`, `order`, `description`, `text`, `url` (BR-EXT-047) |
 
 **Provenance is preserved across edits.** `topic_contents.source_extraction_job_id` is never cleared by an edit. The badge "Extracted from `chapter1.pdf` · page 3" continues to display, signalling "this row originated from extraction even though an admin has rewritten it". This is essential for traceability when LLM extraction errors are corrected.
 
@@ -461,7 +461,7 @@ Topic delete and `course_path_nodes` subtree delete (parent and admin paths) run
 ### Editing materialized rows (frontend)
 
 - **Click on title** → inline contenteditable; Enter saves, Esc reverts. Empty value reverts. Sends `PATCH /api/topic-contents/{id}` with `{title}` only.
-- **Edit button** → full editor modal. For `text` rows: title input + **markdown editor with live preview** (textarea + rendered pane, toggleable or side-by-side — same `MarkdownText` rendering component the student viewer uses, so what the uploader previews is exactly what gets published). For `video` rows: title input + URL input. `pdf`/`image` rows are not text-edited (there is no body to edit) — see the viewers below. Save sends `PATCH /api/topic-contents/{id}` with `{title, body}`. Modal shows the provenance line at the top so admins know they are editing extracted content.
+- **Edit button** → full editor modal. For `text` rows: title input + **markdown editor with live preview** — the split/tab layout of BR-EXT-036, same `MarkdownText` rendering component the student viewer uses, so what the uploader previews is exactly what gets published. For `video` rows: title input + URL input. `pdf`/`image` rows are not text-edited (there is no body to edit) — see the viewers below. Save sends `PATCH /api/topic-contents/{id}` with **only the changed fields** (BR-EXT-047) — the real body field is `text` (or `url` for video); there is no `body` field. Modal shows the provenance line at the top so admins know they are editing extracted content.
 - **Delete button** → confirm dialog mentioning that audit record is preserved.
 
 ### Content list, then viewer (every persona)
@@ -493,8 +493,8 @@ One `ContentViewer` dispatches on `content_type` for **one** item, used identica
 | `content_type` | Viewer | Status |
 |---|---|---|
 | `pdf` | `SecurePdfViewer` (react-pdf, `usePDFBlob` CSRF fetch, `PDFDocument`) | **Exists** at `src/components/pdf-viewer/secure-pdf-viewer.tsx` and is wired into `ContentViewer`; `pdfUrl` already points at the per-content file endpoint. **Gains a control toolbar** — see below (BR-EXT-044). |
-| `image` | Inline image viewer (lightbox/zoom optional) | **Net-new** — the only genuinely new viewer. Needs a matching `case "image"` in the `ContentViewer` switch, which is exhaustive over the `content_type` union. |
-| `text` | Rendered markdown (`MarkdownText`) | **Already exists** for display; gains the live-preview pairing above for the editor (BR-EXT-036). |
+| `image` | Image viewer with the shared viewer toolbar — fit (default), zoom, fullscreen | Shipped as a bare `<img>`; **gains the toolbar** (BR-EXT-044, revised — Viewer & Editor Polish increment). |
+| `text` | Rendered markdown (`MarkdownText`) with the shared viewer toolbar — text size, fullscreen | Display exists; **gains the toolbar** (BR-EXT-044) and the split editor for authoring (BR-EXT-036). |
 | `video` | Player via official SDK | **Replaces** the current raw `<iframe src>` at `content-viewer.tsx:40`, which fails outright for embed-restricted YouTube videos, for both the uploader's preview and the student's viewer. See BR-EXT-035. |
 
 #### PDF viewer toolbar (BR-EXT-044)
@@ -529,6 +529,24 @@ component — so the controls below are net-new rather than a restoration.
   would be a product decision, not a UX fix.
 - No new dependency. Everything above is a react-pdf prop already in use or a native browser API.
 
+#### Image and text viewer toolbar (BR-EXT-044, revised — Viewer & Editor Polish increment)
+
+Tester feedback: an uploaded image opened as a bare `<img>` with none of the PDF viewer's controls.
+The toolbar markup and fullscreen wiring move out of `SecurePdfViewer` into one shared
+`ViewerToolbar` (presentational: buttons + readouts, driven by props) that the PDF, image and text
+viewers all mount, so the three cannot drift. Page controls stay PDF-only.
+
+| Viewer | Controls | Notes |
+|---|---|---|
+| `pdf` | Unchanged (fit width, zoom, pages, fullscreen) | Now renders the shared `ViewerToolbar`; behaviour identical. |
+| `image` | **Fit** (default — whole image visible, `object-fit: contain` within the viewer), zoom − / % / + across 0.5 – 3.0 in 0.25 steps, **Fullscreen** | When zoomed past fit, the container scrolls (overflow auto) to pan. Same read-only posture as PDF: context menu blocked, `draggable={false}`, no download button. Image still loads as an authenticated blob URL (`usePDFBlob`), unchanged. |
+| `text` | Text size A− / A+ (steps of 12.5% across 87.5 – 150%), **Fullscreen** | Body constrained to a readable measure (~72ch) and centred; fullscreen keeps the same measure. Text is **not** copy-blocked — it is the uploader's own notes and the student's reading material. |
+
+- The exam-screen `ZoomedImageModal` (question images) is a separate surface and is **not**
+  touched by this increment.
+- Rotate was considered for phone photos and not added: browsers already honour EXIF orientation
+  (`image-orientation: from-image` is the default). Revisit only if a sideways upload is reported.
+
 ### Raw file serving
 
 Neither the raw PDF nor the raw image can be rendered without an authenticated endpoint that streams the stored file. The existing route is not usable for this:
@@ -553,7 +571,8 @@ The legacy `GET /api/topic-contents/{content_type}/{topic_id}` route is **remove
 
 - New control on each upload group (the raw row + its sibling text rows, or a standalone video/text row): **Publish**, choosing which representation students see.
 - For a PDF/Image upload: a two-way toggle — "Publish as Document" (raw) or "Publish as Text" (extracted, editable beforehand) — mutually exclusive (BR-DATA-024). Switching sets the chosen side's rows to `visibility_status='published'` and the other side's rows back to `'draft'` in one call.
-- For Video/Text: a simple Draft/Published toggle on the single row, same interaction as the existing topic-level Draft/Live toggle.
+- For Video/Text: a **Publish** action on the single row. **Unpublish is deferred** (owner decision, 2026-09-22) — no backend endpoint returns a published standalone row to draft, so a published row shows only its "Published" pill. (Earlier wording promised a Draft/Published toggle; that was never built and is withdrawn until an unpublish endpoint is specced.)
+- **Placement (BR-EXT-046):** every publish control sits **inline in its row** — next to the row's Draft/Published pill for video/text, in the card header row for a PDF/Image upload group — never as a separate strip above or below the item. There is **no** content-level "publish all" button: the topic row's existing Draft/Live toggle is the one topic-level publish.
 - Draft content remains fully visible/editable to the uploader (both raw and extracted forms) at all times — only student-facing display is gated.
 
 ---
@@ -622,6 +641,9 @@ The legacy `GET /api/topic-contents/{content_type}/{topic_id}` route is **remove
   to the component, not to a screen, so student, parent, admin and the legacy `/home` course
   navigation all gain them from one change. No download or print control is added — the viewer's
   existing read-only posture (context menu blocked, selection overlay) is deliberate and unchanged.
+  **Revised 2026-09-22 (Viewer & Editor Polish):** the toolbar is extracted into a shared
+  `ViewerToolbar` and also mounted by the image viewer (fit default, zoom 0.5–3.0, fullscreen,
+  scroll-to-pan) and the text viewer (text size, fullscreen) — see "Image and text viewer toolbar".
 
 - **BR-EXT-045 — Content is listed, then viewed — for every persona.** A topic's content renders as
   one row per item (type icon, title, View) with at most **one** item open at a time, in a shared
@@ -631,12 +653,73 @@ The legacy `GET /api/topic-contents/{content_type}/{topic_id}` route is **remove
   the same dialog, so the two screens share a single viewer modal. The student's hAITU doubt panel
   stays below the list, outside the dialog.
 
+### Viewer & editor polish (Viewer & Editor Polish increment — 2026-09-22)
+
+Second tester/PM round on the same surfaces. Direct increment, not a phase. BR-EXT-044 and
+BR-EXT-036 are revised in place (image/text toolbar; split editor); the rules below are new.
+
+- **BR-EXT-046 — Publish controls are inline; the topic toggle is the only topic-level publish.**
+  A standalone video/text row renders its Draft/Published pill and, when draft, an inline
+  **Publish** button in the same row. A PDF/Image upload card renders its `Document | Text`
+  segmented toggle in the card header row, beside View / Show pages / Delete. The separate control
+  strip the shipped `TopicContentSection` rendered **above** each standalone row (and the disabled
+  "Published" button it showed for published rows) is deleted. No "publish all" button is added:
+  the topic row's existing Draft/Live toggle (BR-PAR-005 / admin topic status) remains the one
+  topic-level publish. Because a student sees an item only when the topic is Live **and** the item
+  is published (BR-DATA-025), the content header shows an advisory line when the topic is `live`
+  and at least one group has nothing published — parent: "N item(s) are drafts — your child can't
+  see them until you publish them"; admin: "N item(s) are drafts — students can't see them until
+  you publish them". Advisory only; it gates nothing. Applies to the parent
+  (`TopicContentSection`) and admin (`admin/components/topic-row.tsx`) surfaces.
+
+- **BR-EXT-047 — Edits send only the fields that changed.** The Edit modal diffs its form values
+  against the row it opened and PATCHes only changed fields; an unchanged form closes without a
+  request. The shipped form re-sent every non-empty field, including an unchanged video `url`, so a
+  title-only edit of a video carried an `https://` URL through the WAF and was blocked by CRS 931130
+  (the PATCH chain never excluded it — see `16_gateway_waf.md` BR-WAF-014). Sending only changed
+  fields also stops needless RAG re-embeds: the service re-enqueues only when `title` or `text` is
+  in the payload. The gateway fix is still required — a real URL or link-bearing text edit must
+  save.
+
+- **BR-EXT-048 — Topic text content is capped at 20,000 characters.** Raised from 4,000 (5×) on
+  `TopicContentBase`, `TopicContentUpdate` and `ParentTopicContentCreate` (Pydantic
+  `max_length`); the column is unbounded `VARCHAR`, so there is no migration. 4,000 was about one
+  dense A4 page and was already smaller than real extracted pages (a 4,498-char page was seen), so
+  editing one returned 422. 20,000 ≈ 3,000–3,500 words, comparable to or below common long-form
+  post caps (Stack Overflow 30k, Discourse 32k). The frontend enforces the same cap (zod
+  `max(20000)` — new, the text field had no client cap before) with the visible counter of
+  BR-EXT-036, so text is never silently cut. The gateway's per-route `tx.arg_length` /
+  `tx.total_arg_length` are raised to fit the cap in **bytes** (BR-WAF-015) — 20,000 chars of
+  Indic script is ≈60 KB. RAG impact checked: `SentenceSplitter(chunk_size=512)` yields ≈10–12
+  chunks per full-size row, and hAITU retrieves top-k chunks, never the whole row.
+
+- **BR-EXT-049 — Markdown files import into a text item, in the browser.** The Text chip of Add
+  Content (and the text Edit modal) offers **Import .md file** plus drag-and-drop onto the editor.
+  The browser reads the file (`File.text()`, UTF-8), strips a leading YAML front-matter block
+  (`---` … `---` at the very start), places the result in the Write pane, and — when the Title
+  field is empty — sets it from the first `# ` heading, else the filename without extension. The
+  uploader reviews the preview and saves; the result is an ordinary `content_type='text'` row via
+  the existing create/PATCH endpoints, draft by default, RAG-indexed like any text row. Accepts
+  `.md` / `.markdown` (≤ 20,000 chars after front-matter strip); one file per import; importing
+  into a non-empty editor asks to replace. A file over the cap is rejected with its character count
+  ("This file has 34,210 characters; the limit is 20,000 — split it or upload it as a PDF"), never
+  truncated. **No new content type, no upload pipeline, no backend change** — markdown needs no
+  extraction; it already is the body. Accepted limits, stated so they are not reported as bugs:
+  relative images (`![](./img.png)`) and off-origin images do not render (no file is received;
+  CSP governs remote images); raw HTML is not rendered (`MarkdownText` has no `rehype-raw`, by
+  design) and heavy inline HTML may be rejected by the WAF's XSS detectors on save; `$…$` math
+  renders only once the planned KaTeX plugin lands.
+
+- **Two Add Content modals.** `features/admin/components/add-content-modal.tsx` and
+  `features/content-management/components/add-content-modal.tsx` are separate implementations;
+  BR-EXT-036/047/048/049 land in **both**. Merging them is out of scope for this increment.
+
 ### Provenance & audit
 
 - **BR-EXT-021** — Each materialized `topic_contents` row carries `source_extraction_job_id` (nullable; only set for extracted rows). UI badge resolves filename via `extraction_job_audit` JOIN. **A raw row surviving a terminal `extraction_failed` has no audit row and therefore no badge** — its `title` is the source filename, so identity is preserved without one (see BR-DATA-009).
 - **BR-EXT-022** — `extraction_job_audit` is **never purged**. It outlives the source file, the job row, and even (logically) the deleted `topic_contents` row.
 - **BR-EXT-023** — `topic_contents` rows manually deleted via `DELETE /api/topic-contents/{id}` do not cascade-delete the audit row. The audit retains "this job extracted N pages on date X by user Y" forever.
-- **BR-EXT-023a** — `PATCH /api/topic-contents/{id}` MUST NOT clear `source_extraction_job_id`. Edits change `title` and/or `body` only. Provenance is permanent.
+- **BR-EXT-023a** — `PATCH /api/topic-contents/{id}` MUST NOT clear `source_extraction_job_id`. Edits change `title`, `order`, `description`, `text` or `url` only (there is no `body` field — the markdown body is `text`). Provenance is permanent.
 - **BR-EXT-023b** — No upload-time title input is offered for PDF/image content types. Per-page titles are auto-derived from the first H1 in the extracted markdown (fallback: `"Page N — {filename}"`) and editable post-hoc via inline rename or the Edit modal. Video and Text uploads accept a title at creation time (1 upload → 1 row).
 
 ### Parent quota
@@ -664,7 +747,7 @@ The legacy `GET /api/topic-contents/{content_type}/{topic_id}` route is **remove
 - **BR-EXT-034** — Every materialized row (raw or text) defaults to `visibility_status='draft'`. Neither side of an extraction is visible to students until the uploader explicitly publishes one (BR-DATA-024). Video and Text rows created via the instant path (`POST /api/topic-contents`) also default to `'draft'`.
 - **BR-EXT-037** — Publish is a single atomic call per upload group, not a per-row toggle: `PATCH /api/topic-contents/{content_id}/publish` (and the parent-scoped mirror under `/api/parent/curriculum/`) resolves the row's group per BR-DATA-024's grouping key and, in **one transaction**, sets the chosen side to `'published'` and every other row in the group to `'draft'`. A per-row `visibility_status` write is not exposed — the mutual-exclusivity invariant cannot be enforced if callers can set one row at a time.
 - **BR-EXT-035** — Video playback uses the official YouTube IFrame Player API / Vimeo Player SDK, not a raw `<iframe src="...">`. Scope stays YouTube + Vimeo only (matching the existing hostname allowlist in BR-EXT/T13.2 — `youtube.com`, `www.youtube.com`, `youtu.be`, `vimeo.com`, `www.vimeo.com`). When the SDK reports an embed error (e.g. the video owner disabled embedding), the player falls back to a "Watch on YouTube"/"Watch on Vimeo" external-link button instead of a silently broken frame. Applies to both the uploader's preview and the student's viewer.
-- **BR-EXT-036** — Text content editing uses a markdown editor with live preview (textarea + rendered pane via the shared `MarkdownText` component), replacing a plain textarea-only editor. Uploader and student see identically-rendered markdown — one rendering pipeline for both authored and extracted text.
+- **BR-EXT-036** — Text content editing uses a markdown editor with live preview (textarea + rendered pane via the shared `MarkdownText` component), replacing a plain textarea-only editor. Uploader and student see identically-rendered markdown — one rendering pipeline for both authored and extracted text. **Layout (revised — Viewer & Editor Polish increment):** the shipped editor stacked a small 0.75rem textarea above the preview inside a 440px modal, so neither was usable for real notes. When the Text chip is active (create) or a `text` row is edited, the modal widens to ≈90vw × 90vh (max 1200px); at ≥900px viewport width it shows **Write | Preview side by side**, each pane filling the modal height and scrolling independently; below 900px it shows **Write / Preview tabs**. The textarea is monospace at body size, and a live `n / 20,000` character counter sits under it, turning to an error state and disabling Save when over the limit (BR-EXT-048). Other chips (Video URL, PDF, Image) keep the narrow modal.
 
 ### Extraction-Optional rules
 

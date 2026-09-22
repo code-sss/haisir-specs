@@ -231,7 +231,7 @@ Native `<dialog id="modal-add-content">`, `.modal-inner.modal-wide` (560px). Typ
 | Drop zone (`.uc-drop`) | For PDF / Image: 120px tall dashed border zone with 📥 icon + "Drop files here or click to browse" + hint text. `.dragover` class on dragenter/dragover. Click triggers hidden `<input type="file" multiple>`. |
 | File list (`.uc-files`) | One `.uc-file` row per added file: icon, name, size (human), status text, mini progress bar (`.uc-file-bar` + `.uc-file-fill`), ✕ remove button (only before upload starts). During upload the row reads "Uploading 42%" over a **determinate** bar driven by real transferred bytes (BR-EXT-042), flips to "Queued" on 201 and to the error text on failure. |
 | URL input (Video) | Single `<input type="url">` with placeholder "https://youtube.com/watch?v=…". Optional title input below. |
-| Text body | Title input + 6-row textarea. Live char count. |
+| Text body | **Revised (BR-EXT-036/048/049):** selecting the Text chip widens the modal to ≈90vw × 90vh (max 1200px). Title input, then **Write \| Preview side by side** at ≥900px viewport (each pane full modal height, independent scroll) or **Write / Preview tabs** below 900px. Monospace textarea at body size; live `n / 20,000` counter under it — error state + Save disabled over the cap. **Import .md file** button above the editor (and drop onto the editor) — reads the file in the browser, strips leading front matter, fills Write, sets Title from first `# ` heading or filename if Title is empty; asks before replacing non-empty text; rejects files over 20,000 chars with the count. |
 | Cost preview band | Right of Upload button: "Est. $0.50–$2.00". For >$2: confirmation checkbox required. |
 | Confirm button (`#uc-confirm-btn`) | Label changes by type: "Upload N PDFs" / "Upload N images" / "Add video" / "Save text". Disabled when no content provided. |
 | Cancel button | "Cancel" (close + drop pseudo-jobs not yet POSTed). Closing during in-flight POSTs does NOT cancel — work continues on topic card. |
@@ -261,7 +261,9 @@ Visible whenever topic has any `contents`. One `.content-row` per item from `ren
 | Provenance badge (`.cr-prov`) | When `source_extraction_job_id` is set: "✨ from {source_filename} · p.{n}" pill on the meta line. Tooltip: "This row was created by an extraction job." (Revised — the original PDF/image is now permanently retained, not purged; see `12_content_extraction.md`.) Persists after edits. |
 | Publish state pill | `.cr-published` "● Published" (green) or `.cr-draft` "○ Draft" (grey) per row. For a `pdf`/`image` row and its sibling extracted `text` rows, exactly one side shows Published at a time (BR-DATA-024). |
 | View button | For `pdf`/`image` rows: opens the inline PDF/image viewer (read-only, no body to edit). For `video` rows: opens the SDK-based player preview. |
-| Edit button | For `text` rows: opens `#modal-edit-content` (560 px), title input + **markdown editor with live preview**. For `video` rows: title + URL input. Not shown on `pdf`/`image` rows (use View instead — there is no editable body). Save sends `PATCH /api/topic-contents/{id}` with `{title, body}`. |
+| Edit button | For `text` rows: opens `#modal-edit-content` in the wide split-editor layout (BR-EXT-036). For `video` rows: title + URL input (narrow modal). Not shown on `pdf`/`image` rows (use View instead — there is no editable body). Save sends `PATCH /api/topic-contents/{id}` with **only the changed fields** (BR-EXT-047); an unchanged form closes without a request. |
+| Publish control placement | **Inline, never a separate strip (BR-EXT-046).** Standalone video/text row: after the Draft/Published pill, an inline **Publish** button when draft; a published row shows only the pill (unpublish deferred — no disabled "Published" button). PDF/image upload card: the `Document \| Text` segmented toggle sits in the card header row beside View / Show pages / Delete, not below it. |
+| Drafts hint | Content header, when the topic is `live` and ≥1 group has nothing published: parent "N item(s) are drafts — your child can't see them until you publish them"; admin "… students can't see them …". Advisory only. No "publish all" button — the topic's Draft/Live toggle is the one topic-level publish. |
 | Publish toggle | On the upload group (raw + its sibling text rows, keyed by `source_extraction_job_id`) or the standalone video/text row (`source_extraction_job_id IS NULL` → group of one): switches which side is `visibility_status='published'`. One `PATCH /api/topic-contents/{content_id}/publish` call per BR-EXT-037 — the server drafts the previous side in the same transaction; the UI never writes rows individually. |
 | Publish toggle — no-text-side state | A PDF/image group whose text rows do not exist yet (extraction still running) or never will (terminal `extraction_failed`): **"Publish as Text" renders disabled** with tooltip "No extracted text yet — retry extraction to enable this", **"Publish as Document" stays enabled**. Derived purely from `textRowId === null`; no new field. See BR-DATA-024 degenerate group / BR-EXT-038. |
 | Duplicate representation while extracting | From the Extraction-Optional increment, one upload appears **simultaneously** in the IN PROGRESS strip (as a job) and in the CONTENT section (as its raw row) — this is intended, not a double-render bug. The content row is immediately viewable and publishable; the strip reports only the extraction side. Do not suppress the content row while a job for the same `source_extraction_job_id` is active. |
@@ -271,14 +273,14 @@ Visible whenever topic has any `contents`. One `.content-row` per item from `ren
 
 ### Edit content modal (`#modal-edit-content`)
 
-Native `<dialog>`, 560 px wide. Triggered by Edit button on any content row.
+Native `<dialog>`. Narrow (560 px) for `video` rows; **wide split editor (≈90vw × 90vh, max 1200px) for `text` rows** (BR-EXT-036). Triggered by Edit button on any content row.
 
 | Element | Detail |
 |---|---|
 | Provenance line | Top of modal. For extracted `text` rows: "✨ Extracted from **{source_filename}** · page {n}. Edits don’t affect the audit record." For non-extracted: "Video URL content." / "Text content (manually authored)." |
 | Title input | Required. Cannot be empty. |
-| Body field | Markdown editor with live preview (side-by-side or toggleable rendered pane, `text` rows) OR URL input (`video`). `pdf`/`image` rows never open this modal — see the View button / inline viewer instead. |
-| Save | `PATCH /api/topic-contents/{id}`. `source_extraction_job_id` is NEVER touched. |
+| Body field | Markdown editor with live preview — Write \| Preview side by side ≥900px, tabs below; `n / 20,000` counter; Import .md file (BR-EXT-036/048/049) — for `text` rows, OR URL input (`video`). `pdf`/`image` rows never open this modal — see the View button / inline viewer instead. |
+| Save | `PATCH /api/topic-contents/{id}` with only changed fields (BR-EXT-047). `source_extraction_job_id` is NEVER touched. |
 | Cancel | Closes modal without sending. |
 
 ### Content viewers (`pdf` / `image` / `video`)
@@ -286,7 +288,9 @@ Native `<dialog>`, 560 px wide. Triggered by Edit button on any content row.
 | Element | Detail |
 |---|---|
 | PDF viewer | Opened via the content row's View button, in the shared near-fullscreen dialog (≈90vw × 90vh, max 1200px). Reuses `SecurePdfViewer` (`src/components/pdf-viewer/secure-pdf-viewer.tsx`) — not a new component. **Gains a sticky toolbar** (BR-EXT-044): fit-width (default), zoom out/in 0.5–3.0 in 0.25 steps with a % readout, page ◀/▶ with `n of N` over continuously-scrolled pages, fullscreen toggle. No download/print button. |
-| Image viewer | Inline (lightbox/zoom optional), same trigger. **Net-new** — fetches the same per-content file endpoint. |
+| Image viewer | Same dialog and trigger; authenticated blob fetch of the per-content file endpoint. **Toolbar (BR-EXT-044 revised):** Fit (default, whole image visible), zoom − / % / + (0.5–3.0, 0.25 steps), Fullscreen; scroll to pan when zoomed. Context menu blocked, `draggable={false}`, no download. |
+| Text viewer | Rendered markdown at a readable measure (~72ch). **Toolbar:** text size A− / A+ (87.5–150%), Fullscreen. |
+| Shared toolbar | PDF, image and text viewers render one shared `ViewerToolbar`; page ◀/▶ is PDF-only. |
 | Shared component | All three come from the `ContentViewer` promoted out of `src/features/student/components/` into a shared location, so student, admin and parent mount one component. **The view dialog itself is shared too** (BR-EXT-045) — the bespoke view-modal markup currently local to the topic content section is replaced by the same dialog the student list opens, so the two surfaces cannot drift apart again. |
 | Video player | YouTube IFrame Player API / Vimeo Player SDK, not a raw `<iframe>`. On an embed error (video owner disabled embedding), shows a "Watch on YouTube"/"Watch on Vimeo" external-link button instead of a broken frame. Same component used in the uploader's View action and the student's S-nav content viewer. |
 

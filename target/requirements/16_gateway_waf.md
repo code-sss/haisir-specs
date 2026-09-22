@@ -23,6 +23,13 @@
 > exception rather than residue: it targets a **`TX` variable**, so the `ARGS_POST` regex form that
 > replaced the other 37 cannot apply. Recorded in `03-secured-api.json` at the directive itself.
 >
+> **Correction (2026-09-22, Viewer & Editor Polish).** The "targets a `TX` variable" justification is
+> wrong. In CRS 4.25.1 rule `931130`'s **primary** `SecRule` inspects `ARGS`; only its **chained**
+> sub-rule reads `TX:/rfi_parameter_.*/`, and that TX var is set only after the `ARGS` match fires.
+> So `ctl:ruleRemoveTargetById=931130;ARGS_POST:/^json\.(url|text)$/` is expected to work and the
+> blanket removal is **not** structural — see BR-WAF-014. Until the harness proves it, treat the
+> surviving blanket removals on the POST chains as residue to retire, not as a justified exception.
+>
 > **Build (`haisir-deploy/gateway-docker/`).** `coraza-proxy-wasm` is vendored in-tree from upstream
 > `0.6.0` with **ten** documented divergences — five file-level patches (APISIX body-processing
 > opt-ins; registration moved to `init()` with an empty `main()` for the WASI reactor build; a
@@ -247,6 +254,8 @@ Everything not named by the regex — headers, cookies, query arguments, and eve
   - A test asserting a WAF verdict on an authenticated route **must** send a valid token, or it can only ever observe the 401 and is structurally incapable of reaching the rule it claims to test.
   - Prefer `common/scripts/tests/waf-harness.sh` for rule-level regression tests. It loads **only** `coraza-filter` (`jq '{plugins: {"coraza-filter": …}}'`), stripping `openid-connect`, `ua-restriction` and `uri-blocker` — so no other plugin can produce a look-alike 403, and no credentials are needed. That is where the CVE-2026-21876 probe lives.
   - Asserting on a status code alone is insufficient where a payload could trip an unrelated rule. Assert the **rule ID** fired (the CVE probe checks for `id "922110"`, because its UTF-7 payload decodes to `<script>alert(1)</script>` and an XSS rule could otherwise mask a broken 922110).
+- **BR-WAF-014 — `931130` on topic-content edits is excluded field-scoped, on PATCH as on POST.** The PATCH chain for `^/api/(topics-contents|parent/curriculum/topic-contents)/[^/]+$` (`id:199120`) never excluded `931130`, while the POST create chains (`id:199100`, `id:199121`) do (blanket). Result: any edit carrying an `https://` value — a video `url`, or markdown `text` with a link — returned 403, surfaced to the user as "Failed to save content". Fix: add `ctl:ruleRemoveTargetById=931130;ARGS_POST:/^json\.(url|text)$/` to the PATCH chain. Residual risk: an off-domain URL in those two fields is not flagged at the gateway; compensating control is the backend's https-only + hostname allowlist on `url` (`_validate_content_url`, both create and update) and `text` is stored markdown rendered without raw HTML. Must be proven on the harness before enforcement (BR-WAF-011): PATCH with `url` → 200, PATCH with link in `text` → 200, same URL in a query arg / header / other body field → still 403. If — and only if — the harness shows the field-scoped form does not hold, fall back to `ctl:ruleRemoveById=931130` scoped to URI+PATCH with the observed evidence recorded (BR-WAF-007). The POST chains' blanket `931130` removals should move to the same field-scoped form in the same change, and the stale `03-secured-api.json` comments (the "TX variable" note and the "PATCH-side parity gap tracked in T4.5.2" note — `TopicContentUpdate.validate_url` already exists) are corrected (BR-WAF-008).
+- **BR-WAF-015 — Topic-content text size limits are per-route and sized in bytes.** Topic `text` is capped at 20,000 characters in the schema (BR-EXT-048). CRS `920370` (`tx.arg_length`) and `920390` (`tx.total_arg_length`) measure **bytes**; 20,000 chars of Indic script is ≈60 KB. On the topic-content create routes (exact-match `^/api/topics-contents/?$` and `^/api/parent/curriculum/topics/[^/]+/content$`, POST) and the edit routes (the `id:199122` PATCH chain, today `arg_length=16384`), set `tx.arg_length=81920` (20,000 × 4-byte worst case) and `tx.total_arg_length=131072`. Scope by exact URI + method — never `@beginsWith`, which would widen to sub-paths such as `/publish`. The platform baseline (`arg_length=4096`, `total_arg_length=65535`, `id:199004`) is unchanged for every other route. Precedent: `18-api-exam-session-submit.json` raises both for essay answers.
 
 ---
 
