@@ -84,7 +84,7 @@ navigation.
 
 ### BL-003 — LaTeX / Math Rendering Pipeline
 **Raised:** 2026-07-02
-**Status:** Ready (approach agreed — ships as a focused content-rendering follow-up)
+**Status:** Partially delivered 2026-09-23 — markdown path (`MarkdownText` + KaTeX: topic text, editor preview, `.md` import, AI chat) specced as BR-EXT-050; **remaining:** exam `question_text`, option text, review question list
 **Related specs:** `12_content_extraction.md` (§11 Content Rendering — added 2026-07-02), `03_student.md` (S-nav content viewer, S-exam question rendering, S05 review), `07_platform_admin.md` (exam builder — authored `question_text`)
 
 **Context:**

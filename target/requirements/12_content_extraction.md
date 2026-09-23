@@ -494,7 +494,7 @@ One `ContentViewer` dispatches on `content_type` for **one** item, used identica
 |---|---|---|
 | `pdf` | `SecurePdfViewer` (react-pdf, `usePDFBlob` CSRF fetch, `PDFDocument`) | **Exists** at `src/components/pdf-viewer/secure-pdf-viewer.tsx` and is wired into `ContentViewer`; `pdfUrl` already points at the per-content file endpoint. **Gains a control toolbar** — see below (BR-EXT-044). |
 | `image` | Image viewer with the shared viewer toolbar — fit (default), zoom, fullscreen | Shipped as a bare `<img>`; **gains the toolbar** (BR-EXT-044, revised — Viewer & Editor Polish increment). |
-| `text` | Rendered markdown (`MarkdownText`) with the shared viewer toolbar — text size, fullscreen | Display exists; **gains the toolbar** (BR-EXT-044) and the split editor for authoring (BR-EXT-036). |
+| `text` | Rendered markdown (`MarkdownText`, **with KaTeX math** — BR-EXT-050) with the shared viewer toolbar — text size, fullscreen | Display exists; **gains the toolbar** (BR-EXT-044), math (BR-EXT-050) and the Code / Split / Preview editor for authoring (BR-EXT-051). |
 | `video` | Player via official SDK | **Replaces** the current raw `<iframe src>` at `content-viewer.tsx:40`, which fails outright for embed-restricted YouTube videos, for both the uploader's preview and the student's viewer. See BR-EXT-035. |
 
 #### PDF viewer toolbar (BR-EXT-044)
@@ -707,12 +707,93 @@ BR-EXT-036 are revised in place (image/text toolbar; split editor); the rules be
   extraction; it already is the body. Accepted limits, stated so they are not reported as bugs:
   relative images (`![](./img.png)`) and off-origin images do not render (no file is received;
   CSP governs remote images); raw HTML is not rendered (`MarkdownText` has no `rehype-raw`, by
-  design) and heavy inline HTML may be rejected by the WAF's XSS detectors on save; `$…$` math
-  renders only once the planned KaTeX plugin lands.
+  design) and heavy inline HTML may be rejected by the WAF's XSS detectors on save. Math in an
+  imported file renders through BR-EXT-050 exactly as typed math does.
 
 - **Two Add Content modals.** `features/admin/components/add-content-modal.tsx` and
   `features/content-management/components/add-content-modal.tsx` are separate implementations;
-  BR-EXT-036/047/048/049 land in **both**. Merging them is out of scope for this increment.
+  BR-EXT-036/047/048/049 land in **both**. Merging the modals is out of scope. **Revised
+  2026-09-23:** the markdown *editor* inside them is no longer duplicated — BR-EXT-051 extracts one
+  shared `MarkdownEditor` that both modals mount. The modals themselves stay two.
+
+### Math, editor modes & PDF page jump (LaTeX & Editor Modes increment — 2026-09-23)
+
+Third tester/PM round. Direct increment, not a phase: frontend plus one gateway parity fix and a
+read-only data check; no API, schema or permission change. Delivers the markdown half of §11 /
+BL-003; exam question and option surfaces (plain-text renderers) remain in BL-003.
+
+- **BR-EXT-050 — LaTeX renders wherever `MarkdownText` renders.** `MarkdownText`
+  (`src/shared/components/ui/markdown-text/markdown-text.tsx`) gains `remark-math` + `rehype-katex`
+  alongside `remark-gfm`, plus `katex/contrib/mhchem` for chemistry (`\ce{H2O}`). Surfaces covered
+  by the one change: the text viewer (student, parent, admin — incl. fullscreen), the editor
+  preview in both modals, imported `.md` files (BR-EXT-049), and the hAITU doubt and exam-review
+  chat bubbles.
+  - **Library & pinning:** KaTeX per §11. `katex` is pinned to the version `rehype-katex` resolves,
+    so `mhchem` registers on the same instance (a second copy makes `\ce` silently no-op).
+    `katex/dist/katex.min.css` is imported once in `app/layout.tsx`; fonts are bundled under
+    `/_next/static/media` (`font-src 'self'`). KaTeX's `style="…"` attributes are covered by the
+    existing `style-src-attr 'unsafe-inline'`; it injects no `<style>` or script, so no CSP change.
+  - **Options:** `throwOnError: false` (invalid LaTeX shows as red source in place, never breaks
+    the page), `strict: "ignore"` (Unicode/Devanagari inside math must not flood the console),
+    `trust: false` (no `\href`/`\url`/`\htmlClass`), `output: "htmlAndMathml"` (MathML for screen
+    readers). No `rehype-raw` — the no-raw-HTML policy stands.
+  - **Delimiters:** `$…$` inline and `$$…$$` display (the extraction prompts already emit these —
+    `worker/prompts.py:13`). `\(…\)` and `\[…\]` (common in LLM output and ChatGPT-exported
+    `.md`) are normalised **before** parsing: only an unescaped opener (even count of preceding
+    backslashes — so `\\[4pt]` row spacing inside `aligned` is untouched), never inside fenced or
+    inline code, never inside an existing `$…$` span; `\[…\]` becomes a `$$` block on its own
+    lines (inline `$$` does not render as display). Known edge: a markdown-escaped literal `\(` now
+    becomes math — documented, not handled.
+  - **Currency `$`:** `remark-math` treats `$5 and $10` as math, and no heuristic can separate
+    currency from OCR math such as `$16:125$`. A literal dollar is written `\$` (CommonMark and
+    `remark-math` both honour it); the editor shows that as a one-line hint. Before rollout, a
+    read-only scan of stored `text` rows for currency-like `$` quantifies exposure (backend task).
+  - **Streaming chat:** hAITU replies stream over SSE and re-render per token; KaTeX on every
+    token is O(n²) and an unclosed `$$` makes the reply flicker. `MarkdownText` takes a `math`
+    prop (default `true`); the chat panels pass `false` while a message is still streaming and
+    `true` once it completes.
+  - **Viewer CSS:** the text viewer's `.textContent { white-space: pre-wrap }`
+    (`content-viewer.module.css`) is removed — it competes with `.markdown` and would render the
+    newlines around display math as blank lines.
+
+- **BR-EXT-051 — Text editor modes: Code | Split | Preview, with fullscreen.** One shared
+  `MarkdownEditor` replaces the split editor duplicated in both Add Content modals (revises the
+  BR-EXT-036 layout; the counter, cap and `.md` import of BR-EXT-048/049 move with it).
+  - A segmented control at the editor's top right — **Code** (raw markdown, full width),
+    **Split** (Code | rendered preview side by side), **Preview** (rendered, full width, readable
+    measure) — plus a **Fullscreen** button (Fullscreen API on the editor container; all three
+    modes work in fullscreen). Pattern: HackMD / StackEdit edit·both·view, VS Code source + preview
+    to the side.
+  - Split is the default at ≥900px; below 900px only Code and Preview are offered. The last mode
+    used is remembered in `localStorage` (read/write wrapped in try/catch; absent → default).
+  - In Split, preview scroll follows the editor proportionally (scrollTop ratio, editor → preview).
+    Line-accurate sync is not attempted.
+  - Preview in every mode is `MarkdownText` with math (BR-EXT-050) — the same renderer the student
+    sees.
+  - Not included: keyboard shortcuts (VS Code's Ctrl+Shift+V collides with the browser's
+    paste-as-plain-text) and line numbers.
+  - The View dialog stays **rendered-only** for every persona (text size + fullscreen per
+    BR-EXT-044); uploaders use Edit for source. Owner decision 2026-09-23.
+
+- **BR-EXT-052 — Unsaved text is never lost to a stray Esc or click.**
+  - When the form is dirty, Cancel, Esc and backdrop click show an **in-modal** "Discard changes?"
+    confirm (Discard / Keep editing). Not `window.confirm` — it forces Chrome out of fullscreen.
+  - While the editor is fullscreen, Esc only exits fullscreen; the modal ignores Esc for one tick
+    after a `fullscreenchange` (browsers differ on whether the exiting Esc keydown also reaches
+    the page).
+  - The Esc handler passed to `useFocusTrap` must be referentially stable (`useCallback`/ref):
+    the hook re-runs its effect when `onEscape` changes and re-focuses the first element on every
+    run, so an inline dirty-check wrapper would steal focus from the textarea on each keystroke. The
+    shared editor uses `src/shared/hooks/use-focus-trap`, not the admin copy.
+
+- **BR-EXT-053 — PDF page number is an input.** The toolbar's `n of N` readout becomes
+  `[ n ] of N` — a numeric input (`inputmode="numeric"`, `aria-label="Page number"`, width fitted
+  to N's digits). Enter or blur jumps to that page via the viewer's existing page-jump
+  (`scrollIntoView`); empty, non-numeric or out-of-range input reverts to the current page. Scroll
+  updates do not overwrite the value while the input has focus. Enter must not submit an enclosing
+  form. `ViewerToolbar`'s `pages` prop gains an `onJump(n)` callback; ◀/▶ stay. As with BR-EXT-044,
+  the legacy `/home` screen inherits it without being touched. Matches Chrome's PDF viewer and the
+  pdf.js reference viewer.
 
 ### Provenance & audit
 
@@ -747,7 +828,7 @@ BR-EXT-036 are revised in place (image/text toolbar; split editor); the rules be
 - **BR-EXT-034** — Every materialized row (raw or text) defaults to `visibility_status='draft'`. Neither side of an extraction is visible to students until the uploader explicitly publishes one (BR-DATA-024). Video and Text rows created via the instant path (`POST /api/topic-contents`) also default to `'draft'`.
 - **BR-EXT-037** — Publish is a single atomic call per upload group, not a per-row toggle: `PATCH /api/topic-contents/{content_id}/publish` (and the parent-scoped mirror under `/api/parent/curriculum/`) resolves the row's group per BR-DATA-024's grouping key and, in **one transaction**, sets the chosen side to `'published'` and every other row in the group to `'draft'`. A per-row `visibility_status` write is not exposed — the mutual-exclusivity invariant cannot be enforced if callers can set one row at a time.
 - **BR-EXT-035** — Video playback uses the official YouTube IFrame Player API / Vimeo Player SDK, not a raw `<iframe src="...">`. Scope stays YouTube + Vimeo only (matching the existing hostname allowlist in BR-EXT/T13.2 — `youtube.com`, `www.youtube.com`, `youtu.be`, `vimeo.com`, `www.vimeo.com`). When the SDK reports an embed error (e.g. the video owner disabled embedding), the player falls back to a "Watch on YouTube"/"Watch on Vimeo" external-link button instead of a silently broken frame. Applies to both the uploader's preview and the student's viewer.
-- **BR-EXT-036** — Text content editing uses a markdown editor with live preview (textarea + rendered pane via the shared `MarkdownText` component), replacing a plain textarea-only editor. Uploader and student see identically-rendered markdown — one rendering pipeline for both authored and extracted text. **Layout (revised — Viewer & Editor Polish increment):** the shipped editor stacked a small 0.75rem textarea above the preview inside a 440px modal, so neither was usable for real notes. When the Text chip is active (create) or a `text` row is edited, the modal widens to ≈90vw × 90vh (max 1200px); at ≥900px viewport width it shows **Write | Preview side by side**, each pane filling the modal height and scrolling independently; below 900px it shows **Write / Preview tabs**. The textarea is monospace at body size, and a live `n / 20,000` character counter sits under it, turning to an error state and disabling Save when over the limit (BR-EXT-048). Other chips (Video URL, PDF, Image) keep the narrow modal.
+- **BR-EXT-036** — Text content editing uses a markdown editor with live preview (textarea + rendered pane via the shared `MarkdownText` component), replacing a plain textarea-only editor. Uploader and student see identically-rendered markdown — one rendering pipeline for both authored and extracted text. **Layout (revised — Viewer & Editor Polish increment):** the shipped editor stacked a small 0.75rem textarea above the preview inside a 440px modal, so neither was usable for real notes. When the Text chip is active (create) or a `text` row is edited, the modal widens to ≈90vw × 90vh (max 1200px); at ≥900px viewport width it shows **Write | Preview side by side**, each pane filling the modal height and scrolling independently; below 900px it shows **Write / Preview tabs**. The textarea is monospace at body size, and a live `n / 20,000` character counter sits under it, turning to an error state and disabling Save when over the limit (BR-EXT-048). Other chips (Video URL, PDF, Image) keep the narrow modal. **Superseded in part 2026-09-23 by BR-EXT-051:** the fixed split/tabs layout becomes a Code | Split | Preview mode switch with fullscreen, in one shared `MarkdownEditor`.
 
 ### Extraction-Optional rules
 
@@ -813,9 +894,14 @@ BR-EXT-036 are revised in place (image/text toolbar; split editor); the rules be
 
 ## 11 — Content Rendering (LaTeX / Math)
 
-> Added 2026-07-02 (pre-Phase-5 hardening pass, G8/T8.4). **Requirement only — no implementation
-> in pre-Phase-5.** Tracked as backlog item `vision/requirements/backlog.md` BL-003 (Status: Ready).
-> Ships as a focused content-rendering follow-up phase.
+> Added 2026-07-02 (pre-Phase-5 hardening pass, G8/T8.4). Tracked as backlog item
+> `vision/requirements/backlog.md` BL-003.
+>
+> **Partially delivered 2026-09-23 (LaTeX & Editor Modes increment, BR-EXT-050):** the markdown
+> path — `MarkdownText` with KaTeX — covering topic `text` content (viewer + editor preview +
+> imported `.md`) and AI chat bubbles. Delimiter question resolved: both `$` and `\(\)`/`\[\]`
+> families are accepted. **Still open in BL-003:** exam `question_text`, option text and the
+> review question list, which do not render through `MarkdownText`.
 
 ### Problem
 

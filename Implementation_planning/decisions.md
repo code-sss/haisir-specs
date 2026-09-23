@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-09-23 — LaTeX & Editor Modes (`/update-target-state`)
+
+Third tester/PM round: LaTeX in text preview/viewer (incl. `.md` import and the student viewer), a
+VS Code-like Code / Split / Preview editor with fullscreen, and a typeable PDF page number.
+
+- **Not phased.** Frontend plus one gateway parity fix; the only backend work is a read-only data
+  scan. Same pattern as the two previous rounds.
+- **KaTeX per the existing §11 / BL-003 decision, not re-litigated.** Wired into `MarkdownText`
+  only, so one change covers viewer, preview, `.md` import and chat. Exam question/option text uses
+  plain-text renderers and stays in BL-003.
+- **Math in hAITU chat too — owner decision.** Chosen over a content-only opt-in; one renderer.
+  Challenger: SSE streaming re-renders per token, so chat enables math only on completed messages.
+- **Both delimiter families accepted.** Our extraction emits `$`; LLM chat and ChatGPT-exported
+  `.md` emit `\(\)`/`\[\]`. Normalisation must respect backslash parity (so `\\[4pt]` inside
+  `aligned` survives), code, and existing `$` spans (challenger).
+- **Currency `$` is accepted as a known edge.** No heuristic separates `$5 and $10` from OCR math
+  like `$16:125$`. `\$` hint in the editor + a pre-rollout scan of stored rows, not a parser hack.
+- **`katex` pinned to `rehype-katex`'s version** so mhchem registers on the same instance;
+  `strict: "ignore"` for Unicode inside math (challenger).
+- **Code | Split | Preview modeled on HackMD/StackEdit and VS Code's preview-to-side.** Keyboard
+  shortcuts rejected (VS Code's Ctrl+Shift+V collides with paste-as-plain-text); line numbers not
+  added. Proportional scroll sync only.
+- **Editor extracted to one shared `MarkdownEditor`.** Reverses the previous round's "leave the two
+  modals' editors duplicated" — a third mode set in two copies would drift. The modals stay two.
+- **View dialog stays rendered-only — owner decision.** Students never see LaTeX source;
+  uploaders use Edit.
+- **Discard guard added — owner decision.** A 20k-char note lost to one Esc is data loss.
+  Challenger: `useFocusTrap` re-focuses the first element whenever `onEscape` changes identity, so
+  the handler must be stable; `window.confirm` exits fullscreen in Chrome, so the confirm is
+  in-modal; ignore Esc for one tick after `fullscreenchange`.
+- **PDF page input** follows Chrome's viewer and pdf.js; reuses the existing page jump.
+- **Gateway gap found while tracing, not reported by testers.** POST create chains lacked three
+  exclusions the PATCH chain has, so *adding* math/markdown would 403 where *editing* passes.
+  Parity fix, field-scoped, after tightening `id:199100` from `@beginsWith` to an exact match so it
+  cannot widen to `/publish` (challenger). XSS `941160` stays active; corpus includes `<` in math.
+
+---
+
 ## 2026-09-22 — Viewer & Editor Polish (`/update-target-state`)
 
 Second tester/PM review of the content surfaces (parent flow, with admin and student checked for
