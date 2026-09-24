@@ -9,8 +9,8 @@
 Third tester/PM round: LaTeX in text preview/viewer (incl. `.md` import and the student viewer), a
 VS Code-like Code / Split / Preview editor with fullscreen, and a typeable PDF page number.
 
-- **Not phased.** Frontend plus one gateway parity fix; the only backend work is a read-only data
-  scan. Same pattern as the two previous rounds.
+- **Not phased.** Frontend plus one gateway parity fix; no backend work. Same pattern as the two
+  previous rounds.
 - **KaTeX per the existing §11 / BL-003 decision, not re-litigated.** Wired into `MarkdownText`
   only, so one change covers viewer, preview, `.md` import and chat. Exam question/option text uses
   plain-text renderers and stays in BL-003.
@@ -20,7 +20,8 @@ VS Code-like Code / Split / Preview editor with fullscreen, and a typeable PDF p
   `.md` emit `\(\)`/`\[\]`. Normalisation must respect backslash parity (so `\\[4pt]` inside
   `aligned` survives), code, and existing `$` spans (challenger).
 - **Currency `$` is accepted as a known edge.** No heuristic separates `$5 and $10` from OCR math
-  like `$16:125$`. `\$` hint in the editor + a pre-rollout scan of stored rows, not a parser hack.
+  like `$16:125$`. `\$` hint in the editor, not a parser hack. Dev scan: 13 matching rows, all OCR math, zero
+  currency. Staging/prod scan dropped — owner: no significant stored content yet. No backend work.
 - **`katex` pinned to `rehype-katex`'s version** so mhchem registers on the same instance;
   `strict: "ignore"` for Unicode inside math (challenger).
 - **Code | Split | Preview modeled on HackMD/StackEdit and VS Code's preview-to-side.** Keyboard

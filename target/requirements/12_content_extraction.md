@@ -746,8 +746,7 @@ BL-003; exam question and option surfaces (plain-text renderers) remain in BL-00
     becomes math — documented, not handled.
   - **Currency `$`:** `remark-math` treats `$5 and $10` as math, and no heuristic can separate
     currency from OCR math such as `$16:125$`. A literal dollar is written `\$` (CommonMark and
-    `remark-math` both honour it); the editor shows that as a one-line hint. Before rollout, a
-    read-only scan of stored `text` rows for currency-like `$` quantifies exposure (backend task).
+    `remark-math` both honour it); the editor shows that as a one-line hint. Existing rows are not migrated or scanned before rollout (owner decision 2026-09-23: no significant stored content yet; a dev scan found 13 matches, all OCR math, zero currency); a stray currency row is fixed by editing it to `\$`.
   - **Streaming chat:** hAITU replies stream over SSE and re-render per token; KaTeX on every
     token is O(n²) and an unclosed `$$` makes the reply flicker. `MarkdownText` takes a `math`
     prop (default `true`); the chat panels pass `false` while a message is still streaming and
