@@ -785,15 +785,15 @@ requires a JSON body on every PATCH, including body-less ones.
 > section said it was fixed; B24's re-scope and B27's clearance lived only in a section intro).
 > Read the `**Status:**` line first; the prose below it is the evidence trail.
 >
-> **47 entries: 7 closed, 3 accepted/deferred, 37 open** — 9 HIGH, 14 MEDIUM, 14 LOW.
+> **58 entries: 7 closed, 3 accepted/deferred, 48 open** — 11 HIGH, 19 MEDIUM, 18 LOW.
 > **Everything open is `[deploy]` or `[deploy/security]` except B34 (frontend, one line) and B44
 > (backend, one character).** A phase built on this backlog is an infrastructure phase.
 >
 > | Disposition | Entries |
 > |---|---|
-> | **OPEN — HIGH** | B12, B13, B14, B24, B29, B40, B42, B43, B48 |
-> | **OPEN — MEDIUM** | B2, B7, B9, B10, B11, B15, B18, B20, B26, B28, B32, B38, B41, B50 |
-> | **OPEN — LOW** | B16, B17, B21, B25, B33, B34, B35, B36, B39, B44, B45, B46, B47, B51 |
+> | **OPEN — HIGH** | B12, B13, B14, B24, B29, B40, B42, B43, B48, B52, B54 |
+> | **OPEN — MEDIUM** | B2, B7, B9, B10, B11, B15, B18, B20, B26, B28, B32, B38, B41, B50, B53, B55, B56, B58, B62 |
+> | **OPEN — LOW** | B16, B17, B21, B25, B33, B34, B35, B36, B39, B44, B45, B46, B47, B51, B57, B59, B60, B61 |
 > | **CLOSED** | B6, B8, B19, B22, B23, B27, B49 |
 > | **ACCEPTED / DEFERRED** | B30 (deferred, HIGH — exposure unchanged), B31, B37 |
 >
@@ -1466,6 +1466,10 @@ defect: the file glob makes the `LOCAL_TESTS` gate unsatisfiable, and `skip()` i
 `PASSED`, so a self-skipping test renders green. That mechanism makes **any** such test a
 fabricated pass — the same shape as B11 and B22.
 
+**Update 2026-09-30:** the CI integration stage now lists every `skip()` in its summary, and
+OIDC-6/7 fail instead of skipping when supplied credentials are rejected. `skip()` itself still
+counts toward `PASSED`; this entry's Prometheus half is unchanged.
+
 `config.sh` gates both metrics URLs on `LOCAL_TESTS`:
 
 ```
@@ -2118,6 +2122,10 @@ unpinned `nvm`/Node and a mutable-tag `pgvector` pull. The app repos apply `--ig
 `--frozen-lockfile` and `uv sync --frozen`; none of it protects the pipeline that runs them. The
 `yq` block at `:150-158` is already the template for the cheapest fix.
 
+**Update 2026-09-30:** the mutable-tag `pgvector` pull is fixed — the backend Jenkinsfile
+now pins `pgvector/pgvector:0.8.6-pg18@sha256:2ba9ca5f…` (matching prod's pgvector 0.8.6). The six
+unverified tool installs remain.
+
 **Found 2026-08-19, full re-scan N4 (MEDIUM).** `other/services/jenkins/Dockerfile` pins `yq` by version
 **and** SHA256 with a verified `sha256sum -c` (`:150-158`) — and nothing else. Trivy (`:55-59`), Gitleaks
 (`:64-68`), Hadolint (`:109-112`) and SonarScanner CLI (`:136-140`) are version-pinned tarballs/binaries
@@ -2400,3 +2408,105 @@ the same time and not yet corrected: that manifest's `pre_checks` names the data
 `haisir-backend-datadir-staging`, but the volume compose actually mounts is `haisir-backend-datadir`
 (unsuffixed) — the wrong name silently auto-creates an empty decoy volume. **Correct that text before
 reusing it for prod.**
+
+## Backlog — surfaced during the v2026.8.1 release (2026-09-30)
+
+> Found while cutting and shipping v2026.8.1 and auditing the DAST/AST pipelines afterwards. Fixed
+> in the same pass, so not logged here: full DAST on by default in `Jenkinsfile.deploy` with a
+> failing integration/DAST job now blocking the prod approval; ZAP stages fail on any High alert;
+> OIDC-6/7 fail (not skip) when supplied credentials are rejected; `oidc-login-e2e.sh` wired into
+> CI; CI prints every skipped check; Checkov made blocking (its `docker_compose` framework never
+> existed — the stage exited 2 before scanning, hidden by `|| true`); ZAP/busybox/pgvector CI
+> images pinned by digest; `setup-keycloak.sh` derives `KEYCLOAK_URL` from the OpenBao-sourced
+> `KEYCLOAK_ADMIN_PORT_BINDING` (74b4964).
+
+### B52 — staging's rootless Docker only runs while someone is logged in (deploy / ops) — surfaced 2026-09-30
+
+**Status:** OPEN · HIGH · deploy/ops — user `sss` on staging has `Linger=no`, so `systemd --user`
+(and the rootless dockerd under it) exists only during a login session. Unattended-upgrades reboots
+at 02:00 (`Automatic-Reboot "true"`); after the 2026-09-26 reboot the whole staging stack stayed
+down ~4.7 days until an SSH login started it, and every non-interactive `ssh staging '<cmd>'`
+starts the stack and tears it down ~10 s after disconnect. Fix: `sudo loginctl enable-linger sss`
+(an attempt on 2026-09-30 did not take — `/var/lib/systemd/linger/` stayed empty). Prod checked
+2026-09-30: `Linger=yes`. Add a Linger assertion to host bootstrap so a rebuilt host cannot regress.
+
+### B53 — staging's APISIX CrowdSec bouncer has not pulled decisions since 2026-07-28 (deploy / security) — surfaced 2026-09-30
+
+**Status:** OPEN · MEDIUM · deploy/security — `cscli bouncers list` shows every `apisix-bouncer`
+row's `last_pull` at or before 2026-07-28, LAPI bouncer metrics show zero hits, and APISIX logs no
+bouncer activity, while `config.yaml` configures `update_interval: 300`. Pre-dates the 2026-09-30
+CrowdSec v1.8.1 upgrade (same in the pre-upgrade baseline). Staging therefore detects but does not
+ban at the gateway. Check prod for the same; debug TLS/API-key/connectivity from `apisix-staging`
+to `crowdsec:8080`. Fixing it interacts with B61 (the DAST scanner would then get banned).
+
+### B54 — ZAP scans are unauthenticated, so DAST covers little beyond the login redirect (deploy / DAST) — surfaced 2026-09-30
+
+**Status:** OPEN · HIGH · deploy/DAST — `Jenkinsfile.integration-dast` runs `zap-baseline.py` and
+`zap-full-scan.py` with no context, auth script or session header. Nearly every page and API route
+is behind `openid-connect`, so both scans exercise the public surface (OIDC redirect, static
+assets, `/api/auth/csrf`) and never reach application endpoints. Fix: a ZAP context that logs in
+as the staging test user (the `oidc-login-e2e.sh` flow is the template) or a `-z` replacer
+injecting a session cookie minted just before the scan.
+
+### B55 — Schemathesis API fuzzing has never run (deploy / DAST) — surfaced 2026-09-30
+
+**Status:** OPEN · MEDIUM · deploy/DAST — the stage fetches `${STAGING_URL}/openapi.json` and
+`exit 0`s with a WARNING when it is not 200. No APISIX route serves `/openapi.json` (0 matches in
+`common/routes/`), so "full DAST" has always silently skipped API fuzzing. Fix: a staging-only
+route (ip-restricted to the CI host) or fetch the schema from the backend container directly; and
+make the skip a failure once the schema is reachable by design.
+
+### B56 — HIGH-severity vulnerabilities never gate a build (security policy) — surfaced 2026-09-30
+
+**Status:** OPEN · MEDIUM · security policy (owner decision) — Trivy fails only on CRITICAL in
+the backend, frontend and gateway pipelines (the HIGH,CRITICAL run is `--exit-code 0`,
+informational), and `pnpm audit` uses `--audit-level critical`. pip-audit fails on any finding.
+Decide whether HIGH should gate (with `--ignore-unfixed` and an allowlist file to keep it
+workable) or stay report-only, and record the decision.
+
+### B57 — Gitleaks scans only the working tree, never git history (deploy / secrets) — surfaced 2026-09-30
+
+**Status:** OPEN · LOW · secrets — every Gitleaks stage (deploy, gateway, backend, frontend) uses
+`--no-git`, so a secret committed and later deleted is never flagged. Add a periodic
+full-history `gitleaks detect` (nightly job or pre-release) with a baseline for known historical
+findings.
+
+### B58 — compose files and deploy-repo configs have no IaC/SAST coverage (deploy / IaC) — surfaced 2026-09-30
+
+**Status:** OPEN · MEDIUM · deploy/IaC — Checkov has no docker-compose framework (the old
+`docker_compose` value was invalid), so `common/docker-compose.yml`, `other/services/*/` compose
+files and APISIX/Keycloak JSON get no automated security scan; the deploy-repo Semgrep stage runs
+only `p/dockerfile` + `p/secrets` over `common/scripts/` and `gateway-docker/`. Options: Checkov
+`--framework yaml` with custom policies, KICS (has compose support), or Semgrep YAML rules for
+the project's own hardening rules (no `privileged`, `cap_drop: ALL`, `no-new-privileges`).
+(`checkov` is installed in the Jenkins image; pinned to 3.3.20 on 2026-09-30 to match pre-commit.)
+
+### B59 — the image-pin policy treats any non-`latest` tag as pinned; Jenkinsfiles are not scanned (deploy / supply chain) — surfaced 2026-09-30
+
+**Status:** OPEN · LOW · supply chain — `check-image-pins.sh` accepts `:stable`, `:pg18`, `:lts`
+as pinned and scans only `*Dockerfile*` / `*docker-compose*`. The CI-run images it could not see
+(`zaproxy:stable`, bare `busybox`, `pgvector:pg18`) were digest-pinned by hand 2026-09-30; nothing
+stops the next one. Decide whether floating tags (`stable`, `lts`, major-only) count as unpinned,
+and extend the scan to `docker run`/`docker pull` in `Jenkinsfile*` across all repos.
+
+### B60 — the nightly DAST cron runs inside staging's reboot window (deploy / CI) — surfaced 2026-09-30
+
+**Status:** OPEN · LOW · deploy/CI — `cron('H 2 * * *')` in `Jenkinsfile.integration-dast` fires
+02:00–02:59; staging's unattended-upgrades reboot is at 02:00 and, until B52 is fixed, staging
+stays down after it. The health check fails loudly (not a silent pass), but the nightly signal is
+lost on reboot nights. Move the cron to e.g. `H 4 * * *` or gate on staging uptime.
+
+### B61 — DAST mostly tests the WAF, and a working bouncer would ban the scanner (deploy / DAST) — surfaced 2026-09-30
+
+**Status:** OPEN · LOW · deploy/DAST — the active scan's payloads are largely 403'd by Coraza
+before reaching the app, and once B53 is fixed CrowdSec will ban the CI egress IP mid-scan. Both
+make findings reflect the gateway, not the application. Decide on a scanner lane: allowlist the
+CI IP in CrowdSec (`whitelists` parser) and either accept WAF-in-path results or add a
+staging-only WAF-bypass route for authenticated DAST (B54).
+
+### B62 — Keycloak 26.7.5 security release not yet deployable (deploy / security) — surfaced 2026-09-30
+
+**Status:** OPEN · MEDIUM · security — upstream 26.7.5 (2026-09-30) fixes six CVEs (incl.
+CVE-2026-18206/18208/18211, OIDC client-policy, introspection and secure-client-uris bypasses).
+v2026.8.1 ships 26.7.4 because 26.7.5 was not on `reg.mini.dev`. Bump `KEYCLOAK_IMAGE_TAG` in
+`staging/.env` + `prod/.env` and ship a patch release once the mirror publishes it.
