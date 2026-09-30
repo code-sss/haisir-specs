@@ -785,13 +785,13 @@ requires a JSON body on every PATCH, including body-less ones.
 > section said it was fixed; B24's re-scope and B27's clearance lived only in a section intro).
 > Read the `**Status:**` line first; the prose below it is the evidence trail.
 >
-> **58 entries: 7 closed, 3 accepted/deferred, 48 open** — 11 HIGH, 19 MEDIUM, 18 LOW.
+> **59 entries: 7 closed, 3 accepted/deferred, 49 open** — 12 HIGH, 19 MEDIUM, 18 LOW.
 > **Everything open is `[deploy]` or `[deploy/security]` except B34 (frontend, one line) and B44
 > (backend, one character).** A phase built on this backlog is an infrastructure phase.
 >
 > | Disposition | Entries |
 > |---|---|
-> | **OPEN — HIGH** | B12, B13, B14, B24, B29, B40, B42, B43, B48, B52, B54 |
+> | **OPEN — HIGH** | B12, B13, B14, B24, B29, B40, B42, B43, B48, B52, B54, B63 |
 > | **OPEN — MEDIUM** | B2, B7, B9, B10, B11, B15, B18, B20, B26, B28, B32, B38, B41, B50, B53, B55, B56, B58, B62 |
 > | **OPEN — LOW** | B16, B17, B21, B25, B33, B34, B35, B36, B39, B44, B45, B46, B47, B51, B57, B59, B60, B61 |
 > | **CLOSED** | B6, B8, B19, B22, B23, B27, B49 |
@@ -2510,3 +2510,26 @@ staging-only WAF-bypass route for authenticated DAST (B54).
 CVE-2026-18206/18208/18211, OIDC client-policy, introspection and secure-client-uris bypasses).
 v2026.8.1 ships 26.7.4 because 26.7.5 was not on `reg.mini.dev`. Bump `KEYCLOAK_IMAGE_TAG` in
 `staging/.env` + `prod/.env` and ship a patch release once the mirror publishes it.
+
+### B63 — the Coraza WAF fails OPEN once its WASM heap passes 2 GiB (deploy / security) — surfaced 2026-09-30
+
+**Status:** OPEN · HIGH · deploy/security — **attacks pass through the gateway** after sustained
+load. On staging (gateway `v2026.8.1`: APISIX 3.19.0, TinyGo 0.41.1), started 20:54, the WAF
+blocked correctly through the 22:36 integration tests; the ZAP active scan (~22:40–22:59) grew the
+Coraza WASM heap and from **22:59:27** every inspected request logged
+`access memory addr -2144776544 with size 101, but the max addr is 2202009600` — a pointer above
+2^31 read as signed int32 by the WASM host — 17,240 times in 15 min. A browser-UA SQLi probe to a
+WAF-protected public route returned **200** (reached Keycloak). APISIX sat at 2.3/3 GiB. The DAST
+job still reported SUCCESS. `docker restart apisix-staging` reset it (382 MiB, SQLi → 403, 0
+errors). Caveat that hid it from tests: with curl's default UA, `ua-restriction` 403s first, so a
+curl-UA probe "passes" even with the WAF dead.
+
+Unknown: whether prod's `v2026.7` (APISIX 3.17/TinyGo 0.39) is also affected — check
+`docker logs apisix-prod 2>&1 | grep -c 'access memory addr'` and a browser-UA SQLi probe
+(PROD_RUNBOOK health script does both). Next steps: reproduce with `waf-harness.sh` + sustained
+load against both images; bound the heap (TinyGo GC settings, `-gc` choice, CRS rule subset,
+periodic worker reload) or cap below 2 GiB so the VM fails closed; make the WASM filter fail
+**closed** on host errors if wasm-nginx-module allows it. Detection added 2026-09-30: a final
+`WAF Enforcement Canary` stage in `Jenkinsfile.integration-dast` fails the run if a browser-UA
+SQLi/XSS probe is not 403 after the scans. Related: [[project_apisix_wasm_memory]] memory note
+(each worker compiles CRS into its own ~1.5 GB VM).
