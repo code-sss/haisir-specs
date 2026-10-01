@@ -2513,8 +2513,10 @@ v2026.8.1 ships 26.7.4 because 26.7.5 was not on `reg.mini.dev`. Bump `KEYCLOAK_
 
 ### B63 — the Coraza WAF fails OPEN once its WASM heap passes 2 GiB (deploy / security) — surfaced 2026-09-30
 
-**Status:** OPEN · HIGH · deploy/security — **attacks pass through the gateway** after sustained
-load. On staging (gateway `v2026.8.1`: APISIX 3.19.0, TinyGo 0.41.1), started 20:54, the WAF
+**Status:** FIX IN REVIEW · HIGH · deploy/security — memory cap (30720 pages) + harness gate
+committed 2026-09-30; closes when a rebuilt gateway is on staging and prod. See
+`gateway-docker/VERSIONS.md` "B63" for the investigation (trigger not isolated; cap verified
+to fail closed). **Attacks passed through the gateway** after sustained load. On staging (gateway `v2026.8.1`: APISIX 3.19.0, TinyGo 0.41.1), started 20:54, the WAF
 blocked correctly through the 22:36 integration tests; the ZAP active scan (~22:40–22:59) grew the
 Coraza WASM heap and from **22:59:27** every inspected request logged
 `access memory addr -2144776544 with size 101, but the max addr is 2202009600` — a pointer above
