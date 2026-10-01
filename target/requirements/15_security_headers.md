@@ -115,7 +115,7 @@ script-src  'self' 'nonce-{n}' 'strict-dynamic' [dev: 'unsafe-eval'];
 style-src   'self' 'nonce-{n}' [dev: 'unsafe-inline'];
 img-src     'self' blob: data:;
 font-src    'self';
-connect-src 'self';
+connect-src 'self' blob:;
 frame-src   <derived from backend allowed_video_hostnames>;
 worker-src  'self' blob:;
 object-src  'none';
@@ -130,6 +130,7 @@ Directive rationale for the non-obvious entries:
 
 - **`img-src ... data:`** — exam authoring inlines images as `data:` URIs (`question-editor.tsx`, `readAsDataURL`), and `form-field.module.css` embeds an inline SVG. Phase 7 G3 removes the former; the latter keeps `data:` needed regardless.
 - **`img-src ... blob:` / `worker-src 'self' blob:`** — `use-pdf-blob.ts` creates object URLs, and `react-pdf`/pdf.js runs a worker (self-hosted at `/pdf.worker.min.mjs`, so `'self'` covers the script; `blob:` covers pdf.js wrapping it).
+- **`connect-src ... blob:`** — pdfjs-dist 6 (react-pdf 11) loads the `use-pdf-blob.ts` object URL with `fetch()`; `'self'` does not match `blob:`, so enforced CSP blocked it ("Failed to load PDF."). Blob URLs are origin-local, so this opens no exfiltration path.
 - **`object-src 'none'`** is safe — PDFs render to canvas via pdf.js, not through `<object>`/`<embed>`.
 - **`frame-src`** — `content-viewer.tsx` embeds video via `<iframe src={item.url}>`, where the URL comes from the database. It is already constrained server-side by `TopicContentSettings.allowed_video_hostnames`.
 - **`'unsafe-eval'` in development only** — React uses `eval` in dev to reconstruct server-side error stacks. Neither React nor Next.js use it in production.
