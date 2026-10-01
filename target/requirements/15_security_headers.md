@@ -129,7 +129,7 @@ report-uri  /csp-report;
 Directive rationale for the non-obvious entries:
 
 - **`img-src ... data:`** — exam authoring inlines images as `data:` URIs (`question-editor.tsx`, `readAsDataURL`), and `form-field.module.css` embeds an inline SVG. Phase 7 G3 removes the former; the latter keeps `data:` needed regardless.
-- **`img-src ... blob:` / `worker-src 'self' blob:`** — `use-pdf-blob.ts` creates object URLs, and `react-pdf`/pdf.js runs a worker (self-hosted at `/pdf.worker.min.mjs`, so `'self'` covers the script; `blob:` covers pdf.js wrapping it).
+- **`img-src ... blob:` / `worker-src 'self' blob:`** — `use-pdf-blob.ts` creates object URLs, and `react-pdf`/pdf.js runs a worker (bundled by Next.js and served from `/_next/static/media/pdf.worker.min.<hash>.mjs` — the site-root `/pdf.worker.min.mjs` is not served on every dev origin — so `'self'` covers the script; `blob:` covers pdf.js wrapping it).
 - **`connect-src ... blob:`** — pdfjs-dist 6 (react-pdf 11) loads the `use-pdf-blob.ts` object URL with `fetch()`; `'self'` does not match `blob:`, so enforced CSP blocked it ("Failed to load PDF."). Blob URLs are origin-local, so this opens no exfiltration path.
 - **`object-src 'none'`** is safe — PDFs render to canvas via pdf.js, not through `<object>`/`<embed>`.
 - **`frame-src`** — `content-viewer.tsx` embeds video via `<iframe src={item.url}>`, where the URL comes from the database. It is already constrained server-side by `TopicContentSettings.allowed_video_hostnames`.

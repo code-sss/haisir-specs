@@ -47,7 +47,7 @@ Browser
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 16, React 19, TypeScript, react-pdf 10 |
+| Frontend | Next.js 16, React 19, TypeScript, react-pdf 11 |
 | Backend | FastAPI 0.135, Python 3.14, SQLAlchemy 2 async, asyncpg, Pydantic v2, structlog |
 | Auth | Keycloak 26 (OIDC + Google SSO), PyJWT, fastapi-csrf-protect |
 | Gateway | Apache APISIX, Coraza WASM WAF (OWASP CRS v4), CrowdSec Bouncer |

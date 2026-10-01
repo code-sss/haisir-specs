@@ -506,8 +506,9 @@ than to any one screen. Every existing mount inherits the controls unchanged: th
 should keep its controls" is satisfied without that screen being touched.
 
 **No third-party viewer plugin** (owner decision, 2026-09-16). The toolbar is built on the
-`SecurePdfViewer` already shipped — `react-pdf` 10 over `pdfjs-dist` 5.3.93, with the worker
-self-hosted at `/pdf.worker.min.mjs` exactly as `15_security_headers.md` pins it.
+`SecurePdfViewer` already shipped — originally `react-pdf` 10 over `pdfjs-dist` 5.3.93, now
+`react-pdf` 11 over `pdfjs-dist` 6 (2026-10), with the worker served from the app's own origin
+(bundled under `/_next/static/media/`) exactly as `15_security_headers.md` pins it.
 `@react-pdf-viewer/core` + `/default-layout` was considered for its ready-made toolbar plugin and
 rejected: it peers on `pdfjs-dist` 3.x and React ≤18 against this repo's pdf.js 5 and React 19
 (a second pdf.js copy plus a peer-dep override), it moves the worker/cmap paths the CSP pins, and
