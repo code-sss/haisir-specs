@@ -682,17 +682,48 @@ BR-EXT-036 are revised in place (image/text toolbar; split editor); the rules be
   in the payload. The gateway fix is still required — a real URL or link-bearing text edit must
   save.
 
-- **BR-EXT-048 — Topic text content is capped at 20,000 characters.** Raised from 4,000 (5×) on
-  `TopicContentBase`, `TopicContentUpdate` and `ParentTopicContentCreate` (Pydantic
-  `max_length`); the column is unbounded `VARCHAR`, so there is no migration. 4,000 was about one
-  dense A4 page and was already smaller than real extracted pages (a 4,498-char page was seen), so
-  editing one returned 422. 20,000 ≈ 3,000–3,500 words, comparable to or below common long-form
-  post caps (Stack Overflow 30k, Discourse 32k). The frontend enforces the same cap (zod
-  `max(20000)` — new, the text field had no client cap before) with the visible counter of
-  BR-EXT-036, so text is never silently cut. The gateway's per-route `tx.arg_length` /
-  `tx.total_arg_length` are raised to fit the cap in **bytes** (BR-WAF-015) — 20,000 chars of
-  Indic script is ≈60 KB. RAG impact checked: `SentenceSplitter(chunk_size=512)` yields ≈10–12
-  chunks per full-size row, and hAITU retrieves top-k chunks, never the whole row.
+- **BR-EXT-048 — Topic text content is capped at 50 KB of UTF-8 (50,000 bytes), stored and
+  rendered as untrusted input.** Set 2026-10-05 (was 20,000 characters; 100 KB and 500,000
+  characters were evaluated and rejected — see below). Measured in **bytes, not characters**, on
+  `TopicContentBase`, `TopicContentUpdate` and `ParentTopicContentCreate` (shared `TopicText`
+  Pydantic type: `max_length` pre-check plus a UTF-8 byte validator); ≈ 50,000 English or
+  ≈ 16,600 Devanagari characters. The column is unbounded `VARCHAR` — no migration. The frontend
+  enforces the same byte cap (zod refine + `utf8ByteLength`), counter shown as `n KB / 50 KB`
+  (rounded **up** to 0.1 KB so an over-cap size never reads as the cap); text is never cut.
+  **Why 50 KB:** it fits the gateway's existing per-route `arg_length` (80 KB) and the unchanged
+  128 KiB WAF body limit, so no gateway size change is needed and Coraza inspects the whole body.
+  Above 128 KiB the WASM build skips inspection silently, inspection costs ~1 s of the single
+  APISIX worker per 100 KB (stalling all traffic), and 300 KB bodies exhausted the Coraza heap in
+  testing (the 2026-10-05 prod outage failure). Larger documents: file-upload path (backlog B66).
+  **Database guarantees (verified 2026-10-05):** text is written only through SQLAlchemy ORM
+  insert/update and LlamaIndex parameterized inserts; every textual SQL in the backend uses bound
+  parameters (no f-string/format/concatenated SQL anywhere in `src`); nothing executes,
+  templates, exports or URL-fetches topic text. **Harmful characters are replaced with `�` (U+FFFD), never
+  failed** (product decision, 2026-10-05): C0/C1 controls except tab/LF/CR (incl. NUL, which
+  Postgres cannot store — was a 500), bidi embedding/override/isolate controls (visual spoofing)
+  and unpaired surrogates. A visible, searchable marker rather than silent removal, so the user can
+  see what changed; `�` rather than `?` because real question marks are everywhere in content.
+  Same rule set client-side (`replaceHarmfulChars`, applied on `.md` import and while typing, so
+  what the user sees is what is saved) and server-side (`_replace_harmful`, a Pydantic
+  before-validator, for direct API callers). The marker counts toward the byte cap (3 bytes).
+  RLM/LRM marks, Devanagari, emoji and real `?` are kept. The same server-side rule
+  (`schemas/text_sanitize.py`, `CleanStr`) covers topic `title`/`description`, hAITU
+  `message`/`history[].content` and doubt-thread messages. It is a **write-side** rule only:
+  read models return stored values as-is (no cap, no replacement). When an import or paste replaces any,
+  the editor shows a non-blocking, dismissible notice (`role="status"`): *"N unsupported
+  characters were replaced with � — search for � to find them."*
+  **Browser guarantees (verified by attack tests in `markdown-text.test.tsx`):** rendering is
+  client-only via `MarkdownText` (react-markdown 10, no `rehype-raw`): raw HTML renders as text;
+  `javascript:`/`vbscript:`/`data:` links and images are stripped (incl. mixed-case,
+  entity-encoded and reference forms); KaTeX runs with `trust: false` (`\href`, `\url`,
+  `\htmlStyle`, `\includegraphics` inert), `maxSize: 10` (a `\rule{1e5em}{1e5em}` page-covering
+  box is capped) and `maxExpand: 1000`; a document that overflows the parser (~3,000 nested `>`
+  — reachable even at the old 20,000-char cap) falls back to escaped plain text via an error
+  boundary instead of crashing the page; CSP `img-src 'self' data: blob:` blocks external
+  tracking images. **Residual:** worst-case 50 KB inputs (e.g. an 8,000-row table or 8,000
+  inline formulas) take several seconds to render — a nuisance limited to the author's own
+  viewers, not an injection; revisit with B66. RAG: ≈25 chunks per full-size row; hAITU
+  retrieves top-k chunks, never the whole row.
 
 - **BR-EXT-049 — Markdown files import into a text item, in the browser.** The Text chip of Add
   Content (and the text Edit modal) offers **Import .md file** plus drag-and-drop onto the editor.
@@ -703,7 +734,7 @@ BR-EXT-036 are revised in place (image/text toolbar; split editor); the rules be
   the existing create/PATCH endpoints, draft by default, RAG-indexed like any text row. Accepts
   `.md` / `.markdown` (≤ 20,000 chars after front-matter strip); one file per import; importing
   into a non-empty editor asks to replace. A file over the cap is rejected with its character count
-  ("This file has 34,210 characters; the limit is 20,000 — split it or upload it as a PDF"), never
+  ("This file has 34,210 characters; the limit is 50 KB — split it or upload it as a PDF"), never
   truncated. **No new content type, no upload pipeline, no backend change** — markdown needs no
   extraction; it already is the body. Accepted limits, stated so they are not reported as bugs:
   relative images (`![](./img.png)`) and off-origin images do not render (no file is received;

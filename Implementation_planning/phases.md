@@ -791,8 +791,8 @@ requires a JSON body on every PATCH, including body-less ones.
 >
 > | Disposition | Entries |
 > |---|---|
-> | **OPEN — HIGH** | B12, B13, B14, B24, B29, B40, B42, B43, B48, B52, B54, B63 |
-> | **OPEN — MEDIUM** | B2, B7, B9, B10, B11, B15, B18, B20, B26, B28, B32, B38, B41, B50, B53, B55, B56, B58, B62 |
+> | **OPEN — HIGH** | B12, B13, B14, B24, B29, B40, B42, B43, B48, B52, B54, B63, **B64 (URGENT)**, B65, **B67** |
+> | **OPEN — MEDIUM** | B66, B2, B7, B9, B10, B11, B15, B18, B20, B26, B28, B32, B38, B41, B50, B53, B55, B56, B58, B62 |
 > | **OPEN — LOW** | B16, B17, B21, B25, B33, B34, B35, B36, B39, B44, B45, B46, B47, B51, B57, B59, B60, B61 |
 > | **CLOSED** | B6, B8, B19, B22, B23, B27, B49 |
 > | **ACCEPTED / DEFERRED** | B30 (deferred, HIGH — exposure unchanged), B31, B37 |
@@ -2514,7 +2514,8 @@ v2026.8.1 ships 26.7.4 because 26.7.5 was not on `reg.mini.dev`. Bump `KEYCLOAK_
 ### B63 — the Coraza WAF fails OPEN once its WASM heap passes 2 GiB (deploy / security) — surfaced 2026-09-30
 
 **Status:** FIX IN REVIEW · HIGH · deploy/security — memory cap (30720 pages) + harness gate
-committed 2026-09-30; closes when a rebuilt gateway is on staging and prod. See
+committed 2026-09-30; closes when a rebuilt gateway is on staging and prod. **2026-10-05: the
+cap fired on prod and failed closed as designed — a 2h15m site-wide 503 outage, see B64.** See
 `gateway-docker/VERSIONS.md` "B63" for the investigation (trigger not isolated; cap verified
 to fail closed). **Attacks passed through the gateway** after sustained load. On staging (gateway `v2026.8.1`: APISIX 3.19.0, TinyGo 0.41.1), started 20:54, the WAF
 blocked correctly through the 22:36 integration tests; the ZAP active scan (~22:40–22:59) grew the
@@ -2535,3 +2536,141 @@ periodic worker reload) or cap below 2 GiB so the VM fails closed; make the WASM
 `WAF Enforcement Canary` stage in `Jenkinsfile.integration-dast` fails the run if a browser-UA
 SQLi/XSS probe is not 403 after the scans. Related: [[project_apisix_wasm_memory]] memory note
 (each worker compiles CRS into its own ~1.5 GB VM).
+
+### B64 — a WAF heap exhaustion takes prod down silently: healthcheck stays green, no alert fires (deploy / ops) — surfaced 2026-10-05
+
+**Status:** OPEN · HIGH · **URGENT** · deploy/ops — prod outage 2026-10-05 00:24→02:41 UTC
+(~2h15m), found by a user, not by monitoring. Fixed by hand with `docker restart apisix-prod`.
+Will recur: the cause (B63 heap growth) is not fixed and nothing detects or recovers from it.
+
+**What happened.** Prod gateway `v2026.8.1` (with B63's 30720-page cap). At 00:24 UTC the Coraza
+WASM heap hit the cap: `runtime.runtimePanicAt` ← `runtime.alloc` ← `runtime.hashmapSet` ←
+`corazawaf.Rule.doEvaluate` ← `proxy_on_request_headers`, so every request logged
+`coraza-filter: failed to run wasm plugin: failed to run proxy_on_http_request_headers` and
+APISIX served nginx's `503 Service Temporarily Unavailable` for every route, including `/`. (Not a
+precursor, despite how it looks: a 920450 line listing every header is Coraza's multi-match
+logging; its `[data]` showed a real block of a scanner's `x-middleware-subrequest` probe.) The worker's RSS was
+~1.2 GiB, so the container was not near its 3 GiB limit. All other services, the tunnel and the
+disk were fine. After the restart: `/` 200, browser-UA SQLi 403, no new wasm errors, 469 MiB.
+The cap did its job (fail closed, not open). The failures are in detection and recovery:
+
+1. **The healthcheck can't see it.** `apisix` healthcheck is `test -S
+   /usr/local/apisix/logs/worker_events.sock`, so it only proves the socket exists. The container
+   reported `healthy` throughout the outage.
+2. **The existing alert never ran.** `ApisixHighErrorRate` (5xx > 5% over 5m) is defined in
+   `common/prometheus/rules/haisir.rules.yml`, but **no `prometheus-prod` container exists on prod**:
+   only `alertmanager-prod` is up (`monitoring` profile partially started). Nothing evaluates the
+   rules. Also verify `ALERT_SLACK_WEBHOOK` is rendered in prod's alertmanager config.
+3. **No self-heal.** Docker does not restart `unhealthy` containers, so even a correct healthcheck
+   needs a restart path.
+
+**Fix (in order):**
+- (a) **Start Prometheus on prod** (and staging) so `ApisixHighErrorRate` and `TargetDown` work;
+  send one test alert end-to-end to Slack. This is the cheapest fix and closes the "found by a user" gap.
+- (b) **Healthcheck that goes through the WAF path**: request a WAF-protected route on the local
+  listener with a browser UA and fail on 5xx (e.g. `curl -fsS -o /dev/null -A 'Mozilla/5.0'
+  http://127.0.0.1:9080/<waf-route>`; the image needs curl, or use `openresty -e`/lua). Must not
+  hit an upstream that can itself be down, or the check flaps on backend outages.
+- (c) **Recovery:** host-side watchdog (systemd user timer, Linger=yes on prod) that restarts
+  `apisix-<env>` when it is `unhealthy` for N checks, or when `failed to run wasm plugin` appears in
+  the last minute. Log every restart so the B63 recurrence rate becomes measurable.
+- (d) Add an alert on the log signature too (`runtimePanicAt` / `failed to run wasm plugin` /
+  `access memory addr`), since the fail-open variant (B63) returns 200s, which (a) won't catch.
+
+Long-term fix is still B63 (bound the heap / periodic worker reload). B64 shortens the outage
+from "until someone notices" to minutes. Related: B63, [[project_waf_wasm_failopen]].
+
+### B65 — bodies over 128 KiB on the 100 MB exam-static route are probably not WAF-inspected at all (deploy / security) — surfaced 2026-10-05
+
+**Status:** OPEN · HIGH · deploy/security — suspected, verify first. `common/routes/12-api-exams-static.json`
+sets `SecRequestBodyLimit 104857600` but inherits `SecRequestBodyInMemoryLimit 131072` from
+`@recommended-conf`. Measured on the gateway image (harness, 2026-10-05, JSON body on a
+topic-content route with only the body limit raised): the coraza-proxy-wasm build has no
+filesystem to spill to, so anything past 131072 bytes was **silently not inspected** — an XSS
+payload at the end of a 129 KB body returned 200. If multipart behaves the same, every upload on
+that route over 128 KiB bypasses the WAF today. Raising the in-memory limit to match is not a fix
+either: it must be ≤ the body limit (Coraza otherwise fails the whole config → 503 everywhere) and
+100 MB in a WASM heap capped under 2 GiB is not viable (B63). Next: reproduce with a multipart
+body in `waf-harness.sh`; then decide between a hard cap ≤128 KiB on inspected parts,
+`ctl:requestBodyAccess=Off` for file parts with app-layer validation as the compensating control,
+or moving large uploads off the WAF path (pre-signed upload). Related: B63, B66, BR-WAF-015.
+
+### B66 — large `.md` documents (up to ~5 MB) via a file-upload path, not the JSON text field (frontend / backend / deploy) — surfaced 2026-10-05
+
+**Status:** OPEN · MEDIUM · feature — BR-EXT-048 caps inline topic text at 50 KB so the JSON body
+stays well inside the 128 KiB WAF body limit (B65/BR-WAF-015). Bigger markdown should
+be uploaded as a file through the multipart path the PDF extraction already uses, stored
+server-side, and rendered read-only. **Acceptance criteria (risks found 2026-10-05):**
+1. **Browser freeze** — a multi-MB or crafted file (deep nesting, thousands of `$…$` blocks)
+   must not hang a student's tab: render in sections / lazily, or cap per-render size; bound KaTeX
+   work.
+2. **Prompt injection into hAITU** — indexed text can carry instructions that steer answers for
+   students who can see it; scope parent-owned content to that parent's students and treat
+   retrieved chunks as untrusted in the hAITU prompt. Bound embedding cost (5 MB ≈ 2,500 chunks).
+3. **Phishing links** — markdown links render as clickable; add
+   `rel="noopener noreferrer nofollow"` (and consider an external-link notice).
+4. **Upload validation** — the WAF will not regex-scan file content, so the backend enforces the
+   size cap, strict UTF-8 decode, no NUL / binary content, and the `.md`/`.markdown` extension.
+5. **Edits** — a large document must not round-trip through the inspected JSON PATCH path;
+   replace-by-reupload only.
+Already safe and must stay so: raw HTML never rendered (no `rehype-raw`), `javascript:`/`data:`
+links stripped by react-markdown 10, KaTeX `trust: false`, CSP `img-src 'self' data: blob:`
+(no tracking pixels), JSON responses not body-inspected by the WAF.
+
+### B67 — tune the WAF for user-authored content by corpus, not by user tickets (deploy / frontend / backend) — surfaced 2026-10-05
+
+**Status:** OPEN · HIGH · product-requested — spec: `target/requirements/17_waf_content_tuning.md`
+(BR-WAF-018…022). At least 8 false-positive rounds since 2026-06 (hAITU chat, csrf cookie, OCR'd
+LaTeX, prose, `942200`, LaTeX/markdown, the 2026-10-05 `.md` import, a frontend param renamed
+to dodge `932236`). Each was fixed per rule from one or two user samples; nothing measures the false-positive rate,
+and a blocked user sees "Failed to save content. Please try again." Plan:
+- **P1:** content-field registry with code-proven sinks, regression set, and a corpus runner on the
+  `waf-harness` stack;
+- **P2:** ≥5,000 benign documents (synthetic generator, product-team files, OpenStax/Wikipedia
+  snapshots, hAITU output) plus the CRS regression-test payloads as the attack corpus; baseline,
+  then fix per the §5 decision procedure;
+- **P3:** CI gates (zero benign blocks, no detection regression on sink-relevant families; also on
+  CRS upgrades);
+- **P4:** draft-preserving, non-blaming UX on WAF 403, auto-report without content, ops alert.
+**Progress 2026-10-06:**
+- synthetic corpus (10 pattern classes) is in `waf-harness.sh`;
+- BR-WAF-017 is extended to 930/933/921110-130/941/944 on `text` (owner decision), with a frontend
+  raw-HTML guard test as the compensating control;
+- the real 26-file book passes 26/26.
+
+**Open gaps:**
+- hAITU chat routes: students quoting code samples to hAITU are not yet covered by the corpus;
+- WAF-403 UX still shows "Please try again" (P4);
+- registry and attack-corpus detection matrix (P2).
+
+## Next-phase priorities (set 2026-10-06, owner: "keep them on priority for next phase")
+
+Shipped this release: the 50 KB byte cap, harmful characters shown as `�` with a notice, WAF
+sink-based exclusions on topic text (BR-WAF-017) and hAITU chat (BR-WAF-023), the synthetic
+corpus + harness checks, the renderer guard test, and `waf-probe-docs.sh`. Carried forward, in
+priority order:
+
+1. **B64 (URGENT)** — gateway WAF heap exhaustion takes prod down silently (2h outage
+   2026-10-05): start Prometheus on prod so the existing alert works, add a healthcheck that goes
+   through the WAF path, and an auto-restart.
+2. **B65 (HIGH)** — bodies over 128 KiB on the 100 MB exam-static route are probably not
+   WAF-inspected at all. Verify with a multipart harness probe, then close it.
+3. **B67 P4** — WAF-403 UX: keep the draft, show a non-blaming message (no "try again"),
+   auto-report without content, gateway `X-WAF-Block` header, ops alert.
+4. **B67 P2/P3** — content-field registry, generator + public corpora, CRS attack corpus with a
+   detection matrix, CI gates (incl. on CRS upgrades).
+5. **NUL / unpaired-surrogate 500s, class-wide** — this release cleans topic text/title/
+   description, hAITU chat and doubt-thread messages (`schemas/text_sanitize.py`). Every other
+   user text that reaches Postgres can still 500 on a NUL: exam answers (`answer.py`
+   `working_text`, `exam_session.py` `user_answer`), question/exam text fields, and
+   `worker/finalize.py` (`page.markdown_text`, which also has no 50 KB cap, so an oversize page
+   is stored but can't be edited). Fix once at the persistence boundary (move the helper to
+   `shared/`, apply it where all writes route through) rather than field by field; decide how to
+   split oversize extracted pages (never silently cut).
+6. **Known WAF limitation** — libinjection SQLi (`942100`) still blocks text that quotes classic
+   SQLi payloads (`' OR '1'='1`), e.g. a security tutorial. Kept on deliberately; revisit with
+   corpus evidence under B67 §5.
+7. **Hardening (optional)** — narrow the `[^/]+` id segment in the topic-content exclusion URIs
+   to the UUID shape. Not exploitable today (930100/930110 block encoded traversal on the URI,
+   verified), but it would remove the dependency on those rules.
+8. **B66** — large `.md` (>50 KB) via the file-upload path.
