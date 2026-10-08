@@ -41,6 +41,13 @@
 > pdfjs-dist's WASM font renderer. Dev additionally carries `'unsafe-eval'`/`'unsafe-inline'`;
 > production does not.
 >
+> KaTeX is the **larger share of that reliance**: its per-expression inline styles (~130 on a single
+> math topic) are inserted as raw HTML through a `<template>`'s `innerHTML`, so they arrive as
+> **parse-time** attributes and are CSP-checked regardless of the CSSOM exemption (a nonce can never
+> cover an attribute; the CSSOM is a different, exempt path). Stubbing the directive to `'none'` on
+> staging produced 132 Report-Only violations on a math topic and 0 across 13 math-free routes
+> (2026-10-08). The relaxation cannot be removed while math renders this way.
+>
 > **Every route is dynamically rendered** (BR-CSP-010) with a CI assertion guarding it — a statically
 > prerendered page cannot receive a nonce, so a strict `script-src` would block its framework
 > scripts. Re-verified 2026-08-06 after the Phase 7 review removed a route: **0 static routes**.

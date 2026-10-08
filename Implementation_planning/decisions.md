@@ -1211,6 +1211,16 @@ review pass covered** — both ran against the host range ending at `d6adec7`.
   (e.g. CSS Houdini custom properties with a registered syntax, or server-computed layout), or a
   CSP Level 4 mechanism that scopes attributes more finely.
 
+- **Amendment (2026-10-08): the reliance is not only the ~11 React props — KaTeX needs it too.**
+  Re-verified live: on a math topic, an injected
+  `Content-Security-Policy-Report-Only: style-src-attr 'none'` produced **132** violations, while 13
+  math-free routes produced 0. KaTeX's HTML output is inserted as raw HTML through a `<template>`
+  element's `innerHTML`, so its ~130 inline `style="…"` attributes are **parse-time** attributes,
+  which CSP checks regardless of the CSSOM exemption (`setAttribute('style')` calls: 0). Under an
+  enforced `'none'` the math loses its strut/vlist spacing. **So the re-open trigger above is
+  necessary but not sufficient: resolving the runtime-computed React props would still not permit
+  removing the directive while math renders this way.**
+
 ### Companion finding, worth generalising beyond CSP
 
 - **Module-scope side effects in a client component are not a global initialiser.** T5.3.6 set Zod's
