@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-10-08 — CSRF on every request; TanStack Query for server state (frontend review)
+
+A frontend review found two Critical Rules out of step with the code. Owner approved making the
+code the source of truth. Spec: `target/requirements/00_overview.md`, `02_auth_and_roles.md`, CLAUDE.md.
+
+- **CSRF token sent on every API call, GET included — owner decision.** `buildApiHeaders()` already
+  attaches `X-CSRF-Token` to every call. Every mutation must validate it. The 38 GET handlers that
+  also depend on `validate_csrf` stay as they are on purpose: `fastapi-csrf-protect` 1.0.7 checks
+  every method it is called on. Browser-native loads (`<img>` for `GET /images/questions/{filename}`,
+  PDF blob URLs) can't send headers, and those routes don't validate it.
+- **Retry contract corrected.** `fetchWithCSRFRetry()` refreshes the token and retries once on a
+  400/401/403/422 whose `detail` mentions CSRF. The spec previously said "auto-retries on 403".
+- **Server state uses TanStack Query v5 — owner decision.** Reverses the 2026-06-24 deferral
+  ("admin feature uses `@tanstack/react-query`… cleanup item"). That cleanup is dropped.
+  `useState`/`useEffect` remain for local UI state. Older `useEffect`-fetch hooks migrate when touched.
+  No Redux, no Axios still holds.
+
+---
+
 ## 2026-09-23 — LaTeX & Editor Modes (`/update-target-state`)
 
 Third tester/PM round: LaTeX in text preview/viewer (incl. `.md` import and the student viewer), a

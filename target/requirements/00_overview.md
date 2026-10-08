@@ -28,7 +28,7 @@ Apache APISIX (TLS termination · WAF/Coraza · OIDC · CSRF · JWT injection)
 
 **Key invariants:**
 - APISIX injects `Authorization: Bearer <JWT>` — the client never sends a Bearer token.
-- Every request carries `X-Current-Role: <role>` and `X-CSRF-Token: <token>` on mutations.
+- Every request carries `X-Current-Role: <role>` and `X-CSRF-Token: <token>`; CSRF is validated on every mutation (and intentionally on many GETs). See `02_auth_and_roles.md`.
 - Identity is the Keycloak `sub` claim (`idp_sub`) — a raw UUID string. No local users table.
 - The backend independently verifies each JWT (local JWKS decode + optional Keycloak token introspection for revocation, RFC 7662). Introspection requires the `token-introspection` client scope and the backend client present in the token `aud` (Keycloak 26). See `target/requirements/02_auth_and_roles.md`.
 
@@ -75,7 +75,7 @@ Parent content is **private** — never shared to a marketplace, never visible t
 
 ## Key Design Decisions
 
-1. **No Redux, no Axios** — raw `fetch` with `credentials: 'include'`; custom hooks using `useState`/`useEffect`.
+1. **No Redux, no Axios** — raw `fetch` with `credentials: 'include'`; server state via TanStack Query v5 hooks, `useState`/`useEffect` for local UI state only.
 2. **SQLAlchemy imperative mapping** — domain models are plain dataclasses; no `Base` subclassing in `domain/models/`.
 3. **DDD folder structure** — no business logic in route files: `api/routes/`, `domain/models/`, `domain/services/`, `domain/repositories/`, `infrastructure/`, `schemas/`, `auth/`.
 4. **Existing schema sacred** — `ALTER TABLE` only; no column drops or renames.

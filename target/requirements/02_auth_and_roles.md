@@ -11,7 +11,7 @@
 ```
 Browser sends:
   Cookie: <session_cookie>          (set by APISIX OIDC plugin)
-  X-CSRF-Token: <token>             (double-submit, required on all mutations)
+  X-CSRF-Token: <token>             (double-submit, sent on every request; validated on all mutations)
   X-Current-Role: <role>            (active persona context)
 
 APISIX injects upstream:
@@ -23,8 +23,8 @@ FastAPI receives all four. Never reads cookies directly.
 ### CSRF
 - Pattern: double-submit cookie (`fastapi-csrf-protect`)
 - Bootstrap: `GET /api/auth/csrf` → token in response body + `Set-Cookie`
-- Mutations: include token in `X-CSRF-Token` header
-- Frontend: use `fetchWithCSRFRetry()` — auto-retries on 403
+- Every API call (GET included) carries the token in `X-CSRF-Token` via `buildApiHeaders()`. Browser-native loads (`<img>` for `GET /images/questions/{filename}`, PDF blob URLs) can't send it, and those routes don't validate it. Every mutation must validate it; GET routes validating it too is intentional (owner decision 2026-10-08).
+- Frontend: `buildApiHeaders()` + `fetchWithCSRFRetry()` — refreshes the token and retries once on a 400/401/403/422 whose `detail` mentions CSRF
 
 ### JWT
 - Keycloak signs RS256; APISIX validates via JWKS (24-hour cache) **at the gateway**

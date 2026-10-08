@@ -47,11 +47,11 @@ UI mapping files reference prototype screen IDs (e.g. `s-home` → `renderHome()
 
 - **APISIX injects the JWT** — the client never sends a Bearer token. FastAPI receives it from the gateway.
 - **Role header is `X-Current-Role`** — not `X-Active-Role`. Required on all role-gated endpoints; missing header → `400`. Exactly four lenient-path exceptions (`GET /api/users/me`, `POST /api/users/me/assign-role`, `PATCH /api/users/me/onboarding-complete`, `GET /images/questions/{filename}`); why: BR-SEC-006 in `target/requirements/02_auth_and_roles.md`.
-- **CSRF on every mutation** — `POST`, `PUT`, `PATCH`, `DELETE` require `X-CSRF-Token`. Frontend uses `fetchWithCSRFRetry()`.
+- **CSRF on every request** — the frontend sends `X-CSRF-Token` on every request, GET included (`buildApiHeaders()` + `fetchWithCSRFRetry()`). Every mutation (`POST`, `PUT`, `PATCH`, `DELETE`) must validate it; GET routes validating it too is intentional.
 - **No local users table** — identity is Keycloak `sub` as a raw UUID string. No FK constraints on user columns.
 - **Existing schema is sacred** — `course_path_nodes`, `topics`, `exam_templates`, `exam_sessions` etc. already exist. Extend, never drop or rename. `assessments`, `assessment_attempts`, `assessment_answers` are deprecated — the unified model is `exam_templates` with `purpose = 'quiz' | 'exam'`.
 - **`owner_type`** is the content ownership key — `platform` (platform admin content) or `parent` (parent-created private content) — on `course_path_nodes`, `topics`, and `exam_templates`.
-- **No Redux, no Axios** — raw `fetch` with `credentials: 'include'`, custom hooks with `useState`/`useEffect` only.
+- **No Redux, no Axios** — raw `fetch` with `credentials: 'include'` (via `fetchWithCSRFRetry()`). Server state uses TanStack Query v5 hooks; `useState`/`useEffect` only for local UI state (owner decision 2026-10-08; older `useEffect`-fetch hooks migrate when touched).
 - **SQLAlchemy imperative mapping** — domain models are plain dataclasses. No `Base` subclassing in `domain/models/`.
 - **Keycloak roles** — all six (`student`, `instructor`, `admin`, `institution_admin`, `tutor`, `parent`) are provisioned and validated by the backend; the assignment flows, role-switcher metadata and `/institution` + `/parent` guards are not built yet. Details: `Implementation_planning/constraints.md` ("auth — all six realm roles…"); remaining work follows `vision/requirements/11_role_migration.md`.
 - **`admin` = SuperAdmin** — maps to the Platform Admin persona. No new `superadmin` role.
