@@ -113,6 +113,7 @@ The gateway keeps the headers that need no nonce and benefit from applying to *a
 default-src 'self';
 script-src  'self' 'nonce-{n}' 'strict-dynamic' [dev: 'unsafe-eval'];
 style-src   'self' 'nonce-{n}' [dev: 'unsafe-inline'];
+style-src-attr 'unsafe-inline';
 img-src     'self' blob: data:;
 font-src    'self';
 connect-src 'self' blob:;
@@ -198,6 +199,7 @@ The soak must include the **Keycloak login round-trip**. Those routes (`07-auth-
 - **BR-CSP-007 — Report-Only precedes enforcement.** A functioning collector plus a soak covering all journeys, including the OIDC round-trip, is required before switching to the enforcing header.
 - **BR-CSP-008 — The report collector persists reports.** A collector that discards its input provides no evidence and must not be counted as CSP infrastructure.
 - **BR-CSP-009 — `report-uri` stays live after enforcement.** Enforced-mode violations are the signal that something broke in production; losing them at cutover discards the value of having built the collector.
+- **BR-CSP-011 — `style-src-attr 'unsafe-inline'` is the only style relaxation, and it covers attributes only.** Some inline styles carry runtime values (drag-resized panel widths, tree indent depth, viewer zoom) and KaTeX emits style attributes; a nonce cannot cover an attribute. `style-src` stays exactly `'self' 'nonce-{n}'`, so `<style>` elements and `<link>` stylesheets remain nonce-gated (a unit test locks both halves). Static styles still belong in a stylesheet or CSS Module; this is not a licence for them. Residual risk is visual spoofing after a markup injection; CSS exfiltration is not possible through an attribute (no selectors), and `img-src`/`font-src 'self'` block `url()` beacons. Re-open when a Report-Only `style-src-attr 'none'` probe stays silent across a full soak.
 
 ---
 
