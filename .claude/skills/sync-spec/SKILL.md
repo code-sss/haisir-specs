@@ -1,250 +1,54 @@
 ---
 name: sync-spec
-description: >
-  Pull spec files from a sibling container (backend or frontend), diff against
-  the git baseline, and merge — keeping backend completions while restoring any
-  spec-ahead planning content the container didn't have. Use when the user says
-  "sync specs from backend/frontend", "I pulled the spec files", "pull specs",
-  or "sync-spec backend/frontend".
-argument-hint: "backend|frontend"
+description: Bring a devcontainer's spec edits back into haisir-specs (`./sync-specs.sh pull` 3-way merge against the pushed SHA → one subagent per conflicted file → Ready-now recompute → lint → diffstat). Does not commit or push.
+when_to_use: Use after implement-* work in the backend or frontend devcontainer marked tasks done in its spec copy. Triggers - "sync specs from backend", "sync specs from frontend", "pull specs", "/sync-spec backend".
+argument-hint: "<frontend|backend>"
 ---
 
-# sync-spec — Pull, Diff, and Merge Spec Files
+# sync-spec
 
-## Core principle — containers ALWAYS carry stale specs
+**Context rule:** the main session only orchestrates. It reads the script's compact output and agent return lines, never full diffs or TASKS.md/PLAN.md bodies. Formats (TASKS/PLAN lines, `Last baselined`, `## Ready now`) are defined once in `.claude/references/tasks-plan-contract.md`; link it, don't copy it.
 
-Every container (backend, frontend, deploy) receives a copy of the spec at the
-time of the last `./sync-specs.sh push`. The spec repo keeps moving forward after
-that push, but the container's copy never updates automatically.
+`./sync-specs.sh` syncs `target/`, `Implementation_planning/`, `vision/requirements/`, `.claude/references/` and `CLAUDE.md`, and nothing else. Every `push` makes the container's copy of those paths an exact copy of host HEAD and writes the HEAD SHA to `/workspaces/haisir-specs/.spec-sha`; `pull` uses that SHA as the merge base. `push` refuses (`REFUSED … not pulled …` / `REFUSED no …/.spec-sha …`) when the container may hold edits no `pull` has seen; pull first, and use `push --force` only when the user says to discard them.
 
-**The versioning always looks like this:**
+## 1. Pull
 
-```
-spec repo:    v1 ──push──> container gets v1
-                    │
-                    │  (spec evolves: planning, task specs, decisions added)
-                    ▼
-spec repo:    v2  ← container still has v1
-                    │
-                    │  (container does implementation work, marks tasks done)
-                    ▼
-pull →  container returns v1 + completions  (stale on everything except its own work)
-```
+No argument → ask "`backend` or `frontend`?" and **wait for the answer**. Then run `./sync-specs.sh pull <c>`.
+- `REFUSED uncommitted changes …` → tell the user to commit or stash those paths. **Stop.** Don't stash for them.
+- `REFUSED cannot reach container …` → the devcontainer is stopped or misnamed. Tell the user to start it. **Stop.**
+- `REFUSED no …/.spec-sha …` → this is a legacy push with no recorded SHA. Ask the user for the spec SHA that was last pushed to `<c>`, then rerun with `--base <sha>`.
+- `OK merged <n> clean <n> conflicts 0` → check deletions (below), then go to step 3.
 
-When multiple containers are involved (backend then frontend, or vice-versa):
+The script writes merged files into the working tree only after every merge ran (all or nothing). `CONFLICT` files keep `<<<<<<< host` / `||||||| base` / `>>>>>>> <c>` markers. `CONTAINER-ONLY`, `HOST-DELETED` (host deleted it, container changed it), `CONTAINER-DELETED` (container deleted it, host still has it) and `BINARY` (differs on both sides; host copy kept) are reported only, never applied.
 
-```
-spec after backend sync:  v3  (v2 + backend completions)
-frontend container:       still has v1
-pull frontend →  frontend returns v1 + its completions  (stale on v2 and v3 additions)
-```
+**Deletions.** A clean merge silently applies lines the container removed. For every `MERGED <path> (-<n> lines)` with n > 0, spawn one `general-purpose` Agent (all such paths in one prompt): "Run `git diff -U1 -- <paths>`. Ignore lines rewritten in place (e.g. `[ ]` → `[x]` flips), anything inside TASKS.md `## Ready now`, and the `Last baselined` line. For each remaining pure removal, return `DELETED <path>:<line> — <one-line summary of what was removed>`, or only `NONE`." If it returns any `DELETED` line, show them and ask **"Keep these deletions, or restore them from host?"** and **wait**. Restore = the same agent re-adds the removed lines with targeted edits. Don't read the diffs yourself.
 
-**The golden rule:**
-> The container's pull is ALWAYS a step backward on the spec. The ONLY things
-> to extract from it are:
-> 1. **Task completions** (`[ ]` → `[x]` with date) — primary value
-> 2. **Implementation-discovered changes** to `target/` files — rare but real
->    (e.g. a field name changed during implementation, a rule was clarified)
->
-> Everything else in the pulled files that differs from HEAD is the container
-> being stale. It must be discarded and the HEAD version restored.
+## 2. Resolve conflicts (one message, all agents in parallel)
 
----
+For each `CONFLICT <path>`, spawn one `general-purpose` Agent with this prompt: "Resolve the git conflict markers in `<path>` (host = haisir-specs HEAD, `<c>` = devcontainer copy). First read the `## Merge rules` section of `.claude/skills/sync-spec/SKILL.md` and `.claude/references/tasks-plan-contract.md`. Edit only the conflict hunks. Remove every marker you resolve, and leave the markers on any hunk you can't decide. Return only `RESOLVED <path>` or `NEEDS-USER <path>: <one line>`."
 
-This skill syncs spec files from a named container into the `haisir-specs` repo.
-The mechanical challenge: the pull overwrites files with stale content. The skill
-diffs the overwritten files against HEAD, extracts only the useful changes from the
-container, and restores everything else.
+When the agents return, run `grep -l '^<<<<<<< host' <conflicted paths>`. For each `NEEDS-USER`, put the one-line question to the user, **wait for the answer**, then apply it with a targeted Edit of that hunk.
 
----
+## Merge rules (for the conflict agents)
 
-## Step 0 — Resolve the source
+- The container's spec copy is stale. Host content wins for planning text: PLAN task blocks, decisions, phases and `target/` wording.
+- Keep a container `target/` change only when it is a correction found during implementation, such as a renamed field or a clarified rule. If you can't tell, return NEEDS-USER.
+- TASKS.md: keep the container's `[ ]` → `[x]` flips and their `(YYYY-MM-DD)` dates. Never un-check a task that host already marked `[x]`.
+- `Last baselined` line: take the container's own `<c>:<sha>` and keep every other repo's SHA from host.
+- `## Ready now`: don't merge it by hand. Take the host side; step 3 recomputes it.
+- Any other line that both sides changed differently → NEEDS-USER.
 
-If the user did not specify `backend` or `frontend`, ask:
-> "Which source — `backend` or `frontend`?"
-
-Use the answer as `{source}` for the rest of this skill.
-
----
-
-## Step 1 — Baseline
-
-Record the current HEAD SHA before touching anything:
+## 3. Recompute and lint
 
 ```bash
-git -C /home/gulzar/Workspace/haisir-specs rev-parse HEAD
+python3 .claude/skills/plan/scripts/plan_tool.py ready --write
+python3 .claude/skills/plan/scripts/plan_tool.py lint | tail -20
 ```
 
-Save this as `{pre_pull_sha}`. If the pull has **already happened** (files already
-overwritten in working tree), skip the actual `./sync-specs.sh pull` call in Step 2
-and go straight to Step 3 using the current working-tree state vs `HEAD`.
+If lint fails, send the failing lines to one `general-purpose` Agent to fix, then lint again.
 
----
+## 4. Report (compact)
 
-## Step 2 — Pull (skip if already done)
-
-Run the pull command:
-
-```bash
-cd /home/gulzar/Workspace/haisir-specs && ./sync-specs.sh pull {source}
-```
-
-This overwrites `target/`, `Implementation_planning/`, and `CLAUDE.md` with files
-from the container. **No other directories are touched.**
-
----
-
-## Step 3 — Diff
-
-Run:
-
-```bash
-git -C /home/gulzar/Workspace/haisir-specs diff HEAD
-```
-
-Capture the full diff output. This shows every change the pull made relative to the
-committed spec state.
-
----
-
-## Step 4 — Analyze each changed file
-
-For every file in the diff, categorise each hunk using the merge rules.
-
-Read `./reference/merge-rules.md` for the detailed merge rules and conflict resolution logic.
-
-The key principle: containers are ALWAYS stale on spec content. RESTORE spec-ahead
-content; KEEP only real work done by the container (`[x]` completions, new endpoints,
-SHA updates, new files inside synced directories).
-
----
-
-## Step 5 — Check push-SHA baseline
-
-Read `sync-specs.push-shas.md` in the repo root if it exists. This records the spec-
-side HEAD SHA at the time of the last `push` to each container. If a push SHA exists
-for `{source}`:
-
-- Run `git diff {push_sha}..HEAD -- Implementation_planning/ target/ CLAUDE.md`
-  to see what spec-side changes accumulated since the last push
-- Any spec-side additions in that range that are now missing from the pulled files →
-  treat as spec-ahead and RESTORE automatically (no ambiguity)
-
-If `sync-specs.push-shas.md` does not exist or has no entry for `{source}`, proceed
-without a baseline (use manual judgment per Step 4 rules).
-
----
-
-## Step 6 — Present reconciliation summary
-
-Before writing any files, present this table to the user:
-
-```
-## Reconciliation summary — pull from {source}
-
-### Kept from {source} container
-| File | Lines / sections kept | Reason |
-|---|---|---|
-| ... | ... | ... |
-
-### Restored from spec (container was behind)
-| File | Lines / sections restored | Reason |
-|---|---|---|
-| ... | ... | ... |
-
-### New files inside synced directories (kept as-is)
-| File | Reason |
-|---|---|
-| ... | ... |
-
-> Only files under `Implementation_planning/`, `target/`, or `CLAUDE.md` can appear
-> here. Files at the repo root (other than `CLAUDE.md`) are not produced by the pull —
-> do not include them in this table.
-
-### Ambiguous items (need your input)
-| File | Description | Options |
-|---|---|---|
-| ... | ... | A / B |
-```
-
-Do NOT write any files during this step. Wait for the user to confirm or adjust.
-
----
-
-## Step 7 — Write merged files
-
-Once the user confirms (e.g. "looks good", "proceed", "do it"):
-
-For each file that needs changes, apply the merged content using `replace_string_in_file`
-(surgical edits) rather than full rewrites — this keeps git diffs clean.
-
-Apply in this order:
-1. `Implementation_planning/TASKS.md` (task completions first — smallest/safest change)
-2. `Implementation_planning/PLAN.md` (restore spec-ahead task specs)
-3. Any `target/` files changed
-4. `CLAUDE.md` if changed
-
----
-
-## Step 8 — Update push-SHA tracking
-
-After writing all merged files, update (or create) `sync-specs.push-shas.md`:
-
-```markdown
-## Last Push SHAs
-
-Record the spec-side HEAD SHA when `./sync-specs.sh push {source}` was last run.
-Used by the `sync-spec` skill as the merge base when pulling changes back.
-
-| Container | SHA | Pushed |
-|---|---|---|
-| backend  | {sha} | YYYY-MM-DD |
-| frontend | {sha} | YYYY-MM-DD |
-
-> Update this file immediately after every `./sync-specs.sh push` run.
-> To update: replace the SHA and date for the relevant container.
-```
-
-If this is a pull (not a push), leave the existing push SHA unchanged — only update
-it on the next push operation.
-
-Remind the user:
-> **After your next `./sync-specs.sh push {source}` run, record the spec HEAD SHA
-> here so future pulls have a clean merge baseline.**
-
----
-
-## Step 9 — Recommend follow-up actions
-
-Print:
-
-```
-## What to do next
-
-- [ ] Run `describe-current-state` if {source} completed new API endpoints or
-      schema changes — this updates `current/api_contracts.md`, `current/schema.md`,
-      and `current/ui_flows.md`.
-- [ ] Run `./sync-specs.sh push {source}` after any spec updates to keep the
-      container in sync, then update `sync-specs.push-shas.md` with the new SHA.
-- [ ] Update `Implementation_planning/progress.md` ## Current State paragraph if
-      significant new work was completed (use the task completion dates as a guide).
-```
-
----
-
-## Scope boundary (important)
-
-`./sync-specs.sh` only syncs: `target/`, `Implementation_planning/`, `CLAUDE.md`.
-
-The following are **NOT** synced and must be updated separately:
-- `current/` — use `describe-current-state`
-- `vision/` — always edited only in this repo
-- `experiments/` — never synced
-- `sync-specs.push-shas.md` — managed manually per this skill
-
----
-
-## Quick-reference
-
-See `./reference/merge-rules.md` for the full merge rules table and per-category
-conflict resolution logic.
+- `git diff --stat -- target Implementation_planning vision/requirements .claude/references CLAUDE.md | tail -15`
+- Status line from step 1, plus the `MERGED` / `BINARY` / `CONTAINER-ONLY` / `HOST-DELETED` / `CONTAINER-DELETED` lines verbatim, and the deletion decision (kept / restored / none). Container-only files sit under `.claude/plans/sync-spec/<c>/`; copy one in only if the user asks, because the next push deletes it from the container. For `CONTAINER-DELETED`, ask whether to delete the host copy too; the next push restores it in the container otherwise.
+- Next: review and commit, then run `./sync-specs.sh push <c>` so the container gets the merged spec and a fresh `.spec-sha`. Run `/describe-current-state` if the container shipped endpoints or schema.

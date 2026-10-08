@@ -7,19 +7,48 @@
     "commit": "",
     "pr": ""
   },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-coauthored.sh\"",
-            "timeout": 10,
-            "statusMessage": "Checking commit for Co-Authored-By trailer"
-          }
-        ]
-      }
+  "permissions": {
+    "allow": [
+      "Read(~/Workspace/haisir-specs/**)",
+      "Read(~/Workspace/haisir-backend/**)",
+      "Read(~/Workspace/haisir-frontend/**)",
+      "Read(~/Workspace/haisir-deploy/**)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git -C ../haisir-backend status:*)",
+      "Bash(git -C ../haisir-backend diff:*)",
+      "Bash(git -C ../haisir-backend log:*)",
+      "Bash(git -C ../haisir-backend show:*)",
+      "Bash(git -C ../haisir-backend rev-parse:*)",
+      "Bash(git -C ../haisir-frontend status:*)",
+      "Bash(git -C ../haisir-frontend diff:*)",
+      "Bash(git -C ../haisir-frontend log:*)",
+      "Bash(git -C ../haisir-frontend show:*)",
+      "Bash(git -C ../haisir-frontend rev-parse:*)",
+      "Bash(git -C ../haisir-deploy status:*)",
+      "Bash(git -C ../haisir-deploy diff:*)",
+      "Bash(git -C ../haisir-deploy log:*)",
+      "Bash(git -C ../haisir-deploy show:*)",
+      "Bash(git -C ../haisir-deploy rev-parse:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(grep:*)",
+      "Bash(python3 .claude/skills/plan/scripts/plan_tool.py lint)",
+      "Bash(python3 .claude/skills/plan/scripts/plan_tool.py lint --plan:*)",
+      "Bash(python3 .claude/skills/plan/scripts/plan_tool.py stats)",
+      "Bash(python3 .claude/skills/plan/scripts/plan_tool.py drift)",
+      "Bash(python3 .claude/skills/plan/scripts/plan_tool.py ready)",
+      "Bash(python3 .claude/skills/plan/scripts/plan_tool.py selftest)",
+      "Bash(python3 .claude/skills/describe-current-state/scripts/snapshot.py)",
+      "Bash(python3 .claude/skills/describe-current-state/scripts/snapshot.py --files:*)",
+      "Bash(python3 .claude/skills/describe-current-state/scripts/snapshot.py --selftest)",
+      "Bash(bash scripts/test_sync_specs.sh)"
     ]
   }
 }

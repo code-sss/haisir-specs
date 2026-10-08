@@ -1,88 +1,57 @@
 ---
 name: update-target-state
-description: >
-  Reviews and updates near-term target requirements specs in target/requirements/ via guided
-  discussion, challenger review, and file updates. Use this whenever the user wants to change,
-  add, or remove anything from the product requirements — even if phrased as "update the spec",
-  "let's revise X", "I want to add a new field", "change how Z works", or "tweak the data model".
-  Also use it for auth rule changes, UI spec updates, or persona flow revisions.
+description: Change the near-term product requirements in target/requirements/ through gather agent → discussion → challenger → approval → writer agent, recording the outcome in decisions.md, progress.md Target State and, when needed, constraints.md. Does not commit.
+when_to_use: Use only when the user explicitly wants to add, change or remove a product requirement in target/requirements/ (data model, API contract, business rule, permission, persona flow, UI spec). Not for capturing what is built (/describe-current-state), phase planning (/plan), vision/ edits, or edits to other files. Triggers - "change the target spec for X", "add a requirement", "revise the parent flow", "update target state", "/update-target-state".
+argument-hint: "[area or change summary]"
 ---
 
-Launch **two parallel Agent tool calls** to read the relevant files simultaneously:
+# Update Target State
 
-**Agent 1 — Core specs:**
-- `target/requirements/00_overview.md` — architecture, personas, design decisions (if stub, fall back to `vision/requirements/00_overview.md`)
-- `target/requirements/01_data_model.md` — existing schema (extend, never drop/rename)
-- `target/requirements/02_auth_and_roles.md` — auth patterns, roles, permission matrix
+**Context rule:** the main session only orchestrates. It never reads `target/requirements/` bodies, `current/*.md`, prototypes, or decisions/phases/progress/constraints.md. Subagents read from paths and hand off through `.claude/plans/update-target-state/<slug>/` (gitignored). Agent prompts pass paths, never content, and end with the return format given here. Policy lives in CLAUDE.md Critical Rules, facts on the ground in `Implementation_planning/constraints.md`. Link them; don't restate them.
 
-**Agent 2 — Domain-specific specs and UI:**
-- Any other `target/requirements/*.md` files relevant to the domain being discussed (if stub, read the corresponding `vision/requirements/` file for context)
-- `target/requirements/ui-mapping/` — UI mapping files for frontend screen details
-- `vision/prototypes/*.html` — visual reference for UI flows and screen IDs (read only if UI flows are being discussed)
+## 1. Scope + deferred-persona guard
 
-Collect results from both agents before proceeding.
+Choose a short kebab-case `<slug>` from `$ARGUMENTS` or the user's request. Run `grep -l '⚠ DEFERRED' vision/requirements/*.md`. If the topic touches a listed persona (today: teacher/tutor, institution admin), **stop**. Tell the user that persona is on hold per decisions.md 2026-07-27, and that its vision file must be revised and the banner removed before target state can be defined. Ask whether to do that revision now as its own discussion, or drop the topic.
 
-**Guard — deferred personas:** if the discussion touches Institution Admin or Teacher/Tutor,
-check the top of `vision/requirements/06_institution_admin.md` / `04_teacher_tutor.md` for a
-`⚠ DEFERRED` banner. If present, stop before drafting any `target/requirements/` changes for that
-persona and remind the user: this persona is on hold per `Implementation_planning/decisions.md`
-(2026-07-27) — the vision file must be explicitly revisited and updated first, with the banner
-removed, before target state can be defined. Ask whether they want to do that revision now (as
-its own discussion) or drop the topic.
+## 2. Gather agent (`general-purpose`, inherited model)
 
-Present a concise summary using this structure:
+Prompt: slug, topic. "Build a brief for this topic. For each file, grep `^#` headings and read only the relevant sections. Sources:
+- `target/requirements/00_overview.md`, `01_data_model.md`, `02_auth_and_roles.md`, plus the topic's own target files.
+- `target/requirements/ui-mapping/`.
+- For stubs (`grep -l 'Status: stub' target/requirements/*.md`, plus the 6-line `06_institution_admin.md`), use the vision file on the same topic. Numbering diverges (target 08 = essay grading, but vision 08 = hAITU = target 11; target 12–17 and `05_06_07_personas.md` have no vision twin), so match by title, never by number.
+- Prototypes: `target/prototypes/*.html` are authoritative where a flow exists (admin, parent, student). Use `vision/prototypes/` only for other personas. Never read a whole HTML file. Grep `id=\"<prefix>-` for screen IDs and read about 40 lines around the ones you need.
+- What is built: the relevant sections of `current/{schema,api_contracts,ui_flows}.md` and `Implementation_planning/constraints.md`.
+Write `.claude/plans/update-target-state/<slug>/context.md` with the sections `## Schema`, `## API`, `## UI`, `## Built today / constraints` and `## Gaps / ambiguities`. Use at most 12 bullets per section and give a `file:line` ref on each. Return only `WROTE <path> <n gaps>`."
 
-```
-## Schema
-<key tables and columns relevant to the discussion domain>
+## 3. Discuss (main)
 
-## API
-<key endpoints relevant to the discussion domain>
+Read `context.md` and present it. Ask what to add, change or remove. Ask clarifying questions and flag conflicts with CLAUDE.md Critical Rules. **Write nothing** until the user says the discussion is finished ("done", "finalise", "update it").
 
-## UI
-<key screens / flows relevant to the discussion domain>
+Then write `.claude/plans/update-target-state/<slug>/changes.md`. Give one bullet per agreed change: target file, section, what changes, and why. Mark business-rule and API-contract changes `[PO+lead]`, since CLAUDE.md's Spec Update Convention requires sign-off from both.
 
-## Gaps / Ambiguities
-<anything incomplete, contradictory, or unclear in the current specs>
-```
+## 4. Challenger (`general-purpose`, inherited model)
 
-Then ask the user what they want to change, add, or remove. Engage in discussion — ask clarifying
-questions, flag conflicts with the critical rules in `CLAUDE.md` (e.g. no dropping columns, no new
-roles without migration steps), and surface any implications for `Implementation_planning/progress.md`
-or the implementation sequence.
+Prompt: the paths of changes.md and context.md. "Check the proposed changes against CLAUDE.md Critical Rules, `Implementation_planning/constraints.md`, the relevant sections of `current/*.md` (what is already built) and the target files they touch. Look for: rule conflicts; inconsistency with the data model or auth spec; breaking what is built without saying so; effects on other personas or on the current PLAN and phase; whether a new implementation-reality constraint arises. Write `.claude/plans/update-target-state/<slug>/review.md` with these sections: `## Blocking`, `## Minor`, `## New constraint` (or `none`), and `## Phase/TASKS impact` (or `none`). Return only `REVIEW <n blocking> <n minor>`."
 
-Do not update any files during discussion — changes made before the user has fully articulated their
-intent are hard to undo and erode trust in the workflow.
+## 5. Approval
 
----
+Read `review.md` and present it.
 
-Once the user explicitly signals that the discussion is finalised (e.g. "looks good", "update it", "done", "finalise"):
+> **⏸ APPROVAL REQUIRED** — reply **go** to write, or give changes.
+> Only an explicit user message counts. Never auto-approve, even in auto mode. Blocking findings get discussed first.
 
-**Before writing, run a Challenger Agent tool call** with this prompt:
+**Stop.** On feedback, update changes.md (re-run step 4 if the change is material) and ask again.
 
-> "You are reviewing proposed changes to requirements specs for a fullstack edtech app. The proposed
-> changes are: [summarise the agreed changes]. Read `CLAUDE.md` → Critical Rules for the authoritative
-> list of constraints. Check for: (1) conflicts with those critical rules, (2) inconsistencies with the
-> existing data model or auth spec, (3) downstream implications for the implementation sequence or other
-> personas. Flag anything that should be reconsidered before writing. Be concise."
+## 6. Writer agent (`general-purpose`, inherited model)
 
-Present the challenger's findings to the user. Then ask explicitly: "Are you happy to proceed with the
-write?" — even if the findings are minor. Do not assume silence means consent. If any critical
-conflicts are flagged, pause and discuss before writing.
+Prompt: the paths of changes.md and review.md, and today's date. "Apply the approved changes:
+1. Edit only the target/requirements files named, and only the sections named. Keep everything else unchanged.
+2. Prepend to `Implementation_planning/decisions.md` (newest first, below the header) `## <date> — <title> (\`/update-target-state\`)` with the decision and why, in the style of the entries already there.
+3. If review.md names a new constraint, add or amend a `## <area> — <fact>` entry in `Implementation_planning/constraints.md`.
+4. In `Implementation_planning/progress.md` `## Target State`, append one paragraph for this change, or amend the existing paragraph on the same topic. Never replace the section.
+5. Only if review.md's Phase/TASKS impact is not `none`: add a note to `Implementation_planning/phases.md` (next-phase stub or backlog), or flag the affected open task in TASKS.md. Otherwise leave both alone.
+Return only a `## Changes made` list (`- <file>: <one line what and why>`)."
 
----
+## 7. Report
 
-Once confirmed (accounting for any challenger flags), update the relevant `target/requirements/*.md` files — only the files that changed. Preserve all existing content that was not discussed.
-
-Then update the `## Target State` section in `Implementation_planning/progress.md` to reflect the new agreed target state as a single clear paragraph.
-
-After updating, summarise what changed using this format:
-
-```
-## Changes made
-- `<filename>`: <one-line description of what changed and why>
-- `<filename>`: <one-line description of what changed and why>
-
-## Preserved unchanged
-- <any files explicitly kept as-is>
-```
+Relay the writer's `## Changes made` list, the challenger's blocking items and how each was resolved, and any `[PO+lead]` items that still need sign-off. Do **not** stage or commit.

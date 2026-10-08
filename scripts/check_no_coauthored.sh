@@ -10,7 +10,8 @@ if [ -z "$msg_file" ]; then
     exit 0
 fi
 
-if grep -qF "Co-Authored-By" "$msg_file"; then
+# Trailer lines only (git trailers start at column 0): prose, `#` comments and the `commit -v` diff (+/-/space prefixed) pass.
+if grep -qiE '^co-authored-by:' "$msg_file"; then
     echo "error: commit message contains a forbidden 'Co-Authored-By'" >&2
     echo "error: trailer. Remove it and retry." >&2
     exit 1

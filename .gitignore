@@ -2,3 +2,4 @@
 
 # Claude Code — personal/machine-local overrides (do not share)
 .claude/settings.local.json
+.claude/plans/
